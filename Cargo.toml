@@ -20,6 +20,11 @@ members = [
     "libs/system/frame_graph",
     "libs/system/gpu",
     "libs/system/input",
+
+    "libs/wgpu-buffer/font_common",
+    "libs/wgpu-buffer/font_ttf",
+    "libs/wgpu-buffer/global_data",
+    "libs/wgpu-buffer/text_layout",
 ]
 
 [dependencies]

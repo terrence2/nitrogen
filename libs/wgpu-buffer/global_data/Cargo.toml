@@ -1,0 +1,22 @@
+[package]
+name = "global_data"
+version = "0.1.0"
+authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+failure = "^ 0.1.2"
+nalgebra = "^ 0.20"
+wgpu = "^ 0.5"
+zerocopy = "^ 0.2"
+absolute_unit = { path = "../../sim/absolute_unit" }
+geodesy = { path = "../../sim/geodesy" }
+camera = { path = "../../sim/camera" }
+frame_graph = { path = "../../system/frame_graph" }
+gpu = { path = "../../system/gpu" }
+
+[dev-dependencies]
+input = { path = "../../system/input" }
+
+[build-dependencies]
+build-shaders = { path = "../../wgpu-render/build-shaders" }
