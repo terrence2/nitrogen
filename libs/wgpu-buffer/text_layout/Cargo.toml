@@ -1,0 +1,20 @@
+[package]
+name = "text_layout"
+version = "0.1.0"
+authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+failure = "^ 0.1.2"
+log = "^ 0.4"
+image = "^ 0.21"
+memoffset = "^ 0.5"
+wgpu = "^ 0.5"
+zerocopy = "^ 0.2"
+font_common = { path = "../../wgpu-buffer/font_common" }
+font_ttf = { path = "../../wgpu-buffer/font_ttf" }
+frame_graph = { path = "../../system/frame_graph" }
+gpu = { path = "../../system/gpu" }
+
+[dev-dependencies]
+input = { path = "../../system/input" }
