@@ -25,6 +25,9 @@ members = [
     "libs/wgpu-buffer/font_ttf",
     "libs/wgpu-buffer/global_data",
     "libs/wgpu-buffer/text_layout",
+
+    "libs/wgpu-render/build-shaders",
+    "libs/wgpu-render/shader_shared",
 ]
 
 [dependencies]
