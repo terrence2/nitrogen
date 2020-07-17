@@ -1,0 +1,19 @@
+[package]
+name = "skybox"
+version = "0.1.0"
+authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+failure = "^ 0.1.2"
+log = "^ 0.4"
+wgpu = "^ 0.5"
+atmosphere = { path = "../../wgpu-buffer/atmosphere" }
+global_data = { path = "../../wgpu-buffer/global_data" }
+gpu = { path = "../../system/gpu" }
+fullscreen = { path = "../../wgpu-buffer/fullscreen" }
+shader_shared = { path = "../../wgpu-render/shader_shared" }
+stars = { path = "../../wgpu-buffer/stars" }
+
+[build-dependencies]
+build-shaders = { path = "../../wgpu-render/build-shaders" }

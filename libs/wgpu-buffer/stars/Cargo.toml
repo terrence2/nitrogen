@@ -1,0 +1,29 @@
+[package]
+name = "stars"
+version = "0.1.0"
+authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+approx = "^ 0.3"
+bitflags = ">= 1.0"
+failure = "^ 0.1.2"
+lazy_static = ">= 1"
+log = "^ 0.4"
+nalgebra = "^ 0.20"
+static_assertions = "^ 1"
+wgpu = "^ 0.5"
+zerocopy = "^ 0.2"
+camera = { path = "../../sim/camera" }
+star_catalog = { path = "../../sim/star_catalog" }
+gpu = { path = "../../system/gpu" }
+
+[dev-dependencies]
+absolute_unit = { path = "../../sim/absolute_unit" }
+command = { path = "../../system/command" }
+fullscreen = { path = "../../wgpu-buffer/fullscreen" }
+global_data = { path = "../../wgpu-buffer/global_data" }
+input = { path = "../../system/input" }
+
+[build-dependencies]
+build-shaders = { path = "../../wgpu-render/build-shaders" }

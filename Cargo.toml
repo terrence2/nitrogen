@@ -7,6 +7,7 @@ edition = "2018"
 [workspace]
 members = [
     "apps/dump-terrain-tables",
+    "apps/dump-terrain-tiles",
 
     "libs/sim/absolute_unit",
     "libs/sim/camera",
@@ -15,6 +16,7 @@ members = [
     "libs/sim/orrery",
     "libs/sim/physical_constants",
     "libs/sim/star_catalog",
+    "libs/sim/universe",
 
     "libs/system/ansi",
     "libs/system/command",
@@ -28,11 +30,15 @@ members = [
     "libs/wgpu-buffer/font_ttf",
     "libs/wgpu-buffer/fullscreen",
     "libs/wgpu-buffer/global_data",
+    "libs/wgpu-buffer/stars",
+    "libs/wgpu-buffer/terrain_geo",
     "libs/wgpu-buffer/text_layout",
 
     "libs/wgpu-render/build-shaders",
     "libs/wgpu-render/shader_shared",
     "libs/wgpu-render/screen_text",
+    "libs/wgpu-render/skybox",
+    "libs/wgpu-render/terrain",
 ]
 
 [dependencies]

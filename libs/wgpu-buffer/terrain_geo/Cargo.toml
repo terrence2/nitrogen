@@ -1,0 +1,31 @@
+[package]
+name = "terrain_geo"
+description = "Mesh for sampling terrain properties."
+version = "0.1.0"
+authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+approx = "^ 0.3"
+backtrace = "^ 0.3"
+failure = "^ 0.1.2"
+float-ord = "^ 0.2"
+json = "^ 0.12"
+memoffset = "^ 0.5"
+nalgebra = "^ 0.20"
+wgpu = "^ 0.5"
+zerocopy = "^ 0.2"
+absolute_unit = { path = "../../sim/absolute_unit" }
+camera = { path = "../../sim/camera" }
+frame_graph = { path = "../../system/frame_graph" }
+geodesy = { path = "../../sim/geodesy" }
+geometry = { path = "../../sim/geometry" }
+gpu = { path = "../../system/gpu" }
+physical_constants = { path = "../../sim/physical_constants" }
+universe = { path = "../../sim/universe" }
+
+[dev-dependencies]
+input = { path = "../../system/input" }
+
+[build-dependencies]
+build-shaders = { path = "../../wgpu-render/build-shaders" }
