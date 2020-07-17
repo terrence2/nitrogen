@@ -1,0 +1,30 @@
+[package]
+name = "atmosphere"
+version = "0.1.0"
+authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+approx = "^ 0.3"
+bitflags = ">= 1.0"
+failure = "^ 0.1.2"
+futures = "^ 0.3"
+image = "^ 0.21"
+lazy_static = ">= 1"
+log = "^ 0.4"
+memmap = "^ 0.6"
+nalgebra = "^ 0.20"
+num-traits = "^ 0.2"
+static_assertions = "^ 1"
+wgpu = "^ 0.5"
+zerocopy = "^ 0.2"
+camera = { path = "../../sim/camera" }
+frame_graph = { path = "../../system/frame_graph" }
+gpu = { path = "../../system/gpu" }
+
+[dev-dependencies]
+spirv-reflect = "^ 0.2"
+input = { path = "../../system/input" }
+
+[build-dependencies]
+build-shaders = { path = "../../wgpu-render/build-shaders" }
