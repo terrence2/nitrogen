@@ -33,7 +33,7 @@ use std::{cell::RefCell, collections::HashMap, sync::Arc};
 // Fallback for when we have no libs loaded.
 // https://fonts.google.com/specimen/Quantico?selection.family=Quantico
 pub const FALLBACK_FONT_NAME: &str = "quantico";
-const QUANTICO_TTF_DATA: &[u8] = include_bytes!("../../../../../assets/font/quantico.ttf");
+const QUANTICO_TTF_DATA: &[u8] = include_bytes!("../../../../assets/font/quantico.ttf");
 
 #[derive(Copy, Clone, Debug)]
 pub enum TextAnchorH {
