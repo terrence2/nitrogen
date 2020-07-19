@@ -57,7 +57,7 @@ impl DirectoryDrawer {
         let mut dd = Self {
             name,
             priority,
-            path: path.clone(),
+            path,
             index: HashMap::new(),
         };
         if only_extension.is_empty() {
