@@ -204,8 +204,8 @@ mod tests {
             assert!(entry.sdec0() >= -PI / 2f64);
             assert!(entry.sdec0() <= PI / 2f64);
         }
-        assert!(visible > 10_000);
-        assert!(visible < 20_000);
+        assert!(visible > 5_000);
+        assert!(visible < 10_000);
 
         Ok(())
     }
