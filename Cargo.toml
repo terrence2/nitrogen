@@ -20,6 +20,7 @@ members = [
     "libs/sim/universe",
 
     "libs/system/ansi",
+    "libs/system/catalog",
     "libs/system/command",
     "libs/system/frame_graph",
     "libs/system/gpu",

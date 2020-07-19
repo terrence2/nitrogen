@@ -1,0 +1,318 @@
+// This file is part of OpenFA.
+//
+// OpenFA is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// OpenFA is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with OpenFA.  If not, see <http://www.gnu.org/licenses/>.
+use crate::{DrawerFileId, DrawerInterface, FileMetadata};
+use failure::{bail, ensure, Fallible};
+use glob::{MatchOptions, Pattern};
+use smallvec::SmallVec;
+use std::{borrow::Cow, collections::HashMap};
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+struct DrawerId(u16);
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+struct ShelfId(u16);
+
+pub const DEFAULT_LABEL: &str = "default";
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct FileId {
+    drawer_file_id: DrawerFileId,
+    shelf_id: ShelfId,
+    drawer_id: DrawerId,
+}
+
+pub struct Catalog {
+    last_shelf: u16,
+    shelf_index: HashMap<String, ShelfId>,
+    shelves: HashMap<ShelfId, Shelf>,
+    default_label: String,
+}
+
+// A catalog is a uniform, indexed interface to a collection of Drawers. This
+// allows a game engine to expose several sources of data through a single interface.
+// Common uses are allowing loose files when developing, while shipping compacted
+// asset packs in production and combining data from multiple packs, e.g. when assets
+// are shipped on multiple disks, or where assets may get extended and overridden
+// with mod content.
+//
+// In addition to the above behavior, files in a catalog may be tagged with a label,
+// allowing for multiple sets of unrelated data. This is useful for testing multiple
+// file-sets at once, e.g. in a multi-game situation.
+impl Catalog {
+    pub fn empty() -> Self {
+        let shelf_id = ShelfId(0);
+        let mut shelf_index = HashMap::new();
+        shelf_index.insert(DEFAULT_LABEL.to_owned(), shelf_id);
+        let mut shelves = HashMap::new();
+        shelves.insert(shelf_id, Shelf::empty());
+        Self {
+            last_shelf: 1,
+            shelf_index,
+            shelves,
+            default_label: DEFAULT_LABEL.to_owned(),
+        }
+    }
+
+    pub fn with_drawers(mut drawers: Vec<Box<dyn DrawerInterface>>) -> Fallible<Self> {
+        let mut catalog = Self::empty();
+        for drawer in drawers.drain(..) {
+            catalog.add_labeled_drawer(DEFAULT_LABEL, drawer)?;
+        }
+        Ok(catalog)
+    }
+
+    pub fn add_drawer(&mut self, drawer: Box<dyn DrawerInterface>) -> Fallible<()> {
+        self.add_labeled_drawer(&self.default_label.clone(), drawer)
+    }
+
+    pub fn file_label(&self, fid: FileId) -> Fallible<String> {
+        for (name, &sid) in &self.shelf_index {
+            if fid.shelf_id == sid {
+                return Ok(name.to_owned());
+            }
+        }
+        bail!("unknown shelf")
+    }
+
+    pub fn find_matching(&self, glob: &str) -> Fallible<SmallVec<[FileId; 4]>> {
+        self.find_labeled_matching(&self.default_label, glob)
+    }
+
+    pub fn find_matching_names(&self, glob: &str) -> Fallible<Vec<String>> {
+        self.find_labeled_matching_names(&self.default_label, glob)
+    }
+
+    pub fn stat_sync(&self, fid: FileId) -> Fallible<FileMetadata> {
+        self.shelves[&fid.shelf_id].stat_sync(fid)
+    }
+
+    pub fn read_sync(&self, fid: FileId) -> Fallible<Cow<[u8]>> {
+        self.shelves[&fid.shelf_id].read_sync(fid)
+    }
+
+    pub fn stat_name_sync(&self, name: &str) -> Fallible<FileMetadata> {
+        self.stat_labeled_name_sync(&self.default_label, name)
+    }
+
+    pub fn read_name_sync(&self, name: &str) -> Fallible<Cow<[u8]>> {
+        self.read_labeled_name_sync(&self.default_label, name)
+    }
+
+    pub fn add_labeled_drawer(
+        &mut self,
+        label: &str,
+        drawer: Box<dyn DrawerInterface>,
+    ) -> Fallible<()> {
+        if !self.shelf_index.contains_key(label) {
+            let shelf_id = ShelfId(self.last_shelf);
+            self.last_shelf += 1;
+            self.shelf_index.insert(label.to_owned(), shelf_id);
+            self.shelves.insert(shelf_id, Shelf::empty());
+        }
+        let shelf_id = self.shelf_index[label];
+        self.shelves
+            .get_mut(&shelf_id)
+            .unwrap()
+            .add_drawer(shelf_id, drawer)
+    }
+
+    pub fn find_labeled_matching(
+        &self,
+        label: &str,
+        glob: &str,
+    ) -> Fallible<SmallVec<[FileId; 4]>> {
+        self.shelves[&self.shelf_index[label]].find_matching(glob)
+    }
+
+    pub fn find_labeled_matching_names(&self, label: &str, glob: &str) -> Fallible<Vec<String>> {
+        self.shelves[&self.shelf_index[label]].find_matching_names(glob)
+    }
+
+    pub fn stat_labeled_name_sync(&self, label: &str, name: &str) -> Fallible<FileMetadata> {
+        self.shelves[&self.shelf_index[label]].stat_name_sync(name)
+    }
+
+    pub fn read_labeled_name_sync(&self, label: &str, name: &str) -> Fallible<Cow<[u8]>> {
+        self.shelves[&self.shelf_index[label]].read_name_sync(name)
+    }
+
+    pub fn default_label(&self) -> &str {
+        &self.default_label
+    }
+
+    pub fn set_default_label(&mut self, context: &str) {
+        self.default_label = context.to_owned()
+    }
+}
+
+// A shelf is a subset of a catalog that contains the same label.
+pub struct Shelf {
+    last_drawer: u16,
+    drawer_index: HashMap<(i64, String), DrawerId>,
+    drawers: HashMap<DrawerId, Box<dyn DrawerInterface>>,
+    index: HashMap<String, FileId>,
+}
+
+impl Shelf {
+    pub fn empty() -> Self {
+        Self {
+            last_drawer: 0,
+            drawer_index: HashMap::new(),
+            drawers: HashMap::new(),
+            index: HashMap::new(),
+        }
+    }
+
+    fn add_drawer(&mut self, shelf_id: ShelfId, drawer: Box<dyn DrawerInterface>) -> Fallible<()> {
+        let next_priority = drawer.priority();
+        let index = drawer.index()?;
+        let drawer_key = (drawer.priority(), drawer.name().to_owned());
+        ensure!(
+            !self.drawer_index.contains_key(&drawer_key),
+            "duplicate drawer added"
+        );
+        let drawer_id = DrawerId(self.last_drawer);
+        self.last_drawer += 1;
+        self.drawer_index.insert(drawer_key, drawer_id);
+        self.drawers.insert(drawer_id, drawer);
+        for (&drawer_file_id, name) in index.iter() {
+            if self.index.contains_key(name) {
+                let prior_drawer = self.index[name].drawer_id;
+                let prior_priority = self.drawers[&prior_drawer].priority();
+                // If there is already a higher priority entry, skip indexing the new version.
+                if next_priority < prior_priority {
+                    continue;
+                }
+            }
+            self.index.insert(
+                name.to_owned(),
+                FileId {
+                    drawer_file_id,
+                    shelf_id,
+                    drawer_id,
+                },
+            );
+        }
+        Ok(())
+    }
+
+    pub fn find_matching(&self, glob: &str) -> Fallible<SmallVec<[FileId; 4]>> {
+        let mut matching = SmallVec::new();
+        let opts = MatchOptions {
+            case_sensitive: false,
+            require_literal_leading_dot: false,
+            require_literal_separator: true,
+        };
+        let pattern = Pattern::new(glob)?;
+        for (key, fid) in self.index.iter() {
+            if pattern.matches_with(key, opts) {
+                matching.push(*fid);
+            }
+        }
+        Ok(matching)
+    }
+
+    pub fn find_matching_names(&self, glob: &str) -> Fallible<Vec<String>> {
+        let mut matching = Vec::new();
+        let opts = MatchOptions {
+            case_sensitive: false,
+            require_literal_leading_dot: false,
+            require_literal_separator: true,
+        };
+        let pattern = Pattern::new(glob)?;
+        for key in self.index.keys() {
+            if pattern.matches_with(key, opts) {
+                matching.push(key.to_owned());
+            }
+        }
+        Ok(matching)
+    }
+
+    pub fn stat_sync(&self, fid: FileId) -> Fallible<FileMetadata> {
+        let drawer_meta = self.drawers[&fid.drawer_id].stat_sync(fid.drawer_file_id)?;
+        Ok(FileMetadata::from_drawer(fid, drawer_meta))
+    }
+
+    pub fn stat_name_sync(&self, name: &str) -> Fallible<FileMetadata> {
+        ensure!(self.index.contains_key(name), "file not found");
+        self.stat_sync(self.index[name])
+    }
+
+    pub fn read_sync(&self, fid: FileId) -> Fallible<Cow<[u8]>> {
+        Ok(self.drawers[&fid.drawer_id].read_sync(fid.drawer_file_id)?)
+    }
+
+    pub fn read_name_sync(&self, name: &str) -> Fallible<Cow<[u8]>> {
+        ensure!(self.index.contains_key(name), "file not found");
+        self.read_sync(self.index[name])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::DirectoryDrawer;
+    use std::path::PathBuf;
+
+    #[test]
+    fn basic_functionality() -> Fallible<()> {
+        let mut catalog = Catalog::with_drawers(vec![DirectoryDrawer::from_directory(
+            0,
+            "./masking_test_data/a",
+        )?])?;
+
+        // Expect success
+        let meta = catalog.stat_name_sync("a.txt")?;
+        assert_eq!(meta.name, "a.txt");
+        assert_eq!(
+            meta.path,
+            Some(PathBuf::from("./masking_test_data/a/a.txt"))
+        );
+        let data = catalog.read_name_sync("a.txt")?;
+        assert_eq!(data, b"hello" as &[u8]);
+
+        // Missing file
+        assert!(catalog.stat_name_sync("a_long_and_silly_name").is_err());
+        // Present, but a directory.
+        assert!(catalog.stat_name_sync("nested").is_err());
+
+        // Add a second drawer with lower priority.
+        catalog.add_drawer(DirectoryDrawer::from_directory(
+            -1,
+            "./masking_test_data/b",
+        )?)?;
+        let meta = catalog.stat_name_sync("a.txt")?;
+        assert_eq!(meta.name, "a.txt");
+        assert_eq!(
+            meta.path,
+            Some(PathBuf::from("./masking_test_data/a/a.txt"))
+        );
+        let data = catalog.read_name_sync("a.txt")?;
+        assert_eq!(data, b"hello" as &[u8]);
+
+        // Add a third drawer with higher priority.
+        catalog.add_drawer(DirectoryDrawer::from_directory(1, "./masking_test_data/b")?)?;
+        let meta = catalog.stat_name_sync("a.txt")?;
+        assert_eq!(meta.name, "a.txt");
+        assert_eq!(
+            meta.path,
+            Some(PathBuf::from("./masking_test_data/b/a.txt"))
+        );
+        let data = catalog.read_name_sync("a.txt")?;
+        assert_eq!(data, b"world" as &[u8]);
+
+        Ok(())
+    }
+}
