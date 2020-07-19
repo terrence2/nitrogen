@@ -86,6 +86,10 @@ impl Catalog {
         bail!("unknown shelf")
     }
 
+    pub fn exists(&self, name: &str) -> bool {
+        self.exists_labeled(&self.default_label, name)
+    }
+
     pub fn find_matching(&self, glob: &str) -> Fallible<SmallVec<[FileId; 4]>> {
         self.find_labeled_matching(&self.default_label, glob)
     }
@@ -134,6 +138,12 @@ impl Catalog {
         glob: &str,
     ) -> Fallible<SmallVec<[FileId; 4]>> {
         self.shelves[&self.shelf_index[label]].find_matching(glob)
+    }
+
+    pub fn exists_labeled(&self, label: &str, name: &str) -> bool {
+        self.shelves[&self.shelf_index[label]]
+            .index
+            .contains_key(name)
     }
 
     pub fn find_labeled_matching_names(&self, label: &str, glob: &str) -> Fallible<Vec<String>> {
