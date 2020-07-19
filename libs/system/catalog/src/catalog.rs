@@ -155,6 +155,17 @@ impl Catalog {
     pub fn set_default_label(&mut self, context: &str) {
         self.default_label = context.to_owned()
     }
+
+    #[allow(unused)]
+    pub fn dump_layout(&self) {
+        println!("Catalog:");
+        for (shelf_name, shelf_id) in &self.shelf_index {
+            println!("  Shelf {}", shelf_name);
+            for ((drawer_prio, drawer_name), _drawer_id) in &self.shelves[shelf_id].drawer_index {
+                println!("    Drawer {} - {}", drawer_prio, drawer_name,);
+            }
+        }
+    }
 }
 
 // A shelf is a subset of a catalog that contains the same label.
