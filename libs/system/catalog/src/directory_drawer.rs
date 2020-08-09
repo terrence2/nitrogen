@@ -13,8 +13,11 @@
 // You should have received a copy of the GNU General Public License
 // along with OpenFA.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{DrawerFileId, DrawerFileMetadata, DrawerInterface};
+use async_trait::async_trait;
 use failure::{ensure, Fallible};
 use std::{borrow::Cow, collections::HashMap, ffi::OsStr, fs, io::Read, path::PathBuf};
+use tokio::fs::File as TokioFile;
+use tokio::io::AsyncReadExt;
 
 pub struct DirectoryDrawer {
     name: String,
@@ -76,6 +79,7 @@ impl DirectoryDrawer {
     }
 }
 
+#[async_trait]
 impl DrawerInterface for DirectoryDrawer {
     fn index(&self) -> Fallible<HashMap<DrawerFileId, String>> {
         Ok(self.index.clone())
@@ -112,5 +116,15 @@ impl DrawerInterface for DirectoryDrawer {
         let mut content = Vec::new();
         fp.read_to_end(&mut content)?;
         Ok(Cow::from(content))
+    }
+
+    async fn read(&self, id: DrawerFileId) -> Fallible<Vec<u8>> {
+        ensure!(self.index.contains_key(&id), "file not found");
+        let mut global_path = self.path.clone();
+        global_path.push(&self.index[&id]);
+        let mut fp = TokioFile::open(&global_path).await?;
+        let mut content = Vec::new();
+        fp.read_to_end(&mut content).await?;
+        Ok(content)
     }
 }

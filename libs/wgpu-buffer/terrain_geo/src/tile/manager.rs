@@ -21,36 +21,46 @@
 //   JAXA's Advanced Land Observing Satellite "DAICHI" (ALOS); height data
 //   Something cartesian polar north and south
 //
-// Each data set gets a directory.
-// That directory has an index.json with all of the tile metadata in it.
-//   Data sets may have spherical or cartesian-polar coordinates.
-//   Data sets may contain height or color data.
-// That directory contains one subdir for every available resolution.
-// All units for spherical data-sets are in arcseconds, including resolution above.
 // Tiles are 512x512 with a one pixel overlap with other tiles to enable linear filtering. Data is
 //   stored row-major with low indexed rows to the south, going north and low index.
 //
 // Tile cache design:
-//   Upload one (or more) mega-texture(s) for each dataset.
+//   Upload one mega-texture(s) for each dataset.
 //   The index is a fixed, large texture:
 //     * SRTM has 1' resolution, but tiles have at minimum 510' of content.
 //     * We need a (360|180 * 60 * 60 / 510) pixels wide|high texture => 2541.17 x 1270.59
 //     * 2560 * 1280 px index texture.
 //     * Open Question: do we have data sets with higher resolution that we want to support? Will
-//       those inherently load in larger blocks to support the above index scheme?
+//       those inherently load in larger blocks to support the above index scheme? Or do we need
+//       mulitple layers of indexing?
 //     * Open Question: one index per dataset or shared globally and we assume the same resolution
-//       choice for all datasets?
+//       choice for all datasets? I think we'll need higher resolution color and normal data than
+//       height?
 //   Tile Updates:
 //     * The patch tree "votes" on what resolution it wants.
+//       * Q: can we compute the index in O(1) instead of walking the tree?
 //     * We select a handful of the most needed that are not present to upload and create copy ops.
+//       * Q: how do we determine globally what the most needed changes are?
 //     * We update the index texture with a compute shader that overwrites if the scale is smaller.
+//       * Q: are there optimizations we can make knowing that it is a quadtree?
 
 // First pass: hard code everything.
-use crate::{tile::QuadTree, GpuDetail};
-use failure::Fallible;
+use crate::{
+    tile::{
+        quad_tree::{QuadTree, QuadTreeId},
+        DataSetCoordinates, DataSetDataKind,
+    },
+    GpuDetail,
+};
+use catalog::{from_utf8_string, Catalog};
+use failure::{err_msg, Fallible};
+use futures::Future;
 use geodesy::{GeoCenter, Graticule};
 use gpu::GPU;
-use std::{fs::File, io::Read, path::PathBuf};
+use std::collections::{BinaryHeap, HashMap};
+
+// FIXME: this should be system dependent and configurable
+const MAX_CONCURRENT_READS: usize = 5;
 
 const TILE_SIZE: u32 = 512;
 
@@ -58,33 +68,108 @@ const INDEX_WIDTH: u32 = 2560;
 const INDEX_HEIGHT: u32 = 1280;
 
 pub(crate) struct TileManager {
+    tile_sets: Vec<TileSet>,
+}
+
+impl TileManager {
+    pub(crate) fn new(catalog: &Catalog, gpu_detail: &GpuDetail, gpu: &mut GPU) -> Fallible<Self> {
+        let mut tile_sets = Vec::new();
+
+        // Scan catalog for all tile sets.
+        for index_fid in catalog.find_matching("*-index.json")? {
+            let index_data = from_utf8_string(catalog.read_sync(index_fid)?)?;
+            let index_json = json::parse(&index_data)?;
+            tile_sets.push(TileSet::new(catalog, index_json, gpu_detail, gpu)?);
+        }
+
+        Ok(Self { tile_sets })
+    }
+
+    pub fn begin_update(&mut self) {
+        for ts in self.tile_sets.iter_mut() {
+            ts.begin_update();
+        }
+    }
+
+    pub fn note_required(&mut self, grat: &Graticule<GeoCenter>) {
+        for ts in self.tile_sets.iter_mut() {
+            ts.note_required(grat);
+        }
+    }
+
+    pub fn finish_update(&mut self, catalog: &Catalog) {
+        for ts in self.tile_sets.iter_mut() {
+            ts.finish_update(catalog);
+        }
+    }
+
+    pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+        self.tile_sets[0].bind_group_layout()
+    }
+
+    pub fn bind_group(&self) -> &wgpu::BindGroup {
+        self.tile_sets[0].bind_group()
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum TileState {
+    Pending,
+    Reading,
+    Active,
+}
+
+pub(crate) struct TileSet {
     #[allow(unused)]
-    srtm_index_texture_extent: wgpu::Extent3d,
+    index_texture_extent: wgpu::Extent3d,
     #[allow(unused)]
-    srtm_index_texture: wgpu::Texture,
+    index_texture: wgpu::Texture,
     #[allow(unused)]
-    srtm_index_texture_view: wgpu::TextureView,
+    index_texture_view: wgpu::TextureView,
     #[allow(unused)]
-    srtm_index_texture_sampler: wgpu::Sampler,
+    index_texture_sampler: wgpu::Sampler,
 
     #[allow(unused)]
-    srtm_atlas_texture_extent: wgpu::Extent3d,
+    atlas_texture_extent: wgpu::Extent3d,
     #[allow(unused)]
-    srtm_atlas_texture: wgpu::Texture,
+    atlas_texture: wgpu::Texture,
     #[allow(unused)]
-    srtm_atlas_texture_view: wgpu::TextureView,
+    atlas_texture_view: wgpu::TextureView,
     #[allow(unused)]
-    srtm_atlas_texture_sampler: wgpu::Sampler,
+    atlas_texture_sampler: wgpu::Sampler,
 
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
 
-    tree: QuadTree,
+    tile_tree: QuadTree,
+    tile_state: HashMap<QuadTreeId, TileState>,
+    tile_load_queue: BinaryHeap<(u32, QuadTreeId)>,
+    tile_read_list: Vec<Box<dyn Future<Output = Fallible<Vec<u8>>>>>,
 }
 
-impl TileManager {
-    pub(crate) fn new(gpu: &mut GPU, gpu_detail: &GpuDetail) -> Fallible<Self> {
-        let srtm_path = PathBuf::from("/home/terrence/storage/srtm/output/srtm/");
+impl TileSet {
+    pub(crate) fn new(
+        catalog: &Catalog,
+        index_json: json::JsonValue,
+        gpu_detail: &GpuDetail,
+        gpu: &mut GPU,
+    ) -> Fallible<Self> {
+        let prefix = index_json["prefix"]
+            .as_str()
+            .ok_or_else(|| err_msg("no prefix listed in index"))?;
+        let kind = DataSetDataKind::from_name(
+            index_json["kind"]
+                .as_str()
+                .ok_or_else(|| err_msg("no kind listed in index"))?,
+        )?;
+        let coordinates = DataSetCoordinates::from_name(
+            index_json["coordinates"]
+                .as_str()
+                .ok_or_else(|| err_msg("no coordinates listed in index"))?,
+        )?;
+
+        let tile_tree = QuadTree::from_catalog(&prefix, catalog)?;
+        // let srtm_path = PathBuf::from("/home/terrence/storage/srtm/output/srtm/");
 
         // FIXME: abstract this out into a DataSet container of some sort so we can at least
         //        get rid of the extremely long names.
@@ -98,14 +183,14 @@ impl TileManager {
         // tile. Tiles are additionally fringed with a border such that linear filtering can be
         // used in the tile lookup without further effort. In combination, this lets us point the
         // full power of the texturing hardware at the problem, with very little extra overhead.
-        let srtm_index_texture_extent = wgpu::Extent3d {
+        let index_texture_extent = wgpu::Extent3d {
             width: INDEX_WIDTH,
             height: INDEX_HEIGHT,
             depth: 1,
         };
-        let srtm_index_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
+        let index_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("terrain-geo-tile-index-texture"),
-            size: srtm_index_texture_extent,
+            size: index_texture_extent,
             array_layer_count: 1,
             mip_level_count: 1,
             sample_count: 1,
@@ -113,17 +198,16 @@ impl TileManager {
             format: wgpu::TextureFormat::Rg16Uint, // offset into atlas stack; also depth or scale?
             usage: wgpu::TextureUsage::all(),
         });
-        let srtm_index_texture_view =
-            srtm_index_texture.create_view(&wgpu::TextureViewDescriptor {
-                format: wgpu::TextureFormat::Rg16Uint,
-                dimension: wgpu::TextureViewDimension::D2,
-                aspect: wgpu::TextureAspect::All,
-                base_mip_level: 0,
-                level_count: 1,
-                base_array_layer: 0,
-                array_layer_count: 1,
-            });
-        let srtm_index_texture_sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
+        let index_texture_view = index_texture.create_view(&wgpu::TextureViewDescriptor {
+            format: wgpu::TextureFormat::Rg16Uint,
+            dimension: wgpu::TextureViewDimension::D2,
+            aspect: wgpu::TextureAspect::All,
+            base_mip_level: 0,
+            level_count: 1,
+            base_array_layer: 0,
+            array_layer_count: 1,
+        });
+        let index_texture_sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -139,14 +223,14 @@ impl TileManager {
         // pre-sampled at various scaling factors, allowing us to use a single atlas for all
         // resolutions. Management of tile layers is done on the CPU between frames, using the
         // patch tree to figure out what is going to be most useful to have in the cache.
-        let srtm_atlas_texture_extent = wgpu::Extent3d {
+        let atlas_texture_extent = wgpu::Extent3d {
             width: TILE_SIZE,
             height: TILE_SIZE,
             depth: 1, // Note: the texture array size is specified elsewhere.
         };
-        let srtm_atlas_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
+        let atlas_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("terrain-geo-tile-atlas-texture"),
-            size: srtm_atlas_texture_extent,
+            size: atlas_texture_extent,
             array_layer_count: gpu_detail.tile_cache_size,
             mip_level_count: 1,
             sample_count: 1,
@@ -154,17 +238,16 @@ impl TileManager {
             format: wgpu::TextureFormat::R16Sint,
             usage: wgpu::TextureUsage::all(),
         });
-        let srtm_atlas_texture_view =
-            srtm_atlas_texture.create_view(&wgpu::TextureViewDescriptor {
-                format: wgpu::TextureFormat::R16Sint, // heights
-                dimension: wgpu::TextureViewDimension::D2Array,
-                aspect: wgpu::TextureAspect::All,
-                base_mip_level: 0,
-                level_count: 1,
-                base_array_layer: 0,
-                array_layer_count: gpu_detail.tile_cache_size,
-            });
-        let srtm_atlas_texture_sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
+        let atlas_texture_view = atlas_texture.create_view(&wgpu::TextureViewDescriptor {
+            format: wgpu::TextureFormat::R16Sint, // heights
+            dimension: wgpu::TextureViewDimension::D2Array,
+            aspect: wgpu::TextureAspect::All,
+            base_mip_level: 0,
+            level_count: 1,
+            base_array_layer: 0,
+            array_layer_count: gpu_detail.tile_cache_size,
+        });
+        let atlas_texture_sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -181,7 +264,7 @@ impl TileManager {
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("terrain-geo-tile-bind-group-layout"),
                     bindings: &[
-                        // SRTM Index
+                        // Index Texture
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
                             visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
@@ -196,7 +279,7 @@ impl TileManager {
                             visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Sampler { comparison: false },
                         },
-                        // SRTM Height Atlas
+                        // Atlas Textures, as referenced by the above index
                         wgpu::BindGroupLayoutEntry {
                             binding: 2,
                             visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
@@ -218,37 +301,26 @@ impl TileManager {
             label: Some("terrain-geo-tile-bind-group"),
             layout: &bind_group_layout,
             bindings: &[
-                // Height Index
+                // Index
                 wgpu::Binding {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&srtm_index_texture_view),
+                    resource: wgpu::BindingResource::TextureView(&index_texture_view),
                 },
                 wgpu::Binding {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&srtm_index_texture_sampler),
+                    resource: wgpu::BindingResource::Sampler(&index_texture_sampler),
                 },
-                // Height Atlas
+                // Atlas
                 wgpu::Binding {
                     binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&srtm_atlas_texture_view),
+                    resource: wgpu::BindingResource::TextureView(&atlas_texture_view),
                 },
                 wgpu::Binding {
                     binding: 3,
-                    resource: wgpu::BindingResource::Sampler(&srtm_atlas_texture_sampler),
+                    resource: wgpu::BindingResource::Sampler(&atlas_texture_sampler),
                 },
             ],
         });
-
-        // Each dataset has an index.json describing the quadtree and where to find elements.
-        let srtm_index_json = {
-            let mut index_path = srtm_path.clone();
-            index_path.push("index.json");
-            let mut index_file = File::open(index_path.as_path())?;
-            let mut index_content = String::new();
-            index_file.read_to_string(&mut index_content)?;
-            json::parse(&index_content)?
-        };
-        let tree = QuadTree::from_json(&srtm_path, &srtm_index_json)?;
 
         // FIXME: test that our basic primitives work as expected.
         /*
@@ -278,41 +350,89 @@ impl TileManager {
             wgpu::BufferCopyView {
                 buffer: &buffer,
                 offset: 0,
-                bytes_per_row: srtm_atlas_texture_extent.width * 2,
-                rows_per_image: srtm_atlas_texture_extent.height,
+                bytes_per_row: atlas_texture_extent.width * 2,
+                rows_per_image: atlas_texture_extent.height,
             },
             wgpu::TextureCopyView {
-                texture: &srtm_atlas_texture,
+                texture: &atlas_texture,
                 mip_level: 0,
                 array_layer: 0u32, // FIXME: hardcoded until we get the index working
                 origin: wgpu::Origin3d::ZERO,
             },
-            srtm_atlas_texture_extent,
+            atlas_texture_extent,
         );
         gpu.queue_mut().submit(&[encoder.finish()]);
         gpu.device().poll(wgpu::Maintain::Wait);
          */
 
         Ok(Self {
-            srtm_index_texture_extent,
-            srtm_index_texture,
-            srtm_index_texture_view,
-            srtm_index_texture_sampler,
+            index_texture_extent,
+            index_texture,
+            index_texture_view,
+            index_texture_sampler,
 
-            srtm_atlas_texture_extent,
-            srtm_atlas_texture,
-            srtm_atlas_texture_view,
-            srtm_atlas_texture_sampler,
+            atlas_texture_extent,
+            atlas_texture,
+            atlas_texture_view,
+            atlas_texture_sampler,
 
             bind_group_layout,
             bind_group,
 
-            tree,
+            tile_tree,
+            tile_state: HashMap::new(),
+            tile_load_queue: BinaryHeap::new(),
+            tile_read_list: Vec::new(),
         })
     }
 
+    pub fn begin_update(&mut self) {
+        self.tile_tree.begin_update();
+    }
+
     pub fn note_required(&mut self, grat: &Graticule<GeoCenter>) {
-        self.tree.note_required(grat)
+        self.tile_tree.note_required(grat);
+    }
+
+    pub fn finish_update<'a, 'b>(&'a mut self, catalog: &'b Catalog)
+    where
+        'b: 'a,
+    {
+        let mut additions = Vec::new();
+        let mut removals = Vec::new();
+        self.tile_tree.finish_update(&mut additions, &mut removals);
+
+        // Apply removals and additions.
+        for qtid in &removals {
+            self.tile_state.remove(qtid);
+        }
+        for &(votes, qtid) in &additions {
+            if !self.tile_state.contains_key(&qtid) {
+                self.tile_state.insert(qtid, TileState::Pending);
+                self.tile_load_queue.push((votes, qtid));
+            }
+        }
+
+        // Kick off any loads, if there is space remaining.
+        while !self.tile_load_queue.is_empty() && self.tile_read_list.len() < MAX_CONCURRENT_READS {
+            let (_, qtid) = self.tile_load_queue.pop().expect("checked is_empty");
+
+            // There may be many frames between when a thing is inserted in the load queue and when
+            // we have disk bandwidth available to read it. Thus we need to double-check that we
+            // even still have it as an active tile and it's current state.
+            let maybe_state = self.tile_state.get(&qtid);
+            if maybe_state.is_none() {
+                continue;
+            }
+            let state = *maybe_state.unwrap();
+            if state != TileState::Pending {
+                continue;
+            }
+            let fut = catalog.read(self.tile_tree.file_id(&qtid));
+            //self.tile_read_list.push(Box::new(fut));
+        }
+
+        println!("ADDITIONS: {:?}, REMOVALS: {:?}", additions, removals);
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
@@ -332,9 +452,10 @@ mod test {
 
     #[test]
     fn test_tile_manager() -> Fallible<()> {
+        let catalog = Catalog::empty();
         let input = InputSystem::new(vec![])?;
         let mut gpu = GPU::new(&input, Default::default())?;
-        let _tm = TileManager::new(&mut gpu, &GpuDetailLevel::Low.parameters())?;
+        let _tm = TileManager::new(&catalog, &GpuDetailLevel::Low.parameters(), &mut gpu)?;
         gpu.device().poll(wgpu::Maintain::Wait);
         Ok(())
     }

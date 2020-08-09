@@ -26,6 +26,13 @@ struct ShelfId(u16);
 
 pub const DEFAULT_LABEL: &str = "default";
 
+pub fn from_utf8_string(input: Cow<[u8]>) -> Fallible<Cow<str>> {
+    Ok(match input {
+        Cow::Borrowed(r) => Cow::from(std::str::from_utf8(r)?),
+        Cow::Owned(o) => Cow::from(String::from_utf8(o)?),
+    })
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct FileId {
     drawer_file_id: DrawerFileId,
@@ -90,6 +97,10 @@ impl Catalog {
         self.exists_labeled(&self.default_label, name)
     }
 
+    pub fn lookup(&self, name: &str) -> Option<FileId> {
+        self.lookup_labeled(&self.default_label, name)
+    }
+
     pub fn find_matching(&self, glob: &str) -> Fallible<SmallVec<[FileId; 4]>> {
         self.find_labeled_matching(&self.default_label, glob)
     }
@@ -104,6 +115,10 @@ impl Catalog {
 
     pub fn read_sync(&self, fid: FileId) -> Fallible<Cow<[u8]>> {
         self.shelves[&fid.shelf_id].read_sync(fid)
+    }
+
+    pub async fn read(&self, fid: FileId) -> Fallible<Vec<u8>> {
+        Ok(self.shelves[&fid.shelf_id].read(fid).await?)
     }
 
     pub fn stat_name_sync(&self, name: &str) -> Fallible<FileMetadata> {
@@ -144,6 +159,13 @@ impl Catalog {
         self.shelves[&self.shelf_index[label]]
             .index
             .contains_key(name)
+    }
+
+    pub fn lookup_labeled(&self, label: &str, name: &str) -> Option<FileId> {
+        self.shelves[&self.shelf_index[label]]
+            .index
+            .get(name)
+            .map(|&fid| fid)
     }
 
     pub fn find_labeled_matching_names(&self, label: &str, glob: &str) -> Fallible<Vec<String>> {
@@ -275,6 +297,12 @@ impl Shelf {
         Ok(self.drawers[&fid.drawer_id].read_sync(fid.drawer_file_id)?)
     }
 
+    pub async fn read(&self, fid: FileId) -> Fallible<Vec<u8>> {
+        Ok(self.drawers[&fid.drawer_id]
+            .read(fid.drawer_file_id)
+            .await?)
+    }
+
     pub fn read_name_sync(&self, name: &str) -> Fallible<Cow<[u8]>> {
         ensure!(self.index.contains_key(name), "file not found");
         self.read_sync(self.index[name])
@@ -288,7 +316,7 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn basic_functionality() -> Fallible<()> {
+    fn test_basic_functionality() -> Fallible<()> {
         let mut catalog = Catalog::with_drawers(vec![DirectoryDrawer::from_directory(
             0,
             "./masking_test_data/a",
@@ -333,6 +361,20 @@ mod tests {
         );
         let data = catalog.read_name_sync("a.txt")?;
         assert_eq!(data, b"world" as &[u8]);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_async_functionality() -> Fallible<()> {
+        let mut catalog = Catalog::with_drawers(vec![DirectoryDrawer::from_directory(
+            0,
+            "./masking_test_data/a",
+        )?])?;
+
+        let meta = catalog.stat_name_sync("a.txt")?;
+        let data = catalog.read(meta.id).await?;
+        assert_eq!(data, b"hello" as &[u8]);
 
         Ok(())
     }

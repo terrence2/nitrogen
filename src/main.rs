@@ -15,6 +15,7 @@
 use absolute_unit::{degrees, kilometers, meters};
 use atmosphere::AtmosphereBuffer;
 use camera::ArcBallCamera;
+use catalog::{Catalog, DirectoryDrawer};
 use chrono::prelude::*;
 use command::Bindings;
 use failure::Fallible;
@@ -29,13 +30,21 @@ use nalgebra::convert;
 use orrery::Orrery;
 use physical_constants::EARTH_RADIUS_KM;
 use screen_text::ScreenTextRenderPass;
-use simplelog::{Config, LevelFilter, TermLogger};
 use skybox::SkyboxRenderPass;
 use stars::StarsBuffer;
-use std::time::Instant;
+use std::{path::PathBuf, time::Instant};
+use structopt::StructOpt;
 use terrain::TerrainRenderPass;
 use terrain_geo::{CpuDetailLevel, GpuDetailLevel, TerrainGeoBuffer};
 use text_layout::{TextAnchorH, TextAnchorV, TextLayoutBuffer, TextPositionH, TextPositionV};
+
+/// Show the contents of an MM file
+#[derive(Debug, StructOpt)]
+struct Opt {
+    /// Extra directories to treat as libraries
+    #[structopt(short, long)]
+    libdir: Vec<PathBuf>,
+}
 
 make_frame_graph!(
     FrameGraph {
@@ -57,7 +66,12 @@ make_frame_graph!(
 );
 
 fn main() -> Fallible<()> {
-    TermLogger::init(LevelFilter::Warn, Config::default())?;
+    env_logger::init();
+    let opt = Opt::from_args();
+    let mut catalog = Catalog::empty();
+    for (i, d) in opt.libdir.iter().enumerate() {
+        catalog.add_drawer(DirectoryDrawer::from_directory(100 + i as i64, d)?)?;
+    }
 
     let system_bindings = Bindings::new("map")
         .bind("+target_up", "Up")?
@@ -82,7 +96,7 @@ fn main() -> Fallible<()> {
     let fullscreen_buffer = FullscreenBuffer::new(&gpu)?;
     let globals_buffer = GlobalParametersBuffer::new(gpu.device())?;
     let stars_buffer = StarsBuffer::new(&gpu)?;
-    let terrain_geo_buffer = TerrainGeoBuffer::new(cpu_detail, gpu_detail, &mut gpu)?;
+    let terrain_geo_buffer = TerrainGeoBuffer::new(&catalog, cpu_detail, gpu_detail, &mut gpu)?;
     let text_layout_buffer = TextLayoutBuffer::new(&mut gpu)?;
 
     let mut frame_graph = FrameGraph::new(
@@ -177,6 +191,7 @@ fn main() -> Fallible<()> {
         )?;
         terrain_geo_buffer.borrow_mut().make_upload_buffer(
             arcball.camera(),
+            &catalog,
             &gpu,
             frame_graph.tracker_mut(),
         )?;

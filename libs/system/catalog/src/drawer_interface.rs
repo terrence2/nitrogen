@@ -12,6 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with OpenFA.  If not, see <http://www.gnu.org/licenses/>.
+use async_trait::async_trait;
 use failure::Fallible;
 use std::{borrow::Cow, collections::HashMap, path::PathBuf};
 
@@ -40,6 +41,7 @@ pub struct DrawerFileMetadata {
 
 // A drawer is one related section of a catalog. It is a uniform interface for a group of files.
 // A game can implement this trait to expose their file grouping as part of a Catalog.
+#[async_trait]
 pub trait DrawerInterface {
     // Index on a drawer lets us build an index over the entire catalog. This must return
     // every name that can be loaded from the drawer, even if it is not yet loadable. After
@@ -62,4 +64,7 @@ pub trait DrawerInterface {
 
     // Provide the content of the given file.
     fn read_sync(&self, id: DrawerFileId) -> Fallible<Cow<[u8]>>;
+
+    // Provide the content of the given file, async.
+    async fn read(&self, id: DrawerFileId) -> Fallible<Vec<u8>>;
 }

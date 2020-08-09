@@ -16,19 +16,19 @@ mod mip;
 mod srtm;
 
 use crate::{
-    mip::{MipIndex, TILE_EXTENT, TILE_SAMPLES},
+    mip::{ChildIndex, MipIndex, MipIndexDataSet, MipTile},
     srtm::SrtmIndex,
 };
-use absolute_unit::{arcseconds, meters};
+use absolute_unit::{arcseconds, degrees, meters, radians, Angle, Radians};
 use failure::Fallible;
 use geodesy::{GeoCenter, Graticule};
 use std::{
-    borrow::BorrowMut,
     io::{stdout, Write},
     path::PathBuf,
+    sync::{Arc, RwLock},
 };
 use structopt::StructOpt;
-use terrain_geo::tile::{DataSetCoordinates, DataSetDataKind};
+use terrain_geo::tile::{DataSetCoordinates, DataSetDataKind, TerrainLevel, TILE_SAMPLES};
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -45,112 +45,150 @@ struct Opt {
     output_directory: PathBuf,
 }
 
-pub const AS_PER_SPHERE_LON: i32 = 360 * 60 * 60;
-pub const AS_PER_SPHERE_LAT: i32 = 120 * 60 * 60;
-pub const AS_PER_HEMI_LON: i32 = AS_PER_SPHERE_LON / 2;
-pub const AS_PER_HEMI_LAT: i32 = AS_PER_SPHERE_LAT / 2;
+#[inline]
+pub fn minimum_longitude() -> Angle<Radians> {
+    radians!(degrees!(-180))
+}
+
+#[inline]
+pub fn maximum_longitude() -> Angle<Radians> {
+    radians!(degrees!(180))
+}
+
+#[inline]
+pub fn minimum_latitude() -> Angle<Radians> {
+    radians!(degrees!(-90))
+}
+
+#[inline]
+pub fn maximum_latitude() -> Angle<Radians> {
+    radians!(degrees!(90))
+}
+
+fn process_srtm_at_level(
+    target_level: usize,
+    current_level: usize,
+    srtm: &SrtmIndex,
+    index: Arc<RwLock<MipIndexDataSet>>,
+    node: Arc<RwLock<MipTile>>,
+) -> Fallible<()> {
+    if current_level < target_level {
+        if !node.read().unwrap().has_children() {
+            let _sw_tile = node
+                .write()
+                .unwrap()
+                .add_child(TerrainLevel::new(current_level + 1), ChildIndex::SouthWest);
+            let _se_tile = node
+                .write()
+                .unwrap()
+                .add_child(TerrainLevel::new(current_level + 1), ChildIndex::SouthEast);
+            let _nw_tile = node
+                .write()
+                .unwrap()
+                .add_child(TerrainLevel::new(current_level + 1), ChildIndex::NorthWest);
+            let _ne_tile = node
+                .write()
+                .unwrap()
+                .add_child(TerrainLevel::new(current_level + 1), ChildIndex::NorthEast);
+            return process_srtm_at_level(
+                target_level,
+                current_level,
+                srtm,
+                index.clone(),
+                node.clone(),
+            );
+        }
+        for maybe_child in node.read().unwrap().maybe_children() {
+            if let Some(child) = maybe_child {
+                process_srtm_at_level(
+                    target_level,
+                    current_level + 1,
+                    srtm,
+                    index.clone(),
+                    child.to_owned(),
+                )?;
+            }
+        }
+        return Ok(());
+    }
+    assert_eq!(target_level, current_level);
+
+    if node
+        .read()
+        .unwrap()
+        .file_exists(index.read().unwrap().base_path())
+    {
+        return Ok(());
+    }
+
+    let level = TerrainLevel::new(target_level);
+    let scale = level.as_scale();
+    let base = *node.read().unwrap().base_corner_graticule();
+    println!("building: level {} @ {}", level.offset(), base);
+
+    for lat_i in -1..TILE_SAMPLES + 1 {
+        if lat_i % 8 == 0 {
+            print!(".");
+            stdout().flush()?;
+        }
+
+        let lat_actual = degrees!(base.latitude + (scale * lat_i));
+        let lat_position = radians!(if lat_actual > degrees!(90) {
+            degrees!(90)
+        } else if lat_actual < degrees!(-90) {
+            degrees!(-90)
+        } else {
+            lat_actual
+        });
+
+        for lon_i in -1..TILE_SAMPLES + 1 {
+            let lon_actual = degrees!(base.longitude + (scale * lon_i));
+            let lon_position = radians!(if lon_actual < degrees!(-180) {
+                degrees!(180) - (-lon_actual - degrees!(180))
+            } else if lon_actual > degrees!(180) {
+                degrees!(-180) + (lon_actual - degrees!(180))
+            } else {
+                lon_actual
+            });
+
+            let position = Graticule::<GeoCenter>::new(
+                arcseconds!(lat_position),
+                arcseconds!(lon_position),
+                meters!(0),
+            );
+            // FIXME: sample regions
+            let height = srtm.sample_nearest(&position);
+            node.write()
+                .unwrap()
+                .set_sample(lat_i as i32 + 1, lon_i as i32 + 1, height);
+        }
+    }
+    println!();
+    node.read()
+        .unwrap()
+        .save_equalized_png(std::path::Path::new("scanout"))?;
+    node.read()
+        .unwrap()
+        .write(index.read().unwrap().base_path())?;
+    Ok(())
+}
 
 fn main() -> Fallible<()> {
     let opt = Opt::from_args();
 
-    let index = SrtmIndex::from_directory(&opt.srtm_directory)?;
+    let srtm = SrtmIndex::from_directory(&opt.srtm_directory)?;
 
     let mut mip_index = MipIndex::empty(&opt.output_directory);
-
-    let mut mip_srtm = mip_index.add_data_set(
-        "srtm",
+    let mip_srtm_heights = mip_index.add_data_set(
+        "srtmh",
         DataSetDataKind::Height,
         DataSetCoordinates::Spherical,
     )?;
-
-    // Sampling strategy:
-    //   1) Samples must fall on integer arc-seconds so that we can use sample_nearest.
-    //   2) Use gaussian kernel over sample area or re-import pre-sampled data somehow?
-    // Variables:
-    //   Tile size: 512 or 1024? I think 512 still since bandwidth is still an issue.
-    // Resolutions:
-    //  scale       | ~tiles   | tiles/hemi
-    //  ------------|----------|------------
-    //   1"         | 700,000  | 648,000
-    //   2"         | 180,000  | 324,000
-    //   4"         |  44,800  | 162,000
-    //   8"         |  11,200  |  81,000
-    //  16"         |   2,800  |  40,500
-    //  32"         |     700  |  20,250
-    //  64" | 1'4"  |     175  |  10,125
-    // 128" | 2'8"  |
-    // 256" | 4'16" |
-
-    for &scale in &[4096, 2048, 1024, 512] {
-        let tile_extent_as = TILE_EXTENT * scale;
-        let tiles_per_sphere_lon =
-            ((AS_PER_SPHERE_LON as f64) / (tile_extent_as as f64)).ceil() as i32;
-        let tiles_per_sphere_lat =
-            ((AS_PER_SPHERE_LAT as f64) / (tile_extent_as as f64)).ceil() as i32;
-
-        for lat_tile_offset in 0..tiles_per_sphere_lat {
-            let lat_as = (lat_tile_offset * tile_extent_as) - AS_PER_HEMI_LAT;
-
-            for lon_tile_offset in 0..tiles_per_sphere_lon {
-                let lon_as = (lon_tile_offset * tile_extent_as) - AS_PER_HEMI_LON;
-
-                // Note that the base of the tile might extend past the data area, so we need to
-                // manually clamp and wrap each individual position back into a reasonable spot.
-                let base = Graticule::<GeoCenter>::new(
-                    arcseconds!(lat_as),
-                    arcseconds!(lon_as),
-                    meters!(0),
-                );
-                println!(
-                    "building: scale {} [{} of {}] @ {}",
-                    scale,
-                    lat_tile_offset * tiles_per_sphere_lon + lon_tile_offset + 1,
-                    tiles_per_sphere_lat * tiles_per_sphere_lon,
-                    base
-                );
-
-                // Fill in a tile.
-                let mut tile = mip_srtm
-                    .borrow_mut()
-                    .write()
-                    .unwrap()
-                    .add_tile(scale, (lat_as, lon_as));
-                let mut td = tile.borrow_mut().write().unwrap();
-                for lat_i in -1..TILE_SAMPLES + 1 {
-                    if lat_i % 8 == 0 {
-                        print!(".");
-                        stdout().flush()?;
-                    }
-
-                    let lat_actual = lat_as + lat_i * scale;
-                    let lat_position = lat_actual.max(-60 * 60 * 60).min(60 * 60 * 60);
-
-                    for lon_i in -1..TILE_SAMPLES + 1 {
-                        let lon_actual = lon_as + lon_i * scale;
-                        let lon_position = if lon_actual < -AS_PER_HEMI_LON {
-                            AS_PER_HEMI_LON - (-lon_actual - AS_PER_HEMI_LON)
-                        } else if lon_actual > AS_PER_HEMI_LON {
-                            -AS_PER_HEMI_LON + (lon_actual - AS_PER_HEMI_LON)
-                        } else {
-                            lon_actual
-                        };
-
-                        let position = Graticule::<GeoCenter>::new(
-                            arcseconds!(lat_position),
-                            arcseconds!(lon_position),
-                            meters!(0),
-                        );
-                        // FIXME: sample regions
-                        let height = index.sample_nearest(&position);
-                        td.set_sample(lat_i + 1, lon_i + 1, height);
-                    }
-                }
-                td.save_equalized_png(std::path::Path::new("scanout"))?;
-                td.write()?;
-                println!();
-            }
-        }
+    let root = mip_srtm_heights.write().unwrap().get_root_tile();
+    for i in 0..5 {
+        process_srtm_at_level(i, 0, &srtm, mip_srtm_heights.clone(), root.clone())?;
     }
-    mip_srtm.write().unwrap().write()?;
-    Ok(())
+    mip_srtm_heights.read().unwrap().write()?;
+
+    return Ok(());
 }

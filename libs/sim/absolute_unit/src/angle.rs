@@ -16,7 +16,7 @@ use crate::impl_unit_for_numerics;
 use std::{
     fmt,
     marker::PhantomData,
-    ops::{Add, AddAssign, Mul, Sub, SubAssign},
+    ops::{Add, AddAssign, Div, DivAssign, Mul, Neg, Sub, SubAssign},
 };
 
 pub trait AngleUnit: Copy {
@@ -62,6 +62,43 @@ impl<Unit: AngleUnit> Angle<Unit> {
 
     pub fn f64(self) -> f64 {
         f64::from(self)
+    }
+
+    pub fn split_degrees_minutes_seconds(&self) -> (i32, i32, i32) {
+        use crate::unit::{arcseconds::ArcSeconds, degrees::Degrees};
+
+        let mut arcsecs = Angle::<ArcSeconds>::from(self).f64() as i64;
+        let degrees = Angle::<Degrees>::from(self).f64() as i64;
+        //let mut arcsecs = arcseconds!(self).f64() as i64;
+        //let degrees = degrees!(self).f64() as i64;
+        arcsecs -= degrees * 3_600;
+        let minutes = arcsecs / 60;
+        arcsecs -= minutes * 60;
+        (degrees as i32, minutes as i32, arcsecs as i32)
+    }
+
+    pub fn format_latitude(&self) -> String {
+        let mut lat = *self;
+        let lat_hemi = if lat.f64() >= 0.0 {
+            "N"
+        } else {
+            lat = -lat;
+            "S"
+        };
+        let (lat_d, lat_m, lat_s) = lat.split_degrees_minutes_seconds();
+        format!("{}{:03}d{:02}m{:02}s", lat_hemi, lat_d, lat_m, lat_s)
+    }
+
+    pub fn format_longitude(&self) -> String {
+        let mut lon = *self;
+        let lon_hemi = if lon.f64() >= 0.0 {
+            "E"
+        } else {
+            lon = -lon;
+            "W"
+        };
+        let (lon_d, lon_m, lon_s) = lon.split_degrees_minutes_seconds();
+        format!("{}{:03}d{:02}m{:02}s", lon_hemi, lon_d, lon_m, lon_s)
     }
 }
 
@@ -138,6 +175,18 @@ where
     }
 }
 
+impl<Unit> Neg for Angle<Unit>
+where
+    Unit: AngleUnit,
+{
+    type Output = Self;
+
+    fn neg(mut self) -> Self::Output {
+        self.femto_rad = -self.femto_rad;
+        self
+    }
+}
+
 macro_rules! impl_angle_unit_for_numeric_type {
     ($Num:ty) => {
         impl<Unit> From<$Num> for Angle<Unit>
@@ -184,6 +233,29 @@ macro_rules! impl_angle_unit_for_numeric_type {
                     femto_rad: (self.femto_rad as f64 * rhs as f64).round() as i64,
                     phantom: PhantomData,
                 }
+            }
+        }
+
+        impl<Unit> Div<$Num> for Angle<Unit>
+        where
+            Unit: AngleUnit,
+        {
+            type Output = Self;
+
+            fn div(self, rhs: $Num) -> Self {
+                Self {
+                    femto_rad: (self.femto_rad as f64 / rhs as f64).round() as i64,
+                    phantom: PhantomData,
+                }
+            }
+        }
+
+        impl<Unit> DivAssign<$Num> for Angle<Unit>
+        where
+            Unit: AngleUnit,
+        {
+            fn div_assign(&mut self, rhs: $Num) {
+                self.femto_rad = (self.femto_rad as f64 / rhs as f64).round() as i64;
             }
         }
     };

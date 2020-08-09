@@ -24,13 +24,14 @@ mod wireframe_indices;
 pub mod tile;
 
 use crate::{
-    index_dependency_lut::*, patch_tree::PatchTree, tile::TileManager,
+    index_dependency_lut::get_index_dependency_lut, patch_tree::PatchTree, tile::TileManager,
     wireframe_indices::get_wireframe_index_buffer,
 };
 pub use crate::{patch_winding::PatchWinding, terrain_vertex::TerrainVertex};
 
 use absolute_unit::Kilometers;
 use camera::Camera;
+use catalog::Catalog;
 use failure::Fallible;
 use frame_graph::FrameStateTracker;
 use geodesy::{Cartesian, GeoCenter, Graticule};
@@ -195,6 +196,7 @@ pub struct TerrainGeoBuffer {
 
 impl TerrainGeoBuffer {
     pub fn new(
+        catalog: &Catalog,
         cpu_detail_level: CpuDetailLevel,
         gpu_detail_level: GpuDetailLevel,
         gpu: &mut GPU,
@@ -207,7 +209,7 @@ impl TerrainGeoBuffer {
             cpu_detail.target_refinement,
             cpu_detail.desired_patch_count,
         );
-        let tile_manager = TileManager::new(gpu, &gpu_detail)?;
+        let tile_manager = TileManager::new(catalog, &gpu_detail, gpu)?;
 
         let mut patch_windings = Vec::with_capacity(cpu_detail.desired_patch_count);
         patch_windings.resize(cpu_detail.desired_patch_count, PatchWinding::Full);
@@ -328,11 +330,11 @@ impl TerrainGeoBuffer {
 
         // Create the index dependence lut.
         let index_dependency_lut_buffer_size = (mem::size_of::<u32>()
-            * Self::get_index_dependency_lut(gpu_detail.subdivisions).len())
+            * get_index_dependency_lut(gpu_detail.subdivisions).len())
             as wgpu::BufferAddress;
         let index_dependency_lut_buffer = gpu.push_slice(
             "terrain-geo-index-dependency-lut",
-            Self::get_index_dependency_lut(gpu_detail.subdivisions),
+            get_index_dependency_lut(gpu_detail.subdivisions),
             wgpu::BufferUsage::STORAGE_READ,
         );
 
@@ -490,6 +492,7 @@ impl TerrainGeoBuffer {
     pub fn make_upload_buffer(
         &mut self,
         camera: &Camera,
+        catalog: &Catalog,
         gpu: &GPU,
         tracker: &mut FrameStateTracker,
     ) -> Fallible<()> {
@@ -499,6 +502,7 @@ impl TerrainGeoBuffer {
         self.patch_tree.optimize_for_view(camera, &mut live_patches);
         assert!(live_patches.len() <= self.desired_patch_count);
 
+        self.tile_manager.begin_update();
         let scale = Matrix4::new_scaling(1_000.0);
         let view = camera.view::<Kilometers>();
         for (offset, (i, winding)) in live_patches.iter().enumerate() {
@@ -534,6 +538,7 @@ impl TerrainGeoBuffer {
             verts.push(TerrainVertex::new(&pv1, &nv1.xyz(), &g1));
             verts.push(TerrainVertex::new(&pv2, &nv2.xyz(), &g2));
         }
+        self.tile_manager.finish_update(catalog);
         // println!("verts: {}", verts.len());
 
         while verts.len() < 3 * self.desired_patch_count {
@@ -568,22 +573,13 @@ impl TerrainGeoBuffer {
             cpass.dispatch(iteration_count, 1, 1);
         }
 
-        Ok(cpass)
-    }
+        // for bind_group in self.tile_manager.height_bind_groups() {
+        //     cpass.set_pipeline(&self.apply_height_pipeline);
+        //     cpass.set_bind_group(0, bind_group, &[]);
+        //     cpass.dispatch()
+        // }
 
-    fn get_index_dependency_lut(subdivisions: usize) -> &'static [u32] {
-        match subdivisions {
-            0 => &INDEX_DEPENDENCY_LUT0,
-            1 => &INDEX_DEPENDENCY_LUT1,
-            2 => &INDEX_DEPENDENCY_LUT2,
-            3 => &INDEX_DEPENDENCY_LUT3,
-            4 => &INDEX_DEPENDENCY_LUT4,
-            5 => &INDEX_DEPENDENCY_LUT5,
-            6 => &INDEX_DEPENDENCY_LUT6,
-            7 => &INDEX_DEPENDENCY_LUT7,
-            8 => &INDEX_DEPENDENCY_LUT8,
-            _ => panic!("only up to 8 subdivisions supported"),
-        }
+        Ok(cpass)
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {

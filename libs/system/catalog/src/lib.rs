@@ -18,7 +18,7 @@ mod drawer_interface;
 mod file_metadata;
 
 pub use crate::{
-    catalog::{Catalog, FileId},
+    catalog::{from_utf8_string, Catalog, FileId},
     directory_drawer::DirectoryDrawer,
     drawer_interface::{DrawerFileId, DrawerFileMetadata, DrawerInterface},
     file_metadata::FileMetadata,

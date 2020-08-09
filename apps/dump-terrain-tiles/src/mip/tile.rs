@@ -12,9 +12,10 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with OpenFA.  If not, see <http://www.gnu.org/licenses/>.
+use absolute_unit::{arcseconds, degrees, meters, Angle, AngleUnit, ArcSeconds};
 use failure::Fallible;
+use geodesy::{GeoCenter, Graticule};
 use image::{ImageBuffer, Luma};
-use json::JsonValue;
 use std::{
     fs,
     fs::File,
@@ -22,66 +23,21 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
 };
+use terrain_geo::tile::{ChildIndex, TerrainLevel, TILE_EXTENT, TILE_PHYSICAL_SIZE, TILE_SAMPLES};
 use zerocopy::AsBytes;
-
-// The physical number of pixels in the tile.
-pub const TILE_PHYSICAL_SIZE: usize = 512;
-
-// Number of samples that the tile is wide and tall. This leaves a one pixel strip at each side
-// for linear filtering to pull from when we use this source as a texture.
-pub const TILE_SAMPLES: i32 = 510;
-
-// Width and height of the tile coverage. Multiply with the tile scale to get width or height
-// in arcseconds.
-pub const TILE_EXTENT: i32 = TILE_SAMPLES - 1;
-
-pub enum ChildIndex {
-    SouthWest,
-    SouthCenter,
-    CenterWest,
-    Center,
-}
-
-impl ChildIndex {
-    pub fn to_index(&self) -> usize {
-        match self {
-            Self::SouthWest => 0,
-            Self::SouthCenter => 1,
-            Self::CenterWest => 2,
-            Self::Center => 3,
-        }
-    }
-
-    pub fn from_index(index: usize) -> Self {
-        match index {
-            0 => Self::SouthWest,
-            1 => Self::SouthCenter,
-            2 => Self::CenterWest,
-            3 => Self::Center,
-            _ => panic!("not a valid index"),
-        }
-    }
-
-    pub fn key_name(&self) -> String {
-        match self {
-            Self::SouthWest => "south_west",
-            Self::SouthCenter => "south_center",
-            Self::CenterWest => "center_west",
-            Self::Center => "center",
-        }
-        .to_owned()
-    }
-}
 
 pub struct Tile {
     // The location of the tile.
-    path: PathBuf,
+    prefix: String,
 
     // Number of arcseconds in a sample.
-    scale: i32,
+    level: TerrainLevel,
 
-    // The tile's bottom left corner.
-    base: (i32, i32),
+    // The tile's bottom left corner. Note the full extent, not the extent clipped.
+    base: Graticule<GeoCenter>,
+
+    // The full angular extent from base to the last of TILE_PHYSICAL_SIZE.
+    angular_extent: Angle<ArcSeconds>,
 
     // Samples. Low indices are more south. This is opposite from SRTM ordering.
     data: [[i16; TILE_PHYSICAL_SIZE]; TILE_PHYSICAL_SIZE],
@@ -91,52 +47,82 @@ pub struct Tile {
 }
 
 impl Tile {
-    pub fn new(dataset_path: &Path, scale: i32, base: (i32, i32)) -> Self {
-        let mut path = dataset_path.to_owned();
-        path.push(&format!("scale-{}", scale));
-        path.push(&Self::filename_base(base));
-
+    pub fn new_uninitialized(
+        prefix: &str,
+        level: TerrainLevel,
+        base: &Graticule<GeoCenter>,
+        angular_extent: Angle<ArcSeconds>,
+    ) -> Self {
         Self {
-            path,
-            scale,
-            base,
+            prefix: prefix.to_owned(),
+            level,
+            base: *base,
+            angular_extent,
             data: [[0i16; TILE_PHYSICAL_SIZE]; TILE_PHYSICAL_SIZE],
             children: [None, None, None, None],
         }
     }
 
-    pub fn set_child(&mut self, index: ChildIndex, child: Arc<RwLock<Tile>>) {
-        self.children[index.to_index()] = Some(child);
+    pub fn add_child(
+        &mut self,
+        target_level: TerrainLevel,
+        index: ChildIndex,
+    ) -> Arc<RwLock<Tile>> {
+        // FIXME: check extent and make sure we're inside?
+        assert_eq!(self.level.offset() + 1, target_level.offset());
+        let h = meters!(0);
+        let ang = self.angular_extent / 2.0;
+        let base = match index {
+            ChildIndex::SouthWest => self.base,
+            ChildIndex::SouthEast => {
+                Graticule::new(self.base.latitude, self.base.longitude + ang, h)
+            }
+            ChildIndex::NorthWest => {
+                Graticule::new(self.base.latitude + ang, self.base.longitude, h)
+            }
+            ChildIndex::NorthEast => {
+                Graticule::new(self.base.latitude + ang, self.base.longitude + ang, h)
+            }
+        };
+        let tile = Arc::new(RwLock::new(Tile::new_uninitialized(
+            &self.prefix,
+            target_level,
+            &base,
+            ang,
+        )));
+        self.children[index.to_index()] = Some(tile.clone());
+        tile
     }
 
-    fn arcsecond_to_dms(mut arcsecs: i32) -> (i32, i32, i32) {
-        let degrees = arcsecs / 3_600;
-        arcsecs -= degrees * 3_600;
-        let minutes = arcsecs / 60;
-        arcsecs -= minutes * 60;
-        (degrees, minutes, arcsecs)
+    pub fn has_children(&self) -> bool {
+        self.children[0].is_some()
+            || self.children[1].is_some()
+            || self.children[2].is_some()
+            || self.children[3].is_some()
     }
 
-    pub fn filename_base(base: (i32, i32)) -> String {
-        let (mut lat, mut lon) = base;
-        let lat_hemi = if lat >= 0 {
-            "N"
-        } else {
-            lat = -lat;
-            "S"
-        };
-        let lon_hemi = if lon >= 0 {
-            "E"
-        } else {
-            lon = -lon;
-            "W"
-        };
-        let (lat_d, lat_m, lat_s) = Self::arcsecond_to_dms(lat);
-        let (lon_d, lon_m, lon_s) = Self::arcsecond_to_dms(lon);
+    pub fn maybe_children(&self) -> &[Option<Arc<RwLock<Tile>>>] {
+        &self.children
+    }
+
+    pub fn base_corner_graticule(&self) -> &Graticule<GeoCenter> {
+        &self.base
+    }
+
+    pub fn filename_base(&self) -> String {
         format!(
-            "{}{:03}d{:02}m{:02}s-{}{:03}d{:02}m{:02}s",
-            lat_hemi, lat_d, lat_m, lat_s, lon_hemi, lon_d, lon_m, lon_s
+            "{}-L{}-{}-{}",
+            self.prefix,
+            self.level.offset(),
+            self.base.latitude.format_latitude(),
+            self.base.longitude.format_longitude(),
         )
+    }
+
+    pub fn filename(&self, directory: &Path) -> PathBuf {
+        let mut buf = directory.to_owned();
+        buf.push(self.filename_base());
+        buf.with_extension("bin")
     }
 
     pub fn find_sampled_extremes(&self) -> (i16, i16) {
@@ -155,14 +141,21 @@ impl Tile {
         (lo, hi)
     }
 
+    pub fn is_empty_tile(&self) -> bool {
+        let (lo, hi) = self.find_sampled_extremes();
+        lo == 0 && hi == 0
+    }
+
     // Set a sample, offset in samples from the base corner.
     pub fn set_sample(&mut self, lat_offset: i32, lon_offset: i32, sample: i16) {
         self.data[lat_offset as usize][lon_offset as usize] = sample;
     }
 
     pub fn save_equalized_png(&self, directory: &Path) -> Fallible<()> {
-        let mut path = directory.to_owned();
-        path.push(format!("R{}-", self.scale) + &Self::filename_base(self.base));
+        if self.is_empty_tile() {
+            return Ok(());
+        }
+        let path = self.filename(directory);
 
         let (_, high) = self.find_sampled_extremes();
 
@@ -183,45 +176,20 @@ impl Tile {
         Ok(())
     }
 
-    #[allow(unused)]
-    pub fn file_exists(&self) -> bool {
-        self.path.exists()
+    pub fn file_exists(&self, directory: &Path) -> bool {
+        self.filename(directory).exists()
     }
 
-    pub fn write(&self) -> Fallible<()> {
-        if !self.path.parent().expect("subdir").exists() {
-            fs::create_dir(self.path.parent().expect("subdir"))?;
+    pub fn write(&self, directory: &Path) -> Fallible<()> {
+        if self.is_empty_tile() {
+            return Ok(());
         }
-        let mut fp = File::create(&self.path.with_extension("bin"))?;
+        let path = self.filename(directory);
+        if !path.parent().expect("subdir").exists() {
+            fs::create_dir(path.parent().expect("subdir"))?;
+        }
+        let mut fp = File::create(&path)?;
         fp.write_all(self.data.as_bytes())?;
         Ok(())
-    }
-
-    pub fn as_json(&self) -> Fallible<JsonValue> {
-        let mut children = JsonValue::new_object();
-        for (i, maybe_child) in self.children.iter().enumerate() {
-            if let Some(child) = maybe_child {
-                let key = ChildIndex::from_index(i).key_name();
-                children.insert(&key, child.read().unwrap().as_json()?)?;
-            }
-        }
-
-        let mut base = JsonValue::new_object();
-        base.insert("latitude_arcseconds", self.base.0)?;
-        base.insert("longitude_arcseconds", self.base.1)?;
-
-        let mut obj = JsonValue::new_object();
-        obj.insert("children", children)?;
-        obj.insert("base", base)?;
-        obj.insert("scale", self.scale)?;
-        let rel = self
-            .path
-            .strip_prefix(self.path.parent().unwrap().parent().unwrap())?
-            .with_extension("bin")
-            .to_string_lossy()
-            .to_string();
-        obj.insert::<&str>("path", &rel)?;
-
-        Ok(obj)
     }
 }

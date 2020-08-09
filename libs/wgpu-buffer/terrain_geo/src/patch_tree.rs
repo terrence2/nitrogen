@@ -23,6 +23,7 @@ use absolute_unit::Kilometers;
 use approx::assert_relative_eq;
 use camera::Camera;
 use geometry::{algorithm::bisect_edge, Plane};
+use log::trace;
 use nalgebra::{Point3, Vector3};
 use physical_constants::EARTH_RADIUS_KM;
 use std::{
@@ -626,7 +627,7 @@ impl PatchTree {
         // Select patches based on visibility.
         let max_split = self.max_splittable();
         let min_merge = self.min_mergeable();
-        println!(
+        trace!(
             "r:{} qs:{} qm:{} p:{} t:{}/{} | -/+: {}/{}/{} | {:.02}/{:.02} | {:?}",
             live_patches.len(),
             self.split_queue.len(),

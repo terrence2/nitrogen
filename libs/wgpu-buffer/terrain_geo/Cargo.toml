@@ -10,13 +10,16 @@ approx = "^ 0.3"
 backtrace = "^ 0.3"
 failure = "^ 0.1.2"
 float-ord = "^ 0.2"
+futures = "^ 0.3"
 json = "^ 0.12"
+log = "^ 0.4"
 memoffset = "^ 0.5"
 nalgebra = "^ 0.20"
 wgpu = "^ 0.5"
 zerocopy = "^ 0.2"
 absolute_unit = { path = "../../sim/absolute_unit" }
 camera = { path = "../../sim/camera" }
+catalog = { path = "../../system/catalog" }
 frame_graph = { path = "../../system/frame_graph" }
 geodesy = { path = "../../sim/geodesy" }
 geometry = { path = "../../sim/geometry" }
