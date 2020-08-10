@@ -165,7 +165,7 @@ impl Catalog {
         self.shelves[&self.shelf_index[label]]
             .index
             .get(name)
-            .map(|&fid| fid)
+            .copied()
     }
 
     pub fn find_labeled_matching_names(&self, label: &str, glob: &str) -> Fallible<Vec<String>> {
@@ -367,7 +367,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_async_functionality() -> Fallible<()> {
-        let mut catalog = Catalog::with_drawers(vec![DirectoryDrawer::from_directory(
+        let catalog = Catalog::with_drawers(vec![DirectoryDrawer::from_directory(
             0,
             "./masking_test_data/a",
         )?])?;

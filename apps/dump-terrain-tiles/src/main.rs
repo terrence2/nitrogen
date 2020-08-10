@@ -16,7 +16,7 @@ mod mip;
 mod srtm;
 
 use crate::{
-    mip::{ChildIndex, MipIndex, MipIndexDataSet, MipTile},
+    mip::{MipIndex, MipIndexDataSet, MipTile},
     srtm::SrtmIndex,
 };
 use absolute_unit::{arcseconds, degrees, meters, radians, Angle, Radians};
@@ -28,7 +28,9 @@ use std::{
     sync::{Arc, RwLock},
 };
 use structopt::StructOpt;
-use terrain_geo::tile::{DataSetCoordinates, DataSetDataKind, TerrainLevel, TILE_SAMPLES};
+use terrain_geo::tile::{
+    ChildIndex, DataSetCoordinates, DataSetDataKind, TerrainLevel, TILE_SAMPLES,
+};
 
 #[derive(Debug, StructOpt)]
 #[structopt(
@@ -90,13 +92,7 @@ fn process_srtm_at_level(
                 .write()
                 .unwrap()
                 .add_child(TerrainLevel::new(current_level + 1), ChildIndex::NorthEast);
-            return process_srtm_at_level(
-                target_level,
-                current_level,
-                srtm,
-                index.clone(),
-                node.clone(),
-            );
+            return process_srtm_at_level(target_level, current_level, srtm, index, node);
         }
         for maybe_child in node.read().unwrap().maybe_children() {
             if let Some(child) = maybe_child {
@@ -190,5 +186,5 @@ fn main() -> Fallible<()> {
     }
     mip_srtm_heights.read().unwrap().write()?;
 
-    return Ok(());
+    Ok(())
 }

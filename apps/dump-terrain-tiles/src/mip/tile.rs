@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with OpenFA.  If not, see <http://www.gnu.org/licenses/>.
-use absolute_unit::{arcseconds, degrees, meters, Angle, AngleUnit, ArcSeconds};
+use absolute_unit::{meters, Angle, ArcSeconds};
 use failure::Fallible;
 use geodesy::{GeoCenter, Graticule};
 use image::{ImageBuffer, Luma};
@@ -23,7 +23,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
 };
-use terrain_geo::tile::{ChildIndex, TerrainLevel, TILE_EXTENT, TILE_PHYSICAL_SIZE, TILE_SAMPLES};
+use terrain_geo::tile::{ChildIndex, TerrainLevel, TILE_PHYSICAL_SIZE};
 use zerocopy::AsBytes;
 
 pub struct Tile {

@@ -142,7 +142,7 @@ impl QuadTree {
     }
 
     pub(crate) fn begin_update(&mut self) {
-        self.generation.wrapping_add(1);
+        self.generation = self.generation.wrapping_add(1);
         self.additions.clear();
     }
 
@@ -161,8 +161,9 @@ impl QuadTree {
         }
 
         // Ensure we have a votes structure, potentially noting the addition of a node.
+        // We cannot use `.entry` because of the need to re-borrow self here.
+        #[allow(clippy::map_entry)]
         if !self.votes.contains_key(&node_id) {
-            // Note: we cannot use `.entry` because of the need to re-borrow self here.
             self.additions.push(node_id);
             self.votes.insert(
                 node_id,
@@ -216,6 +217,6 @@ impl QuadTree {
             }
         }
         let gen = self.generation;
-        self.votes.retain(|k, v| v.generation == gen);
+        self.votes.retain(|_, v| v.generation == gen);
     }
 }

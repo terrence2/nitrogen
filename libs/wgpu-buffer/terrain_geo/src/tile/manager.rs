@@ -54,7 +54,6 @@ use crate::{
 };
 use catalog::{from_utf8_string, Catalog};
 use failure::{err_msg, Fallible};
-use futures::Future;
 use geodesy::{GeoCenter, Graticule};
 use gpu::GPU;
 use std::{
@@ -150,6 +149,11 @@ pub(crate) struct TileSet {
 
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
+
+    #[allow(unused)]
+    kind: DataSetDataKind,
+    #[allow(unused)]
+    coordinates: DataSetCoordinates,
 
     tile_tree: QuadTree,
     tile_state: HashMap<QuadTreeId, TileState>,
@@ -393,6 +397,8 @@ impl TileSet {
             bind_group_layout,
             bind_group,
 
+            kind,
+            coordinates,
             tile_tree,
             tile_state: HashMap::new(),
             tile_load_queue: BinaryHeap::new(),
@@ -420,6 +426,8 @@ impl TileSet {
             self.tile_state.remove(qtid);
         }
         for &(votes, qtid) in &additions {
+            // We cannot use `.entry` because of the need to re-borrow self here.
+            #[allow(clippy::map_entry)]
             if !self.tile_state.contains_key(&qtid) {
                 self.tile_state.insert(qtid, TileState::Pending);
                 self.tile_load_queue.push((votes, qtid));
@@ -452,7 +460,7 @@ impl TileSet {
             let closer_sender = self.tile_sender.clone();
             async_rt.spawn(async move {
                 let data = closure_catalog.read().await.read(fid).await.unwrap();
-                let foo = closer_sender.send((qtid, data));
+                closer_sender.send((qtid, data)).expect("unbounded send");
             });
         }
 
