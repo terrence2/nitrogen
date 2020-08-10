@@ -51,6 +51,7 @@ image = "^ 0.21"
 log = "^ 0.4"
 nalgebra = "^ 0.20"
 structopt = "^ 0.2"
+tokio = { version = "^ 0.2", features = ["rt-threaded", "macros", "fs", "sync"] }
 absolute_unit = { path = "libs/sim/absolute_unit" }
 atmosphere = { path = "libs/wgpu-buffer/atmosphere" }
 camera = { path = "libs/sim/camera" }

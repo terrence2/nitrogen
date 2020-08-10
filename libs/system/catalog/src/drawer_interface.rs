@@ -42,7 +42,7 @@ pub struct DrawerFileMetadata {
 // A drawer is one related section of a catalog. It is a uniform interface for a group of files.
 // A game can implement this trait to expose their file grouping as part of a Catalog.
 #[async_trait]
-pub trait DrawerInterface {
+pub trait DrawerInterface: Send + Sync {
     // Index on a drawer lets us build an index over the entire catalog. This must return
     // every name that can be loaded from the drawer, even if it is not yet loadable. After
     // this method is called, the catalog will never reference the returned names again, in

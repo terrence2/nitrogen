@@ -32,11 +32,12 @@ use physical_constants::EARTH_RADIUS_KM;
 use screen_text::ScreenTextRenderPass;
 use skybox::SkyboxRenderPass;
 use stars::StarsBuffer;
-use std::{path::PathBuf, time::Instant};
+use std::{path::PathBuf, sync::Arc, time::Instant};
 use structopt::StructOpt;
 use terrain::TerrainRenderPass;
 use terrain_geo::{CpuDetailLevel, GpuDetailLevel, TerrainGeoBuffer};
 use text_layout::{TextAnchorH, TextAnchorV, TextLayoutBuffer, TextPositionH, TextPositionV};
+use tokio::{runtime::Runtime, sync::RwLock};
 
 /// Show the contents of an MM file
 #[derive(Debug, StructOpt)]
@@ -68,6 +69,9 @@ make_frame_graph!(
 fn main() -> Fallible<()> {
     env_logger::init();
     let opt = Opt::from_args();
+
+    let mut async_rt = Runtime::new()?;
+
     let mut catalog = Catalog::empty();
     for (i, d) in opt.libdir.iter().enumerate() {
         catalog.add_drawer(DirectoryDrawer::from_directory(100 + i as i64, d)?)?;
@@ -98,6 +102,7 @@ fn main() -> Fallible<()> {
     let stars_buffer = StarsBuffer::new(&gpu)?;
     let terrain_geo_buffer = TerrainGeoBuffer::new(&catalog, cpu_detail, gpu_detail, &mut gpu)?;
     let text_layout_buffer = TextLayoutBuffer::new(&mut gpu)?;
+    let catalog = Arc::new(RwLock::new(catalog));
 
     let mut frame_graph = FrameGraph::new(
         &mut gpu,
@@ -191,7 +196,8 @@ fn main() -> Fallible<()> {
         )?;
         terrain_geo_buffer.borrow_mut().make_upload_buffer(
             arcball.camera(),
-            &catalog,
+            catalog.clone(),
+            &mut async_rt,
             &gpu,
             frame_graph.tracker_mut(),
         )?;

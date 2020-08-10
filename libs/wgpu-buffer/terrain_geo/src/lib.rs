@@ -38,6 +38,7 @@ use geodesy::{Cartesian, GeoCenter, Graticule};
 use gpu::GPU;
 use nalgebra::{Matrix4, Point3};
 use std::{cell::RefCell, mem, ops::Range, sync::Arc};
+use tokio::{runtime::Runtime, sync::RwLock};
 use zerocopy::{AsBytes, FromBytes};
 
 #[allow(unused)]
@@ -492,7 +493,8 @@ impl TerrainGeoBuffer {
     pub fn make_upload_buffer(
         &mut self,
         camera: &Camera,
-        catalog: &Catalog,
+        catalog: Arc<RwLock<Catalog>>,
+        async_rt: &mut Runtime,
         gpu: &GPU,
         tracker: &mut FrameStateTracker,
     ) -> Fallible<()> {
@@ -538,7 +540,7 @@ impl TerrainGeoBuffer {
             verts.push(TerrainVertex::new(&pv1, &nv1.xyz(), &g1));
             verts.push(TerrainVertex::new(&pv2, &nv2.xyz(), &g2));
         }
-        self.tile_manager.finish_update(catalog);
+        self.tile_manager.finish_update(catalog, async_rt);
         // println!("verts: {}", verts.len());
 
         while verts.len() < 3 * self.desired_patch_count {

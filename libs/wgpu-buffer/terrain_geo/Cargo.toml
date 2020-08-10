@@ -15,6 +15,7 @@ json = "^ 0.12"
 log = "^ 0.4"
 memoffset = "^ 0.5"
 nalgebra = "^ 0.20"
+tokio = { version = "^ 0.2", features = ["rt-threaded", "macros", "fs", "sync"] }
 wgpu = "^ 0.5"
 zerocopy = "^ 0.2"
 absolute_unit = { path = "../../sim/absolute_unit" }

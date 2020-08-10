@@ -57,7 +57,17 @@ use failure::{err_msg, Fallible};
 use futures::Future;
 use geodesy::{GeoCenter, Graticule};
 use gpu::GPU;
-use std::collections::{BinaryHeap, HashMap};
+use std::{
+    collections::{BinaryHeap, HashMap},
+    sync::Arc,
+};
+use tokio::{
+    runtime::Runtime,
+    sync::{
+        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+        RwLock,
+    },
+};
 
 // FIXME: this should be system dependent and configurable
 const MAX_CONCURRENT_READS: usize = 5;
@@ -97,9 +107,9 @@ impl TileManager {
         }
     }
 
-    pub fn finish_update(&mut self, catalog: &Catalog) {
+    pub fn finish_update(&mut self, catalog: Arc<RwLock<Catalog>>, async_rt: &mut Runtime) {
         for ts in self.tile_sets.iter_mut() {
-            ts.finish_update(catalog);
+            ts.finish_update(catalog.clone(), async_rt);
         }
     }
 
@@ -144,7 +154,9 @@ pub(crate) struct TileSet {
     tile_tree: QuadTree,
     tile_state: HashMap<QuadTreeId, TileState>,
     tile_load_queue: BinaryHeap<(u32, QuadTreeId)>,
-    tile_read_list: Vec<Box<dyn Future<Output = Fallible<Vec<u8>>>>>,
+    tile_read_count: usize,
+    tile_sender: UnboundedSender<(QuadTreeId, Vec<u8>)>,
+    tile_receiver: UnboundedReceiver<(QuadTreeId, Vec<u8>)>,
 }
 
 impl TileSet {
@@ -365,6 +377,8 @@ impl TileSet {
         gpu.device().poll(wgpu::Maintain::Wait);
          */
 
+        let (tile_sender, tile_receiver) = unbounded_channel();
+
         Ok(Self {
             index_texture_extent,
             index_texture,
@@ -382,7 +396,9 @@ impl TileSet {
             tile_tree,
             tile_state: HashMap::new(),
             tile_load_queue: BinaryHeap::new(),
-            tile_read_list: Vec::new(),
+            tile_read_count: 0,
+            tile_sender,
+            tile_receiver,
         })
     }
 
@@ -394,10 +410,7 @@ impl TileSet {
         self.tile_tree.note_required(grat);
     }
 
-    pub fn finish_update<'a, 'b>(&'a mut self, catalog: &'b Catalog)
-    where
-        'b: 'a,
-    {
+    pub fn finish_update(&mut self, catalog: Arc<RwLock<Catalog>>, async_rt: &mut Runtime) {
         let mut additions = Vec::new();
         let mut removals = Vec::new();
         self.tile_tree.finish_update(&mut additions, &mut removals);
@@ -414,7 +427,7 @@ impl TileSet {
         }
 
         // Kick off any loads, if there is space remaining.
-        while !self.tile_load_queue.is_empty() && self.tile_read_list.len() < MAX_CONCURRENT_READS {
+        while !self.tile_load_queue.is_empty() && self.tile_read_count < MAX_CONCURRENT_READS {
             let (_, qtid) = self.tile_load_queue.pop().expect("checked is_empty");
 
             // There may be many frames between when a thing is inserted in the load queue and when
@@ -428,8 +441,27 @@ impl TileSet {
             if state != TileState::Pending {
                 continue;
             }
-            let fut = catalog.read(self.tile_tree.file_id(&qtid));
-            //self.tile_read_list.push(Box::new(fut));
+
+            // If the state was pending, move us to the reading state and consume a read slot.
+            self.tile_state.insert(qtid, TileState::Reading);
+            self.tile_read_count += 1;
+
+            // Do the read in a disconnected greenthread and send it back on an mpsc queue.
+            let fid = self.tile_tree.file_id(&qtid);
+            let closure_catalog = catalog.clone();
+            let closer_sender = self.tile_sender.clone();
+            async_rt.spawn(async move {
+                let data = closure_catalog.read().await.read(fid).await.unwrap();
+                let foo = closer_sender.send((qtid, data));
+            });
+        }
+
+        // Check for any completed reads.
+        while let Ok((qtid, data)) = self.tile_receiver.try_recv() {
+            self.tile_read_count -= 1;
+            self.tile_state.insert(qtid, TileState::Active);
+            // TODO: push this into the atlas and update the index
+            println!("DATA @ {:?} <- {}b", qtid, data.len());
         }
 
         println!("ADDITIONS: {:?}, REMOVALS: {:?}", additions, removals);
