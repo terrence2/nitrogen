@@ -15,9 +15,8 @@
 use absolute_unit::{Kilometers, LengthUnit, Meters};
 use camera::Camera;
 use failure::Fallible;
-use frame_graph::FrameStateTracker;
 use geodesy::{Cartesian, GeoCenter};
-use gpu::GPU;
+use gpu::{FrameStateTracker, GPU};
 use nalgebra::{convert, Isometry3, Matrix4, Point3, Vector3, Vector4};
 use std::{cell::RefCell, mem, sync::Arc};
 use zerocopy::{AsBytes, FromBytes};

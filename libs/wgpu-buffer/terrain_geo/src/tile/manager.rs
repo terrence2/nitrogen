@@ -55,7 +55,7 @@ use crate::{
 use catalog::{from_utf8_string, Catalog};
 use failure::{err_msg, Fallible};
 use geodesy::{GeoCenter, Graticule};
-use gpu::GPU;
+use gpu::{FrameStateTracker, GPU};
 use std::{
     collections::{BinaryHeap, HashMap},
     sync::Arc,
@@ -106,9 +106,14 @@ impl TileManager {
         }
     }
 
-    pub fn finish_update(&mut self, catalog: Arc<RwLock<Catalog>>, async_rt: &mut Runtime) {
+    pub fn finish_update(
+        &mut self,
+        catalog: Arc<RwLock<Catalog>>,
+        async_rt: &mut Runtime,
+        tracker: &mut FrameStateTracker,
+    ) {
         for ts in self.tile_sets.iter_mut() {
-            ts.finish_update(catalog.clone(), async_rt);
+            ts.finish_update(catalog.clone(), async_rt, tracker);
         }
     }
 
@@ -416,7 +421,12 @@ impl TileSet {
         self.tile_tree.note_required(grat);
     }
 
-    pub fn finish_update(&mut self, catalog: Arc<RwLock<Catalog>>, async_rt: &mut Runtime) {
+    pub fn finish_update(
+        &mut self,
+        catalog: Arc<RwLock<Catalog>>,
+        async_rt: &mut Runtime,
+        tracker: &mut FrameStateTracker,
+    ) {
         let mut additions = Vec::new();
         let mut removals = Vec::new();
         self.tile_tree.finish_update(&mut additions, &mut removals);
@@ -470,6 +480,29 @@ impl TileSet {
             self.tile_state.insert(qtid, TileState::Active);
             // TODO: push this into the atlas and update the index
             println!("DATA @ {:?} <- {}b", qtid, data.len());
+
+            /*
+            let buffer = gpu.push_slice(
+                "terrain-geo-atlas-tile-upload-buffer",
+                &data,
+                wgpu::BufferUsage::COPY_SRC,
+            );
+            encoder.copy_buffer_to_texture(
+                wgpu::BufferCopyView {
+                    buffer: &buffer,
+                    offset: 0,
+                    bytes_per_row: atlas_texture_extent.width * 2,
+                    rows_per_image: atlas_texture_extent.height,
+                },
+                wgpu::TextureCopyView {
+                    texture: &atlas_texture,
+                    mip_level: 0,
+                    array_layer: 0u32, // FIXME: hardcoded until we get the index working
+                    origin: wgpu::Origin3d::ZERO,
+                },
+                atlas_texture_extent,
+            );
+             */
         }
 
         println!("ADDITIONS: {:?}, REMOVALS: {:?}", additions, removals);

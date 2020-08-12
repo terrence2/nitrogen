@@ -18,8 +18,7 @@ use crate::{
     LayoutHandle, LayoutTextRenderContext, TextAnchorH, TextAnchorV, TextPositionH, TextPositionV,
 };
 use failure::Fallible;
-use frame_graph::FrameStateTracker;
-use gpu::GPU;
+use gpu::{FrameStateTracker, GPU};
 use std::{mem, ops::Range, sync::Arc};
 use zerocopy::{AsBytes, FromBytes};
 

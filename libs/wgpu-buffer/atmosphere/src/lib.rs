@@ -27,8 +27,7 @@ mod precompute;
 
 use crate::{earth_consts::ATMOSPHERE_PARAMETERS_BUFFER_SIZE, precompute::Precompute};
 use failure::Fallible;
-use frame_graph::FrameStateTracker;
-use gpu::GPU;
+use gpu::{FrameStateTracker, GPU};
 use log::trace;
 use nalgebra::Vector3;
 use std::{cell::RefCell, mem, sync::Arc, time::Instant};

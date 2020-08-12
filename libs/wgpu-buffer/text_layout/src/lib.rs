@@ -25,8 +25,7 @@ use crate::{
 use failure::Fallible;
 use font_common::FontInterface;
 use font_ttf::TtfFont;
-use frame_graph::FrameStateTracker;
-use gpu::GPU;
+use gpu::{FrameStateTracker, GPU};
 use log::trace;
 use std::{cell::RefCell, collections::HashMap, sync::Arc};
 

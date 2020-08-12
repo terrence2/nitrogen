@@ -12,7 +12,6 @@ zerocopy = "^ 0.2"
 absolute_unit = { path = "../../sim/absolute_unit" }
 geodesy = { path = "../../sim/geodesy" }
 camera = { path = "../../sim/camera" }
-frame_graph = { path = "../../system/frame_graph" }
 gpu = { path = "../../system/gpu" }
 
 [dev-dependencies]

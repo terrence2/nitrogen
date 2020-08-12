@@ -40,14 +40,14 @@ impl CopyBufferDescriptor {
 
 // Note: still quite limited; just precompute without dependencies.
 pub struct FrameStateTracker {
-    uploads: Vec<CopyBufferDescriptor>,
+    b2b_uploads: Vec<CopyBufferDescriptor>,
     precompute: Vec<i32>, // TODO
 }
 
 impl Default for FrameStateTracker {
     fn default() -> Self {
         Self {
-            uploads: Vec::new(),
+            b2b_uploads: Vec::new(),
             precompute: Vec::new(),
         }
     }
@@ -55,7 +55,7 @@ impl Default for FrameStateTracker {
 
 impl FrameStateTracker {
     pub fn reset(&mut self) {
-        self.uploads.clear();
+        self.b2b_uploads.clear();
         self.precompute.clear();
     }
 
@@ -75,11 +75,11 @@ impl FrameStateTracker {
         destination: Arc<Box<wgpu::Buffer>>,
         copy_size: wgpu::BufferAddress,
     ) {
-        self.uploads
+        self.b2b_uploads
             .push(CopyBufferDescriptor::new(source, destination, copy_size));
     }
 
-    pub fn drain_uploads(&mut self) -> impl Iterator<Item = CopyBufferDescriptor> + '_ {
-        self.uploads.drain(..)
+    pub fn drain_b2b_uploads(&mut self) -> std::vec::Drain<CopyBufferDescriptor> {
+        self.b2b_uploads.drain(..)
     }
 }

@@ -12,8 +12,6 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-mod frame_state_tracker;
-
 pub use crate::frame_state_tracker::FrameStateTracker;
 
 #[macro_export]
@@ -40,12 +38,12 @@ macro_rules! make_frame_graph {
         impl $name {
             #[allow(clippy::too_many_arguments)]
             pub fn new(
-                gpu: &mut ::gpu::GPU,
+                gpu: &mut $crate::GPU,
                 $(
                     $buffer_name: &::std::sync::Arc<::std::cell::RefCell<$buffer_type>>
                 ),*
             ) -> ::failure::Fallible<Self> {
-                let mut graph = Self {
+                Ok(Self {
                     tracker: Default::default(),
                     $(
                         $buffer_name: $buffer_name.to_owned()
@@ -58,38 +56,29 @@ macro_rules! make_frame_graph {
                             ),*
                         )?
                     ),*
-                };
-                Ok(graph)
+                })
             }
 
-            pub fn run(&mut self, gpu: &mut ::gpu::GPU) -> ::failure::Fallible<()> {
+            pub fn run(&mut self, gpu: &mut $crate::GPU) -> ::failure::Fallible<()> {
                 $(
                     let $buffer_name = self.$buffer_name.borrow();
                 )*
                 let mut frame = gpu.begin_frame()?;
                 {
-                    for desc in self.tracker.drain_uploads() {
-                        frame.copy_buffer_to_buffer(
-                            &desc.source,
-                            desc.source_offset,
-                            &desc.destination,
-                            desc.destination_offset,
-                            desc.copy_size
-                        );
-                    }
+                    frame.apply_all_buffer_to_buffer_uploads(self.tracker.drain_b2b_uploads());
 
                     {
-                        let cpass = frame.begin_compute_pass();
+                        let _cpass = frame.begin_compute_pass();
                         $(
-                            let cpass = $precompute_name.precompute(cpass);
+                            let _cpass = $precompute_name.precompute(_cpass);
                         )*
                     }
 
                     {
-                        let rpass = frame.begin_render_pass();
+                        let _rpass = frame.begin_render_pass();
                         $(
-                            let rpass = self.$renderer_name.draw(
-                                rpass,
+                            let _rpass = self.$renderer_name.draw(
+                                _rpass,
                                 $(
                                     &$input_buffer_name
                                 ),*
@@ -107,4 +96,56 @@ macro_rules! make_frame_graph {
             }
         }
     };
+}
+
+#[cfg(test)]
+mod test {
+    use crate::GPU;
+    use failure::Fallible;
+    use input::InputSystem;
+    use std::{cell::RefCell, sync::Arc};
+
+    pub struct TestBuffer;
+    impl TestBuffer {
+        fn precompute<'a>(&self, cpass: wgpu::ComputePass<'a>) -> wgpu::ComputePass<'a> {
+            cpass
+        }
+    }
+
+    pub struct TestRenderer;
+    impl TestRenderer {
+        fn new(_gpu: &GPU, _foo: &TestBuffer) -> Fallible<Self> {
+            Ok(Self)
+        }
+        fn draw<'a>(
+            &self,
+            rpass: wgpu::RenderPass<'a>,
+            _foo: &'a TestBuffer,
+        ) -> wgpu::RenderPass<'a> {
+            rpass
+        }
+    }
+
+    make_frame_graph!(
+        FrameGraph {
+            buffers: {
+                foo: TestBuffer
+            };
+            precompute: { foo };
+            renderers: [
+                bar: TestRenderer { foo }
+            ];
+        }
+    );
+
+    #[test]
+    fn test_basic() -> Fallible<()> {
+        let input = InputSystem::new(vec![])?;
+        let mut gpu = GPU::new(&input, Default::default())?;
+        let foo = Arc::new(RefCell::new(TestBuffer));
+        let mut frame_graph = FrameGraph::new(&mut gpu, &foo)?;
+        frame_graph.run(&mut gpu)?;
+        let _tracker = frame_graph.tracker_mut();
+        Ok(())
+    }
 }

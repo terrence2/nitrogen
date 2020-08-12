@@ -12,12 +12,17 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+mod frame_graph;
+mod frame_state_tracker;
+
+pub use crate::frame_state_tracker::FrameStateTracker;
+
+use crate::frame_state_tracker::CopyBufferDescriptor;
 use failure::{err_msg, Fallible};
-use frame_graph::FrameStateTracker;
 use futures::executor::block_on;
 use input::InputSystem;
 use log::trace;
-use std::{io::Cursor, mem, sync::Arc};
+use std::{io::Cursor, mem, sync::Arc, vec::Drain};
 use winit::dpi::PhysicalSize;
 use zerocopy::{AsBytes, FromBytes};
 
@@ -355,21 +360,16 @@ impl<'a> Frame<'a> {
         self.queue.submit(&[self.encoder.finish()]);
     }
 
-    pub fn copy_buffer_to_buffer(
-        &mut self,
-        source: &wgpu::Buffer,
-        source_offset: wgpu::BufferAddress,
-        destination: &wgpu::Buffer,
-        destination_offset: wgpu::BufferAddress,
-        copy_size: wgpu::BufferAddress,
-    ) {
-        self.encoder.copy_buffer_to_buffer(
-            source,
-            source_offset,
-            destination,
-            destination_offset,
-            copy_size,
-        )
+    pub fn apply_all_buffer_to_buffer_uploads(&mut self, b2b_uploads: Drain<CopyBufferDescriptor>) {
+        for desc in b2b_uploads {
+            self.encoder.copy_buffer_to_buffer(
+                &desc.source,
+                desc.source_offset,
+                &desc.destination,
+                desc.destination_offset,
+                desc.copy_size,
+            );
+        }
     }
 }
 

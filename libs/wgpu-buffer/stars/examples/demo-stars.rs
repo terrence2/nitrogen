@@ -129,15 +129,7 @@ fn main() -> Fallible<()> {
         let sb_borrow = stars_buffers.borrow();
         let mut frame = gpu.begin_frame()?;
         {
-            for desc in tracker.drain_uploads() {
-                frame.copy_buffer_to_buffer(
-                    &desc.source,
-                    desc.source_offset,
-                    &desc.destination,
-                    desc.destination_offset,
-                    desc.copy_size,
-                );
-            }
+            frame.apply_all_buffer_to_buffer_uploads(tracker.drain_b2b_uploads());
 
             let mut rpass = frame.begin_render_pass();
             rpass.set_pipeline(&pipeline);
