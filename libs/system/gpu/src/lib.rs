@@ -17,7 +17,7 @@ mod frame_state_tracker;
 
 pub use crate::frame_state_tracker::FrameStateTracker;
 
-use crate::frame_state_tracker::CopyBufferDescriptor;
+use crate::frame_state_tracker::{CopyBufferToBufferDescriptor, CopyBufferToTextureDescriptor};
 use failure::{err_msg, Fallible};
 use futures::executor::block_on;
 use input::InputSystem;
@@ -360,7 +360,10 @@ impl<'a> Frame<'a> {
         self.queue.submit(&[self.encoder.finish()]);
     }
 
-    pub fn apply_all_buffer_to_buffer_uploads(&mut self, b2b_uploads: Drain<CopyBufferDescriptor>) {
+    pub fn apply_all_buffer_to_buffer_uploads(
+        &mut self,
+        b2b_uploads: Drain<CopyBufferToBufferDescriptor>,
+    ) {
         for desc in b2b_uploads {
             self.encoder.copy_buffer_to_buffer(
                 &desc.source,
@@ -370,6 +373,72 @@ impl<'a> Frame<'a> {
                 desc.copy_size,
             );
         }
+    }
+
+    pub fn apply_all_buffer_to_texture_uploads(
+        &mut self,
+        b2t_uploads: Drain<CopyBufferToTextureDescriptor>,
+    ) {
+        for desc in b2t_uploads {
+            self.encoder.copy_buffer_to_texture(
+                wgpu::BufferCopyView {
+                    buffer: &desc.source,
+                    offset: 0,
+                    bytes_per_row: desc.target_extent.width * desc.target_element_size,
+                    rows_per_image: desc.target_extent.height,
+                },
+                wgpu::TextureCopyView {
+                    texture: &desc.target,
+                    mip_level: 0, // TODO: need to scale extent appropriately
+                    array_layer: desc.target_array_layer,
+                    origin: wgpu::Origin3d::ZERO,
+                },
+                desc.target_extent,
+            );
+        }
+    }
+}
+
+pub fn texture_format_size(texture_format: wgpu::TextureFormat) -> u32 {
+    match texture_format {
+        wgpu::TextureFormat::R8Unorm => 1,
+        wgpu::TextureFormat::R8Snorm => 1,
+        wgpu::TextureFormat::R8Uint => 1,
+        wgpu::TextureFormat::R8Sint => 1,
+        wgpu::TextureFormat::R16Uint => 2,
+        wgpu::TextureFormat::R16Sint => 2,
+        wgpu::TextureFormat::R16Float => 2,
+        wgpu::TextureFormat::Rg8Unorm => 2,
+        wgpu::TextureFormat::Rg8Snorm => 2,
+        wgpu::TextureFormat::Rg8Uint => 2,
+        wgpu::TextureFormat::Rg8Sint => 2,
+        wgpu::TextureFormat::R32Uint => 4,
+        wgpu::TextureFormat::R32Sint => 4,
+        wgpu::TextureFormat::R32Float => 4,
+        wgpu::TextureFormat::Rg16Uint => 4,
+        wgpu::TextureFormat::Rg16Sint => 4,
+        wgpu::TextureFormat::Rg16Float => 4,
+        wgpu::TextureFormat::Rgba8Unorm => 4,
+        wgpu::TextureFormat::Rgba8UnormSrgb => 4,
+        wgpu::TextureFormat::Rgba8Snorm => 4,
+        wgpu::TextureFormat::Rgba8Uint => 4,
+        wgpu::TextureFormat::Rgba8Sint => 4,
+        wgpu::TextureFormat::Bgra8Unorm => 4,
+        wgpu::TextureFormat::Bgra8UnormSrgb => 4,
+        wgpu::TextureFormat::Rgb10a2Unorm => 4,
+        wgpu::TextureFormat::Rg11b10Float => 4,
+        wgpu::TextureFormat::Rg32Uint => 8,
+        wgpu::TextureFormat::Rg32Sint => 8,
+        wgpu::TextureFormat::Rg32Float => 8,
+        wgpu::TextureFormat::Rgba16Uint => 8,
+        wgpu::TextureFormat::Rgba16Sint => 8,
+        wgpu::TextureFormat::Rgba16Float => 8,
+        wgpu::TextureFormat::Rgba32Uint => 16,
+        wgpu::TextureFormat::Rgba32Sint => 16,
+        wgpu::TextureFormat::Rgba32Float => 16,
+        wgpu::TextureFormat::Depth32Float => 4,
+        wgpu::TextureFormat::Depth24Plus => 4,
+        wgpu::TextureFormat::Depth24PlusStencil8 => 4,
     }
 }
 
