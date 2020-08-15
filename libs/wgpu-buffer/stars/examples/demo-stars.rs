@@ -52,9 +52,9 @@ fn main() -> Fallible<()> {
         .device()
         .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             bind_group_layouts: &[
-                globals_buffer.borrow().bind_group_layout(),
+                globals_buffer.read().unwrap().bind_group_layout(),
                 &empty_layout,
-                stars_buffers.borrow().bind_group_layout(),
+                stars_buffers.read().unwrap().bind_group_layout(),
             ],
         });
     let pipeline = gpu
@@ -121,12 +121,13 @@ fn main() -> Fallible<()> {
         // Prepare new camera parameters.
         let mut tracker = Default::default();
         globals_buffer
-            .borrow()
+            .read()
+            .unwrap()
             .make_upload_buffer(arcball.camera(), &gpu, &mut tracker)?;
 
-        let gb_borrow = globals_buffer.borrow();
-        let fs_borrow = fullscreen_buffer.borrow();
-        let sb_borrow = stars_buffers.borrow();
+        let gb_borrow = globals_buffer.read().unwrap();
+        let fs_borrow = fullscreen_buffer.read().unwrap();
+        let sb_borrow = stars_buffers.read().unwrap();
         let mut frame = gpu.begin_frame()?;
         {
             frame.apply_all_buffer_to_buffer_uploads(tracker.drain_b2b_uploads());

@@ -34,10 +34,14 @@ use camera::Camera;
 use catalog::Catalog;
 use failure::Fallible;
 use geodesy::{Cartesian, GeoCenter, Graticule};
-use gpu::{FrameStateTracker, GPU};
+use gpu::{GpuResource, UploadTracker, GPU};
 use nalgebra::{Matrix4, Point3};
-use std::{cell::RefCell, mem, ops::Range, sync::Arc};
-use tokio::{runtime::Runtime, sync::RwLock};
+use std::{
+    mem,
+    ops::Range,
+    sync::{Arc, RwLock},
+};
+use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use zerocopy::{AsBytes, FromBytes};
 
 #[allow(unused)]
@@ -200,7 +204,7 @@ impl TerrainGeoBuffer {
         cpu_detail_level: CpuDetailLevel,
         gpu_detail_level: GpuDetailLevel,
         gpu: &mut GPU,
-    ) -> Fallible<Arc<RefCell<Self>>> {
+    ) -> Fallible<Arc<RwLock<Self>>> {
         let cpu_detail = cpu_detail_level.parameters();
         let gpu_detail = gpu_detail_level.parameters();
 
@@ -467,7 +471,7 @@ impl TerrainGeoBuffer {
             })
             .collect::<Vec<_>>();
 
-        Ok(Arc::new(RefCell::new(Self {
+        Ok(Arc::new(RwLock::new(Self {
             desired_patch_count: cpu_detail.desired_patch_count,
             patch_tree,
             patch_windings,
@@ -492,10 +496,10 @@ impl TerrainGeoBuffer {
     pub fn make_upload_buffer(
         &mut self,
         camera: &Camera,
-        catalog: Arc<RwLock<Catalog>>,
+        catalog: Arc<AsyncRwLock<Catalog>>,
         async_rt: &mut Runtime,
         gpu: &GPU,
-        tracker: &mut FrameStateTracker,
+        tracker: &mut UploadTracker,
     ) -> Fallible<()> {
         // TODO: keep these allocations across frames
         let mut verts = Vec::with_capacity(3 * self.desired_patch_count);
@@ -558,32 +562,6 @@ impl TerrainGeoBuffer {
         Ok(())
     }
 
-    pub fn precompute<'a>(
-        &'a self,
-        mut cpass: wgpu::ComputePass<'a>,
-    ) -> Fallible<wgpu::ComputePass<'a>> {
-        cpass.set_pipeline(&self.subdivide_prepare_pipeline);
-        cpass.set_bind_group(0, &self.subdivide_prepare_bind_group, &[]);
-        cpass.dispatch(3 * self.desired_patch_count as u32, 1, 1);
-
-        for i in 0..self.subdivisions {
-            let (expand, bind_group) = &self.subdivide_expand_bind_groups[i];
-            let iteration_count =
-                expand.compute_vertices_in_patch * self.desired_patch_count as u32;
-            cpass.set_pipeline(&self.subdivide_expand_pipeline);
-            cpass.set_bind_group(0, bind_group, &[]);
-            cpass.dispatch(iteration_count, 1, 1);
-        }
-
-        // for bind_group in self.tile_manager.height_bind_groups() {
-        //     cpass.set_pipeline(&self.apply_height_pipeline);
-        //     cpass.set_bind_group(0, bind_group, &[]);
-        //     cpass.dispatch()
-        // }
-
-        Ok(cpass)
-    }
-
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         self.tile_manager.bind_group_layout()
     }
@@ -621,6 +599,35 @@ impl TerrainGeoBuffer {
 
     pub fn wireframe_index_range(&self, winding: PatchWinding) -> Range<u32> {
         self.wireframe_index_ranges[winding.index()].clone()
+    }
+}
+
+impl GpuResource for TerrainGeoBuffer {
+    fn name(&self) -> &str {
+        "terrain-geo-buffer"
+    }
+
+    fn compute<'a>(&'a self, mut cpass: wgpu::ComputePass<'a>) -> wgpu::ComputePass<'a> {
+        cpass.set_pipeline(&self.subdivide_prepare_pipeline);
+        cpass.set_bind_group(0, &self.subdivide_prepare_bind_group, &[]);
+        cpass.dispatch(3 * self.desired_patch_count as u32, 1, 1);
+
+        for i in 0..self.subdivisions {
+            let (expand, bind_group) = &self.subdivide_expand_bind_groups[i];
+            let iteration_count =
+                expand.compute_vertices_in_patch * self.desired_patch_count as u32;
+            cpass.set_pipeline(&self.subdivide_expand_pipeline);
+            cpass.set_bind_group(0, bind_group, &[]);
+            cpass.dispatch(iteration_count, 1, 1);
+        }
+
+        // for bind_group in self.tile_manager.height_bind_groups() {
+        //     cpass.set_pipeline(&self.apply_height_pipeline);
+        //     cpass.set_bind_group(0, bind_group, &[]);
+        //     cpass.dispatch()
+        // }
+
+        cpass
     }
 }
 

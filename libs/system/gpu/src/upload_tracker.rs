@@ -66,12 +66,12 @@ impl CopyBufferToBufferDescriptor {
 }
 
 // Note: still quite limited; just precompute without dependencies.
-pub struct FrameStateTracker {
-    b2b_uploads: Vec<CopyBufferToBufferDescriptor>,
-    b2t_uploads: Vec<CopyBufferToTextureDescriptor>,
+pub struct UploadTracker {
+    pub(crate) b2b_uploads: Vec<CopyBufferToBufferDescriptor>,
+    pub(crate) b2t_uploads: Vec<CopyBufferToTextureDescriptor>,
 }
 
-impl Default for FrameStateTracker {
+impl Default for UploadTracker {
     fn default() -> Self {
         Self {
             b2b_uploads: Vec::new(),
@@ -80,12 +80,7 @@ impl Default for FrameStateTracker {
     }
 }
 
-impl FrameStateTracker {
-    pub fn reset(&mut self) {
-        self.b2b_uploads.clear();
-        self.b2t_uploads.clear();
-    }
-
+impl UploadTracker {
     pub fn upload(
         &mut self,
         source: wgpu::Buffer,
@@ -93,19 +88,10 @@ impl FrameStateTracker {
         copy_size: usize,
     ) {
         assert!(copy_size < wgpu::BufferAddress::MAX as usize);
-        self.upload_ba(source, destination, copy_size as wgpu::BufferAddress);
-    }
-
-    pub fn upload_ba(
-        &mut self,
-        source: wgpu::Buffer,
-        destination: Arc<Box<wgpu::Buffer>>,
-        copy_size: wgpu::BufferAddress,
-    ) {
         self.b2b_uploads.push(CopyBufferToBufferDescriptor::new(
             source,
             destination,
-            copy_size,
+            copy_size as wgpu::BufferAddress,
         ));
     }
 

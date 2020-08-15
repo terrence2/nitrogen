@@ -25,9 +25,12 @@ use crate::{
 use failure::Fallible;
 use font_common::FontInterface;
 use font_ttf::TtfFont;
-use gpu::{FrameStateTracker, GPU};
+use gpu::{GpuResource, UploadTracker, GPU};
 use log::trace;
-use std::{cell::RefCell, collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
 // Fallback for when we have no libs loaded.
 // https://fonts.google.com/specimen/Quantico?selection.family=Quantico
@@ -133,8 +136,14 @@ pub struct TextLayoutBuffer {
     layout_bind_group_layout: wgpu::BindGroupLayout,
 }
 
+impl GpuResource for TextLayoutBuffer {
+    fn name(&self) -> &str {
+        "text-layout-buffer"
+    }
+}
+
 impl TextLayoutBuffer {
-    pub fn new(gpu: &mut GPU) -> Fallible<Arc<RefCell<Self>>> {
+    pub fn new(gpu: &mut GPU) -> Fallible<Arc<RwLock<Self>>> {
         trace!("LayoutBuffer::new");
 
         let glyph_bind_group_layout = GlyphCache::create_bind_group_layout(gpu.device());
@@ -165,7 +174,7 @@ impl TextLayoutBuffer {
             gpu,
         ));
 
-        Ok(Arc::new(RefCell::new(Self {
+        Ok(Arc::new(RwLock::new(Self {
             glyph_cache_map,
             glyph_caches,
             layout_map: HashMap::new(),
@@ -238,11 +247,7 @@ impl TextLayoutBuffer {
         Ok(self.layout_mut(handle))
     }
 
-    pub fn make_upload_buffer(
-        &mut self,
-        gpu: &GPU,
-        tracker: &mut FrameStateTracker,
-    ) -> Fallible<()> {
+    pub fn make_upload_buffer(&mut self, gpu: &GPU, tracker: &mut UploadTracker) -> Fallible<()> {
         for layout in self.layouts.iter_mut() {
             layout.make_upload_buffer(
                 &self.glyph_caches[layout.glyph_cache_index()],
@@ -267,7 +272,8 @@ mod test {
         let layout_buffer = TextLayoutBuffer::new(&mut gpu)?;
 
         layout_buffer
-            .borrow_mut()
+            .write()
+            .unwrap()
             .add_screen_text("quantico", "Top Left (r)", &gpu)?
             .with_color(&[1f32, 0f32, 0f32, 1f32])
             .with_horizontal_position(TextPositionH::Left)
@@ -276,7 +282,8 @@ mod test {
             .with_vertical_anchor(TextAnchorV::Top);
 
         layout_buffer
-            .borrow_mut()
+            .write()
+            .unwrap()
             .add_screen_text("quantico", "Top Right (b)", &gpu)?
             .with_color(&[0f32, 0f32, 1f32, 1f32])
             .with_horizontal_position(TextPositionH::Right)
@@ -285,7 +292,8 @@ mod test {
             .with_vertical_anchor(TextAnchorV::Top);
 
         layout_buffer
-            .borrow_mut()
+            .write()
+            .unwrap()
             .add_screen_text("quantico", "Bottom Left (w)", &gpu)?
             .with_color(&[1f32, 1f32, 1f32, 1f32])
             .with_horizontal_position(TextPositionH::Left)
@@ -294,7 +302,8 @@ mod test {
             .with_vertical_anchor(TextAnchorV::Bottom);
 
         layout_buffer
-            .borrow_mut()
+            .write()
+            .unwrap()
             .add_screen_text("quantico", "Bottom Right (m)", &gpu)?
             .with_color(&[1f32, 0f32, 1f32, 1f32])
             .with_horizontal_position(TextPositionH::Right)
@@ -303,7 +312,8 @@ mod test {
             .with_vertical_anchor(TextAnchorV::Bottom);
 
         let handle_clr = layout_buffer
-            .borrow_mut()
+            .write()
+            .unwrap()
             .add_screen_text("quantico", "", &gpu)?
             .with_span("THR: AFT  1.0G   2462   LCOS   740 M61")
             .with_color(&[1f32, 0f32, 0f32, 1f32])
@@ -314,7 +324,8 @@ mod test {
             .handle();
 
         let handle_fin = layout_buffer
-            .borrow_mut()
+            .write()
+            .unwrap()
             .add_screen_text("quantico", "DONE: 0%", &gpu)?
             .with_color(&[0f32, 1f32, 0f32, 1f32])
             .with_horizontal_position(TextPositionH::Center)
@@ -326,11 +337,11 @@ mod test {
         for i in 0..32 {
             if i < 16 {
                 handle_clr
-                    .grab(&mut layout_buffer.borrow_mut())
+                    .grab(&mut layout_buffer.write().unwrap())
                     .set_color(&[0f32, i as f32 / 16f32, 0f32, 1f32])
             } else {
                 handle_clr
-                    .grab(&mut layout_buffer.borrow_mut())
+                    .grab(&mut layout_buffer.write().unwrap())
                     .set_color(&[
                         (i as f32 - 16f32) / 16f32,
                         1f32,
@@ -340,7 +351,7 @@ mod test {
             };
             let msg = format!("DONE: {}%", ((i as f32 / 32f32) * 100f32) as u32);
             handle_fin
-                .grab(&mut layout_buffer.borrow_mut())
+                .grab(&mut layout_buffer.write().unwrap())
                 .set_span(&msg);
         }
         Ok(())

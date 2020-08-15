@@ -16,9 +16,12 @@ use absolute_unit::{Kilometers, LengthUnit, Meters};
 use camera::Camera;
 use failure::Fallible;
 use geodesy::{Cartesian, GeoCenter};
-use gpu::{FrameStateTracker, GPU};
+use gpu::{GpuResource, UploadTracker, GPU};
 use nalgebra::{convert, Isometry3, Matrix4, Point3, Vector3, Vector4};
-use std::{cell::RefCell, mem, sync::Arc};
+use std::{
+    mem,
+    sync::{Arc, RwLock},
+};
 use zerocopy::{AsBytes, FromBytes};
 
 pub fn m2v(m: &Matrix4<f32>) -> [[f32; 4]; 4] {
@@ -145,8 +148,14 @@ impl Globals {
     }
 }
 
+impl GpuResource for GlobalParametersBuffer {
+    fn name(&self) -> &str {
+        "globals-buffer"
+    }
+}
+
 impl GlobalParametersBuffer {
-    pub fn new(device: &wgpu::Device) -> Fallible<Arc<RefCell<Self>>> {
+    pub fn new(device: &wgpu::Device) -> Fallible<Arc<RwLock<Self>>> {
         let buffer_size = mem::size_of::<Globals>() as wgpu::BufferAddress;
         let parameters_buffer = Arc::new(Box::new(device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("globals-buffer"),
@@ -178,7 +187,7 @@ impl GlobalParametersBuffer {
             }],
         });
 
-        Ok(Arc::new(RefCell::new(Self {
+        Ok(Arc::new(RwLock::new(Self {
             bind_group_layout,
             bind_group,
             buffer_size,
@@ -195,7 +204,7 @@ impl GlobalParametersBuffer {
         &self.bind_group
     }
 
-    fn upload_gpu_buffer(&self, globals: Globals, gpu: &GPU, tracker: &mut FrameStateTracker) {
+    fn upload_gpu_buffer(&self, globals: Globals, gpu: &GPU, tracker: &mut UploadTracker) {
         let source_map = gpu.device().create_buffer_mapped(&wgpu::BufferDescriptor {
             label: Some("global-buffer"),
             size: self.buffer_size,
@@ -203,14 +212,18 @@ impl GlobalParametersBuffer {
         });
         source_map.data.copy_from_slice(globals.as_bytes());
         let source = source_map.finish();
-        tracker.upload_ba(source, self.parameters_buffer.clone(), self.buffer_size)
+        tracker.upload(
+            source,
+            self.parameters_buffer.clone(),
+            self.buffer_size as usize,
+        )
     }
 
     pub fn make_upload_buffer(
         &self,
         camera: &Camera,
         gpu: &GPU,
-        tracker: &mut FrameStateTracker,
+        tracker: &mut UploadTracker,
     ) -> Fallible<()> {
         let globals: Globals = Default::default();
         let globals = globals
@@ -225,7 +238,7 @@ impl GlobalParametersBuffer {
         &self,
         _camera: &Camera,
         _gpu: &GPU,
-        _tracker: &mut FrameStateTracker,
+        _tracker: &mut UploadTracker,
     ) -> Fallible<()> {
         /*
         let globals = Self::arcball_camera_to_buffer(100f32, 100f32, 0f32, 0f32, camera, gpu);

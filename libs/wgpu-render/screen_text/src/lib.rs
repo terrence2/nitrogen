@@ -14,21 +14,24 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use failure::Fallible;
 use global_data::GlobalParametersBuffer;
-use gpu::GPU;
+use gpu::{GpuResource, RenderStep, GPU};
 use log::trace;
 use shader_shared::Group;
+use std::sync::{Arc, RwLock};
 use text_layout::{LayoutVertex, TextLayoutBuffer};
 
-pub struct ScreenTextRenderPass {
+pub struct ScreenTextRenderStep {
+    global_data: Arc<RwLock<GlobalParametersBuffer>>,
+    layout_buffer: Arc<RwLock<TextLayoutBuffer>>,
     pipeline: wgpu::RenderPipeline,
 }
 
-impl ScreenTextRenderPass {
+impl ScreenTextRenderStep {
     pub fn new(
         gpu: &mut GPU,
-        global_data: &GlobalParametersBuffer,
-        layout_buffer: &TextLayoutBuffer,
-    ) -> Fallible<Self> {
+        global_data: Arc<RwLock<GlobalParametersBuffer>>,
+        layout_buffer: Arc<RwLock<TextLayoutBuffer>>,
+    ) -> Fallible<Arc<RwLock<Self>>> {
         trace!("ScreenTextRenderPass::new");
 
         let vert_shader =
@@ -40,9 +43,9 @@ impl ScreenTextRenderPass {
             gpu.device()
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     bind_group_layouts: &[
-                        global_data.bind_group_layout(),
-                        layout_buffer.glyph_bind_group_layout(),
-                        layout_buffer.layout_bind_group_layout(),
+                        global_data.read().unwrap().bind_group_layout(),
+                        layout_buffer.read().unwrap().glyph_bind_group_layout(),
+                        layout_buffer.read().unwrap().layout_bind_group_layout(),
                     ],
                 });
 
@@ -94,7 +97,11 @@ impl ScreenTextRenderPass {
                 alpha_to_coverage_enabled: false,
             });
 
-        Ok(Self { pipeline })
+        Ok(Arc::new(RwLock::new(Self {
+            global_data,
+            layout_buffer,
+            pipeline,
+        })))
     }
 
     pub fn draw<'a>(
@@ -117,6 +124,51 @@ impl ScreenTextRenderPass {
                 rpass.draw_indexed(layout.index_range(), 0, 0..1);
             }
         }
+        rpass
+    }
+}
+
+use std::{any::Any, collections::HashMap, sync::RwLockReadGuard};
+
+impl RenderStep for ScreenTextRenderStep {
+    fn name(&self) -> &str {
+        "screen-text-render-step"
+    }
+
+    fn render<'a>(
+        &'a self,
+        mut rpass: wgpu::RenderPass<'a>,
+        resources: &'a HashMap<&str, RwLockReadGuard<'a, dyn RenderStep>>,
+    ) -> wgpu::RenderPass<'a> {
+        println!("RENDER");
+        // (&resources["globals-buffer"] as &(dyn Any + 'static))
+        //     .downcast_ref::<&GlobalParametersBuffer>()
+        //     .expect("globals")
+        //     .bind_group();
+        let a = (&resources["globals-buffer"])
+            .downcast_ref::<&GlobalParametersBuffer>()
+            .expect("globals")
+            .bind_group();
+        // let a = &resources["globals-buffer"];
+        // let b = **a;
+        let layout_buffer = &resources[self.layout_buffer.read().unwrap().name()];
+
+        rpass.set_pipeline(&self.pipeline);
+        //rpass.set_bind_group(Group::Globals.index(), &global_data.bind_group(), &[]);
+        /*
+        for (font_name, layout_handles) in layout_buffer.layouts_by_font() {
+            let glyph_cache = layout_buffer.glyph_cache(font_name);
+            rpass.set_bind_group(Group::GlyphCache.index(), &glyph_cache.bind_group(), &[]);
+            for &layout_handle in layout_handles {
+                let layout = layout_buffer.layout(layout_handle);
+                rpass.set_bind_group(Group::TextLayout.index(), &layout.bind_group(), &[]);
+
+                rpass.set_index_buffer(&layout.index_buffer(), 0, 0);
+                rpass.set_vertex_buffer(0, &layout.vertex_buffer(), 0, 0);
+                rpass.draw_indexed(layout.index_range(), 0, 0..1);
+            }
+        }
+         */
         rpass
     }
 }

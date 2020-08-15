@@ -13,11 +13,14 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 mod frame_graph;
-mod frame_state_tracker;
+mod upload_tracker;
 
-pub use crate::frame_state_tracker::FrameStateTracker;
+pub use crate::{
+    frame_graph::{FrameGraph, GpuResource, RenderStep},
+    upload_tracker::UploadTracker,
+};
 
-use crate::frame_state_tracker::{CopyBufferToBufferDescriptor, CopyBufferToTextureDescriptor};
+use crate::upload_tracker::{CopyBufferToBufferDescriptor, CopyBufferToTextureDescriptor};
 use failure::{err_msg, Fallible};
 use futures::executor::block_on;
 use input::InputSystem;
@@ -273,7 +276,7 @@ impl GPU {
         data: &[T],
         target: Arc<Box<wgpu::Buffer>>,
         usage: wgpu::BufferUsage,
-        tracker: &mut FrameStateTracker,
+        tracker: &mut UploadTracker,
     ) {
         if let Some(source) = self.maybe_push_slice(label, data, usage) {
             tracker.upload(source, target, mem::size_of::<T>() * data.len());

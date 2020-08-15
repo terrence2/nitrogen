@@ -18,7 +18,7 @@ use crate::{
     LayoutHandle, LayoutTextRenderContext, TextAnchorH, TextAnchorV, TextPositionH, TextPositionV,
 };
 use failure::Fallible;
-use gpu::{FrameStateTracker, GPU};
+use gpu::{UploadTracker, GPU};
 use std::{mem, ops::Range, sync::Arc};
 use zerocopy::{AsBytes, FromBytes};
 
@@ -260,7 +260,7 @@ impl Layout {
         &mut self,
         glyph_cache: &GlyphCache,
         gpu: &GPU,
-        tracker: &mut FrameStateTracker,
+        tracker: &mut UploadTracker,
     ) -> Fallible<()> {
         if self.text_render_context.is_none() {
             self.text_render_context =

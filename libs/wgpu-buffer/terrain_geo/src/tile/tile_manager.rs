@@ -48,7 +48,7 @@ use crate::{tile::tile_set::TileSet, GpuDetail};
 use catalog::{from_utf8_string, Catalog};
 use failure::Fallible;
 use geodesy::{GeoCenter, Graticule};
-use gpu::{FrameStateTracker, GPU};
+use gpu::{UploadTracker, GPU};
 use std::sync::Arc;
 use tokio::{runtime::Runtime, sync::RwLock};
 
@@ -89,7 +89,7 @@ impl TileManager {
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &mut Runtime,
         gpu: &GPU,
-        tracker: &mut FrameStateTracker,
+        tracker: &mut UploadTracker,
     ) {
         for ts in self.tile_sets.iter_mut() {
             ts.finish_update(catalog.clone(), async_rt, gpu, tracker);
