@@ -57,11 +57,10 @@ pub(crate) struct QuadTree {
     root: QuadTreeId,
     nodes: Vec<QuadTreeNode>,
 
-    // A side struct that we use to track priority, based on what is visible.
-    votes: HashMap<QuadTreeId, NodeVotes>,
-    additions: Vec<QuadTreeId>,
-
-    // Generation tracks the current frame.
+    // Note that we may be tracking many hundreds of thousands of tiles, so we want to avoid
+    // visiting each tile per frame. To do this we use the following side structures to track
+    // current visibility and priority.
+    //
     // Update algorithm:
     //   Bump global generation count at the start of the update.
     //   For each note_resize:
@@ -69,11 +68,12 @@ pub(crate) struct QuadTree {
     //       if the nodes generation is older than this generation, reset the vote count
     //       set the node generation to current generation
     //       bump the vote count on the node
-    //       if not present in live_votes
+    //       if not present in `votes`
     //         note the new node
-    //         insert the node into by by_votes
-    //          TODO: do we need a side HashSet as well?
-    //   Sort the by_votes set
+    //         insert the node into by `votes`
+    //   At end, clear out any `votes` that are behind the current generation
+    votes: HashMap<QuadTreeId, NodeVotes>,
+    additions: Vec<QuadTreeId>,
     generation: u32,
 }
 
