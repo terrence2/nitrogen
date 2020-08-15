@@ -66,6 +66,7 @@ macro_rules! make_frame_graph {
                 let mut frame = gpu.begin_frame()?;
                 {
                     frame.apply_all_buffer_to_buffer_uploads(self.tracker.drain_b2b_uploads());
+                    frame.apply_all_buffer_to_texture_uploads(self.tracker.drain_b2t_uploads());
 
                     {
                         let _cpass = frame.begin_compute_pass();

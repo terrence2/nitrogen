@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 pub struct CopyBufferToTextureDescriptor {
     pub(crate) source: wgpu::Buffer,
-    pub(crate) target: wgpu::Texture,
+    pub(crate) target: Arc<Box<wgpu::Texture>>,
     pub(crate) target_extent: wgpu::Extent3d,
     pub(crate) target_element_size: u32,
     pub(crate) target_array_layer: u32,
@@ -26,7 +26,7 @@ pub struct CopyBufferToTextureDescriptor {
 impl CopyBufferToTextureDescriptor {
     pub fn new(
         source: wgpu::Buffer,
-        target: wgpu::Texture,
+        target: Arc<Box<wgpu::Texture>>,
         target_extent: wgpu::Extent3d,
         target_element_size: u32,
         target_array_layer: u32,
@@ -112,7 +112,7 @@ impl FrameStateTracker {
     pub fn upload_to_texture(
         &mut self,
         source: wgpu::Buffer,
-        target: wgpu::Texture,
+        target: Arc<Box<wgpu::Texture>>,
         target_extent: wgpu::Extent3d,
         target_format: wgpu::TextureFormat,
         target_array_layer: u32,
@@ -128,5 +128,9 @@ impl FrameStateTracker {
 
     pub fn drain_b2b_uploads(&mut self) -> std::vec::Drain<CopyBufferToBufferDescriptor> {
         self.b2b_uploads.drain(..)
+    }
+
+    pub fn drain_b2t_uploads(&mut self) -> std::vec::Drain<CopyBufferToTextureDescriptor> {
+        self.b2t_uploads.drain(..)
     }
 }

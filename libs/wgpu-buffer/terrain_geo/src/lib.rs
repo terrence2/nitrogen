@@ -539,7 +539,8 @@ impl TerrainGeoBuffer {
             verts.push(TerrainVertex::new(&pv1, &nv1.xyz(), &g1));
             verts.push(TerrainVertex::new(&pv2, &nv2.xyz(), &g2));
         }
-        self.tile_manager.finish_update(catalog, async_rt, tracker);
+        self.tile_manager
+            .finish_update(catalog, async_rt, gpu, tracker);
         // println!("verts: {}", verts.len());
 
         while verts.len() < 3 * self.desired_patch_count {

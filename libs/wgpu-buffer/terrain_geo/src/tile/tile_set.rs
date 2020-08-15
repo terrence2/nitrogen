@@ -12,39 +12,6 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with OpenFA.  If not, see <http://www.gnu.org/licenses/>.
-
-// Data Sets:
-//   NASA's Shuttle Radar Topography Map (SRTM); height data
-//
-// Desired Data Sets:
-//   NASA's Blue Marble Next Generation (BMNG); diffuse color information
-//   JAXA's Advanced Land Observing Satellite "DAICHI" (ALOS); height data
-//   Something cartesian polar north and south
-//
-// Tiles are 512x512 with a one pixel overlap with other tiles to enable linear filtering. Data is
-//   stored row-major with low indexed rows to the south, going north and low index.
-//
-// Tile cache design:
-//   Upload one mega-texture(s) for each dataset.
-//   The index is a fixed, large texture:
-//     * SRTM has 1' resolution, but tiles have at minimum 510' of content.
-//     * We need a (360|180 * 60 * 60 / 510) pixels wide|high texture => 2541.17 x 1270.59
-//     * 2560 * 1280 px index texture.
-//     * Open Question: do we have data sets with higher resolution that we want to support? Will
-//       those inherently load in larger blocks to support the above index scheme? Or do we need
-//       mulitple layers of indexing?
-//     * Open Question: one index per dataset or shared globally and we assume the same resolution
-//       choice for all datasets? I think we'll need higher resolution color and normal data than
-//       height?
-//   Tile Updates:
-//     * The patch tree "votes" on what resolution it wants.
-//       * Q: can we compute the index in O(1) instead of walking the tree?
-//     * We select a handful of the most needed that are not present to upload and create copy ops.
-//       * Q: how do we determine globally what the most needed changes are?
-//     * We update the index texture with a compute shader that overwrites if the scale is smaller.
-//       * Q: are there optimizations we can make knowing that it is a quadtree?
-
-// First pass: hard code everything.
 use crate::{
     tile::{
         quad_tree::{QuadTree, QuadTreeId},
@@ -52,12 +19,12 @@ use crate::{
     },
     GpuDetail,
 };
-use catalog::{from_utf8_string, Catalog};
+use catalog::Catalog;
 use failure::{err_msg, Fallible};
 use geodesy::{GeoCenter, Graticule};
 use gpu::{FrameStateTracker, GPU};
 use std::{
-    collections::{BinaryHeap, HashMap},
+    collections::{BTreeMap, BinaryHeap},
     sync::Arc,
 };
 use tokio::{
@@ -76,61 +43,41 @@ const TILE_SIZE: u32 = 512;
 const INDEX_WIDTH: u32 = 2560;
 const INDEX_HEIGHT: u32 = 1280;
 
-pub(crate) struct TileManager {
-    tile_sets: Vec<TileSet>,
-}
-
-impl TileManager {
-    pub(crate) fn new(catalog: &Catalog, gpu_detail: &GpuDetail, gpu: &mut GPU) -> Fallible<Self> {
-        let mut tile_sets = Vec::new();
-
-        // Scan catalog for all tile sets.
-        for index_fid in catalog.find_matching("*-index.json")? {
-            let index_data = from_utf8_string(catalog.read_sync(index_fid)?)?;
-            let index_json = json::parse(&index_data)?;
-            tile_sets.push(TileSet::new(catalog, index_json, gpu_detail, gpu)?);
-        }
-
-        Ok(Self { tile_sets })
-    }
-
-    pub fn begin_update(&mut self) {
-        for ts in self.tile_sets.iter_mut() {
-            ts.begin_update();
-        }
-    }
-
-    pub fn note_required(&mut self, grat: &Graticule<GeoCenter>) {
-        for ts in self.tile_sets.iter_mut() {
-            ts.note_required(grat);
-        }
-    }
-
-    pub fn finish_update(
-        &mut self,
-        catalog: Arc<RwLock<Catalog>>,
-        async_rt: &mut Runtime,
-        tracker: &mut FrameStateTracker,
-    ) {
-        for ts in self.tile_sets.iter_mut() {
-            ts.finish_update(catalog.clone(), async_rt, tracker);
-        }
-    }
-
-    pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
-        self.tile_sets[0].bind_group_layout()
-    }
-
-    pub fn bind_group(&self) -> &wgpu::BindGroup {
-        self.tile_sets[0].bind_group()
-    }
-}
-
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum TileState {
-    Pending,
-    Reading,
-    Active,
+    NoSpace,
+    Pending(usize),
+    Reading(usize),
+    Active(usize),
+}
+
+impl TileState {
+    fn is_pending(&self) -> bool {
+        match self {
+            Self::NoSpace => false,
+            Self::Pending(_) => true,
+            Self::Reading(_) => false,
+            Self::Active(_) => false,
+        }
+    }
+
+    fn is_reading(&self) -> bool {
+        match self {
+            Self::NoSpace => false,
+            Self::Pending(_) => false,
+            Self::Reading(_) => true,
+            Self::Active(_) => false,
+        }
+    }
+
+    fn atlas_slot(&self) -> usize {
+        match *self {
+            Self::NoSpace => panic!("called atlas slot on no-space state"),
+            Self::Pending(slot) => slot,
+            Self::Reading(slot) => slot,
+            Self::Active(slot) => slot,
+        }
+    }
 }
 
 pub(crate) struct TileSet {
@@ -143,10 +90,9 @@ pub(crate) struct TileSet {
     #[allow(unused)]
     index_texture_sampler: wgpu::Sampler,
 
-    #[allow(unused)]
+    atlas_texture_format: wgpu::TextureFormat,
     atlas_texture_extent: wgpu::Extent3d,
-    #[allow(unused)]
-    atlas_texture: wgpu::Texture,
+    atlas_texture: Arc<Box<wgpu::Texture>>,
     #[allow(unused)]
     atlas_texture_view: wgpu::TextureView,
     #[allow(unused)]
@@ -160,10 +106,33 @@ pub(crate) struct TileSet {
     #[allow(unused)]
     coordinates: DataSetCoordinates,
 
+    // For each offset in the atlas, records the allocation state and the target tile, if allocated.
+    atlas_tile_map: Vec<Option<QuadTreeId>>,
+
+    // A list of all free offsets in the atlas.
+    atlas_free_list: Vec<usize>,
+
+    // The full tree of possible tiles.
     tile_tree: QuadTree,
-    tile_state: HashMap<QuadTreeId, TileState>,
+
+    // Map of the tile states, given the list of adds and removals from the tile_tree as the view
+    // moves about. This can be empty, NoSpace if there is not a slot free in the atlas, Pending
+    // while waiting to read the tile, Reading when the background thread is outstanding,
+    // then Active once the tile is uploaded. Since this is a BTreeMap, the keys are sorted. Since
+    // we allocate QuadTreeId breadth first, we can use the ordering as a paint list.
+    tile_state: BTreeMap<QuadTreeId, TileState>,
+
+    // A list of requested loads, sorted by vote count. If we have empty read slots, per the tile
+    // tile_read_count, we'll pull from this. Given the async nature of tile loads, this will
+    // frequently contain repeats and dead tiles that have since moved out of view.
     tile_load_queue: BinaryHeap<(u32, QuadTreeId)>,
+
+    // Number of async read slots currently being utilized. We will ideally set this higher
+    // on machines with more disk parallelism.
+    // TODO: figure out what disk the catalog is coming from and use some heuristics
     tile_read_count: usize,
+
+    // Tile transfer from the background read thread to the main thread.
     tile_sender: UnboundedSender<(QuadTreeId, Vec<u8>)>,
     tile_receiver: UnboundedReceiver<(QuadTreeId, Vec<u8>)>,
 }
@@ -244,6 +213,7 @@ impl TileSet {
         // pre-sampled at various scaling factors, allowing us to use a single atlas for all
         // resolutions. Management of tile layers is done on the CPU between frames, using the
         // patch tree to figure out what is going to be most useful to have in the cache.
+        let atlas_texture_format = wgpu::TextureFormat::R16Sint;
         let atlas_texture_extent = wgpu::Extent3d {
             width: TILE_SIZE,
             height: TILE_SIZE,
@@ -256,7 +226,7 @@ impl TileSet {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R16Sint,
+            format: atlas_texture_format,
             usage: wgpu::TextureUsage::all(),
         });
         let atlas_texture_view = atlas_texture.create_view(&wgpu::TextureViewDescriptor {
@@ -394,8 +364,9 @@ impl TileSet {
             index_texture_view,
             index_texture_sampler,
 
+            atlas_texture_format,
             atlas_texture_extent,
-            atlas_texture,
+            atlas_texture: Arc::new(Box::new(atlas_texture)),
             atlas_texture_view,
             atlas_texture_sampler,
 
@@ -404,8 +375,12 @@ impl TileSet {
 
             kind,
             coordinates,
+
+            atlas_tile_map: vec![None; gpu_detail.tile_cache_size as usize],
+            atlas_free_list: (0..gpu_detail.tile_cache_size as usize).collect(),
+
             tile_tree,
-            tile_state: HashMap::new(),
+            tile_state: BTreeMap::new(),
             tile_load_queue: BinaryHeap::new(),
             tile_read_count: 0,
             tile_sender,
@@ -425,6 +400,7 @@ impl TileSet {
         &mut self,
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &mut Runtime,
+        gpu: &GPU,
         tracker: &mut FrameStateTracker,
     ) {
         let mut additions = Vec::new();
@@ -432,16 +408,11 @@ impl TileSet {
         self.tile_tree.finish_update(&mut additions, &mut removals);
 
         // Apply removals and additions.
-        for qtid in &removals {
-            self.tile_state.remove(qtid);
+        for &qtid in &removals {
+            self.deallocate_atlas_slot(qtid);
         }
         for &(votes, qtid) in &additions {
-            // We cannot use `.entry` because of the need to re-borrow self here.
-            #[allow(clippy::map_entry)]
-            if !self.tile_state.contains_key(&qtid) {
-                self.tile_state.insert(qtid, TileState::Pending);
-                self.tile_load_queue.push((votes, qtid));
-            }
+            self.allocate_atlas_slot(votes, qtid);
         }
 
         // Kick off any loads, if there is space remaining.
@@ -452,16 +423,13 @@ impl TileSet {
             // we have disk bandwidth available to read it. Thus we need to double-check that we
             // even still have it as an active tile and it's current state.
             let maybe_state = self.tile_state.get(&qtid);
-            if maybe_state.is_none() {
-                continue;
-            }
-            let state = *maybe_state.unwrap();
-            if state != TileState::Pending {
+            if maybe_state.is_none() || !maybe_state.unwrap().is_pending() {
                 continue;
             }
 
             // If the state was pending, move us to the reading state and consume a read slot.
-            self.tile_state.insert(qtid, TileState::Reading);
+            let atlas_slot = maybe_state.unwrap().atlas_slot();
+            self.tile_state.insert(qtid, TileState::Reading(atlas_slot));
             self.tile_read_count += 1;
 
             // Do the read in a disconnected greenthread and send it back on an mpsc queue.
@@ -476,36 +444,68 @@ impl TileSet {
 
         // Check for any completed reads.
         while let Ok((qtid, data)) = self.tile_receiver.try_recv() {
-            self.tile_read_count -= 1;
-            self.tile_state.insert(qtid, TileState::Active);
-            // TODO: push this into the atlas and update the index
-            println!("DATA @ {:?} <- {}b", qtid, data.len());
+            // If the reading tile has gone out of view in the time since it was enqueued, we
+            // may have lost our atlas slot. That's fine, just dump the bytes on the floor.
+            let maybe_state = self.tile_state.get(&qtid);
+            if maybe_state.is_none() || !maybe_state.unwrap().is_reading() {
+                continue;
+            }
 
-            /*
+            let atlas_slot = maybe_state.unwrap().atlas_slot();
+            self.tile_read_count -= 1;
+            self.tile_state.insert(qtid, TileState::Active(atlas_slot));
+
+            // TODO: push this into the atlas and update the index
+            println!("Uploading @ {:?} -> {}", qtid, atlas_slot);
+
             let buffer = gpu.push_slice(
                 "terrain-geo-atlas-tile-upload-buffer",
                 &data,
                 wgpu::BufferUsage::COPY_SRC,
             );
-            encoder.copy_buffer_to_texture(
-                wgpu::BufferCopyView {
-                    buffer: &buffer,
-                    offset: 0,
-                    bytes_per_row: atlas_texture_extent.width * 2,
-                    rows_per_image: atlas_texture_extent.height,
-                },
-                wgpu::TextureCopyView {
-                    texture: &atlas_texture,
-                    mip_level: 0,
-                    array_layer: 0u32, // FIXME: hardcoded until we get the index working
-                    origin: wgpu::Origin3d::ZERO,
-                },
-                atlas_texture_extent,
+            tracker.upload_to_texture(
+                buffer,
+                self.atlas_texture.clone(),
+                self.atlas_texture_extent,
+                self.atlas_texture_format,
+                atlas_slot as u32,
             );
-             */
         }
 
-        println!("ADDITIONS: {:?}, REMOVALS: {:?}", additions, removals);
+        // TODO: Add a paint, or should that be static, like preload?
+    }
+
+    fn allocate_atlas_slot(&mut self, votes: u32, qtid: QuadTreeId) {
+        // If we got an addition, the tile should have been removed by the tree.
+        assert!(!self.tile_state.contains_key(&qtid));
+
+        let state = if let Some(atlas_slot) = self.atlas_free_list.pop() {
+            assert!(self.atlas_tile_map[atlas_slot].is_none());
+            self.atlas_tile_map[atlas_slot] = Some(qtid);
+            self.tile_load_queue.push((votes, qtid));
+            TileState::Pending(atlas_slot)
+        } else {
+            TileState::NoSpace
+        };
+        self.tile_state.insert(qtid, state);
+    }
+
+    fn deallocate_atlas_slot(&mut self, qtid: QuadTreeId) {
+        // If the tile went out of scope, it must have been in scope before.
+        assert!(self.tile_state.contains_key(&qtid));
+
+        // Note that this orphans any instances of qtid in the load queue or in the background
+        // read thread. We need to re-check the state any time we would look at it from one of
+        // those sources.
+        let state = self.tile_state.remove(&qtid).unwrap();
+        let atlas_slot = match state {
+            TileState::NoSpace => return,
+            TileState::Pending(slot) => slot,
+            TileState::Reading(slot) => slot,
+            TileState::Active(slot) => slot,
+        };
+        self.atlas_tile_map[atlas_slot] = None;
+        self.atlas_free_list.push(atlas_slot);
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
@@ -514,22 +514,5 @@ impl TileSet {
 
     pub fn bind_group(&self) -> &wgpu::BindGroup {
         &self.bind_group
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use crate::GpuDetailLevel;
-    use input::InputSystem;
-
-    #[test]
-    fn test_tile_manager() -> Fallible<()> {
-        let catalog = Catalog::empty();
-        let input = InputSystem::new(vec![])?;
-        let mut gpu = GPU::new(&input, Default::default())?;
-        let _tm = TileManager::new(&catalog, &GpuDetailLevel::Low.parameters(), &mut gpu)?;
-        gpu.device().poll(wgpu::Maintain::Wait);
-        Ok(())
     }
 }
