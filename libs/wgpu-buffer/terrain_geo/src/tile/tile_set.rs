@@ -230,7 +230,7 @@ impl TileSet {
             usage: wgpu::TextureUsage::all(),
         });
         let atlas_texture_view = atlas_texture.create_view(&wgpu::TextureViewDescriptor {
-            format: wgpu::TextureFormat::R16Sint, // heights
+            format: atlas_texture_format,
             dimension: wgpu::TextureViewDimension::D2Array,
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,

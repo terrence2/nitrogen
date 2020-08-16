@@ -56,11 +56,18 @@ make_frame_graph!(
             terrain_geo: TerrainGeoBuffer,
             text_layout: TextLayoutBuffer
         };
-        precompute: { terrain_geo };
         renderers: [
             skybox: SkyboxRenderPass { globals, fullscreen, stars, atmosphere },
             terrain: TerrainRenderPass { globals, atmosphere, terrain_geo },
             screen_text: ScreenTextRenderPass { globals, text_layout }
+        ];
+        passes: [
+            precompute: Compute() { terrain_geo() },
+            draw: Render(Screen) {
+                skybox( globals, fullscreen, stars, atmosphere ),
+                terrain( globals, atmosphere, terrain_geo ),
+                screen_text( globals, text_layout )
+            }
         ];
     }
 );

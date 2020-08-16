@@ -12,16 +12,72 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-pub use crate::frame_state_tracker::FrameStateTracker;
+
+#[macro_export]
+macro_rules! make_frame_graph_pass {
+    (Compute() {
+        $owner:ident, $gpu:ident, $encoder:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
+     }
+    ) => {{
+        let _cpass = $encoder.begin_compute_pass();
+        $(
+            let _cpass = $pass_item_name.$pass_name(_cpass);
+        )*
+    }};
+    (Render(Screen) {
+        $owner:ident, $gpu:ident, $encoder:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
+     }
+    ) => {
+        let color_attachment = $gpu.get_next_framebuffer()?;
+
+        {
+            let _rpass = $encoder.begin_render_pass(&$crate::wgpu::RenderPassDescriptor {
+                color_attachments: &[$crate::GPU::color_attachment(&color_attachment.view)],
+                depth_stencil_attachment: Some($gpu.depth_stencil_attachment()),
+            });
+            $(
+                let _rpass = $pass_item_name.$pass_name(
+                    _rpass,
+                    $(
+                        &$pass_item_input_name
+                    ),*
+                );
+            )*
+        }
+    };
+    (Render($pass_target_buffer:ident, $pass_target_func:ident) {
+        $owner:ident, $gpu:ident, $encoder:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
+     }
+    ) => {{
+        let (color_attachments, depth_stencil_attachment) = $pass_target_buffer.$pass_target_func();
+        let render_pass_desc_ref = $crate::wgpu::RenderPassDescriptor {
+            color_attachments: &color_attachments,
+            depth_stencil_attachment,
+        };
+        let _rpass = $encoder.begin_render_pass(&render_pass_desc_ref);
+        $(
+            let _rpass = $pass_item_name.$pass_name(
+                _rpass,
+                $(
+                    &$pass_item_input_name
+                ),*
+            );
+        )*
+    }};
+}
 
 #[macro_export]
 macro_rules! make_frame_graph {
     (
         $name:ident {
             buffers: { $($buffer_name:ident: $buffer_type:ty),* };
-            precompute: { $($precompute_name:ident),* };
             renderers: [
                 $( $renderer_name:ident: $renderer_type:ty { $($input_buffer_name:ident),* } ),*
+            ];
+            passes: [
+                $( $pass_name:ident: $pass_type:ident($($pass_args:ident),*) {
+                    $($pass_item_name:ident ( $($pass_item_input_name:ident),* ) ),*
+                } ),*
             ];
         }
     ) => {
@@ -63,31 +119,23 @@ macro_rules! make_frame_graph {
                 $(
                     let $buffer_name = self.$buffer_name.borrow();
                 )*
-                let mut frame = gpu.begin_frame()?;
-                {
-                    frame.apply_all_buffer_to_buffer_uploads(self.tracker.drain_b2b_uploads());
-                    frame.apply_all_buffer_to_texture_uploads(self.tracker.drain_b2t_uploads());
+                $(
+                    let $renderer_name = &self.$renderer_name;
+                )*
 
-                    {
-                        let _cpass = frame.begin_compute_pass();
-                        $(
-                            let _cpass = $precompute_name.precompute(_cpass);
-                        )*
-                    }
-
-                    {
-                        let _rpass = frame.begin_render_pass();
-                        $(
-                            let _rpass = self.$renderer_name.draw(
-                                _rpass,
-                                $(
-                                    &$input_buffer_name
-                                ),*
-                            );
-                        )*
-                    }
-                }
-                frame.finish();
+                let mut encoder = gpu
+                    .device()
+                    .create_command_encoder(&$crate::wgpu::CommandEncoderDescriptor {
+                        label: Some("frame-encoder"),
+                    });
+                self.tracker.dispatch_uploads(&mut encoder);
+                $(
+                    $crate::make_frame_graph_pass!($pass_type($($pass_args),*) {
+                        self, gpu, encoder, $pass_name, $($pass_item_name ( $($pass_item_input_name),* )),*
+                    });
+                )*
+                gpu.queue_mut().submit(&[encoder.finish()]);
+                self.tracker.reset();
 
                 Ok(())
             }
@@ -106,23 +154,92 @@ mod test {
     use input::InputSystem;
     use std::{cell::RefCell, sync::Arc};
 
-    pub struct TestBuffer;
+    pub struct TestBuffer {
+        render_target: wgpu::TextureView,
+        update_count: usize,
+        compute_count: RefCell<usize>,
+        render_count: RefCell<usize>,
+        screen_count: RefCell<usize>,
+    }
     impl TestBuffer {
-        fn precompute<'a>(&self, cpass: wgpu::ComputePass<'a>) -> wgpu::ComputePass<'a> {
+        fn new(gpu: &GPU) -> Arc<RefCell<Self>> {
+            let texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
+                label: None,
+                size: wgpu::Extent3d {
+                    width: 1,
+                    height: 1,
+                    depth: 1,
+                },
+                array_layer_count: 1,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Uint,
+                usage: wgpu::TextureUsage::all(),
+            });
+            let render_target = texture.create_view(&wgpu::TextureViewDescriptor {
+                format: wgpu::TextureFormat::Rgba8Uint,
+                dimension: wgpu::TextureViewDimension::D2,
+                aspect: wgpu::TextureAspect::All,
+                base_mip_level: 0,
+                level_count: 1,
+                base_array_layer: 0,
+                array_layer_count: 1,
+            });
+            Arc::new(RefCell::new(Self {
+                render_target,
+                update_count: 0,
+                compute_count: RefCell::new(0),
+                render_count: RefCell::new(0),
+                screen_count: RefCell::new(0),
+            }))
+        }
+        fn update(&mut self) {
+            self.update_count += 1;
+        }
+        fn example_compute_pass<'a>(&self, cpass: wgpu::ComputePass<'a>) -> wgpu::ComputePass<'a> {
+            *self.compute_count.borrow_mut() += 1;
             cpass
+        }
+        fn example_render_pass<'a>(&self, rpass: wgpu::RenderPass<'a>) -> wgpu::RenderPass<'a> {
+            *self.render_count.borrow_mut() += 1;
+            rpass
+        }
+        fn example_render_pass_attachments(
+            &self,
+        ) -> (
+            [wgpu::RenderPassColorAttachmentDescriptor; 1],
+            Option<wgpu::RenderPassDepthStencilAttachmentDescriptor>,
+        ) {
+            (
+                [wgpu::RenderPassColorAttachmentDescriptor {
+                    attachment: &self.render_target,
+                    resolve_target: None,
+                    load_op: wgpu::LoadOp::Clear,
+                    store_op: wgpu::StoreOp::Store,
+                    clear_color: wgpu::Color::GREEN,
+                }],
+                None,
+            )
         }
     }
 
-    pub struct TestRenderer;
+    pub struct TestRenderer {
+        render_count: RefCell<usize>,
+    }
     impl TestRenderer {
         fn new(_gpu: &GPU, _foo: &TestBuffer) -> Fallible<Self> {
-            Ok(Self)
+            Ok(Self {
+                render_count: RefCell::new(0),
+            })
         }
         fn draw<'a>(
             &self,
             rpass: wgpu::RenderPass<'a>,
-            _foo: &'a TestBuffer,
+            test_buffer: &'a TestBuffer,
         ) -> wgpu::RenderPass<'a> {
+            *self.render_count.borrow_mut() += 1;
+            *test_buffer.screen_count.borrow_mut() += 1;
             rpass
         }
     }
@@ -130,11 +247,21 @@ mod test {
     make_frame_graph!(
         FrameGraph {
             buffers: {
-                foo: TestBuffer
+                test_buffer: TestBuffer
             };
-            precompute: { foo };
             renderers: [
-                bar: TestRenderer { foo }
+                test_renderer: TestRenderer { test_buffer }
+            ];
+            passes: [
+                example_render_pass: Render(test_buffer, example_render_pass_attachments) {
+                    test_buffer ( )
+                },
+                example_compute_pass: Compute() {
+                    test_buffer ( )
+                },
+                draw: Render(Screen) {
+                    test_renderer ( test_buffer )
+                }
             ];
         }
     );
@@ -143,9 +270,20 @@ mod test {
     fn test_basic() -> Fallible<()> {
         let input = InputSystem::new(vec![])?;
         let mut gpu = GPU::new(&input, Default::default())?;
-        let foo = Arc::new(RefCell::new(TestBuffer));
-        let mut frame_graph = FrameGraph::new(&mut gpu, &foo)?;
-        frame_graph.run(&mut gpu)?;
+        let test_buffer = TestBuffer::new(&gpu);
+        let mut frame_graph = FrameGraph::new(&mut gpu, &test_buffer)?;
+
+        for _ in 0..3 {
+            test_buffer.borrow_mut().update();
+            frame_graph.run(&mut gpu)?;
+        }
+
+        assert_eq!(test_buffer.borrow().update_count, 3);
+        assert_eq!(*test_buffer.borrow().compute_count.borrow(), 3);
+        assert_eq!(*test_buffer.borrow().screen_count.borrow(), 3);
+        assert_eq!(*test_buffer.borrow().render_count.borrow(), 3);
+        assert_eq!(*frame_graph.test_renderer.render_count.borrow(), 3);
+
         let _tracker = frame_graph.tracker_mut();
         Ok(())
     }

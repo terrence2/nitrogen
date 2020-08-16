@@ -108,16 +108,24 @@ fn main() -> Fallible<()> {
 
         let gb_borrow = globals_buffer.borrow();
         let fs_borrow = fullscreen_buffer.borrow();
-        let mut frame = gpu.begin_frame()?;
+        let framebuffer = gpu.get_next_framebuffer()?;
+        let mut encoder = gpu
+            .device()
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("frame-encoder"),
+            });
+        tracker.dispatch_uploads(&mut encoder);
         {
-            frame.apply_all_buffer_to_buffer_uploads(tracker.drain_b2b_uploads());
-
-            let mut rpass = frame.begin_render_pass();
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                color_attachments: &[GPU::color_attachment(&framebuffer.view)],
+                depth_stencil_attachment: Some(gpu.depth_stencil_attachment()),
+            });
             rpass.set_pipeline(&pipeline);
             rpass.set_bind_group(0, gb_borrow.bind_group(), &[]);
             rpass.set_vertex_buffer(0, fs_borrow.vertex_buffer(), 0, 0);
             rpass.draw(0..4, 0..1);
         }
-        frame.finish();
+        gpu.queue_mut().submit(&[encoder.finish()]);
+        tracker.reset();
     }
 }
