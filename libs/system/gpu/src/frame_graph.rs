@@ -24,6 +24,14 @@ macro_rules! make_frame_graph_pass {
             let _cpass = $pass_item_name.$pass_name(_cpass);
         )*
     }};
+    (Any() {
+        $owner:ident, $gpu:ident, $encoder:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
+     }
+    ) => {{
+        $(
+            $encoder = $pass_item_name.$pass_name($encoder);
+        )*
+    }};
     (Render(Screen) {
         $owner:ident, $gpu:ident, $encoder:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
      }
@@ -160,6 +168,7 @@ mod test {
         compute_count: RefCell<usize>,
         render_count: RefCell<usize>,
         screen_count: RefCell<usize>,
+        any_count: RefCell<usize>,
     }
     impl TestBuffer {
         fn new(gpu: &GPU) -> Arc<RefCell<Self>> {
@@ -192,6 +201,7 @@ mod test {
                 compute_count: RefCell::new(0),
                 render_count: RefCell::new(0),
                 screen_count: RefCell::new(0),
+                any_count: RefCell::new(0),
             }))
         }
         fn update(&mut self) {
@@ -221,6 +231,10 @@ mod test {
                 }],
                 None,
             )
+        }
+        fn example_any_pass<'a>(&self, encoder: wgpu::CommandEncoder) -> wgpu::CommandEncoder {
+            *self.any_count.borrow_mut() += 1;
+            encoder
         }
     }
 
@@ -254,10 +268,13 @@ mod test {
             ];
             passes: [
                 example_render_pass: Render(test_buffer, example_render_pass_attachments) {
-                    test_buffer ( )
+                    test_buffer()
                 },
                 example_compute_pass: Compute() {
-                    test_buffer ( )
+                    test_buffer()
+                },
+                example_any_pass: Any() {
+                    test_buffer()
                 },
                 draw: Render(Screen) {
                     test_renderer ( test_buffer )
@@ -282,6 +299,7 @@ mod test {
         assert_eq!(*test_buffer.borrow().compute_count.borrow(), 3);
         assert_eq!(*test_buffer.borrow().screen_count.borrow(), 3);
         assert_eq!(*test_buffer.borrow().render_count.borrow(), 3);
+        assert_eq!(*test_buffer.borrow().any_count.borrow(), 3);
         assert_eq!(*frame_graph.test_renderer.render_count.borrow(), 3);
 
         let _tracker = frame_graph.tracker_mut();
