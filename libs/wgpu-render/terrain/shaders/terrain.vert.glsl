@@ -17,11 +17,9 @@
 #include <wgpu-render/shader_shared/include/quaternion.glsl>
 #include <wgpu-buffer/global_data/include/global_data.glsl>
 
-#define EARTH_TO_KM 6370.0
-
-layout(location = 0) in vec3 position;
+layout(location = 0) in vec3 position; // eye relative
 layout(location = 1) in vec3 normal;
-layout(location = 2) in vec2 graticule;
+layout(location = 2) in vec2 graticule; // earth centered
 
 layout(location = 0) out vec4 v_color;
 
@@ -45,9 +43,22 @@ void main() {
     // Map s, t onto the actual subsection of the atlas that is used.
     float tile_extent = 512.0 * 4096.0;
     float fract_lon = (360.0 * 60.0 * 60.0) / tile_extent;
-    float fract_lat = (120.0 * 60.0 * 60.0) / tile_extent;
+    float fract_lat = (180.0 * 60.0 * 60.0) / tile_extent;
 
-    // Note: layer 0 happens to be our 4096 scale top level, so just use it for now.
+    v_color = vec4(s, t, 0, 1);
+
+    /*
+    ivec4 index_texel = texture(
+        isampler2D(srtm_index_texture, srtm_index_sampler),
+        vec2(
+            1.0 - s * fract_lon,
+            t * fract_lat
+        )
+    );
+    float height = index_texel.r * 255.0;
+    v_color = vec4(height, height, height, 1);
+    */
+
     /*
     ivec4 height_texel = texture(
         isampler2DArray(srtm_atlas_texture, srtm_atlas_sampler),
@@ -61,5 +72,5 @@ void main() {
     v_color = vec4(height, height, height, 1);
     */
 
-    v_color = vec4(1, 0, 1, 1);
+    //v_color = vec4(1, 0, 1, 1);
 }

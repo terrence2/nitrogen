@@ -14,6 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use std::sync::Arc;
 
+#[derive(Debug)]
 pub struct CopyBufferToTextureDescriptor {
     source: wgpu::Buffer,
     target: Arc<Box<wgpu::Texture>>,
@@ -40,6 +41,7 @@ impl CopyBufferToTextureDescriptor {
     }
 }
 
+#[derive(Debug)]
 pub struct CopyBufferToBufferDescriptor {
     source: wgpu::Buffer,
     source_offset: wgpu::BufferAddress,
@@ -136,7 +138,10 @@ impl FrameStateTracker {
             );
         }
 
-        for desc in self.b2t_uploads.iter() {
+        for (i, desc) in self.b2t_uploads.iter().enumerate() {
+            println!("DEsC {}: {:?}", i, desc);
+
+            assert_eq!(desc.target_extent.width * desc.target_element_size % 256, 0);
             encoder.copy_buffer_to_texture(
                 wgpu::BufferCopyView {
                     buffer: &desc.source,
@@ -152,6 +157,10 @@ impl FrameStateTracker {
                 },
                 desc.target_extent,
             );
+
+            if i == 1 {
+                break;
+            }
         }
     }
 }

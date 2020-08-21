@@ -96,6 +96,16 @@ impl TileManager {
         }
     }
 
+    pub fn paint_atlas_indices<'a>(
+        &self,
+        mut encoder: wgpu::CommandEncoder,
+    ) -> wgpu::CommandEncoder {
+        for ts in self.tile_sets.iter() {
+            ts.paint_atlas_index(&mut encoder)
+        }
+        encoder
+    }
+
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         self.tile_sets[0].bind_group_layout()
     }

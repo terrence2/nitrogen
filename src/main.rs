@@ -53,19 +53,20 @@ make_frame_graph!(
             fullscreen: FullscreenBuffer,
             globals: GlobalParametersBuffer,
             stars: StarsBuffer,
-            terrain_geo: TerrainGeoBuffer,
+            //terrain_geo: TerrainGeoBuffer,
             text_layout: TextLayoutBuffer
         };
         renderers: [
             skybox: SkyboxRenderPass { globals, fullscreen, stars, atmosphere },
-            terrain: TerrainRenderPass { globals, atmosphere, terrain_geo },
+            //terrain: TerrainRenderPass { globals, atmosphere, terrain_geo },
             screen_text: ScreenTextRenderPass { globals, text_layout }
         ];
         passes: [
-            precompute: Compute() { terrain_geo() },
+            //paint_atlas_indices: Any() { terrain_geo() },
+            //tesselate: Compute() { terrain_geo() },
             draw: Render(Screen) {
                 skybox( globals, fullscreen, stars, atmosphere ),
-                terrain( globals, atmosphere, terrain_geo ),
+                //terrain( globals, atmosphere, terrain_geo ),
                 screen_text( globals, text_layout )
             }
         ];
@@ -116,7 +117,7 @@ fn main() -> Fallible<()> {
         &fullscreen_buffer,
         &globals_buffer,
         &stars_buffer,
-        &terrain_geo_buffer,
+        //&terrain_geo_buffer,
         &text_layout_buffer,
     )?;
     ///////////////////////////////////////////////////////////

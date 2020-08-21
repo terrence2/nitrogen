@@ -14,6 +14,7 @@
 // along with OpenFA.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     tile::{
+        index_paint_vertex::IndexPaintVertex,
         quad_tree::{QuadTree, QuadTreeId},
         DataSetCoordinates, DataSetDataKind,
     },
@@ -23,8 +24,10 @@ use catalog::Catalog;
 use failure::{err_msg, Fallible};
 use geodesy::{GeoCenter, Graticule};
 use gpu::{FrameStateTracker, GPU};
+use log::trace;
 use std::{
     collections::{BTreeMap, BinaryHeap},
+    ops::Range,
     sync::Arc,
 };
 use tokio::{
@@ -89,6 +92,10 @@ pub(crate) struct TileSet {
     index_texture_view: wgpu::TextureView,
     #[allow(unused)]
     index_texture_sampler: wgpu::Sampler,
+
+    //index_paint_pipeline: wgpu::RenderPipeline,
+    index_paint_range: Range<u32>,
+    index_paint_vert_buffer: Arc<Box<wgpu::Buffer>>,
 
     atlas_texture_format: wgpu::TextureFormat,
     atlas_texture_extent: wgpu::Extent3d,
@@ -173,6 +180,7 @@ impl TileSet {
         // tile. Tiles are additionally fringed with a border such that linear filtering can be
         // used in the tile lookup without further effort. In combination, this lets us point the
         // full power of the texturing hardware at the problem, with very little extra overhead.
+        let index_texture_format = wgpu::TextureFormat::Rg16Uint; // offset into atlas stack; also depth or scale?
         let index_texture_extent = wgpu::Extent3d {
             width: INDEX_WIDTH,
             height: INDEX_HEIGHT,
@@ -185,11 +193,11 @@ impl TileSet {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rg16Uint, // offset into atlas stack; also depth or scale?
+            format: index_texture_format,
             usage: wgpu::TextureUsage::all(),
         });
         let index_texture_view = index_texture.create_view(&wgpu::TextureViewDescriptor {
-            format: wgpu::TextureFormat::Rg16Uint,
+            format: index_texture_format,
             dimension: wgpu::TextureViewDimension::D2,
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,
@@ -208,6 +216,56 @@ impl TileSet {
             lod_max_clamp: 9_999_999f32,
             compare: wgpu::CompareFunction::Never,
         });
+        let index_paint_range = 0u32..(6 * gpu_detail.tile_cache_size);
+        let index_paint_vert_buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
+            label: Some("index-paint-vert-buffer"),
+            size: (IndexPaintVertex::mem_size() * 6 * gpu_detail.tile_cache_size as usize)
+                as wgpu::BufferAddress,
+            usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::VERTEX,
+        });
+        let index_paint_vert_shader =
+            gpu.create_shader_module(include_bytes!("../../target/index_paint.vert.spirv"))?;
+        let index_paint_frag_shader =
+            gpu.create_shader_module(include_bytes!("../../target/index_paint.frag.spirv"))?;
+        let index_paint_pipeline =
+            gpu.device()
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    layout: &gpu
+                        .device()
+                        .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                            bind_group_layouts: &[],
+                        }),
+                    vertex_stage: wgpu::ProgrammableStageDescriptor {
+                        module: &index_paint_vert_shader,
+                        entry_point: "main",
+                    },
+                    fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
+                        module: &index_paint_frag_shader,
+                        entry_point: "main",
+                    }),
+                    rasterization_state: Some(wgpu::RasterizationStateDescriptor {
+                        front_face: wgpu::FrontFace::Ccw,
+                        cull_mode: wgpu::CullMode::None,
+                        depth_bias: 0,
+                        depth_bias_slope_scale: 0.0,
+                        depth_bias_clamp: 0.0,
+                    }),
+                    primitive_topology: wgpu::PrimitiveTopology::TriangleList,
+                    color_states: &[wgpu::ColorStateDescriptor {
+                        format: index_texture_format,
+                        alpha_blend: wgpu::BlendDescriptor::REPLACE,
+                        color_blend: wgpu::BlendDescriptor::REPLACE,
+                        write_mask: wgpu::ColorWrite::ALL,
+                    }],
+                    depth_stencil_state: None,
+                    vertex_state: wgpu::VertexStateDescriptor {
+                        index_format: wgpu::IndexFormat::Uint32,
+                        vertex_buffers: &[IndexPaintVertex::descriptor()],
+                    },
+                    sample_count: 1,
+                    sample_mask: !0,
+                    alpha_to_coverage_enabled: false,
+                });
 
         // The atlas texture is a 2d array of tiles. All tiles have the same size, but may be
         // pre-sampled at various scaling factors, allowing us to use a single atlas for all
@@ -364,6 +422,10 @@ impl TileSet {
             index_texture_view,
             index_texture_sampler,
 
+            //index_paint_pipeline,
+            index_paint_range,
+            index_paint_vert_buffer: Arc::new(Box::new(index_paint_vert_buffer)),
+
             atlas_texture_format,
             atlas_texture_extent,
             atlas_texture: Arc::new(Box::new(atlas_texture)),
@@ -456,7 +518,7 @@ impl TileSet {
             self.tile_state.insert(qtid, TileState::Active(atlas_slot));
 
             // TODO: push this into the atlas and update the index
-            println!("Uploading @ {:?} -> {}", qtid, atlas_slot);
+            trace!("uploading {:?} -> {}", qtid, atlas_slot);
 
             let buffer = gpu.push_slice(
                 "terrain-geo-atlas-tile-upload-buffer",
@@ -472,6 +534,27 @@ impl TileSet {
             );
         }
 
+        // Use the list of allocated tiles to generate a vertex buffer to upload.
+        let mut tris = Vec::new();
+        for (qtid, tile_state) in self.tile_state.iter() {
+            if let TileState::Active(slot) = tile_state {
+                tris.push(IndexPaintVertex::new([-1f32, -1f32], [u16::MAX, u16::MAX]));
+                tris.push(IndexPaintVertex::new([1f32, -1f32], [u16::MAX, u16::MAX]));
+                tris.push(IndexPaintVertex::new([-1f32, 1f32], [u16::MAX, u16::MAX]));
+            }
+        }
+        if tris.len() > 0 {
+            let upload_buffer = gpu.push_slice(
+                "index-paint-tris-upload",
+                &tris,
+                wgpu::BufferUsage::COPY_SRC,
+            );
+            tracker.upload(
+                upload_buffer,
+                self.index_paint_vert_buffer.clone(),
+                IndexPaintVertex::mem_size() * tris.len(),
+            );
+        }
         // TODO: Add a paint, or should that be static, like preload?
     }
 
@@ -506,6 +589,24 @@ impl TileSet {
         };
         self.atlas_tile_map[atlas_slot] = None;
         self.atlas_free_list.push(atlas_slot);
+    }
+
+    pub fn paint_atlas_index<'a>(&self, encoder: &mut wgpu::CommandEncoder) {
+        /*
+        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+                attachment: &self.index_texture_view,
+                resolve_target: None,
+                load_op: wgpu::LoadOp::Clear,
+                store_op: wgpu::StoreOp::Store,
+                clear_color: wgpu::Color::BLACK,
+            }],
+            depth_stencil_attachment: None,
+        });
+        rpass.set_pipeline(&self.index_paint_pipeline);
+        rpass.set_vertex_buffer(0, &self.index_paint_vert_buffer, 0, 0);
+        rpass.draw(self.index_paint_range.clone(), 0..1);
+         */
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {

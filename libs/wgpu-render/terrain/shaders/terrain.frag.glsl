@@ -17,9 +17,9 @@
 #include <wgpu-buffer/global_data/include/global_data.glsl>
 // #include <buffer/terrain/include/global.glsl>
 
-//#include <wgpu-buffer/atmosphere/include/global.glsl>
-//#include <wgpu-buffer/atmosphere/include/descriptorset.glsl>
-//#include <wgpu-buffer/atmosphere/include/library.glsl>
+#include <wgpu-buffer/atmosphere/include/global.glsl>
+#include <wgpu-buffer/atmosphere/include/descriptorset.glsl>
+#include <wgpu-buffer/atmosphere/include/library.glsl>
 
 //layout(location = 0) in vec4 v_position; // hm tile xyz
 //layout(location = 1) in vec4 v_normal; // hm tile xyz
@@ -37,7 +37,7 @@ void
 main()
 {
     f_color = v_color;
-    //f_color = vec4(1, 0, 1, 1);
+    //f_color = vec4(0, 1, 0, 1);
 /*
     vec3 intersect = v_position.xyz;
     vec3 normal = v_normal.xyz;

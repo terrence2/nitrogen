@@ -19,13 +19,14 @@ mod patch_tree;
 mod patch_winding;
 mod queue;
 mod terrain_vertex;
+mod tri_strip_indices;
 mod wireframe_indices;
 
 pub mod tile;
 
 use crate::{
     index_dependency_lut::get_index_dependency_lut, patch_tree::PatchTree, tile::TileManager,
-    wireframe_indices::get_wireframe_index_buffer,
+    tri_strip_indices::get_tri_strip_index_buffer, wireframe_indices::get_wireframe_index_buffer,
 };
 pub use crate::{patch_winding::PatchWinding, terrain_vertex::TerrainVertex};
 
@@ -186,6 +187,9 @@ pub struct TerrainGeoBuffer {
 
     wireframe_index_buffers: Vec<wgpu::Buffer>,
     wireframe_index_ranges: Vec<Range<u32>>,
+
+    tristrip_index_buffers: Vec<wgpu::Buffer>,
+    tristrip_index_ranges: Vec<Range<u32>>,
 
     subdivisions: usize,
     subdivide_prepare_pipeline: wgpu::ComputePipeline,
@@ -447,8 +451,7 @@ impl TerrainGeoBuffer {
             subdivide_expand_bind_groups.push((expand_context, subdivide_expand_bind_group));
         }
 
-        // Create each of the 8 index buffers at this subdivision level.
-        // TODO: do we want to keep this permanently?
+        // Create each of the 4 wireframe index buffers at this subdivision level.
         let wireframe_index_buffers = PatchWinding::all_windings()
             .iter()
             .map(|&winding| {
@@ -467,6 +470,25 @@ impl TerrainGeoBuffer {
             })
             .collect::<Vec<_>>();
 
+        // Create each of the 4 tristrip index buffers at this subdivision level.
+        let tristrip_index_buffers = PatchWinding::all_windings()
+            .iter()
+            .map(|&winding| {
+                gpu.push_slice(
+                    "terrain-geo-tristrip-indices-SUB",
+                    get_tri_strip_index_buffer(gpu_detail.subdivisions, winding),
+                    wgpu::BufferUsage::INDEX,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let tristrip_index_ranges = PatchWinding::all_windings()
+            .iter()
+            .map(|&winding| {
+                0u32..get_tri_strip_index_buffer(gpu_detail.subdivisions, winding).len() as u32
+            })
+            .collect::<Vec<_>>();
+
         Ok(Arc::new(RefCell::new(Self {
             desired_patch_count: cpu_detail.desired_patch_count,
             patch_tree,
@@ -479,6 +501,8 @@ impl TerrainGeoBuffer {
             target_vertex_buffer,
             wireframe_index_buffers,
             wireframe_index_ranges,
+            tristrip_index_buffers,
+            tristrip_index_ranges,
 
             subdivisions: gpu_detail.subdivisions,
             subdivide_context,
@@ -498,11 +522,11 @@ impl TerrainGeoBuffer {
         tracker: &mut FrameStateTracker,
     ) -> Fallible<()> {
         // TODO: keep these allocations across frames
-        let mut verts = Vec::with_capacity(3 * self.desired_patch_count);
         let mut live_patches = Vec::with_capacity(self.desired_patch_count);
         self.patch_tree.optimize_for_view(camera, &mut live_patches);
         assert!(live_patches.len() <= self.desired_patch_count);
 
+        let mut verts = Vec::with_capacity(3 * self.desired_patch_count);
         self.tile_manager.begin_update();
         let scale = Matrix4::new_scaling(1_000.0);
         let view = camera.view::<Kilometers>();
@@ -558,7 +582,11 @@ impl TerrainGeoBuffer {
         Ok(())
     }
 
-    pub fn precompute<'a>(
+    pub fn paint_atlas_indices<'a>(&self, encoder: wgpu::CommandEncoder) -> wgpu::CommandEncoder {
+        self.tile_manager.paint_atlas_indices(encoder)
+    }
+
+    pub fn tesselate<'a>(
         &'a self,
         mut cpass: wgpu::ComputePass<'a>,
     ) -> Fallible<wgpu::ComputePass<'a>> {
@@ -621,6 +649,14 @@ impl TerrainGeoBuffer {
 
     pub fn wireframe_index_range(&self, winding: PatchWinding) -> Range<u32> {
         self.wireframe_index_ranges[winding.index()].clone()
+    }
+
+    pub fn tristrip_index_buffer(&self, winding: PatchWinding) -> &wgpu::Buffer {
+        &self.tristrip_index_buffers[winding.index()]
+    }
+
+    pub fn tristrip_index_range(&self, winding: PatchWinding) -> Range<u32> {
+        self.tristrip_index_ranges[winding.index()].clone()
     }
 }
 

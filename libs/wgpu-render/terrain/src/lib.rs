@@ -72,7 +72,7 @@ impl TerrainRenderPass {
                     depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
                         format: GPU::DEPTH_FORMAT,
                         depth_write_enabled: false,
-                        depth_compare: wgpu::CompareFunction::Less,
+                        depth_compare: wgpu::CompareFunction::Always,
                         stencil_front: wgpu::StencilStateFaceDescriptor::IGNORE,
                         stencil_back: wgpu::StencilStateFaceDescriptor::IGNORE,
                         stencil_read_mask: 0,
@@ -111,12 +111,12 @@ impl TerrainRenderPass {
                 }),
                 rasterization_state: Some(wgpu::RasterizationStateDescriptor {
                     front_face: wgpu::FrontFace::Cw,
-                    cull_mode: wgpu::CullMode::None,
+                    cull_mode: wgpu::CullMode::Back,
                     depth_bias: 0,
                     depth_bias_slope_scale: 0.0,
                     depth_bias_clamp: 0.0,
                 }),
-                primitive_topology: wgpu::PrimitiveTopology::LineList,
+                primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
                 color_states: &[wgpu::ColorStateDescriptor {
                     format: GPU::texture_format(),
                     color_blend: wgpu::BlendDescriptor::REPLACE,
@@ -125,7 +125,7 @@ impl TerrainRenderPass {
                 }],
                 depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
                     format: GPU::DEPTH_FORMAT,
-                    depth_write_enabled: false,
+                    depth_write_enabled: true,
                     depth_compare: wgpu::CompareFunction::Less,
                     stencil_front: wgpu::StencilStateFaceDescriptor::IGNORE,
                     stencil_back: wgpu::StencilStateFaceDescriptor::IGNORE,
@@ -172,9 +172,9 @@ impl TerrainRenderPass {
         for i in 0..terrain_geo_buffer.num_patches() {
             let winding = terrain_geo_buffer.patch_winding(i);
             let base_vertex = terrain_geo_buffer.patch_vertex_buffer_offset(i);
-            rpass.set_index_buffer(terrain_geo_buffer.wireframe_index_buffer(winding), 0, 0);
+            rpass.set_index_buffer(terrain_geo_buffer.tristrip_index_buffer(winding), 0, 0);
             rpass.draw_indexed(
-                terrain_geo_buffer.wireframe_index_range(winding),
+                terrain_geo_buffer.tristrip_index_range(winding),
                 base_vertex,
                 0..1,
             );

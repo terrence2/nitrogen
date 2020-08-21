@@ -227,32 +227,6 @@ impl GPU {
         }
     }
 
-    /*
-    pub fn screen_render_pass_descriptor<'a>(
-        &'a self,
-        framebuffer: &'a wgpu::SwapChainOutput,
-    ) -> wgpu::RenderPassDescriptor<'a, 'a> {
-        wgpu::RenderPassDescriptor {
-            color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                attachment: &framebuffer.view,
-                resolve_target: None,
-                load_op: wgpu::LoadOp::Clear,
-                store_op: wgpu::StoreOp::Store,
-                clear_color: wgpu::Color::GREEN,
-            }],
-            depth_stencil_attachment: Some(::wgpu::RenderPassDepthStencilAttachmentDescriptor {
-                attachment: &self.depth_texture,
-                depth_load_op: wgpu::LoadOp::Clear,
-                depth_store_op: wgpu::StoreOp::Store,
-                clear_depth: 1f32,
-                stencil_load_op: wgpu::LoadOp::Clear,
-                stencil_store_op: wgpu::StoreOp::Store,
-                clear_stencil: 0,
-            }),
-        }
-    }
-     */
-
     pub fn maybe_push_buffer(
         &self,
         label: &'static str,
