@@ -36,11 +36,12 @@ macro_rules! make_frame_graph_pass {
         $owner:ident, $gpu:ident, $encoder:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
      }
     ) => {
+        // FIXME: Check if the color attachment is sub-optimal and needs to be re-created
         let color_attachment = $gpu.get_next_framebuffer()?;
 
         {
             let _rpass = $encoder.begin_render_pass(&$crate::wgpu::RenderPassDescriptor {
-                color_attachments: &[$crate::GPU::color_attachment(&color_attachment.view)],
+                color_attachments: &[$crate::GPU::color_attachment(&color_attachment.output.view)],
                 depth_stencil_attachment: Some($gpu.depth_stencil_attachment()),
             });
             $(
@@ -142,7 +143,7 @@ macro_rules! make_frame_graph {
                         self, gpu, encoder, $pass_name, $($pass_item_name ( $($pass_item_input_name),* )),*
                     });
                 )*
-                gpu.queue_mut().submit(&[encoder.finish()]);
+                gpu.queue_mut().submit(vec![encoder.finish()]);
                 self.tracker.reset();
 
                 Ok(())
@@ -179,7 +180,6 @@ mod test {
                     height: 1,
                     depth: 1,
                 },
-                array_layer_count: 1,
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
@@ -187,13 +187,14 @@ mod test {
                 usage: wgpu::TextureUsage::all(),
             });
             let render_target = texture.create_view(&wgpu::TextureViewDescriptor {
-                format: wgpu::TextureFormat::Rgba8Uint,
-                dimension: wgpu::TextureViewDimension::D2,
+                label: None,
+                format: Some(wgpu::TextureFormat::Rgba8Uint),
+                dimension: Some(wgpu::TextureViewDimension::D2),
                 aspect: wgpu::TextureAspect::All,
                 base_mip_level: 0,
-                level_count: 1,
+                level_count: None,
                 base_array_layer: 0,
-                array_layer_count: 1,
+                array_layer_count: None,
             });
             Arc::new(RefCell::new(Self {
                 render_target,
@@ -225,9 +226,10 @@ mod test {
                 [wgpu::RenderPassColorAttachmentDescriptor {
                     attachment: &self.render_target,
                     resolve_target: None,
-                    load_op: wgpu::LoadOp::Clear,
-                    store_op: wgpu::StoreOp::Store,
-                    clear_color: wgpu::Color::GREEN,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
+                        store: true,
+                    },
                 }],
                 None,
             )

@@ -145,15 +145,22 @@ impl FrameStateTracker {
             encoder.copy_buffer_to_texture(
                 wgpu::BufferCopyView {
                     buffer: &desc.source,
-                    offset: 0,
-                    bytes_per_row: desc.target_extent.width * desc.target_element_size,
-                    rows_per_image: desc.target_extent.height,
+                    layout: wgpu::TextureDataLayout {
+                        offset: 0,
+                        bytes_per_row: desc.target_extent.width * desc.target_element_size,
+                        rows_per_image: desc.target_extent.height,
+                    },
                 },
                 wgpu::TextureCopyView {
                     texture: &desc.target,
                     mip_level: 0, // TODO: need to scale extent appropriately
-                    array_layer: desc.target_array_layer,
-                    origin: wgpu::Origin3d::ZERO,
+                    //array_layer: desc.target_array_layer,
+                    //origin: wgpu::Origin3d::ZERO,
+                    origin: wgpu::Origin3d {
+                        x: 0,
+                        y: 0,
+                        z: desc.target_array_layer,
+                    },
                 },
                 desc.target_extent,
             );
@@ -205,5 +212,19 @@ pub fn texture_format_size(texture_format: wgpu::TextureFormat) -> u32 {
         wgpu::TextureFormat::Depth32Float => 4,
         wgpu::TextureFormat::Depth24Plus => 4,
         wgpu::TextureFormat::Depth24PlusStencil8 => 4,
+        wgpu::TextureFormat::Bc1RgbaUnorm => 4,
+        wgpu::TextureFormat::Bc1RgbaUnormSrgb => 4,
+        wgpu::TextureFormat::Bc2RgbaUnorm => 4,
+        wgpu::TextureFormat::Bc2RgbaUnormSrgb => 4,
+        wgpu::TextureFormat::Bc3RgbaUnorm => 4,
+        wgpu::TextureFormat::Bc3RgbaUnormSrgb => 4,
+        wgpu::TextureFormat::Bc4RUnorm => 1,
+        wgpu::TextureFormat::Bc4RSnorm => 1,
+        wgpu::TextureFormat::Bc5RgUnorm => 2,
+        wgpu::TextureFormat::Bc5RgSnorm => 2,
+        wgpu::TextureFormat::Bc6hRgbUfloat => 16,
+        wgpu::TextureFormat::Bc6hRgbSfloat => 16,
+        wgpu::TextureFormat::Bc7RgbaUnorm => 4,
+        wgpu::TextureFormat::Bc7RgbaUnormSrgb => 4,
     }
 }

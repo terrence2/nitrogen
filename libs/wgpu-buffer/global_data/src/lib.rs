@@ -169,7 +169,7 @@ impl GlobalParametersBuffer {
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("globals-bind-group"),
             layout: &bind_group_layout,
-            bindings: &[wgpu::Binding {
+            bindings: &[wgpu::BindGroupEntry {
                 binding: 0,
                 resource: wgpu::BindingResource::Buffer {
                     buffer: &parameters_buffer,
