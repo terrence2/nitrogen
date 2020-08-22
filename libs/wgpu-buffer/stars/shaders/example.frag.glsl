@@ -25,8 +25,8 @@ void main() {
         return;
     #endif
 
-    vec3 star_radiance = vec3(0);
+    vec3 star_radiance = vec3(0, 0, 0);
     float star_alpha = 0;
     show_stars(v_ray, star_radiance, star_alpha);
-    f_color = vec4(star_radiance, 1.0);
+    f_color = vec4(star_radiance, star_alpha);
 }

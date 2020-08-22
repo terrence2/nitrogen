@@ -22,6 +22,7 @@ gpu = { path = "../../system/gpu" }
 absolute_unit = { path = "../../sim/absolute_unit" }
 command = { path = "../../system/command" }
 fullscreen = { path = "../../wgpu-buffer/fullscreen" }
+geodesy = { path = "../../sim/geodesy" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 input = { path = "../../system/input" }
 

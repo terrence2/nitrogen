@@ -41,16 +41,16 @@ struct StarInst {
     float radius;
 };
 
-layout(set = 2, binding = 0) buffer DeclinationBands {
+layout(set = 2, binding = 0) readonly buffer DeclinationBands {
     BandMetadata stars_bands[33];
 };
-layout(set = 2, binding = 1) buffer BinPositions {
+layout(set = 2, binding = 1) readonly buffer BinPositions {
     BinPosition stars_bins[5434];
 };
-layout(set = 2, binding = 2) buffer Indexes {
+layout(set = 2, binding = 2) readonly buffer Indexes {
     uint stars_indexes[];
 };
-layout(set = 2, binding = 3) buffer StarBlock {
+layout(set = 2, binding = 3) readonly buffer StarBlock {
     StarInst stars_stars[];
 };
 
@@ -94,6 +94,7 @@ void show_stars(
     uint bin = bin_for_ra_d(ra, dec);
     BinPosition pos = stars_bins[bin];
 
+    star_radiance = vec3(0, 0, 0);
     star_alpha = 0.0;
     for (uint i = pos.index_base; i < pos.index_base + pos.num_indexes; ++i) {
         uint star_index = stars_indexes[i];
