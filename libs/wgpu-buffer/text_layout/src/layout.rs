@@ -71,7 +71,7 @@ impl Layout {
                 label: Some("text-layout-data-buffer"),
                 size,
                 usage: wgpu::BufferUsage::all(),
-                mapped_at_creation: false
+                mapped_at_creation: false,
             },
         )));
 

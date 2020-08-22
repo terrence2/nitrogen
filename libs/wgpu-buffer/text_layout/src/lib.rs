@@ -151,7 +151,7 @@ impl TextLayoutBuffer {
                         ty: wgpu::BindingType::StorageBuffer {
                             dynamic: false,
                             readonly: true,
-                            min_binding_size: None
+                            min_binding_size: None,
                         },
                         count: None,
                     }],

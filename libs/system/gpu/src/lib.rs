@@ -232,13 +232,14 @@ impl GPU {
         }
         let size = data.len() as wgpu::BufferAddress;
         trace!("uploading {} with {} bytes", label, size);
-        Some(self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(label),
-                contents: data,
-                usage,
-            }))
+        Some(
+            self.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some(label),
+                    contents: data,
+                    usage,
+                }),
+        )
     }
 
     pub fn maybe_push_slice<T: AsBytes>(
@@ -252,13 +253,14 @@ impl GPU {
         }
         let size = (mem::size_of::<T>() * data.len()) as wgpu::BufferAddress;
         trace!("uploading {} with {} bytes", label, size);
-        Some(self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(label),
-                contents: data.as_bytes(),
-                usage,
-            }))
+        Some(
+            self.device
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some(label),
+                    contents: data.as_bytes(),
+                    usage,
+                }),
+        )
     }
 
     pub fn push_buffer(
@@ -289,8 +291,7 @@ impl GPU {
     ) -> wgpu::Buffer {
         let size = mem::size_of::<T>() as wgpu::BufferAddress;
         trace!("uploading {} with {} bytes", label, size);
-        self
-            .device
+        self.device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(label),
                 contents: data.as_bytes(),

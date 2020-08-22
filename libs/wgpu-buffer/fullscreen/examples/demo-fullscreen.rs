@@ -17,7 +17,7 @@ use camera::ArcBallCamera;
 use command::Bindings;
 use failure::Fallible;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
-use geodesy::{Graticule, GeoSurface, Target};
+use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
 use gpu::GPU;
 use input::InputSystem;
@@ -91,8 +91,16 @@ fn main() -> Fallible<()> {
         });
 
     let mut arcball = ArcBallCamera::new(gpu.aspect_ratio(), meters!(0.1), meters!(3.4e+10));
-    arcball.set_eye_relative(Graticule::<Target>::new(degrees!(0), degrees!(0), meters!(10)))?;
-    arcball.set_target(Graticule::<GeoSurface>::new(degrees!(0), degrees!(0), meters!(10)));
+    arcball.set_eye_relative(Graticule::<Target>::new(
+        degrees!(0),
+        degrees!(0),
+        meters!(10),
+    ))?;
+    arcball.set_target(Graticule::<GeoSurface>::new(
+        degrees!(0),
+        degrees!(0),
+        meters!(10),
+    ));
     arcball.set_distance(meters!(40.0));
 
     loop {
