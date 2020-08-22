@@ -145,13 +145,15 @@ impl TextLayoutBuffer {
             gpu.device()
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("text-layout-bind-group-layout"),
-                    bindings: &[wgpu::BindGroupLayoutEntry {
+                    entries: &[wgpu::BindGroupLayoutEntry {
                         binding: 0,
                         visibility: wgpu::ShaderStage::VERTEX,
                         ty: wgpu::BindingType::StorageBuffer {
                             dynamic: false,
                             readonly: true,
+                            min_binding_size: None
                         },
+                        count: None,
                     }],
                 });
 
@@ -160,7 +162,7 @@ impl TextLayoutBuffer {
         glyph_cache_map.insert(FALLBACK_FONT_NAME.to_owned(), index);
         glyph_caches.push(GlyphCache::new(
             index,
-            TtfFont::from_bytes(&QUANTICO_TTF_DATA, gpu)?,
+            TtfFont::from_bytes("quantico", &QUANTICO_TTF_DATA, gpu)?,
             &glyph_bind_group_layout,
             gpu,
         ));

@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use codepage_437::{FromCp437, CP437_CONTROL};
 use failure::Fallible;
-use font_common::{upload_texture_luma, FontInterface, GlyphFrame};
+use font_common::{upload_texture_luma, FontInterface, GlyphFrame, ROW_ALIGNMENT};
 use gpu::GPU;
 use image::{GrayImage, Luma};
 use lazy_static::lazy_static;
@@ -71,7 +71,11 @@ impl FontInterface for TtfFont {
 }
 
 impl TtfFont {
-    pub fn from_bytes(bytes: &'static [u8], gpu: &mut GPU) -> Fallible<Box<dyn FontInterface>> {
+    pub fn from_bytes(
+        name: &str,
+        bytes: &'static [u8],
+        gpu: &mut GPU,
+    ) -> Fallible<Box<dyn FontInterface>> {
         trace!("GlyphCacheTTF::new");
 
         let font = Font::from_bytes(bytes)?;
@@ -92,6 +96,9 @@ impl TtfFont {
             if let Some(bb) = glyph.pixel_bounding_box() {
                 pixel_width += (bb.max.x - bb.min.x) as u32 + 1;
             }
+        }
+        if pixel_width % ROW_ALIGNMENT != 0 {
+            pixel_width += ROW_ALIGNMENT - (pixel_width % ROW_ALIGNMENT);
         }
 
         // Extract all necessary glyphs to a texture and upload to GPU.
@@ -126,8 +133,10 @@ impl TtfFont {
             }
         }
 
-        let texture_view = upload_texture_luma(buf, gpu)?;
+        let texture_view =
+            upload_texture_luma(&format!("ttf-font-{}-texture-view", name), buf, gpu)?;
         let sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
+            label: Some(&format!("ttf-font-{}-sampler", name)),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -136,7 +145,8 @@ impl TtfFont {
             mipmap_filter: wgpu::FilterMode::Nearest,
             lod_min_clamp: 0f32,
             lod_max_clamp: 9_999_999f32,
-            compare: wgpu::CompareFunction::Never,
+            compare: None,
+            anisotropy_clamp: None,
         });
 
         Ok(Box::new(Self {

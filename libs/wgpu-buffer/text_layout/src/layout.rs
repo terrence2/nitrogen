@@ -71,18 +71,16 @@ impl Layout {
                 label: Some("text-layout-data-buffer"),
                 size,
                 usage: wgpu::BufferUsage::all(),
+                mapped_at_creation: false
             },
         )));
 
         let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("text-layout-bind-group"),
             layout: &bind_group_layout,
-            bindings: &[wgpu::Binding {
+            entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::Buffer {
-                    buffer: &layout_data_buffer,
-                    range: 0..size,
-                },
+                resource: wgpu::BindingResource::Buffer(layout_data_buffer.slice(..)),
             }],
         });
 

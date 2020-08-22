@@ -46,12 +46,12 @@ impl GlyphCache {
         let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("glyph-cache-TTF-bind-group"),
             layout: bind_group_layout,
-            bindings: &[
-                wgpu::Binding {
+            entries: &[
+                wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::TextureView(&texture_view),
                 },
-                wgpu::Binding {
+                wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&sampler),
                 },
@@ -72,7 +72,7 @@ impl GlyphCache {
     pub fn create_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
         device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("glyph-cache-bind-group-layout"),
-            bindings: &[
+            entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
                     visibility: wgpu::ShaderStage::FRAGMENT,
@@ -81,11 +81,13 @@ impl GlyphCache {
                         component_type: wgpu::TextureComponentType::Uint,
                         multisampled: false,
                     },
+                    count: None,
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
                     visibility: wgpu::ShaderStage::FRAGMENT,
                     ty: wgpu::BindingType::Sampler { comparison: false },
+                    count: None,
                 },
             ],
         })
