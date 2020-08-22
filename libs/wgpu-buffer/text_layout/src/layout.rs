@@ -301,12 +301,20 @@ impl Layout {
         self.glyph_cache_index.index()
     }
 
-    pub fn vertex_buffer(&self) -> &wgpu::Buffer {
-        &self.text_render_context.as_ref().unwrap().vertex_buffer
+    pub fn vertex_buffer(&self) -> wgpu::BufferSlice {
+        self.text_render_context
+            .as_ref()
+            .unwrap()
+            .vertex_buffer
+            .slice(..)
     }
 
-    pub fn index_buffer(&self) -> &wgpu::Buffer {
-        &self.text_render_context.as_ref().unwrap().index_buffer
+    pub fn index_buffer(&self) -> wgpu::BufferSlice {
+        self.text_render_context
+            .as_ref()
+            .unwrap()
+            .index_buffer
+            .slice(..)
     }
 
     pub fn index_range(&self) -> Range<u32> {

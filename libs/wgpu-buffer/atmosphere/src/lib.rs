@@ -25,12 +25,13 @@ mod colorspace;
 mod earth_consts;
 mod precompute;
 
-use crate::{earth_consts::ATMOSPHERE_PARAMETERS_BUFFER_SIZE, precompute::Precompute};
+use crate::earth_consts::AtmosphereParameters;
+use crate::precompute::Precompute;
 use failure::Fallible;
 use gpu::{FrameStateTracker, GPU};
 use log::trace;
 use nalgebra::Vector3;
-use std::{cell::RefCell, mem, sync::Arc, time::Instant};
+use std::{cell::RefCell, mem, num::NonZeroU64, sync::Arc, time::Instant};
 
 const NUM_PRECOMPUTED_WAVELENGTHS: usize = 40;
 const NUM_SCATTERING_ORDER: usize = 4;
@@ -67,6 +68,7 @@ impl AtmosphereBuffer {
                 label: Some("atmosphere-sun-buffer"),
                 size: camera_and_sun_buffer_size,
                 usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+                mapped_at_creation: false,
             },
         )));
 
@@ -74,18 +76,28 @@ impl AtmosphereBuffer {
             gpu.device()
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("atmosphere-bind-group-layout"),
-                    bindings: &[
+                    entries: &[
                         // camera and sun
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::UniformBuffer { dynamic: false },
+                            ty: wgpu::BindingType::UniformBuffer {
+                                dynamic: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
                         },
                         // atmosphere params
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::UniformBuffer { dynamic: false },
+                            ty: wgpu::BindingType::UniformBuffer {
+                                dynamic: false,
+                                min_binding_size: NonZeroU64::new(
+                                    mem::size_of::<AtmosphereParameters>() as u64,
+                                ),
+                            },
+                            count: None,
                         },
                         // transmittance texture
                         wgpu::BindGroupLayoutEntry {
@@ -96,11 +108,13 @@ impl AtmosphereBuffer {
                                 component_type: wgpu::TextureComponentType::Float,
                                 dimension: wgpu::TextureViewDimension::D2,
                             },
+                            count: None,
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 3,
                             visibility: wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Sampler { comparison: false },
+                            count: None,
                         },
                         // irradiance texture
                         wgpu::BindGroupLayoutEntry {
@@ -111,11 +125,13 @@ impl AtmosphereBuffer {
                                 component_type: wgpu::TextureComponentType::Float,
                                 dimension: wgpu::TextureViewDimension::D2,
                             },
+                            count: None,
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 5,
                             visibility: wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Sampler { comparison: false },
+                            count: None,
                         },
                         // scattering texture
                         wgpu::BindGroupLayoutEntry {
@@ -126,11 +142,13 @@ impl AtmosphereBuffer {
                                 component_type: wgpu::TextureComponentType::Float,
                                 dimension: wgpu::TextureViewDimension::D3,
                             },
+                            count: None,
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 7,
                             visibility: wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Sampler { comparison: false },
+                            count: None,
                         },
                         // single mie scattering texture
                         wgpu::BindGroupLayoutEntry {
@@ -141,16 +159,19 @@ impl AtmosphereBuffer {
                                 component_type: wgpu::TextureComponentType::Float,
                                 dimension: wgpu::TextureViewDimension::D3,
                             },
+                            count: None,
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 9,
                             visibility: wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Sampler { comparison: false },
+                            count: None,
                         },
                     ],
                 });
 
         let sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("atmosphere-sampler"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -159,90 +180,76 @@ impl AtmosphereBuffer {
             mipmap_filter: wgpu::FilterMode::Linear,
             lod_min_clamp: 0f32,
             lod_max_clamp: 9_999_999f32,
-            compare: wgpu::CompareFunction::Never,
+            compare: None,
+            anisotropy_clamp: None,
         });
 
-        let t2descriptor = wgpu::TextureViewDescriptor {
-            format: wgpu::TextureFormat::Rgba32Float,
-            dimension: wgpu::TextureViewDimension::D2,
+        let view_descriptor = wgpu::TextureViewDescriptor {
+            label: Some("atmosphere-texture-view"),
+            format: None,
+            dimension: None,
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,
-            level_count: 1, // mip level
+            level_count: None,
             base_array_layer: 0,
-            array_layer_count: 1,
-        };
-
-        let t3descriptor = wgpu::TextureViewDescriptor {
-            format: wgpu::TextureFormat::Rgba32Float,
-            dimension: wgpu::TextureViewDimension::D3,
-            aspect: wgpu::TextureAspect::All,
-            base_mip_level: 0,
-            level_count: 1, // mip level
-            base_array_layer: 0,
-            array_layer_count: 1,
+            array_layer_count: None,
         };
 
         let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("atmosphere-bind-group"),
             layout: &bind_group_layout,
-            bindings: &[
+            entries: &[
                 // camera and sun
-                wgpu::Binding {
+                wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer {
-                        buffer: &camera_and_sun_buffer,
-                        range: 0..camera_and_sun_buffer_size,
-                    },
+                    resource: wgpu::BindingResource::Buffer(camera_and_sun_buffer.slice(..)),
                 },
                 // atmosphere
-                wgpu::Binding {
+                wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Buffer {
-                        buffer: &atmosphere_params_buffer,
-                        range: 0..ATMOSPHERE_PARAMETERS_BUFFER_SIZE,
-                    },
+                    resource: wgpu::BindingResource::Buffer(atmosphere_params_buffer.slice(..)),
                 },
                 // transmittance texture
-                wgpu::Binding {
+                wgpu::BindGroupEntry {
                     binding: 2,
                     resource: wgpu::BindingResource::TextureView(
-                        &transmittance_texture.create_view(&t2descriptor),
+                        &transmittance_texture.create_view(&view_descriptor),
                     ),
                 },
-                wgpu::Binding {
+                wgpu::BindGroupEntry {
                     binding: 3,
                     resource: wgpu::BindingResource::Sampler(&sampler),
                 },
                 // irradiance texture
-                wgpu::Binding {
+                wgpu::BindGroupEntry {
                     binding: 4,
                     resource: wgpu::BindingResource::TextureView(
-                        &irradiance_texture.create_view(&t2descriptor),
+                        &irradiance_texture.create_view(&view_descriptor),
                     ),
                 },
-                wgpu::Binding {
+                wgpu::BindGroupEntry {
                     binding: 5,
                     resource: wgpu::BindingResource::Sampler(&sampler),
                 },
                 // scattering texture
-                wgpu::Binding {
+                wgpu::BindGroupEntry {
                     binding: 6,
                     resource: wgpu::BindingResource::TextureView(
-                        &scattering_texture.create_view(&t3descriptor),
+                        &scattering_texture.create_view(&view_descriptor),
                     ),
                 },
-                wgpu::Binding {
+                wgpu::BindGroupEntry {
                     binding: 7,
                     resource: wgpu::BindingResource::Sampler(&sampler),
                 },
                 // single mie scattering texture
-                wgpu::Binding {
+                wgpu::BindGroupEntry {
                     binding: 8,
                     resource: wgpu::BindingResource::TextureView(
-                        &single_mie_scattering_texture.create_view(&t3descriptor),
+                        &single_mie_scattering_texture.create_view(&view_descriptor),
                     ),
                 },
-                wgpu::Binding {
+                wgpu::BindGroupEntry {
                     binding: 9,
                     resource: wgpu::BindingResource::Sampler(&sampler),
                 },

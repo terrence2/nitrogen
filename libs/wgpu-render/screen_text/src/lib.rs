@@ -39,6 +39,8 @@ impl ScreenTextRenderPass {
         let pipeline_layout =
             gpu.device()
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("screen-text-pipeline-layout"),
+                    push_constant_ranges: &[],
                     bind_group_layouts: &[
                         global_data.bind_group_layout(),
                         layout_buffer.glyph_bind_group_layout(),
@@ -49,7 +51,8 @@ impl ScreenTextRenderPass {
         let pipeline = gpu
             .device()
             .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                layout: &pipeline_layout,
+                label: Some("screen-text-pipeline"),
+                layout: Some(&pipeline_layout),
                 vertex_stage: wgpu::ProgrammableStageDescriptor {
                     module: &vert_shader,
                     entry_point: "main",
@@ -64,6 +67,7 @@ impl ScreenTextRenderPass {
                     depth_bias: 0,
                     depth_bias_slope_scale: 0.0,
                     depth_bias_clamp: 0.0,
+                    clamp_depth: false,
                 }),
                 primitive_topology: wgpu::PrimitiveTopology::TriangleList,
                 color_states: &[wgpu::ColorStateDescriptor {
@@ -80,10 +84,12 @@ impl ScreenTextRenderPass {
                     format: GPU::DEPTH_FORMAT,
                     depth_write_enabled: false,
                     depth_compare: wgpu::CompareFunction::Less,
-                    stencil_front: wgpu::StencilStateFaceDescriptor::IGNORE,
-                    stencil_back: wgpu::StencilStateFaceDescriptor::IGNORE,
-                    stencil_read_mask: 0,
-                    stencil_write_mask: 0,
+                    stencil: wgpu::StencilStateDescriptor {
+                        front: wgpu::StencilStateFaceDescriptor::IGNORE,
+                        back: wgpu::StencilStateFaceDescriptor::IGNORE,
+                        read_mask: 0,
+                        write_mask: 0,
+                    },
                 }),
                 vertex_state: wgpu::VertexStateDescriptor {
                     index_format: wgpu::IndexFormat::Uint32,
@@ -112,8 +118,8 @@ impl ScreenTextRenderPass {
                 let layout = layout_buffer.layout(layout_handle);
                 rpass.set_bind_group(Group::TextLayout.index(), &layout.bind_group(), &[]);
 
-                rpass.set_index_buffer(&layout.index_buffer(), 0, 0);
-                rpass.set_vertex_buffer(0, &layout.vertex_buffer(), 0, 0);
+                rpass.set_index_buffer(layout.index_buffer());
+                rpass.set_vertex_buffer(0, layout.vertex_buffer());
                 rpass.draw_indexed(layout.index_range(), 0, 0..1);
             }
         }

@@ -27,6 +27,7 @@ use gpu::{FrameStateTracker, GPU};
 use log::trace;
 use std::{
     collections::{BTreeMap, BinaryHeap},
+    num::NonZeroU32,
     ops::Range,
     sync::Arc,
 };
@@ -189,7 +190,6 @@ impl TileSet {
         let index_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("terrain-geo-tile-index-texture"),
             size: index_texture_extent,
-            array_layer_count: 1,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -197,15 +197,17 @@ impl TileSet {
             usage: wgpu::TextureUsage::all(),
         });
         let index_texture_view = index_texture.create_view(&wgpu::TextureViewDescriptor {
-            format: index_texture_format,
-            dimension: wgpu::TextureViewDimension::D2,
+            label: Some("terrain-index-texture-view"),
+            format: None,
+            dimension: None,
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,
-            level_count: 1,
+            level_count: None,
             base_array_layer: 0,
-            array_layer_count: 1,
+            array_layer_count: None,
         });
         let index_texture_sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("terrain-index-sampler"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -214,7 +216,8 @@ impl TileSet {
             mipmap_filter: wgpu::FilterMode::Nearest,
             lod_min_clamp: 0f32,
             lod_max_clamp: 9_999_999f32,
-            compare: wgpu::CompareFunction::Never,
+            compare: None,
+            anisotropy_clamp: None,
         });
         let index_paint_range = 0u32..(6 * gpu_detail.tile_cache_size);
         let index_paint_vert_buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
@@ -222,6 +225,7 @@ impl TileSet {
             size: (IndexPaintVertex::mem_size() * 6 * gpu_detail.tile_cache_size as usize)
                 as wgpu::BufferAddress,
             usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::VERTEX,
+            mapped_at_creation: false,
         });
         let index_paint_vert_shader =
             gpu.create_shader_module(include_bytes!("../../target/index_paint.vert.spirv"))?;
@@ -230,11 +234,14 @@ impl TileSet {
         let index_paint_pipeline =
             gpu.device()
                 .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    layout: &gpu
-                        .device()
-                        .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("terrain-index-paint-pipeline"),
+                    layout: Some(&gpu.device().create_pipeline_layout(
+                        &wgpu::PipelineLayoutDescriptor {
+                            label: Some("terrain-index-paint-pipeline-layout"),
+                            push_constant_ranges: &[],
                             bind_group_layouts: &[],
-                        }),
+                        },
+                    )),
                     vertex_stage: wgpu::ProgrammableStageDescriptor {
                         module: &index_paint_vert_shader,
                         entry_point: "main",
@@ -249,6 +256,7 @@ impl TileSet {
                         depth_bias: 0,
                         depth_bias_slope_scale: 0.0,
                         depth_bias_clamp: 0.0,
+                        clamp_depth: false,
                     }),
                     primitive_topology: wgpu::PrimitiveTopology::TriangleList,
                     color_states: &[wgpu::ColorStateDescriptor {
@@ -275,12 +283,11 @@ impl TileSet {
         let atlas_texture_extent = wgpu::Extent3d {
             width: TILE_SIZE,
             height: TILE_SIZE,
-            depth: 1, // Note: the texture array size is specified elsewhere.
+            depth: gpu_detail.tile_cache_size, // TODO: is texture array size specified here now?
         };
         let atlas_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("terrain-geo-tile-atlas-texture"),
             size: atlas_texture_extent,
-            array_layer_count: gpu_detail.tile_cache_size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -288,15 +295,17 @@ impl TileSet {
             usage: wgpu::TextureUsage::all(),
         });
         let atlas_texture_view = atlas_texture.create_view(&wgpu::TextureViewDescriptor {
-            format: atlas_texture_format,
-            dimension: wgpu::TextureViewDimension::D2Array,
+            label: Some("terrain-atlas-texture-view"),
+            format: None,
+            dimension: Some(wgpu::TextureViewDimension::D2Array),
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,
-            level_count: 1,
+            level_count: None,
             base_array_layer: 0,
-            array_layer_count: gpu_detail.tile_cache_size,
+            array_layer_count: NonZeroU32::new(gpu_detail.tile_cache_size),
         });
         let atlas_texture_sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("terrain-atlas-sampler"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -305,14 +314,15 @@ impl TileSet {
             mipmap_filter: wgpu::FilterMode::Nearest, // We should be able to mip between levels...
             lod_min_clamp: 0f32,
             lod_max_clamp: 9_999_999f32,
-            compare: wgpu::CompareFunction::Never,
+            compare: None,
+            anisotropy_clamp: None,
         });
 
         let bind_group_layout =
             gpu.device()
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("terrain-geo-tile-bind-group-layout"),
-                    bindings: &[
+                    entries: &[
                         // Index Texture
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
@@ -322,11 +332,13 @@ impl TileSet {
                                 component_type: wgpu::TextureComponentType::Uint,
                                 multisampled: false,
                             },
+                            count: None,
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
                             visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Sampler { comparison: false },
+                            count: None,
                         },
                         // Atlas Textures, as referenced by the above index
                         wgpu::BindGroupLayoutEntry {
@@ -337,11 +349,13 @@ impl TileSet {
                                 component_type: wgpu::TextureComponentType::Sint,
                                 multisampled: false,
                             },
+                            count: None,
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 3,
                             visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Sampler { comparison: false },
+                            count: None,
                         },
                     ],
                 });
@@ -349,22 +363,22 @@ impl TileSet {
         let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("terrain-geo-tile-bind-group"),
             layout: &bind_group_layout,
-            bindings: &[
+            entries: &[
                 // Index
-                wgpu::Binding {
+                wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::TextureView(&index_texture_view),
                 },
-                wgpu::Binding {
+                wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&index_texture_sampler),
                 },
                 // Atlas
-                wgpu::Binding {
+                wgpu::BindGroupEntry {
                     binding: 2,
                     resource: wgpu::BindingResource::TextureView(&atlas_texture_view),
                 },
-                wgpu::Binding {
+                wgpu::BindGroupEntry {
                     binding: 3,
                     resource: wgpu::BindingResource::Sampler(&atlas_texture_sampler),
                 },

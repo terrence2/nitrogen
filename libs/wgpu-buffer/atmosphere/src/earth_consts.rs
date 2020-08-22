@@ -15,7 +15,7 @@
 use crate::colorspace::{cie_color_coefficient_at_wavelength, convert_xyz_to_srgb};
 use num_traits::pow::Pow;
 use static_assertions::{assert_eq_align, assert_eq_size};
-use std::{f64::consts::PI as PI64, mem, ops::Range};
+use std::{f64::consts::PI as PI64, ops::Range};
 use zerocopy::{AsBytes, FromBytes};
 
 pub const RGB_LAMBDAS: [f64; 4] = [680.0, 550.0, 440.0, 0.0];
@@ -113,7 +113,6 @@ pub struct AtmosphereParameters {
 }
 assert_eq_size!(AtmosphereParameters, [f32; 40 + 16 * 3]);
 assert_eq_align!(AtmosphereParameters, [f32; 4]);
-pub const ATMOSPHERE_PARAMETERS_BUFFER_SIZE: u64 = mem::size_of::<AtmosphereParameters>() as u64;
 
 // Evaluate the wavelength-based table at the given wavelength,
 // interpolating between adjacent table values.
