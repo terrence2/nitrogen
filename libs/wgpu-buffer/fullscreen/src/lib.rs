@@ -68,8 +68,8 @@ impl FullscreenBuffer {
         })))
     }
 
-    pub fn vertex_buffer(&self) -> &wgpu::Buffer {
-        &self.vertex_buffer
+    pub fn vertex_buffer(&self) -> wgpu::BufferSlice {
+        self.vertex_buffer.slice(0..)
     }
 }
 

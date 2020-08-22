@@ -12,11 +12,12 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use absolute_unit::meters;
+use absolute_unit::{degrees, meters};
 use camera::ArcBallCamera;
 use command::Bindings;
 use failure::Fallible;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
+use geodesy::{Graticule, GeoSurface, Target};
 use global_data::GlobalParametersBuffer;
 use gpu::GPU;
 use input::InputSystem;
@@ -37,12 +38,15 @@ fn main() -> Fallible<()> {
     let pipeline_layout = gpu
         .device()
         .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("main-pipeline-layout"),
             bind_group_layouts: &[globals_buffer.borrow().bind_group_layout()],
+            push_constant_ranges: &[],
         });
     let pipeline = gpu
         .device()
         .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            layout: &pipeline_layout,
+            label: Some("main-pipeline"),
+            layout: Some(&pipeline_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &vert_shader,
                 entry_point: "main",
@@ -54,6 +58,7 @@ fn main() -> Fallible<()> {
             rasterization_state: Some(wgpu::RasterizationStateDescriptor {
                 front_face: wgpu::FrontFace::Cw,
                 cull_mode: wgpu::CullMode::Back,
+                clamp_depth: false,
                 depth_bias: 0,
                 depth_bias_slope_scale: 0.0,
                 depth_bias_clamp: 0.0,
@@ -69,10 +74,12 @@ fn main() -> Fallible<()> {
                 format: GPU::DEPTH_FORMAT,
                 depth_write_enabled: false,
                 depth_compare: wgpu::CompareFunction::Less,
-                stencil_front: wgpu::StencilStateFaceDescriptor::IGNORE,
-                stencil_back: wgpu::StencilStateFaceDescriptor::IGNORE,
-                stencil_read_mask: 0,
-                stencil_write_mask: 0,
+                stencil: wgpu::StencilStateDescriptor {
+                    front: wgpu::StencilStateFaceDescriptor::IGNORE,
+                    back: wgpu::StencilStateFaceDescriptor::IGNORE,
+                    read_mask: 0,
+                    write_mask: 0,
+                },
             }),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
@@ -83,7 +90,9 @@ fn main() -> Fallible<()> {
             alpha_to_coverage_enabled: false,
         });
 
-    let mut arcball = ArcBallCamera::new(gpu.aspect_ratio(), meters!(0.1), meters!(3.4e+38));
+    let mut arcball = ArcBallCamera::new(gpu.aspect_ratio(), meters!(0.1), meters!(3.4e+10));
+    arcball.set_eye_relative(Graticule::<Target>::new(degrees!(0), degrees!(0), meters!(10)))?;
+    arcball.set_target(Graticule::<GeoSurface>::new(degrees!(0), degrees!(0), meters!(10)));
     arcball.set_distance(meters!(40.0));
 
     loop {
@@ -99,6 +108,7 @@ fn main() -> Fallible<()> {
                 _ => {}
             }
         }
+        arcball.think();
 
         // Prepare new camera parameters.
         let mut tracker = Default::default();
@@ -117,15 +127,15 @@ fn main() -> Fallible<()> {
         tracker.dispatch_uploads(&mut encoder);
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                color_attachments: &[GPU::color_attachment(&framebuffer.view)],
+                color_attachments: &[GPU::color_attachment(&framebuffer.output.view)],
                 depth_stencil_attachment: Some(gpu.depth_stencil_attachment()),
             });
             rpass.set_pipeline(&pipeline);
             rpass.set_bind_group(0, gb_borrow.bind_group(), &[]);
-            rpass.set_vertex_buffer(0, fs_borrow.vertex_buffer(), 0, 0);
+            rpass.set_vertex_buffer(0, fs_borrow.vertex_buffer());
             rpass.draw(0..4, 0..1);
         }
-        gpu.queue_mut().submit(&[encoder.finish()]);
+        gpu.queue_mut().submit(vec![encoder.finish()]);
         tracker.reset();
     }
 }

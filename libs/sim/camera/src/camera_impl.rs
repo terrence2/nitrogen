@@ -17,6 +17,7 @@ use geodesy::{Cartesian, GeoCenter};
 use geometry::Plane;
 use nalgebra::{Isometry3, Perspective3, Point3, Vector3};
 
+#[derive(Debug)]
 pub struct Camera {
     // Camera parameters
     fov_y: Angle<Radians>,

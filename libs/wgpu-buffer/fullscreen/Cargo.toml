@@ -15,6 +15,7 @@ gpu = { path = "../../system/gpu" }
 absolute_unit = { path = "../../sim/absolute_unit" }
 command = { path = "../../system/command" }
 global_data = { path = "../../wgpu-buffer/global_data" }
+geodesy = { path = "../../sim/geodesy" }
 input = { path = "../../system/input" }
 
 [build-dependencies]

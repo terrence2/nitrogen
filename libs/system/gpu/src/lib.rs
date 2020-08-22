@@ -232,15 +232,13 @@ impl GPU {
         }
         let size = data.len() as wgpu::BufferAddress;
         trace!("uploading {} with {} bytes", label, size);
-        let cpu_buffer = self
+        Some(self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(label),
                 contents: data,
                 usage,
-            });
-        // TODO: check unamp
-        Some(cpu_buffer)
+            }))
     }
 
     pub fn maybe_push_slice<T: AsBytes>(
@@ -254,15 +252,13 @@ impl GPU {
         }
         let size = (mem::size_of::<T>() * data.len()) as wgpu::BufferAddress;
         trace!("uploading {} with {} bytes", label, size);
-        let cpu_buffer = self
+        Some(self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(label),
                 contents: data.as_bytes(),
                 usage,
-            });
-        // TODO: check unmap
-        Some(cpu_buffer)
+            }))
     }
 
     pub fn push_buffer(
@@ -293,15 +289,13 @@ impl GPU {
     ) -> wgpu::Buffer {
         let size = mem::size_of::<T>() as wgpu::BufferAddress;
         trace!("uploading {} with {} bytes", label, size);
-        let cpu_buffer = self
+        self
             .device
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(label),
                 contents: data.as_bytes(),
                 usage,
-            });
-        // TODO: Can we unmap now? Do we need to unmap later?
-        cpu_buffer
+            })
     }
 
     pub fn upload_slice_to<T: AsBytes>(
