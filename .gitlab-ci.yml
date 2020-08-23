@@ -1,0 +1,26 @@
+before_script:
+  - source $HOME/.cargo/env
+  - rustup update
+  - rustup target add x86_64-pc-windows-gnu
+  - rustup component add rustfmt
+  - rustup component add clippy
+
+check_format:
+  script:
+    - source $HOME/.cargo/env
+    - cargo fmt --all -- --check
+
+check_build:
+  script:
+    - source $HOME/.cargo/env
+    - cargo check --all --all-targets
+
+check_clippy:
+  script:
+    - source $HOME/.cargo/env
+    - cargo clippy --all --all-targets -- --deny warnings
+
+check_test:
+  script:
+    - source $HOME/.cargo/env
+    - cargo test --all --all-targets
