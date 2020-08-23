@@ -18,8 +18,7 @@ use crate::{
     LayoutHandle, LayoutTextRenderContext, TextAnchorH, TextAnchorV, TextPositionH, TextPositionV,
 };
 use failure::Fallible;
-use frame_graph::FrameStateTracker;
-use gpu::GPU;
+use gpu::{FrameStateTracker, GPU};
 use std::{mem, ops::Range, sync::Arc};
 use zerocopy::{AsBytes, FromBytes};
 
@@ -72,18 +71,16 @@ impl Layout {
                 label: Some("text-layout-data-buffer"),
                 size,
                 usage: wgpu::BufferUsage::all(),
+                mapped_at_creation: false,
             },
         )));
 
         let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("text-layout-bind-group"),
             layout: &bind_group_layout,
-            bindings: &[wgpu::Binding {
+            entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::Buffer {
-                    buffer: &layout_data_buffer,
-                    range: 0..size,
-                },
+                resource: wgpu::BindingResource::Buffer(layout_data_buffer.slice(..)),
             }],
         });
 
@@ -304,12 +301,20 @@ impl Layout {
         self.glyph_cache_index.index()
     }
 
-    pub fn vertex_buffer(&self) -> &wgpu::Buffer {
-        &self.text_render_context.as_ref().unwrap().vertex_buffer
+    pub fn vertex_buffer(&self) -> wgpu::BufferSlice {
+        self.text_render_context
+            .as_ref()
+            .unwrap()
+            .vertex_buffer
+            .slice(..)
     }
 
-    pub fn index_buffer(&self) -> &wgpu::Buffer {
-        &self.text_render_context.as_ref().unwrap().index_buffer
+    pub fn index_buffer(&self) -> wgpu::BufferSlice {
+        self.text_render_context
+            .as_ref()
+            .unwrap()
+            .index_buffer
+            .slice(..)
     }
 
     pub fn index_range(&self) -> Range<u32> {

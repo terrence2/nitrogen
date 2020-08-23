@@ -46,6 +46,8 @@ impl SkyboxRenderPass {
         let pipeline_layout =
             gpu.device()
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("skybox-pipeline-layout"),
+                    push_constant_ranges: &[],
                     bind_group_layouts: &[
                         globals_buffer.bind_group_layout(),
                         atmosphere_buffer.bind_group_layout(),
@@ -56,7 +58,8 @@ impl SkyboxRenderPass {
         let pipeline = gpu
             .device()
             .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                layout: &pipeline_layout,
+                label: Some("skybox-pipeline"),
+                layout: Some(&pipeline_layout),
                 vertex_stage: wgpu::ProgrammableStageDescriptor {
                     module: &vert_shader,
                     entry_point: "main",
@@ -71,6 +74,7 @@ impl SkyboxRenderPass {
                     depth_bias: 0,
                     depth_bias_slope_scale: 0.0,
                     depth_bias_clamp: 0.0,
+                    clamp_depth: false,
                 }),
                 primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
                 color_states: &[wgpu::ColorStateDescriptor {
@@ -83,10 +87,12 @@ impl SkyboxRenderPass {
                     format: GPU::DEPTH_FORMAT,
                     depth_write_enabled: false,
                     depth_compare: wgpu::CompareFunction::Less,
-                    stencil_front: wgpu::StencilStateFaceDescriptor::IGNORE,
-                    stencil_back: wgpu::StencilStateFaceDescriptor::IGNORE,
-                    stencil_read_mask: 0,
-                    stencil_write_mask: 0,
+                    stencil: wgpu::StencilStateDescriptor {
+                        front: wgpu::StencilStateFaceDescriptor::IGNORE,
+                        back: wgpu::StencilStateFaceDescriptor::IGNORE,
+                        read_mask: 0,
+                        write_mask: 0,
+                    },
                 }),
                 vertex_state: wgpu::VertexStateDescriptor {
                     index_format: wgpu::IndexFormat::Uint16,
@@ -116,7 +122,7 @@ impl SkyboxRenderPass {
             &[],
         );
         rpass.set_bind_group(Group::Stars.index(), &stars_buffer.bind_group(), &[]);
-        rpass.set_vertex_buffer(0, &fullscreen_buffer.vertex_buffer(), 0, 0);
+        rpass.set_vertex_buffer(0, fullscreen_buffer.vertex_buffer());
         rpass.draw(0..4, 0..1);
         rpass
     }

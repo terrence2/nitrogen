@@ -12,10 +12,12 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with OpenFA.  If not, see <http://www.gnu.org/licenses/>.
-mod manager;
+mod index_paint_vertex;
 mod quad_tree;
+mod tile_manager;
+mod tile_set;
 
-pub(crate) use manager::TileManager;
+pub(crate) use tile_manager::TileManager;
 
 use absolute_unit::{arcseconds, meters, Angle, ArcSeconds};
 use failure::{bail, Fallible};

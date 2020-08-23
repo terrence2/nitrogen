@@ -21,7 +21,10 @@ use failure::Fallible;
 use gpu::GPU;
 use image::{ImageBuffer, Luma};
 
+pub const ROW_ALIGNMENT: u32 = 256;
+
 pub fn upload_texture_luma(
+    name: &str,
     image_buf: ImageBuffer<Luma<u8>, Vec<u8>>,
     gpu: &mut GPU,
 ) -> Fallible<wgpu::TextureView> {
@@ -31,6 +34,7 @@ pub fn upload_texture_luma(
         height: image_dim.1,
         depth: 1,
     };
+    assert_eq!(extent.width % 256, 0);
     let image_data = image_buf.into_raw();
 
     let transfer_buffer = gpu.push_buffer(
@@ -41,7 +45,6 @@ pub fn upload_texture_luma(
     let texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
         label: Some("glyph-cache-texture"),
         size: extent,
-        array_layer_count: 1,
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
@@ -56,32 +59,34 @@ pub fn upload_texture_luma(
     encoder.copy_buffer_to_texture(
         wgpu::BufferCopyView {
             buffer: &transfer_buffer,
-            offset: 0,
-            bytes_per_row: extent.width,
-            rows_per_image: extent.height,
+            layout: wgpu::TextureDataLayout {
+                offset: 0,
+                bytes_per_row: extent.width,
+                rows_per_image: extent.height,
+            },
         },
         wgpu::TextureCopyView {
             texture: &texture,
             mip_level: 0,
-            array_layer: 0,
             origin: wgpu::Origin3d::ZERO,
         },
         extent,
     );
-    gpu.queue_mut().submit(&[encoder.finish()]);
+    gpu.queue_mut().submit(vec![encoder.finish()]);
 
     // FIXME: we need to track usage of this... it should only be startup.
     //        If so, can we aggregate these into a single wait or something?
     gpu.device().poll(wgpu::Maintain::Wait);
 
     let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
-        format: wgpu::TextureFormat::R8Unorm,
-        dimension: wgpu::TextureViewDimension::D2,
+        label: Some(name),
+        format: None,
+        dimension: None,
         aspect: wgpu::TextureAspect::All,
         base_mip_level: 0,
-        level_count: 1, // mip level
+        level_count: None,
         base_array_layer: 0,
-        array_layer_count: 1,
+        array_layer_count: None,
     });
 
     Ok(texture_view)

@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 failure = "^ 0.1.2"
 log = "^ 0.4"
-wgpu = "^ 0.5"
+wgpu = "^ 0.6"
 atmosphere = { path = "../../wgpu-buffer/atmosphere" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 gpu = { path = "../../system/gpu" }

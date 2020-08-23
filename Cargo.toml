@@ -22,7 +22,6 @@ members = [
     "libs/system/ansi",
     "libs/system/catalog",
     "libs/system/command",
-    "libs/system/frame_graph",
     "libs/system/gpu",
     "libs/system/input",
     "libs/system/packed_struct",
@@ -57,7 +56,6 @@ atmosphere = { path = "libs/wgpu-buffer/atmosphere" }
 camera = { path = "libs/sim/camera" }
 catalog = { path = "libs/system/catalog" }
 command = { path = "libs/system/command" }
-frame_graph = { path = "libs/system/frame_graph" }
 fullscreen = { path = "libs/wgpu-buffer/fullscreen" }
 geodesy = { path = "libs/sim/geodesy" }
 global_data = { path = "libs/wgpu-buffer/global_data" }

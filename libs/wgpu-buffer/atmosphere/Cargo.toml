@@ -16,10 +16,9 @@ memmap = "^ 0.6"
 nalgebra = "^ 0.20"
 num-traits = "^ 0.2"
 static_assertions = "^ 1"
-wgpu = "^ 0.5"
+wgpu = "^ 0.6"
 zerocopy = "^ 0.2"
 camera = { path = "../../sim/camera" }
-frame_graph = { path = "../../system/frame_graph" }
 gpu = { path = "../../system/gpu" }
 
 [dev-dependencies]

@@ -14,19 +14,13 @@
 // along with OpenFA.  If not, see <http://www.gnu.org/licenses/>.
 #version 450
 #include <wgpu-render/shader_shared/include/consts.glsl>
-#include <wgpu-buffer/stars/include/stars.glsl>
 
-layout(location = 0) in vec3 v_ray;
-layout(location = 0) out vec4 f_color;
+layout(location = 0) in vec2 vert_position;
+layout(location = 1) in uvec2 vert_color;
+
+layout(location = 0) out uvec2 result_color;
 
 void main() {
-    #if SHOW_BINS
-        f_color = vec4(show_bins(v_ray), 1.0);
-        return;
-    #endif
-
-    vec3 star_radiance = vec3(0, 0, 0);
-    float star_alpha = 0;
-    show_stars(v_ray, star_radiance, star_alpha);
-    f_color = vec4(star_radiance, star_alpha);
+    result_color = vert_color;
+    gl_Position = vec4(vert_position, 0, 1);
 }

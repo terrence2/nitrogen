@@ -12,11 +12,12 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with OpenFA.  If not, see <http://www.gnu.org/licenses/>.
-use absolute_unit::meters;
+use absolute_unit::{degrees, meters};
 use camera::ArcBallCamera;
 use command::Bindings;
 use failure::Fallible;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
+use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
 use gpu::GPU;
 use input::InputSystem;
@@ -40,17 +41,19 @@ fn main() -> Fallible<()> {
         .device()
         .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("empty-bind-group-layout"),
-            bindings: &[],
+            entries: &[],
         });
     let empty_bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("empty-bind-group"),
         layout: &empty_layout,
-        bindings: &[],
+        entries: &[],
     });
 
     let pipeline_layout = gpu
         .device()
         .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("demo-stars-pipeline-layout"),
+            push_constant_ranges: &[],
             bind_group_layouts: &[
                 globals_buffer.borrow().bind_group_layout(),
                 &empty_layout,
@@ -60,7 +63,8 @@ fn main() -> Fallible<()> {
     let pipeline = gpu
         .device()
         .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            layout: &pipeline_layout,
+            label: Some("demo-stars-pipeline"),
+            layout: Some(&pipeline_layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &vert_shader,
                 entry_point: "main",
@@ -75,6 +79,7 @@ fn main() -> Fallible<()> {
                 depth_bias: 0,
                 depth_bias_slope_scale: 0.0,
                 depth_bias_clamp: 0.0,
+                clamp_depth: false,
             }),
             primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
             color_states: &[wgpu::ColorStateDescriptor {
@@ -86,11 +91,13 @@ fn main() -> Fallible<()> {
             depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
                 format: GPU::DEPTH_FORMAT,
                 depth_write_enabled: false,
-                depth_compare: wgpu::CompareFunction::Less,
-                stencil_front: wgpu::StencilStateFaceDescriptor::IGNORE,
-                stencil_back: wgpu::StencilStateFaceDescriptor::IGNORE,
-                stencil_read_mask: 0,
-                stencil_write_mask: 0,
+                depth_compare: wgpu::CompareFunction::Always,
+                stencil: wgpu::StencilStateDescriptor {
+                    front: wgpu::StencilStateFaceDescriptor::IGNORE,
+                    back: wgpu::StencilStateFaceDescriptor::IGNORE,
+                    read_mask: 0,
+                    write_mask: 0,
+                },
             }),
             vertex_state: wgpu::VertexStateDescriptor {
                 index_format: wgpu::IndexFormat::Uint16,
@@ -102,6 +109,16 @@ fn main() -> Fallible<()> {
         });
 
     let mut arcball = ArcBallCamera::new(gpu.aspect_ratio(), meters!(0.1), meters!(3.4e+38));
+    arcball.set_eye_relative(Graticule::<Target>::new(
+        degrees!(0),
+        degrees!(0),
+        meters!(10),
+    ))?;
+    arcball.set_target(Graticule::<GeoSurface>::new(
+        degrees!(0),
+        degrees!(0),
+        meters!(10),
+    ));
     arcball.set_distance(meters!(40.0));
 
     loop {
@@ -117,6 +134,7 @@ fn main() -> Fallible<()> {
                 _ => {}
             }
         }
+        arcball.think();
 
         // Prepare new camera parameters.
         let mut tracker = Default::default();
@@ -127,26 +145,26 @@ fn main() -> Fallible<()> {
         let gb_borrow = globals_buffer.borrow();
         let fs_borrow = fullscreen_buffer.borrow();
         let sb_borrow = stars_buffers.borrow();
-        let mut frame = gpu.begin_frame()?;
+        let framebuffer = gpu.get_next_framebuffer()?;
+        let mut encoder = gpu
+            .device()
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("frame-encoder"),
+            });
+        tracker.dispatch_uploads(&mut encoder);
         {
-            for desc in tracker.drain_uploads() {
-                frame.copy_buffer_to_buffer(
-                    &desc.source,
-                    desc.source_offset,
-                    &desc.destination,
-                    desc.destination_offset,
-                    desc.copy_size,
-                );
-            }
-
-            let mut rpass = frame.begin_render_pass();
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                color_attachments: &[GPU::color_attachment(&framebuffer.output.view)],
+                depth_stencil_attachment: Some(gpu.depth_stencil_attachment()),
+            });
             rpass.set_pipeline(&pipeline);
             rpass.set_bind_group(0, gb_borrow.bind_group(), &[]);
             rpass.set_bind_group(1, &empty_bind_group, &[]);
             rpass.set_bind_group(2, sb_borrow.bind_group(), &[]);
-            rpass.set_vertex_buffer(0, fs_borrow.vertex_buffer(), 0, 0);
+            rpass.set_vertex_buffer(0, fs_borrow.vertex_buffer());
             rpass.draw(0..4, 0..1);
         }
-        frame.finish();
+        gpu.queue_mut().submit(vec![encoder.finish()]);
+        tracker.reset();
     }
 }

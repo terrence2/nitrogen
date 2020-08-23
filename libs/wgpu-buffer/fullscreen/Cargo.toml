@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 failure = "^ 0.1.2"
 zerocopy = "^ 0.2"
-wgpu = "^ 0.5"
+wgpu = "^ 0.6"
 camera = { path = "../../sim/camera" }
 gpu = { path = "../../system/gpu" }
 
@@ -15,6 +15,7 @@ gpu = { path = "../../system/gpu" }
 absolute_unit = { path = "../../sim/absolute_unit" }
 command = { path = "../../system/command" }
 global_data = { path = "../../wgpu-buffer/global_data" }
+geodesy = { path = "../../sim/geodesy" }
 input = { path = "../../system/input" }
 
 [build-dependencies]

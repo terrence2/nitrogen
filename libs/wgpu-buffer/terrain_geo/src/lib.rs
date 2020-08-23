@@ -19,13 +19,14 @@ mod patch_tree;
 mod patch_winding;
 mod queue;
 mod terrain_vertex;
+mod tri_strip_indices;
 mod wireframe_indices;
 
 pub mod tile;
 
 use crate::{
     index_dependency_lut::get_index_dependency_lut, patch_tree::PatchTree, tile::TileManager,
-    wireframe_indices::get_wireframe_index_buffer,
+    tri_strip_indices::get_tri_strip_index_buffer, wireframe_indices::get_wireframe_index_buffer,
 };
 pub use crate::{patch_winding::PatchWinding, terrain_vertex::TerrainVertex};
 
@@ -33,11 +34,10 @@ use absolute_unit::Kilometers;
 use camera::Camera;
 use catalog::Catalog;
 use failure::Fallible;
-use frame_graph::FrameStateTracker;
 use geodesy::{Cartesian, GeoCenter, Graticule};
-use gpu::GPU;
+use gpu::{FrameStateTracker, GPU};
 use nalgebra::{Matrix4, Point3};
-use std::{cell::RefCell, mem, ops::Range, sync::Arc};
+use std::{cell::RefCell, mem, num::NonZeroU64, ops::Range, sync::Arc};
 use tokio::{runtime::Runtime, sync::RwLock};
 use zerocopy::{AsBytes, FromBytes};
 
@@ -188,6 +188,9 @@ pub struct TerrainGeoBuffer {
     wireframe_index_buffers: Vec<wgpu::Buffer>,
     wireframe_index_ranges: Vec<Range<u32>>,
 
+    tristrip_index_buffers: Vec<wgpu::Buffer>,
+    tristrip_index_ranges: Vec<Range<u32>>,
+
     subdivisions: usize,
     subdivide_prepare_pipeline: wgpu::ComputePipeline,
     subdivide_prepare_bind_group: wgpu::BindGroup,
@@ -223,7 +226,8 @@ impl TerrainGeoBuffer {
             &wgpu::BufferDescriptor {
                 label: Some("terrain-geo-patch-vertex-buffer"),
                 size: patch_upload_buffer_size,
-                usage: wgpu::BufferUsage::STORAGE_READ | wgpu::BufferUsage::COPY_DST,
+                usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::COPY_DST,
+                mapped_at_creation: false,
             },
         )));
 
@@ -233,8 +237,6 @@ impl TerrainGeoBuffer {
             target_subdivision_level: gpu_detail.subdivisions as u32,
             pad: [0u32; 2],
         };
-        let subdivide_context_buffer_size =
-            mem::size_of::<SubdivisionContext>() as wgpu::BufferAddress;
         let subdivide_context_buffer = Arc::new(Box::new(gpu.push_data(
             "subdivision-context",
             &subdivide_context,
@@ -252,6 +254,7 @@ impl TerrainGeoBuffer {
                 label: Some("terrain-geo-sub-vertex-buffer"),
                 size: target_vertex_buffer_size,
                 usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::VERTEX,
+                mapped_at_creation: false,
             },
         )));
 
@@ -259,11 +262,17 @@ impl TerrainGeoBuffer {
             gpu.device()
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("terrain-geo-subdivide-bind-group-layout"),
-                    bindings: &[
+                    entries: &[
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::UniformBuffer { dynamic: false },
+                            ty: wgpu::BindingType::UniformBuffer {
+                                dynamic: false,
+                                min_binding_size: NonZeroU64::new(
+                                    mem::size_of::<SubdivisionContext>() as u64,
+                                ),
+                            },
+                            count: None,
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
@@ -271,7 +280,9 @@ impl TerrainGeoBuffer {
                             ty: wgpu::BindingType::StorageBuffer {
                                 dynamic: false,
                                 readonly: false,
+                                min_binding_size: NonZeroU64::new(target_vertex_buffer_size),
                             },
+                            count: None,
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 2,
@@ -279,7 +290,9 @@ impl TerrainGeoBuffer {
                             ty: wgpu::BindingType::StorageBuffer {
                                 dynamic: false,
                                 readonly: true,
+                                min_binding_size: NonZeroU64::new(patch_upload_buffer_size),
                             },
+                            count: None,
                         },
                     ],
                 });
@@ -289,11 +302,14 @@ impl TerrainGeoBuffer {
         let subdivide_prepare_pipeline =
             gpu.device()
                 .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                    layout: &gpu
-                        .device()
-                        .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("terrain-subdivide-prepare-pipeline"),
+                    layout: Some(&gpu.device().create_pipeline_layout(
+                        &wgpu::PipelineLayoutDescriptor {
+                            label: Some("terrain-subdivide-prepare-pipeline-layout"),
+                            push_constant_ranges: &[],
                             bind_group_layouts: &[&subdivide_prepare_bind_group_layout],
-                        }),
+                        },
+                    )),
                     compute_stage: wgpu::ProgrammableStageDescriptor {
                         module: &subdivide_prepare_shader,
                         entry_point: "main",
@@ -304,27 +320,18 @@ impl TerrainGeoBuffer {
             gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("terrain-geo-subdivide-bind-group"),
                 layout: &subdivide_prepare_bind_group_layout,
-                bindings: &[
-                    wgpu::Binding {
+                entries: &[
+                    wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::Buffer {
-                            buffer: &subdivide_context_buffer,
-                            range: 0..subdivide_context_buffer_size,
-                        },
+                        resource: wgpu::BindingResource::Buffer(subdivide_context_buffer.slice(..)),
                     },
-                    wgpu::Binding {
+                    wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Buffer {
-                            buffer: &target_vertex_buffer,
-                            range: 0..target_vertex_buffer_size,
-                        },
+                        resource: wgpu::BindingResource::Buffer(target_vertex_buffer.slice(..)),
                     },
-                    wgpu::Binding {
+                    wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::Buffer {
-                            buffer: &patch_upload_buffer,
-                            range: 0..patch_upload_buffer_size,
-                        },
+                        resource: wgpu::BindingResource::Buffer(patch_upload_buffer.slice(..)),
                     },
                 ],
             });
@@ -336,25 +343,39 @@ impl TerrainGeoBuffer {
         let index_dependency_lut_buffer = gpu.push_slice(
             "terrain-geo-index-dependency-lut",
             get_index_dependency_lut(gpu_detail.subdivisions),
-            wgpu::BufferUsage::STORAGE_READ,
+            wgpu::BufferUsage::STORAGE,
         );
 
         let subdivide_expand_bind_group_layout =
             gpu.device()
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("terrain-geo-subdivide-prepare-bind-group-layout"),
-                    bindings: &[
+                    entries: &[
                         // Subdivide context
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::UniformBuffer { dynamic: false },
+                            ty: wgpu::BindingType::UniformBuffer {
+                                dynamic: false,
+                                min_binding_size: NonZeroU64::new(
+                                    mem::size_of::<SubdivisionContext>() as u64,
+                                ),
+                            },
+                            count: None,
                         },
                         // Subdivide expand context
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::UniformBuffer { dynamic: false },
+                            ty: wgpu::BindingType::UniformBuffer {
+                                dynamic: false,
+                                min_binding_size: NonZeroU64::new(mem::size_of::<
+                                    SubdivisionExpandContext,
+                                >(
+                                )
+                                    as u64),
+                            },
+                            count: None,
                         },
                         // Target vertex buffer
                         wgpu::BindGroupLayoutEntry {
@@ -363,7 +384,9 @@ impl TerrainGeoBuffer {
                             ty: wgpu::BindingType::StorageBuffer {
                                 dynamic: false,
                                 readonly: false,
+                                min_binding_size: NonZeroU64::new(target_vertex_buffer_size),
                             },
+                            count: None,
                         },
                         // Index dependency LUT
                         wgpu::BindGroupLayoutEntry {
@@ -372,7 +395,9 @@ impl TerrainGeoBuffer {
                             ty: wgpu::BindingType::StorageBuffer {
                                 dynamic: false,
                                 readonly: true,
+                                min_binding_size: NonZeroU64::new(index_dependency_lut_buffer_size),
                             },
+                            count: None,
                         },
                     ],
                 });
@@ -382,11 +407,14 @@ impl TerrainGeoBuffer {
         let subdivide_expand_pipeline =
             gpu.device()
                 .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                    layout: &gpu
-                        .device()
-                        .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("terrain-subdivide-expand-pipeline"),
+                    layout: Some(&gpu.device().create_pipeline_layout(
+                        &wgpu::PipelineLayoutDescriptor {
+                            label: Some("terrain-subdivide-expand-pipeline-layout"),
+                            push_constant_ranges: &[],
                             bind_group_layouts: &[&subdivide_expand_bind_group_layout],
-                        }),
+                        },
+                    )),
                     compute_stage: wgpu::ProgrammableStageDescriptor {
                         module: &subdivide_expand_shader,
                         entry_point: "main",
@@ -403,8 +431,6 @@ impl TerrainGeoBuffer {
                     as u32,
                 pad: [0u32; 1],
             };
-            let expand_context_buffer_size =
-                mem::size_of::<SubdivisionExpandContext>() as wgpu::BufferAddress;
             let expand_context_buffer = gpu.push_data(
                 "terrain-geo-expand-context-SUB",
                 &expand_context,
@@ -414,42 +440,35 @@ impl TerrainGeoBuffer {
                 gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("terrain-geo-subdivide-expand-bind-group"),
                     layout: &subdivide_expand_bind_group_layout,
-                    bindings: &[
-                        wgpu::Binding {
+                    entries: &[
+                        wgpu::BindGroupEntry {
                             binding: 0,
-                            resource: wgpu::BindingResource::Buffer {
-                                buffer: &subdivide_context_buffer,
-                                range: 0..subdivide_context_buffer_size,
-                            },
+                            resource: wgpu::BindingResource::Buffer(
+                                subdivide_context_buffer.slice(..),
+                            ),
                         },
-                        wgpu::Binding {
+                        wgpu::BindGroupEntry {
                             binding: 1,
-                            resource: wgpu::BindingResource::Buffer {
-                                buffer: &expand_context_buffer,
-                                range: 0..expand_context_buffer_size,
-                            },
+                            resource: wgpu::BindingResource::Buffer(
+                                expand_context_buffer.slice(..),
+                            ),
                         },
-                        wgpu::Binding {
+                        wgpu::BindGroupEntry {
                             binding: 2,
-                            resource: wgpu::BindingResource::Buffer {
-                                buffer: &target_vertex_buffer,
-                                range: 0..target_vertex_buffer_size,
-                            },
+                            resource: wgpu::BindingResource::Buffer(target_vertex_buffer.slice(..)),
                         },
-                        wgpu::Binding {
+                        wgpu::BindGroupEntry {
                             binding: 3,
-                            resource: wgpu::BindingResource::Buffer {
-                                buffer: &index_dependency_lut_buffer,
-                                range: 0..index_dependency_lut_buffer_size,
-                            },
+                            resource: wgpu::BindingResource::Buffer(
+                                index_dependency_lut_buffer.slice(..),
+                            ),
                         },
                     ],
                 });
             subdivide_expand_bind_groups.push((expand_context, subdivide_expand_bind_group));
         }
 
-        // Create each of the 8 index buffers at this subdivision level.
-        // TODO: do we want to keep this permanently?
+        // Create each of the 4 wireframe index buffers at this subdivision level.
         let wireframe_index_buffers = PatchWinding::all_windings()
             .iter()
             .map(|&winding| {
@@ -468,6 +487,25 @@ impl TerrainGeoBuffer {
             })
             .collect::<Vec<_>>();
 
+        // Create each of the 4 tristrip index buffers at this subdivision level.
+        let tristrip_index_buffers = PatchWinding::all_windings()
+            .iter()
+            .map(|&winding| {
+                gpu.push_slice(
+                    "terrain-geo-tristrip-indices-SUB",
+                    get_tri_strip_index_buffer(gpu_detail.subdivisions, winding),
+                    wgpu::BufferUsage::INDEX,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let tristrip_index_ranges = PatchWinding::all_windings()
+            .iter()
+            .map(|&winding| {
+                0u32..get_tri_strip_index_buffer(gpu_detail.subdivisions, winding).len() as u32
+            })
+            .collect::<Vec<_>>();
+
         Ok(Arc::new(RefCell::new(Self {
             desired_patch_count: cpu_detail.desired_patch_count,
             patch_tree,
@@ -480,6 +518,8 @@ impl TerrainGeoBuffer {
             target_vertex_buffer,
             wireframe_index_buffers,
             wireframe_index_ranges,
+            tristrip_index_buffers,
+            tristrip_index_ranges,
 
             subdivisions: gpu_detail.subdivisions,
             subdivide_context,
@@ -499,11 +539,11 @@ impl TerrainGeoBuffer {
         tracker: &mut FrameStateTracker,
     ) -> Fallible<()> {
         // TODO: keep these allocations across frames
-        let mut verts = Vec::with_capacity(3 * self.desired_patch_count);
         let mut live_patches = Vec::with_capacity(self.desired_patch_count);
         self.patch_tree.optimize_for_view(camera, &mut live_patches);
         assert!(live_patches.len() <= self.desired_patch_count);
 
+        let mut verts = Vec::with_capacity(3 * self.desired_patch_count);
         self.tile_manager.begin_update();
         let scale = Matrix4::new_scaling(1_000.0);
         let view = camera.view::<Kilometers>();
@@ -540,8 +580,8 @@ impl TerrainGeoBuffer {
             verts.push(TerrainVertex::new(&pv1, &nv1.xyz(), &g1));
             verts.push(TerrainVertex::new(&pv2, &nv2.xyz(), &g2));
         }
-        self.tile_manager.finish_update(catalog, async_rt);
-        // println!("verts: {}", verts.len());
+        self.tile_manager
+            .finish_update(catalog, async_rt, gpu, tracker);
 
         while verts.len() < 3 * self.desired_patch_count {
             verts.push(TerrainVertex::empty());
@@ -558,7 +598,11 @@ impl TerrainGeoBuffer {
         Ok(())
     }
 
-    pub fn precompute<'a>(
+    pub fn paint_atlas_indices(&self, encoder: wgpu::CommandEncoder) -> wgpu::CommandEncoder {
+        self.tile_manager.paint_atlas_indices(encoder)
+    }
+
+    pub fn tesselate<'a>(
         &'a self,
         mut cpass: wgpu::ComputePass<'a>,
     ) -> Fallible<wgpu::ComputePass<'a>> {
@@ -596,8 +640,8 @@ impl TerrainGeoBuffer {
         self.desired_patch_count as i32
     }
 
-    pub fn vertex_buffer(&self) -> &wgpu::Buffer {
-        &self.target_vertex_buffer
+    pub fn vertex_buffer(&self) -> wgpu::BufferSlice {
+        self.target_vertex_buffer.slice(..)
     }
 
     pub fn patch_upload_buffer(&self) -> &wgpu::Buffer {
@@ -615,12 +659,20 @@ impl TerrainGeoBuffer {
         self.patch_windings[patch_number as usize]
     }
 
-    pub fn wireframe_index_buffer(&self, winding: PatchWinding) -> &wgpu::Buffer {
-        &self.wireframe_index_buffers[winding.index()]
+    pub fn wireframe_index_buffer(&self, winding: PatchWinding) -> wgpu::BufferSlice {
+        self.wireframe_index_buffers[winding.index()].slice(..)
     }
 
     pub fn wireframe_index_range(&self, winding: PatchWinding) -> Range<u32> {
         self.wireframe_index_ranges[winding.index()].clone()
+    }
+
+    pub fn tristrip_index_buffer(&self, winding: PatchWinding) -> wgpu::BufferSlice {
+        self.tristrip_index_buffers[winding.index()].slice(..)
+    }
+
+    pub fn tristrip_index_range(&self, winding: PatchWinding) -> Range<u32> {
+        self.tristrip_index_ranges[winding.index()].clone()
     }
 }
 

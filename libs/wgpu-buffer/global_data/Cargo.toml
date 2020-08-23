@@ -7,12 +7,11 @@ edition = "2018"
 [dependencies]
 failure = "^ 0.1.2"
 nalgebra = "^ 0.20"
-wgpu = "^ 0.5"
+wgpu = "^ 0.6"
 zerocopy = "^ 0.2"
 absolute_unit = { path = "../../sim/absolute_unit" }
 geodesy = { path = "../../sim/geodesy" }
 camera = { path = "../../sim/camera" }
-frame_graph = { path = "../../system/frame_graph" }
 gpu = { path = "../../system/gpu" }
 
 [dev-dependencies]

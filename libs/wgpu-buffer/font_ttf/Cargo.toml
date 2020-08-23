@@ -13,6 +13,6 @@ image = "^ 0.21"
 lazy_static = ">= 1"
 log = ">= 0.4"
 rusttype = "^ 0.7"
-wgpu = "^ 0.5"
+wgpu = "^ 0.6"
 gpu = { path = "../../system/gpu" }
 font_common = { path = "../../wgpu-buffer/font_common" }

@@ -14,10 +14,10 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{Kilometers, LengthUnit, Meters};
 use camera::Camera;
+use core::num::NonZeroU64;
 use failure::Fallible;
-use frame_graph::FrameStateTracker;
 use geodesy::{Cartesian, GeoCenter};
-use gpu::GPU;
+use gpu::{FrameStateTracker, GPU};
 use nalgebra::{convert, Isometry3, Matrix4, Point3, Vector3, Vector4};
 use std::{cell::RefCell, mem, sync::Arc};
 use zerocopy::{AsBytes, FromBytes};
@@ -152,30 +152,30 @@ impl GlobalParametersBuffer {
         let parameters_buffer = Arc::new(Box::new(device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("globals-buffer"),
             size: buffer_size,
-            usage: wgpu::BufferUsage::STORAGE_READ | wgpu::BufferUsage::COPY_DST,
+            usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::COPY_DST,
+            mapped_at_creation: false,
         })));
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("globals-bind-group-layout"),
-            bindings: &[wgpu::BindGroupLayoutEntry {
+            entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStage::all(),
                 ty: wgpu::BindingType::StorageBuffer {
+                    min_binding_size: NonZeroU64::new(buffer_size),
                     dynamic: false,
                     readonly: true,
                 },
+                count: None,
             }],
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("globals-bind-group"),
             layout: &bind_group_layout,
-            bindings: &[wgpu::Binding {
+            entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::Buffer {
-                    buffer: &parameters_buffer,
-                    range: 0..buffer_size,
-                },
+                resource: wgpu::BindingResource::Buffer(parameters_buffer.slice(0..buffer_size)),
             }],
         });
 
@@ -196,17 +196,6 @@ impl GlobalParametersBuffer {
         &self.bind_group
     }
 
-    fn upload_gpu_buffer(&self, globals: Globals, gpu: &GPU, tracker: &mut FrameStateTracker) {
-        let source_map = gpu.device().create_buffer_mapped(&wgpu::BufferDescriptor {
-            label: Some("global-buffer"),
-            size: self.buffer_size,
-            usage: wgpu::BufferUsage::MAP_READ | wgpu::BufferUsage::COPY_SRC,
-        });
-        source_map.data.copy_from_slice(globals.as_bytes());
-        let source = source_map.finish();
-        tracker.upload_ba(source, self.parameters_buffer.clone(), self.buffer_size)
-    }
-
     pub fn make_upload_buffer(
         &self,
         camera: &Camera,
@@ -218,7 +207,12 @@ impl GlobalParametersBuffer {
             .with_screen_overlay_projection(gpu)
             .with_geocenter_km_raymarching(camera)
             .with_debug_geocenter_helpers(camera);
-        self.upload_gpu_buffer(globals, gpu, tracker);
+        let buffer = gpu.push_data(
+            "global-upload-buffer",
+            &globals,
+            wgpu::BufferUsage::MAP_READ | wgpu::BufferUsage::COPY_SRC,
+        );
+        tracker.upload_ba(buffer, self.parameters_buffer.clone(), self.buffer_size);
         Ok(())
     }
 
