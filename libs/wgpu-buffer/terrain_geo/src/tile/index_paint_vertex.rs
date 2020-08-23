@@ -24,13 +24,6 @@ pub struct IndexPaintVertex {
 }
 
 impl IndexPaintVertex {
-    pub fn empty() -> Self {
-        Self {
-            position: [0f32; 2],
-            color: [0; 2],
-        }
-    }
-
     pub fn new(position: [f32; 2], color: [u16; 2]) -> Self {
         Self { position, color }
     }

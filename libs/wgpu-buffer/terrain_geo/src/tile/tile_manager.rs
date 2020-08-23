@@ -96,10 +96,7 @@ impl TileManager {
         }
     }
 
-    pub fn paint_atlas_indices<'a>(
-        &self,
-        mut encoder: wgpu::CommandEncoder,
-    ) -> wgpu::CommandEncoder {
+    pub fn paint_atlas_indices(&self, mut encoder: wgpu::CommandEncoder) -> wgpu::CommandEncoder {
         for ts in self.tile_sets.iter() {
             ts.paint_atlas_index(&mut encoder)
         }

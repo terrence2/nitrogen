@@ -237,8 +237,6 @@ impl TerrainGeoBuffer {
             target_subdivision_level: gpu_detail.subdivisions as u32,
             pad: [0u32; 2],
         };
-        let subdivide_context_buffer_size =
-            mem::size_of::<SubdivisionContext>() as wgpu::BufferAddress;
         let subdivide_context_buffer = Arc::new(Box::new(gpu.push_data(
             "subdivision-context",
             &subdivide_context,
@@ -433,8 +431,6 @@ impl TerrainGeoBuffer {
                     as u32,
                 pad: [0u32; 1],
             };
-            let expand_context_buffer_size =
-                mem::size_of::<SubdivisionExpandContext>() as wgpu::BufferAddress;
             let expand_context_buffer = gpu.push_data(
                 "terrain-geo-expand-context-SUB",
                 &expand_context,
@@ -602,7 +598,7 @@ impl TerrainGeoBuffer {
         Ok(())
     }
 
-    pub fn paint_atlas_indices<'a>(&self, encoder: wgpu::CommandEncoder) -> wgpu::CommandEncoder {
+    pub fn paint_atlas_indices(&self, encoder: wgpu::CommandEncoder) -> wgpu::CommandEncoder {
         self.tile_manager.paint_atlas_indices(encoder)
     }
 

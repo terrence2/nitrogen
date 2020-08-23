@@ -234,7 +234,7 @@ mod test {
                 None,
             )
         }
-        fn example_any_pass<'a>(&self, encoder: wgpu::CommandEncoder) -> wgpu::CommandEncoder {
+        fn example_any_pass(&self, encoder: wgpu::CommandEncoder) -> wgpu::CommandEncoder {
             *self.any_count.borrow_mut() += 1;
             encoder
         }

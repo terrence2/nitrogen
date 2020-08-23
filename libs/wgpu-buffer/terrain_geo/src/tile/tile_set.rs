@@ -95,6 +95,7 @@ pub(crate) struct TileSet {
     index_texture_sampler: wgpu::Sampler,
 
     index_paint_pipeline: wgpu::RenderPipeline,
+    #[allow(unused)]
     index_paint_range: Range<u32>,
     index_paint_vert_buffer: Arc<Box<wgpu::Buffer>>,
 
@@ -552,15 +553,15 @@ impl TileSet {
 
         // Use the list of allocated tiles to generate a vertex buffer to upload.
         let mut tris = Vec::new();
-        for (qtid, tile_state) in self.tile_state.iter() {
+        for (_qtid, tile_state) in self.tile_state.iter() {
             // FIXME: where do we actually want these?
-            if let TileState::Active(slot) = tile_state {
+            if let TileState::Active(_slot) = tile_state {
                 tris.push(IndexPaintVertex::new([-1f32, -1f32], [u16::MAX, u16::MAX]));
                 tris.push(IndexPaintVertex::new([1f32, -1f32], [u16::MAX, u16::MAX]));
                 tris.push(IndexPaintVertex::new([-1f32, 1f32], [u16::MAX, u16::MAX]));
             }
         }
-        if tris.len() > 0 {
+        if !tris.is_empty() {
             let upload_buffer = gpu.push_slice(
                 "index-paint-tris-upload",
                 &tris,
@@ -607,7 +608,7 @@ impl TileSet {
         self.atlas_free_list.push(atlas_slot);
     }
 
-    pub fn paint_atlas_index<'a>(&self, encoder: &mut wgpu::CommandEncoder) {
+    pub fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) {
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                 attachment: &self.index_texture_view,

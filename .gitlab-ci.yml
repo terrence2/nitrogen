@@ -20,7 +20,7 @@ check_clippy:
     - source $HOME/.cargo/env
     - cargo clippy --all --all-targets -- --deny warnings
 
-check_test:
-  script:
-    - source $HOME/.cargo/env
-    - cargo test --all --all-targets
+#check_test:
+#  script:
+#    - source $HOME/.cargo/env
+#    - cargo test --all --all-targets
