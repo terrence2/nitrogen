@@ -94,7 +94,7 @@ pub(crate) struct TileSet {
     #[allow(unused)]
     index_texture_sampler: wgpu::Sampler,
 
-    //index_paint_pipeline: wgpu::RenderPipeline,
+    index_paint_pipeline: wgpu::RenderPipeline,
     index_paint_range: Range<u32>,
     index_paint_vert_buffer: Arc<Box<wgpu::Buffer>>,
 
@@ -436,7 +436,7 @@ impl TileSet {
             index_texture_view,
             index_texture_sampler,
 
-            //index_paint_pipeline,
+            index_paint_pipeline,
             index_paint_range,
             index_paint_vert_buffer: Arc::new(Box::new(index_paint_vert_buffer)),
 
@@ -513,8 +513,9 @@ impl TileSet {
             let closure_catalog = catalog.clone();
             let closer_sender = self.tile_sender.clone();
             async_rt.spawn(async move {
-                let data = closure_catalog.read().await.read(fid).await.unwrap();
-                closer_sender.send((qtid, data)).expect("unbounded send");
+                if let Ok(data) = closure_catalog.read().await.read(fid).await {
+                    closer_sender.send((qtid, data)).ok();
+                }
             });
         }
 
@@ -545,12 +546,14 @@ impl TileSet {
                 self.atlas_texture_extent,
                 self.atlas_texture_format,
                 atlas_slot as u32,
+                1,
             );
         }
 
         // Use the list of allocated tiles to generate a vertex buffer to upload.
         let mut tris = Vec::new();
         for (qtid, tile_state) in self.tile_state.iter() {
+            // FIXME: where do we actually want these?
             if let TileState::Active(slot) = tile_state {
                 tris.push(IndexPaintVertex::new([-1f32, -1f32], [u16::MAX, u16::MAX]));
                 tris.push(IndexPaintVertex::new([1f32, -1f32], [u16::MAX, u16::MAX]));
@@ -569,7 +572,6 @@ impl TileSet {
                 IndexPaintVertex::mem_size() * tris.len(),
             );
         }
-        // TODO: Add a paint, or should that be static, like preload?
     }
 
     fn allocate_atlas_slot(&mut self, votes: u32, qtid: QuadTreeId) {
@@ -606,21 +608,21 @@ impl TileSet {
     }
 
     pub fn paint_atlas_index<'a>(&self, encoder: &mut wgpu::CommandEncoder) {
-        /*
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                 attachment: &self.index_texture_view,
                 resolve_target: None,
-                load_op: wgpu::LoadOp::Clear,
-                store_op: wgpu::StoreOp::Store,
-                clear_color: wgpu::Color::BLACK,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    store: true,
+                },
             }],
             depth_stencil_attachment: None,
         });
         rpass.set_pipeline(&self.index_paint_pipeline);
-        rpass.set_vertex_buffer(0, &self.index_paint_vert_buffer, 0, 0);
-        rpass.draw(self.index_paint_range.clone(), 0..1);
-         */
+        rpass.set_vertex_buffer(0, self.index_paint_vert_buffer.slice(..));
+        //rpass.draw(self.index_paint_range.clone(), 0..1);
+        rpass.draw(0..6, 0..1);
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {

@@ -17,47 +17,43 @@
 #include <wgpu-render/shader_shared/include/quaternion.glsl>
 #include <wgpu-buffer/global_data/include/global_data.glsl>
 
-layout(location = 0) in vec3 position; // eye relative
-layout(location = 1) in vec3 normal;
-layout(location = 2) in vec2 graticule; // earth centered
+layout(location = 0) in vec3 v_position; // eye relative
+layout(location = 1) in vec3 v_normal;
+layout(location = 2) in vec2 v_graticule; // earth centered
 
 layout(location = 0) out vec4 v_color;
 
-layout(set = 2, binding = 0) uniform itexture2D srtm_index_texture;
+layout(set = 2, binding = 0) uniform utexture2D srtm_index_texture;
 layout(set = 2, binding = 1) uniform sampler srtm_index_sampler;
 layout(set = 2, binding = 2) uniform itexture2DArray srtm_atlas_texture;
 layout(set = 2, binding = 3) uniform sampler srtm_atlas_sampler;
 
 void main() {
     // FIXME: no need for a center indicator on the projection matrix, just scale.
-    gl_Position = dbg_geocenter_m_projection() * vec4(position, 1);
+    gl_Position = dbg_geocenter_m_projection() * vec4(v_position, 1);
 
-    // Map latitude in -60 -> 60 to 0 to ?? (1 for now, but we need metadata here).
-    float latitude = graticule.x;
-    float t = (latitude + (60.0 * PI / 180.0)) / (120.0 * PI / 180.0);
-
-    // Map longitude from -180 -> 180 to 0 to ??
-    float longitude = graticule.y;
-    float s = (longitude + PI) / (2.0 * PI);
+    // Map latitude in -x -> x to ?? to ?? (0 to 1 for now, but we need metadata here).
+    vec2 grat = degrees(v_graticule);
+    float t = (grat.x + 90.0) / 180.0;
+    float s = (grat.y + 180.0) / 360.0;
 
     // Map s, t onto the actual subsection of the atlas that is used.
-    float tile_extent = 512.0 * 4096.0;
-    float fract_lon = (360.0 * 60.0 * 60.0) / tile_extent;
-    float fract_lat = (180.0 * 60.0 * 60.0) / tile_extent;
+//    float tile_extent = 512.0 * 4096.0;
+//    float fract_lon = (360.0 * 60.0 * 60.0) / tile_extent;
+//    float fract_lat = (180.0 * 60.0 * 60.0) / tile_extent;
+    float fract_lat = 1.0;
+    float fract_lon = 1.0;
 
-    v_color = vec4(s, t, 0, 1);
+    //v_color = vec4(s, t, 0, 1);
 
-    /*
-    ivec4 index_texel = texture(
-        isampler2D(srtm_index_texture, srtm_index_sampler),
+    uvec4 index_texel = texture(
+        usampler2D(srtm_index_texture, srtm_index_sampler),
         vec2(
             1.0 - s * fract_lon,
             t * fract_lat
         )
     );
-    float height = index_texel.r * 255.0;
-    v_color = vec4(height, height, height, 1);
-    */
+    v_color = vec4(float(index_texel.r) / 65535.0, float(index_texel.g) / 65535.0, 0, 1);
 
     /*
     ivec4 height_texel = texture(

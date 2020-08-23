@@ -15,11 +15,11 @@
 #version 450
 #include <wgpu-render/shader_shared/include/consts.glsl>
 
-layout(location = 0) in flat uvec2 v_color;
-layout(location = 0) out vec4 f_color;
+layout(location = 0) in flat uvec2 vert_color;
+layout(location = 0) out uvec2 result_color;
 
 void
 main()
 {
-    f_color = vec4(v_color.x / 65536, v_color.y / 65536, 0, 1);
+    result_color = vert_color;
 }

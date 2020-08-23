@@ -586,7 +586,6 @@ impl TerrainGeoBuffer {
         }
         self.tile_manager
             .finish_update(catalog, async_rt, gpu, tracker);
-        // println!("verts: {}", verts.len());
 
         while verts.len() < 3 * self.desired_patch_count {
             verts.push(TerrainVertex::empty());

@@ -215,7 +215,7 @@ impl GPU {
             attachment,
             resolve_target: None,
             ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
+                load: wgpu::LoadOp::Clear(wgpu::Color::RED),
                 store: true,
             },
         }

@@ -21,6 +21,7 @@ pub struct CopyBufferToTextureDescriptor {
     target_extent: wgpu::Extent3d,
     target_element_size: u32,
     target_array_layer: u32,
+    array_layer_count: u32,
 }
 
 impl CopyBufferToTextureDescriptor {
@@ -30,6 +31,7 @@ impl CopyBufferToTextureDescriptor {
         target_extent: wgpu::Extent3d,
         target_element_size: u32,
         target_array_layer: u32,
+        array_layer_count: u32,
     ) -> Self {
         Self {
             source,
@@ -37,6 +39,7 @@ impl CopyBufferToTextureDescriptor {
             target_extent,
             target_element_size,
             target_array_layer,
+            array_layer_count,
         }
     }
 }
@@ -117,6 +120,7 @@ impl FrameStateTracker {
         target_extent: wgpu::Extent3d,
         target_format: wgpu::TextureFormat,
         target_array_layer: u32,
+        array_layer_count: u32,
     ) {
         self.b2t_uploads.push(CopyBufferToTextureDescriptor::new(
             source,
@@ -124,6 +128,7 @@ impl FrameStateTracker {
             target_extent,
             texture_format_size(target_format),
             target_array_layer,
+            array_layer_count,
         ));
     }
 
@@ -139,8 +144,6 @@ impl FrameStateTracker {
         }
 
         for (i, desc) in self.b2t_uploads.iter().enumerate() {
-            println!("DEsC {}: {:?}", i, desc);
-
             assert_eq!(desc.target_extent.width * desc.target_element_size % 256, 0);
             encoder.copy_buffer_to_texture(
                 wgpu::BufferCopyView {
@@ -154,15 +157,17 @@ impl FrameStateTracker {
                 wgpu::TextureCopyView {
                     texture: &desc.target,
                     mip_level: 0, // TODO: need to scale extent appropriately
-                    //array_layer: desc.target_array_layer,
-                    //origin: wgpu::Origin3d::ZERO,
                     origin: wgpu::Origin3d {
                         x: 0,
                         y: 0,
                         z: desc.target_array_layer,
                     },
                 },
-                desc.target_extent,
+                wgpu::Extent3d {
+                    width: desc.target_extent.width,
+                    height: desc.target_extent.height,
+                    depth: desc.array_layer_count,
+                },
             );
 
             if i == 1 {
