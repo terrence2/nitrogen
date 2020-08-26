@@ -16,10 +16,11 @@ use crate::{
     tile::{
         index_paint_vertex::IndexPaintVertex,
         quad_tree::{QuadTree, QuadTreeId},
-        DataSetCoordinates, DataSetDataKind,
+        DataSetCoordinates, DataSetDataKind, TerrainLevel, TILE_EXTENT,
     },
     GpuDetail,
 };
+use absolute_unit::arcseconds;
 use catalog::Catalog;
 use failure::{err_msg, Fallible};
 use geodesy::{GeoCenter, Graticule};
@@ -43,9 +44,6 @@ use tokio::{
 const MAX_CONCURRENT_READS: usize = 5;
 
 const TILE_SIZE: u32 = 512;
-
-const INDEX_WIDTH: u32 = 2560;
-const INDEX_HEIGHT: u32 = 1280;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum TileState {
@@ -95,7 +93,6 @@ pub(crate) struct TileSet {
     index_texture_sampler: wgpu::Sampler,
 
     index_paint_pipeline: wgpu::RenderPipeline,
-    #[allow(unused)]
     index_paint_range: Range<u32>,
     index_paint_vert_buffer: Arc<Box<wgpu::Buffer>>,
 
@@ -168,10 +165,6 @@ impl TileSet {
         )?;
 
         let tile_tree = QuadTree::from_catalog(&prefix, catalog)?;
-        // let srtm_path = PathBuf::from("/home/terrence/storage/srtm/output/srtm/");
-
-        // FIXME: abstract this out into a DataSet container of some sort so we can at least
-        //        get rid of the extremely long names.
 
         // The index texture is just a more or less normal texture. The longitude in spherical
         // coordinates maps to `s` and the latitude maps to `t` (with some important finagling).
@@ -183,9 +176,11 @@ impl TileSet {
         // used in the tile lookup without further effort. In combination, this lets us point the
         // full power of the texturing hardware at the problem, with very little extra overhead.
         let index_texture_format = wgpu::TextureFormat::Rg16Uint; // offset into atlas stack; also depth or scale?
+
+        // FIXME: find a way to use a smaller texture.
         let index_texture_extent = wgpu::Extent3d {
-            width: INDEX_WIDTH,
-            height: INDEX_HEIGHT,
+            width: TerrainLevel::base_scale().f64() as u32,
+            height: TerrainLevel::base_scale().f64() as u32,
             depth: 1,
         };
         let index_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
@@ -253,7 +248,7 @@ impl TileSet {
                     }),
                     rasterization_state: Some(wgpu::RasterizationStateDescriptor {
                         front_face: wgpu::FrontFace::Ccw,
-                        cull_mode: wgpu::CullMode::None,
+                        cull_mode: wgpu::CullMode::Back,
                         depth_bias: 0,
                         depth_bias_slope_scale: 0.0,
                         depth_bias_clamp: 0.0,
@@ -268,7 +263,7 @@ impl TileSet {
                     }],
                     depth_stencil_state: None,
                     vertex_state: wgpu::VertexStateDescriptor {
-                        index_format: wgpu::IndexFormat::Uint32,
+                        index_format: wgpu::IndexFormat::Uint16,
                         vertex_buffers: &[IndexPaintVertex::descriptor()],
                     },
                     sample_count: 1,
@@ -385,49 +380,6 @@ impl TileSet {
                 },
             ],
         });
-
-        // FIXME: test that our basic primitives work as expected.
-        /*
-        let root_data = {
-            let mut path = srtm_path;
-            path.push(srtm_index_json["path"].as_str().expect("string"));
-            let mut fp = File::open(&path)?;
-            let mut data = [0u8; 2 * 512 * 512];
-            fp.read_exact(&mut data)?;
-            //data
-            let as2: &[u8] = &data;
-            let result_data: LayoutVerified<&[u8], [u16]> = LayoutVerified::new_slice(as2).unwrap();
-            result_data.into_slice().to_owned()
-        };
-
-        let mut encoder = gpu
-            .device()
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("terrain-geo-initial-texture-uploader-command-encoder"),
-            });
-        let buffer = gpu.push_slice(
-            "terrain-geo-root-atlas-upload-buffer",
-            &root_data,
-            wgpu::BufferUsage::COPY_SRC,
-        );
-        encoder.copy_buffer_to_texture(
-            wgpu::BufferCopyView {
-                buffer: &buffer,
-                offset: 0,
-                bytes_per_row: atlas_texture_extent.width * 2,
-                rows_per_image: atlas_texture_extent.height,
-            },
-            wgpu::TextureCopyView {
-                texture: &atlas_texture,
-                mip_level: 0,
-                array_layer: 0u32, // FIXME: hardcoded until we get the index working
-                origin: wgpu::Origin3d::ZERO,
-            },
-            atlas_texture_extent,
-        );
-        gpu.queue_mut().submit(&[encoder.finish()]);
-        gpu.device().poll(wgpu::Maintain::Wait);
-         */
 
         let (tile_sender, tile_receiver) = unbounded_channel();
 
@@ -552,27 +504,52 @@ impl TileSet {
         }
 
         // Use the list of allocated tiles to generate a vertex buffer to upload.
+        // FIXME: don't re-allocate every frame
         let mut tris = Vec::new();
-        for (_qtid, tile_state) in self.tile_state.iter() {
+        println!("START");
+        for (qtid, tile_state) in self.tile_state.iter() {
             // FIXME: where do we actually want these?
-            if let TileState::Active(_slot) = tile_state {
-                tris.push(IndexPaintVertex::new([-1f32, -1f32], [u16::MAX, u16::MAX]));
-                tris.push(IndexPaintVertex::new([1f32, -1f32], [u16::MAX, u16::MAX]));
-                tris.push(IndexPaintVertex::new([-1f32, 1f32], [u16::MAX, u16::MAX]));
+            if let TileState::Active(slot) = tile_state {
+                let base = self.tile_tree.base(qtid);
+                let pix_x = arcseconds!(base.longitude).f64() as i64 / TILE_EXTENT;
+                let pix_y = arcseconds!(base.latitude).f64() as i64 / TILE_EXTENT;
+                let pix_s = self.tile_tree.angular_extent(qtid).f64() as i64 / TILE_EXTENT;
+
+                let tex_x = pix_x as f32 / (self.index_texture_extent.width / 2) as f32;
+                let tex_y = pix_y as f32 / (self.index_texture_extent.height / 2) as f32;
+                let tex_s = pix_s as f32 / (self.index_texture_extent.width / 2) as f32;
+
+                println!(
+                    "Would paint at {}x{} ({}x{}) -> {} ({})",
+                    pix_x, pix_y, tex_x, tex_y, pix_s, tex_s
+                );
+                let c = *slot as u16 * 255;
+                // let c = u16::MAX;
+                // let c = 0;
+                tris.push(IndexPaintVertex::new([tex_x, tex_y], [c, 0]));
+                tris.push(IndexPaintVertex::new([tex_x + tex_s, tex_y], [c, 0]));
+                tris.push(IndexPaintVertex::new([tex_x, tex_y + tex_s], [c, 0]));
+                tris.push(IndexPaintVertex::new([tex_x + tex_s, tex_y], [c, 0]));
+                tris.push(IndexPaintVertex::new(
+                    [tex_x + tex_s, tex_y + tex_s],
+                    [c, 0],
+                ));
+                tris.push(IndexPaintVertex::new([tex_x, tex_y + tex_s], [c, 0]));
             }
         }
-        if !tris.is_empty() {
-            let upload_buffer = gpu.push_slice(
-                "index-paint-tris-upload",
-                &tris,
-                wgpu::BufferUsage::COPY_SRC,
-            );
-            tracker.upload(
-                upload_buffer,
-                self.index_paint_vert_buffer.clone(),
-                IndexPaintVertex::mem_size() * tris.len(),
-            );
+        while tris.len() < self.index_paint_range.end as usize {
+            tris.push(IndexPaintVertex::new([0f32, 0f32], [0, 0]));
         }
+        let upload_buffer = gpu.push_slice(
+            "index-paint-tris-upload",
+            &tris,
+            wgpu::BufferUsage::COPY_SRC,
+        );
+        tracker.upload(
+            upload_buffer,
+            self.index_paint_vert_buffer.clone(),
+            IndexPaintVertex::mem_size() * tris.len(),
+        );
     }
 
     fn allocate_atlas_slot(&mut self, votes: u32, qtid: QuadTreeId) {
@@ -622,8 +599,8 @@ impl TileSet {
         });
         rpass.set_pipeline(&self.index_paint_pipeline);
         rpass.set_vertex_buffer(0, self.index_paint_vert_buffer.slice(..));
-        //rpass.draw(self.index_paint_range.clone(), 0..1);
-        rpass.draw(0..6, 0..1);
+        rpass.draw(self.index_paint_range.clone(), 0..1);
+        // rpass.draw(6..18, 0..1);
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {

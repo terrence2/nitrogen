@@ -6,8 +6,8 @@ edition = "2018"
 
 [dependencies]
 failure = "^ 0.1.2"
-json = "^ 0.12"
 image = "^ 0.23"
+json = "^ 0.12"
 memmap = "^ 0.7"
 nalgebra = "^ 0.20"
 structopt = "^ 0.3"

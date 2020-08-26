@@ -141,6 +141,14 @@ impl QuadTree {
         self.nodes[id.offset()].file_id
     }
 
+    pub(crate) fn base(&self, id: &QuadTreeId) -> Graticule<GeoCenter> {
+        self.nodes[id.offset()].base
+    }
+
+    pub(crate) fn angular_extent(&self, id: &QuadTreeId) -> Angle<ArcSeconds> {
+        self.nodes[id.offset()].angular_extent
+    }
+
     pub(crate) fn begin_update(&mut self) {
         self.generation = self.generation.wrapping_add(1);
         self.additions.clear();
