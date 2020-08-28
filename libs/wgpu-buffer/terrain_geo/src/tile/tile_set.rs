@@ -506,7 +506,7 @@ impl TileSet {
         // Use the list of allocated tiles to generate a vertex buffer to upload.
         // FIXME: don't re-allocate every frame
         let mut tris = Vec::new();
-        println!("START");
+        // println!("START");
         for (qtid, tile_state) in self.tile_state.iter() {
             // FIXME: where do we actually want these?
             if let TileState::Active(slot) = tile_state {
@@ -519,10 +519,10 @@ impl TileSet {
                 let tex_y = pix_y as f32 / (self.index_texture_extent.height / 2) as f32;
                 let tex_s = pix_s as f32 / (self.index_texture_extent.width / 2) as f32;
 
-                println!(
-                    "Would paint at {}x{} ({}x{}) -> {} ({})",
-                    pix_x, pix_y, tex_x, tex_y, pix_s, tex_s
-                );
+                // println!(
+                //     "Would paint at {}x{} ({}x{}) -> {} ({})",
+                //     pix_x, pix_y, tex_x, tex_y, pix_s, tex_s
+                // );
                 let c = *slot as u16 * 255;
                 // let c = u16::MAX;
                 // let c = 0;

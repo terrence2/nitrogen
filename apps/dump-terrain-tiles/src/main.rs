@@ -117,10 +117,7 @@ fn process_srtm_at_level(
         return Ok(());
     }
 
-    assert_eq!(
-        (-1..TILE_SAMPLES + 1).collect::<Vec<_>>().len(),
-        TILE_PHYSICAL_SIZE
-    );
+    assert_eq!((-1..TILE_SAMPLES + 1).count(), TILE_PHYSICAL_SIZE);
 
     let level = TerrainLevel::new(target_level);
     let scale = level.as_scale();
