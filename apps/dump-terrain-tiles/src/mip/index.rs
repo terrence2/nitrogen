@@ -111,6 +111,11 @@ impl IndexDataSet {
         obj.insert::<&str>("prefix", &self.prefix)?;
         obj.insert("kind", self.kind.name())?;
         obj.insert("coordinates", self.coordinates.name())?;
+        // let mut index = JsonValue::new_object();
+        // let mut absolute_base = JsonValue::new_object();
+        // absolute_base.insert("latitude_arcseconds", arcseconds!(self.root.read().unwrap().base_corner_graticule().latitude()).f64());
+        // absolute_base.insert("longitude_arcseconds", arcseconds!(self.root.read().unwrap().base_corner_graticule().longitude()).f64());
+        // index.insert("absolute_base", absolue_base);
         Ok(obj)
     }
 

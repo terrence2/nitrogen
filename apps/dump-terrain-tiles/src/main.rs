@@ -29,7 +29,7 @@ use std::{
 };
 use structopt::StructOpt;
 use terrain_geo::tile::{
-    ChildIndex, DataSetCoordinates, DataSetDataKind, TerrainLevel, TILE_SAMPLES,
+    ChildIndex, DataSetCoordinates, DataSetDataKind, TerrainLevel, TILE_PHYSICAL_SIZE, TILE_SAMPLES,
 };
 
 #[derive(Debug, StructOpt)]
@@ -117,19 +117,23 @@ fn process_srtm_at_level(
         return Ok(());
     }
 
+    assert_eq!((-1..TILE_SAMPLES + 1).count(), TILE_PHYSICAL_SIZE);
+
     let level = TerrainLevel::new(target_level);
     let scale = level.as_scale();
     let base = *node.read().unwrap().base_corner_graticule();
     println!("building: level {} @ {}", level.offset(), base);
-
     for lat_i in -1..TILE_SAMPLES + 1 {
         if lat_i % 8 == 0 {
             print!(".");
             stdout().flush()?;
         }
 
+        // 'actual' unfolds infinitely
+        // 'srtm' is clamped or wrapped as appropriate to srtm extents
+
         let lat_actual = degrees!(base.latitude + (scale * lat_i));
-        let lat_position = radians!(if lat_actual > degrees!(90) {
+        let lat_srtm = radians!(if lat_actual > degrees!(90) {
             degrees!(90)
         } else if lat_actual < degrees!(-90) {
             degrees!(-90)
@@ -139,21 +143,21 @@ fn process_srtm_at_level(
 
         for lon_i in -1..TILE_SAMPLES + 1 {
             let lon_actual = degrees!(base.longitude + (scale * lon_i));
-            let lon_position = radians!(if lon_actual < degrees!(-180) {
-                degrees!(180) - (-lon_actual - degrees!(180))
-            } else if lon_actual > degrees!(180) {
-                degrees!(-180) + (lon_actual - degrees!(180))
-            } else {
-                lon_actual
-            });
+            let mut lon_srtm = lon_actual;
+            while lon_srtm < degrees!(-180) {
+                lon_srtm += degrees!(360);
+            }
+            while lon_srtm > degrees!(180) {
+                lon_srtm -= degrees!(360);
+            }
 
-            let position = Graticule::<GeoCenter>::new(
-                arcseconds!(lat_position),
-                arcseconds!(lon_position),
+            let srtm_grat = Graticule::<GeoCenter>::new(
+                arcseconds!(lat_srtm),
+                arcseconds!(lon_srtm),
                 meters!(0),
             );
             // FIXME: sample regions
-            let height = srtm.sample_nearest(&position);
+            let height = srtm.sample_nearest(&srtm_grat);
             node.write()
                 .unwrap()
                 .set_sample(lat_i as i32 + 1, lon_i as i32 + 1, height);

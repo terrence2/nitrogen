@@ -1,6 +1,7 @@
-cache:
-  paths:
-    - target/
+#cache:
+#  paths:
+#    - target/
+#    - libs/**/**/target/
 
 before_script:
   - source $HOME/.cargo/env

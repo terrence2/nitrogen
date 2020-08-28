@@ -22,6 +22,7 @@ pub(crate) use tile_manager::TileManager;
 use absolute_unit::{arcseconds, meters, Angle, ArcSeconds};
 use failure::{bail, Fallible};
 use geodesy::{GeoCenter, Graticule};
+use lazy_static::lazy_static;
 
 // The physical number of pixels in the tile.
 pub const TILE_PHYSICAL_SIZE: usize = 512;
@@ -85,27 +86,28 @@ impl DataSetDataKind {
     }
 }
 
+const ARCSEC_LEVEL: usize = 12;
+lazy_static! {
+    static ref LEVEL_SCALES: [Angle<ArcSeconds>; ARCSEC_LEVEL + 1] = {
+        let mut out = [arcseconds!(0); ARCSEC_LEVEL + 1];
+        let mut scale = arcseconds!(1);
+        for level in (0..=ARCSEC_LEVEL).rev() {
+            out[level] = scale;
+            scale = scale * 2.0;
+        }
+        out
+    };
+}
+
 #[derive(Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct TerrainLevel(usize);
 
 impl TerrainLevel {
-    // The arcsecond sample resolution required to cover a full earth at TILE_EXTENT samples.
-    //
-    // At a tile resolution of arcseconds, we need:
-    // 360 * 60 * 60 / 509 => 2546.1689587426326
-    //
-    // tiles to cover the full width of the globe. Alternatively, we can view this as needing a
-    // scale of that much per tile to cover the globe with one tile.
-    //
-    // Thus, we standardize on a baseline of 2560 tiles and accept a few tiles of wrapping on each
-    // side. We try to be symmetrical, tile wise across 0x0, which means that the wrapping happens
-    // halfway through our arcsecond resolution tiles.
-    //
-    // The underlying type for Angle is femtoradians, so we can represent lengths down to
-    // micrometer scale, even at earth radius. It also means we likely need to round a bit when
-    // reading out at arcsecond resolution.
+    // Given a resolution of 1", we require 12 doublings to cover the full planet.
+    // This gives us a base scale of 4096" per sample per 509 sample tile to get
+    // everything, with a ridiculous overlap.
     pub fn base_scale() -> Angle<ArcSeconds> {
-        arcseconds!(2560)
+        LEVEL_SCALES[0]
     }
 
     pub fn base_angular_extent() -> Angle<ArcSeconds> {
@@ -121,11 +123,7 @@ impl TerrainLevel {
     }
 
     pub fn as_scale(&self) -> Angle<ArcSeconds> {
-        let mut s = Self::base_scale();
-        for _ in 0..self.0 {
-            s /= 2.0;
-        }
-        s
+        LEVEL_SCALES[self.0]
     }
 
     pub fn new(level: usize) -> Self {
