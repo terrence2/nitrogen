@@ -19,7 +19,10 @@ use failure::Fallible;
 use geodesy::{Cartesian, GeoCenter};
 use gpu::{FrameStateTracker, GPU};
 use nalgebra::{convert, Isometry3, Matrix4, Point3, Vector3, Vector4};
-use std::{cell::RefCell, mem, sync::Arc};
+use std::{
+    mem,
+    sync::{Arc, RwLock},
+};
 use zerocopy::{AsBytes, FromBytes};
 
 pub fn m2v(m: &Matrix4<f32>) -> [[f32; 4]; 4] {
@@ -147,7 +150,7 @@ impl Globals {
 }
 
 impl GlobalParametersBuffer {
-    pub fn new(device: &wgpu::Device) -> Fallible<Arc<RefCell<Self>>> {
+    pub fn new(device: &wgpu::Device) -> Fallible<Arc<RwLock<Self>>> {
         let buffer_size = mem::size_of::<Globals>() as wgpu::BufferAddress;
         let parameters_buffer = Arc::new(Box::new(device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("globals-buffer"),
@@ -179,7 +182,7 @@ impl GlobalParametersBuffer {
             }],
         });
 
-        Ok(Arc::new(RefCell::new(Self {
+        Ok(Arc::new(RwLock::new(Self {
             bind_group_layout,
             bind_group,
             buffer_size,

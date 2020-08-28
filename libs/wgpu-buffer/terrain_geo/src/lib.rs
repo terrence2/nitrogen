@@ -37,8 +37,13 @@ use failure::Fallible;
 use geodesy::{Cartesian, GeoCenter, Graticule};
 use gpu::{FrameStateTracker, GPU};
 use nalgebra::{Matrix4, Point3};
-use std::{cell::RefCell, mem, num::NonZeroU64, ops::Range, sync::Arc};
-use tokio::{runtime::Runtime, sync::RwLock};
+use std::{
+    mem,
+    num::NonZeroU64,
+    ops::Range,
+    sync::{Arc, RwLock},
+};
+use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use zerocopy::{AsBytes, FromBytes};
 
 #[allow(unused)]
@@ -204,7 +209,7 @@ impl TerrainGeoBuffer {
         cpu_detail_level: CpuDetailLevel,
         gpu_detail_level: GpuDetailLevel,
         gpu: &mut GPU,
-    ) -> Fallible<Arc<RefCell<Self>>> {
+    ) -> Fallible<Arc<RwLock<Self>>> {
         let cpu_detail = cpu_detail_level.parameters();
         let gpu_detail = gpu_detail_level.parameters();
 
@@ -506,7 +511,7 @@ impl TerrainGeoBuffer {
             })
             .collect::<Vec<_>>();
 
-        Ok(Arc::new(RefCell::new(Self {
+        Ok(Arc::new(RwLock::new(Self {
             desired_patch_count: cpu_detail.desired_patch_count,
             patch_tree,
             patch_windings,
@@ -533,7 +538,7 @@ impl TerrainGeoBuffer {
     pub fn make_upload_buffer(
         &mut self,
         camera: &Camera,
-        catalog: Arc<RwLock<Catalog>>,
+        catalog: Arc<AsyncRwLock<Catalog>>,
         async_rt: &mut Runtime,
         gpu: &GPU,
         tracker: &mut FrameStateTracker,

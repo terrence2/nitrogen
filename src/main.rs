@@ -36,7 +36,7 @@ use structopt::StructOpt;
 use terrain::TerrainRenderPass;
 use terrain_geo::{CpuDetailLevel, GpuDetailLevel, TerrainGeoBuffer};
 use text_layout::{TextAnchorH, TextAnchorV, TextLayoutBuffer, TextPositionH, TextPositionV};
-use tokio::{runtime::Runtime, sync::RwLock};
+use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 
 /// Show the contents of an MM file
 #[derive(Debug, StructOpt)]
@@ -109,7 +109,7 @@ fn main() -> Fallible<()> {
     let stars_buffer = StarsBuffer::new(&gpu)?;
     let terrain_geo_buffer = TerrainGeoBuffer::new(&catalog, cpu_detail, gpu_detail, &mut gpu)?;
     let text_layout_buffer = TextLayoutBuffer::new(&mut gpu)?;
-    let catalog = Arc::new(RwLock::new(catalog));
+    let catalog = Arc::new(AsyncRwLock::new(catalog));
 
     let mut frame_graph = FrameGraph::new(
         &mut gpu,
@@ -123,7 +123,8 @@ fn main() -> Fallible<()> {
     ///////////////////////////////////////////////////////////
 
     let fps_handle = text_layout_buffer
-        .borrow_mut()
+        .write()
+        .unwrap()
         .add_screen_text("", "", &gpu)?
         .with_color(&[1f32, 0f32, 0f32, 1f32])
         .with_horizontal_position(TextPositionH::Left)
@@ -191,17 +192,17 @@ fn main() -> Fallible<()> {
 
         arcball.think();
 
-        globals_buffer.borrow().make_upload_buffer(
+        globals_buffer.read().unwrap().make_upload_buffer(
             arcball.camera(),
             &gpu,
             frame_graph.tracker_mut(),
         )?;
-        atmosphere_buffer.borrow().make_upload_buffer(
+        atmosphere_buffer.read().unwrap().make_upload_buffer(
             convert(orrery.sun_direction()),
             &gpu,
             frame_graph.tracker_mut(),
         )?;
-        terrain_geo_buffer.borrow_mut().make_upload_buffer(
+        terrain_geo_buffer.write().unwrap().make_upload_buffer(
             arcball.camera(),
             catalog.clone(),
             &mut async_rt,
@@ -209,7 +210,8 @@ fn main() -> Fallible<()> {
             frame_graph.tracker_mut(),
         )?;
         text_layout_buffer
-            .borrow_mut()
+            .write()
+            .unwrap()
             .make_upload_buffer(&gpu, frame_graph.tracker_mut())?;
         frame_graph.run(&mut gpu)?;
 
@@ -224,7 +226,7 @@ fn main() -> Fallible<()> {
             frame_time.subsec_micros(),
         );
         fps_handle
-            .grab(&mut text_layout_buffer.borrow_mut())
+            .grab(&mut text_layout_buffer.write().unwrap())
             .set_span(&ts);
     }
 }

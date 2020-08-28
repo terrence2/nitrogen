@@ -27,7 +27,10 @@ use font_common::FontInterface;
 use font_ttf::TtfFont;
 use gpu::{FrameStateTracker, GPU};
 use log::trace;
-use std::{cell::RefCell, collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
 // Fallback for when we have no libs loaded.
 // https://fonts.google.com/specimen/Quantico?selection.family=Quantico
@@ -134,7 +137,7 @@ pub struct TextLayoutBuffer {
 }
 
 impl TextLayoutBuffer {
-    pub fn new(gpu: &mut GPU) -> Fallible<Arc<RefCell<Self>>> {
+    pub fn new(gpu: &mut GPU) -> Fallible<Arc<RwLock<Self>>> {
         trace!("LayoutBuffer::new");
 
         let glyph_bind_group_layout = GlyphCache::create_bind_group_layout(gpu.device());
@@ -167,7 +170,7 @@ impl TextLayoutBuffer {
             gpu,
         ));
 
-        Ok(Arc::new(RefCell::new(Self {
+        Ok(Arc::new(RwLock::new(Self {
             glyph_cache_map,
             glyph_caches,
             layout_map: HashMap::new(),

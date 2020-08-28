@@ -14,7 +14,10 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use failure::Fallible;
 use gpu::GPU;
-use std::{cell::RefCell, mem, sync::Arc};
+use std::{
+    mem,
+    sync::{Arc, RwLock},
+};
 use zerocopy::{AsBytes, FromBytes};
 
 #[repr(C)]
@@ -62,8 +65,8 @@ pub struct FullscreenBuffer {
 }
 
 impl FullscreenBuffer {
-    pub fn new(gpu: &GPU) -> Fallible<Arc<RefCell<Self>>> {
-        Ok(Arc::new(RefCell::new(Self {
+    pub fn new(gpu: &GPU) -> Fallible<Arc<RwLock<Self>>> {
+        Ok(Arc::new(RwLock::new(Self {
             vertex_buffer: FullscreenVertex::buffer(gpu),
         })))
     }

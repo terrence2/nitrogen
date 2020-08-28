@@ -93,7 +93,7 @@ macro_rules! make_frame_graph {
         pub struct $name {
             tracker: $crate::FrameStateTracker,
             $(
-                $buffer_name: ::std::sync::Arc<::std::cell::RefCell<$buffer_type>>
+                $buffer_name: ::std::sync::Arc<::std::sync::RwLock<$buffer_type>>
             ),*,
             $(
                 $renderer_name: $renderer_type
@@ -105,7 +105,7 @@ macro_rules! make_frame_graph {
             pub fn new(
                 gpu: &mut $crate::GPU,
                 $(
-                    $buffer_name: &::std::sync::Arc<::std::cell::RefCell<$buffer_type>>
+                    $buffer_name: &::std::sync::Arc<::std::sync::RwLock<$buffer_type>>
                 ),*
             ) -> ::failure::Fallible<Self> {
                 Ok(Self {
@@ -117,7 +117,7 @@ macro_rules! make_frame_graph {
                         $renderer_name: <$renderer_type>::new(
                             gpu,
                             $(
-                                &$input_buffer_name.borrow()
+                                &$input_buffer_name.read().unwrap()
                             ),*
                         )?
                     ),*
@@ -126,7 +126,7 @@ macro_rules! make_frame_graph {
 
             pub fn run(&mut self, gpu: &mut $crate::GPU) -> ::failure::Fallible<()> {
                 $(
-                    let $buffer_name = self.$buffer_name.borrow();
+                    let $buffer_name = self.$buffer_name.read().unwrap();
                 )*
                 $(
                     let $renderer_name = &self.$renderer_name;
@@ -161,7 +161,10 @@ mod test {
     use crate::GPU;
     use failure::Fallible;
     use input::InputSystem;
-    use std::{cell::RefCell, sync::Arc};
+    use std::{
+        cell::RefCell,
+        sync::{Arc, RwLock},
+    };
 
     pub struct TestBuffer {
         render_target: wgpu::TextureView,
@@ -172,7 +175,7 @@ mod test {
         any_count: RefCell<usize>,
     }
     impl TestBuffer {
-        fn new(gpu: &GPU) -> Arc<RefCell<Self>> {
+        fn new(gpu: &GPU) -> Arc<RwLock<Self>> {
             let texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
                 label: None,
                 size: wgpu::Extent3d {
@@ -196,7 +199,7 @@ mod test {
                 base_array_layer: 0,
                 array_layer_count: None,
             });
-            Arc::new(RefCell::new(Self {
+            Arc::new(RwLock::new(Self {
                 render_target,
                 update_count: 0,
                 compute_count: RefCell::new(0),
@@ -293,15 +296,15 @@ mod test {
         let mut frame_graph = FrameGraph::new(&mut gpu, &test_buffer)?;
 
         for _ in 0..3 {
-            test_buffer.borrow_mut().update();
+            test_buffer.write().unwrap().update();
             frame_graph.run(&mut gpu)?;
         }
 
-        assert_eq!(test_buffer.borrow().update_count, 3);
-        assert_eq!(*test_buffer.borrow().compute_count.borrow(), 3);
-        assert_eq!(*test_buffer.borrow().screen_count.borrow(), 3);
-        assert_eq!(*test_buffer.borrow().render_count.borrow(), 3);
-        assert_eq!(*test_buffer.borrow().any_count.borrow(), 3);
+        assert_eq!(test_buffer.read().unwrap().update_count, 3);
+        assert_eq!(*test_buffer.read().unwrap().compute_count.borrow(), 3);
+        assert_eq!(*test_buffer.read().unwrap().screen_count.borrow(), 3);
+        assert_eq!(*test_buffer.read().unwrap().render_count.borrow(), 3);
+        assert_eq!(*test_buffer.read().unwrap().any_count.borrow(), 3);
         assert_eq!(*frame_graph.test_renderer.render_count.borrow(), 3);
 
         let _tracker = frame_graph.tracker_mut();

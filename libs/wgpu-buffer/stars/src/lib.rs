@@ -18,7 +18,13 @@ use log::trace;
 use nalgebra::Vector3;
 use star_catalog::Stars;
 use static_assertions::{assert_eq_align, assert_eq_size};
-use std::{cell::RefCell, collections::HashSet, f32::consts::PI, mem, num::NonZeroU64, sync::Arc};
+use std::{
+    collections::HashSet,
+    f32::consts::PI,
+    mem,
+    num::NonZeroU64,
+    sync::{Arc, RwLock},
+};
 use zerocopy::{AsBytes, FromBytes};
 
 const TAU: f32 = PI * 2f32;
@@ -190,7 +196,7 @@ impl StarsBuffer {
         band.base_index as usize + rai
     }
 
-    pub fn new(gpu: &GPU) -> Fallible<Arc<RefCell<Self>>> {
+    pub fn new(gpu: &GPU) -> Fallible<Arc<RwLock<Self>>> {
         trace!("StarsBuffer::new");
 
         let mut offset = 0;
@@ -393,7 +399,7 @@ impl StarsBuffer {
             ],
         });
 
-        Ok(Arc::new(RefCell::new(Self {
+        Ok(Arc::new(RwLock::new(Self {
             bind_group_layout,
             bind_group,
         })))

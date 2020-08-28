@@ -31,7 +31,12 @@ use failure::Fallible;
 use gpu::{FrameStateTracker, GPU};
 use log::trace;
 use nalgebra::Vector3;
-use std::{cell::RefCell, mem, num::NonZeroU64, sync::Arc, time::Instant};
+use std::{
+    mem,
+    num::NonZeroU64,
+    sync::{Arc, RwLock},
+    time::Instant,
+};
 
 const NUM_PRECOMPUTED_WAVELENGTHS: usize = 40;
 const NUM_SCATTERING_ORDER: usize = 4;
@@ -44,7 +49,7 @@ pub struct AtmosphereBuffer {
 }
 
 impl AtmosphereBuffer {
-    pub fn new(gpu: &mut GPU) -> Fallible<Arc<RefCell<Self>>> {
+    pub fn new(gpu: &mut GPU) -> Fallible<Arc<RwLock<Self>>> {
         trace!("AtmosphereBuffer::new");
 
         let precompute_start = Instant::now();
@@ -256,7 +261,7 @@ impl AtmosphereBuffer {
             ],
         });
 
-        Ok(Arc::new(RefCell::new(Self {
+        Ok(Arc::new(RwLock::new(Self {
             bind_group_layout,
             bind_group,
             sun_direction_buffer: camera_and_sun_buffer,
