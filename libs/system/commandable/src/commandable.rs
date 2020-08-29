@@ -43,7 +43,7 @@ pub(crate) fn make_commandable_attribute(item: ItemImpl) -> TokenStream2 {
     let mut arms = Vec::new();
     for item in visitor.commands {
         let name = format!("{}", item);
-        let arm: Arm = parse2(quote! { #name => self.#item(command) }.into()).unwrap();
+        let arm: Arm = parse2(quote! { #name => self.#item(command) }).unwrap();
         arms.push(arm);
     }
 

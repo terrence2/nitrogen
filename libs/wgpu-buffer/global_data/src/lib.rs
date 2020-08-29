@@ -19,10 +19,7 @@ use failure::Fallible;
 use geodesy::{Cartesian, GeoCenter};
 use gpu::{UploadTracker, GPU};
 use nalgebra::{convert, Isometry3, Matrix4, Point3, Vector3, Vector4};
-use std::{
-    mem,
-    sync::{Arc, RwLock},
-};
+use std::{mem, sync::Arc};
 use zerocopy::{AsBytes, FromBytes};
 
 pub fn m2v(m: &Matrix4<f32>) -> [[f32; 4]; 4] {

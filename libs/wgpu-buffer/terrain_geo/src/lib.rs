@@ -37,12 +37,7 @@ use failure::Fallible;
 use geodesy::{Cartesian, GeoCenter, Graticule};
 use gpu::{UploadTracker, GPU};
 use nalgebra::{Matrix4, Point3};
-use std::{
-    mem,
-    num::NonZeroU64,
-    ops::Range,
-    sync::{Arc, RwLock},
-};
+use std::{mem, num::NonZeroU64, ops::Range, sync::Arc};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use zerocopy::{AsBytes, FromBytes};
 

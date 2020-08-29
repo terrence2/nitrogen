@@ -31,12 +31,7 @@ use failure::Fallible;
 use gpu::{UploadTracker, GPU};
 use log::trace;
 use nalgebra::Vector3;
-use std::{
-    mem,
-    num::NonZeroU64,
-    sync::{Arc, RwLock},
-    time::Instant,
-};
+use std::{mem, num::NonZeroU64, sync::Arc, time::Instant};
 
 const NUM_PRECOMPUTED_WAVELENGTHS: usize = 40;
 const NUM_SCATTERING_ORDER: usize = 4;

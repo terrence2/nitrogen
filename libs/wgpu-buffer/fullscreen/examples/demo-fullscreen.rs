@@ -39,7 +39,7 @@ fn main() -> Fallible<()> {
         .device()
         .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("main-pipeline-layout"),
-            bind_group_layouts: &[globals_buffer.borrow().bind_group_layout()],
+            bind_group_layouts: &[globals_buffer.bind_group_layout()],
             push_constant_ranges: &[],
         });
     let pipeline = gpu
@@ -120,12 +120,10 @@ fn main() -> Fallible<()> {
 
         // Prepare new camera parameters.
         let mut tracker = Default::default();
-        globals_buffer
-            .borrow()
-            .make_upload_buffer(arcball.camera(), &gpu, &mut tracker)?;
+        globals_buffer.make_upload_buffer(arcball.camera(), &gpu, &mut tracker)?;
 
-        let gb_borrow = globals_buffer.borrow();
-        let fs_borrow = fullscreen_buffer.borrow();
+        let gb_borrow = &globals_buffer;
+        let fs_borrow = &fullscreen_buffer;
         let framebuffer = gpu.get_next_framebuffer()?;
         let mut encoder = gpu
             .device()
@@ -144,6 +142,5 @@ fn main() -> Fallible<()> {
             rpass.draw(0..4, 0..1);
         }
         gpu.queue_mut().submit(vec![encoder.finish()]);
-        tracker.reset();
     }
 }

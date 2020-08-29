@@ -102,7 +102,7 @@ macro_rules! make_frame_graph {
         impl $name {
             #[allow(clippy::too_many_arguments)]
             pub fn new(
-                legion: &mut ::legion::world::World,
+                _legion: &mut ::legion::world::World,
                 gpu: &mut $crate::GPU,
                 $(
                     $buffer_name: $buffer_type
@@ -118,7 +118,7 @@ macro_rules! make_frame_graph {
                         )?
                     ),*,
                     $(
-                        $buffer_name: $buffer_name
+                        $buffer_name
                     ),*
                 })
             }

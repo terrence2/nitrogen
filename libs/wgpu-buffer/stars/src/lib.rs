@@ -18,13 +18,7 @@ use log::trace;
 use nalgebra::Vector3;
 use star_catalog::Stars;
 use static_assertions::{assert_eq_align, assert_eq_size};
-use std::{
-    collections::HashSet,
-    f32::consts::PI,
-    mem,
-    num::NonZeroU64,
-    sync::{Arc, RwLock},
-};
+use std::{collections::HashSet, f32::consts::PI, mem, num::NonZeroU64};
 use zerocopy::{AsBytes, FromBytes};
 
 const TAU: f32 = PI * 2f32;

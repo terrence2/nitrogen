@@ -14,10 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use failure::Fallible;
 use gpu::GPU;
-use std::{
-    mem,
-    sync::{Arc, RwLock},
-};
+use std::mem;
 use zerocopy::{AsBytes, FromBytes};
 
 #[repr(C)]

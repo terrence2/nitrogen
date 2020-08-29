@@ -27,8 +27,8 @@ pub fn derive_commandable(input: TokenStream) -> TokenStream {
     let input = proc_macro2::TokenStream::from(input);
 
     let output: proc_macro2::TokenStream = {
-        let item: DeriveInput = parse2(input.into()).unwrap();
-        make_derive_commandable(item).into()
+        let item: DeriveInput = parse2(input).unwrap();
+        make_derive_commandable(item)
     };
 
     proc_macro::TokenStream::from(output)
@@ -45,8 +45,8 @@ pub fn commandable(
     let input = proc_macro2::TokenStream::from(input);
 
     let output: proc_macro2::TokenStream = {
-        let item: ItemImpl = parse2(input.into()).unwrap();
-        make_commandable_attribute(item).into()
+        let item: ItemImpl = parse2(input).unwrap();
+        make_commandable_attribute(item)
     };
 
     proc_macro::TokenStream::from(output)
