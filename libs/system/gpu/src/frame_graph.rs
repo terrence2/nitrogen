@@ -103,11 +103,18 @@ macro_rules! make_frame_graph {
         impl $name {
             #[allow(clippy::too_many_arguments)]
             pub fn new(
+                legion: &mut ::legion::world::World,
                 gpu: &mut $crate::GPU,
                 $(
                     $buffer_name: &::std::sync::Arc<::std::sync::RwLock<$buffer_type>>
                 ),*
             ) -> ::failure::Fallible<Self> {
+                $(
+                    legion.insert(
+                        (),
+                        vec![(::universe::component::Name::new(stringify!($buffer_name)),)]
+                    );
+                )*
                 Ok(Self {
                     tracker: Default::default(),
                     $(
@@ -161,6 +168,7 @@ mod test {
     use crate::GPU;
     use failure::Fallible;
     use input::InputSystem;
+    use legion::prelude::*;
     use std::{
         cell::RefCell,
         sync::{Arc, RwLock},
@@ -290,10 +298,11 @@ mod test {
 
     #[test]
     fn test_basic() -> Fallible<()> {
+        let mut legion = World::default();
         let input = InputSystem::new(vec![])?;
         let mut gpu = GPU::new(&input, Default::default())?;
         let test_buffer = TestBuffer::new(&gpu);
-        let mut frame_graph = FrameGraph::new(&mut gpu, &test_buffer)?;
+        let mut frame_graph = FrameGraph::new(&mut legion, &mut gpu, &test_buffer)?;
 
         for _ in 0..3 {
             test_buffer.write().unwrap().update();

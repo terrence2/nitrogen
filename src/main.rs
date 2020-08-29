@@ -24,6 +24,7 @@ use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
 use gpu::{make_frame_graph, GPU};
 use input::InputSystem;
+use legion::prelude::*;
 use log::trace;
 use nalgebra::convert;
 use orrery::Orrery;
@@ -78,6 +79,7 @@ fn main() -> Fallible<()> {
     let opt = Opt::from_args();
 
     let mut async_rt = Runtime::new()?;
+    let mut legion = World::default();
 
     let mut catalog = Catalog::empty();
     for (i, d) in opt.libdir.iter().enumerate() {
@@ -112,6 +114,7 @@ fn main() -> Fallible<()> {
     let catalog = Arc::new(AsyncRwLock::new(catalog));
 
     let mut frame_graph = FrameGraph::new(
+        &mut legion,
         &mut gpu,
         &atmosphere_buffer,
         &fullscreen_buffer,

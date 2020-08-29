@@ -1,0 +1,15 @@
+[package]
+name = "commandable"
+version = "0.1.0"
+authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
+edition = "2018"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+failure = "^ 0.1.2"
+proc-macro2 = "^ 1"
+syn = "^ 1"
+quote = "^ 1"
+command = { path = "../../system/command" }

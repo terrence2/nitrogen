@@ -211,3 +211,43 @@ impl TerrainRenderPass {
         rpass
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use command::{Command, CommandHandler};
+    use commandable::{command, commandable, Commandable};
+    use failure::Fallible;
+
+    #[derive(Commandable)]
+    struct Buffer {
+        value: u32,
+    }
+
+    #[commandable]
+    impl Buffer {
+        fn new() -> Self {
+            Self { value: 0 }
+        }
+
+        #[command]
+        fn make_good(&mut self, _command: &Command) {
+            self.value = 42;
+        }
+
+        #[command]
+        fn make_bad(&mut self, _command: &Command) {
+            self.value = 13;
+        }
+    }
+
+    #[test]
+    fn test_create() -> Fallible<()> {
+        let mut buf = Buffer::new();
+        assert_eq!(buf.value, 0);
+        buf.handle_command(&Command::new("make_good"));
+        assert_eq!(buf.value, 42);
+        buf.handle_command(&Command::new("make_bad"));
+        assert_eq!(buf.value, 13);
+        Ok(())
+    }
+}

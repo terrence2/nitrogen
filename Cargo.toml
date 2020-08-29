@@ -22,6 +22,7 @@ members = [
     "libs/system/ansi",
     "libs/system/catalog",
     "libs/system/command",
+    "libs/system/commandable",
     "libs/system/gpu",
     "libs/system/input",
     "libs/system/packed_struct",
@@ -47,6 +48,7 @@ chrono = "^ 0.4"
 env_logger = "^ 0.7"
 failure = "^ 0.1.2"
 image = "^ 0.21"
+legion = "= 0.2.4"
 log = "^ 0.4"
 nalgebra = "^ 0.20"
 structopt = "^ 0.2"
@@ -69,3 +71,4 @@ stars = { path = "libs/wgpu-buffer/stars" }
 terrain = { path = "libs/wgpu-render/terrain" }
 terrain_geo = { path = "libs/wgpu-buffer/terrain_geo" }
 text_layout = { path = "libs/wgpu-buffer/text_layout" }
+universe = { path = "libs/sim/universe" }

@@ -19,6 +19,10 @@ use winit::{
     event::DeviceId,
 };
 
+pub trait CommandHandler {
+    fn handle_command(&mut self, command: &Command);
+}
+
 #[derive(Clone, Debug)]
 pub enum CommandArg {
     None,
