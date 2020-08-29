@@ -25,7 +25,7 @@ use crate::{
 use failure::Fallible;
 use font_common::FontInterface;
 use font_ttf::TtfFont;
-use gpu::{FrameStateTracker, GPU};
+use gpu::{UploadTracker, GPU};
 use log::trace;
 use std::{
     collections::HashMap,
@@ -137,7 +137,7 @@ pub struct TextLayoutBuffer {
 }
 
 impl TextLayoutBuffer {
-    pub fn new(gpu: &mut GPU) -> Fallible<Arc<RwLock<Self>>> {
+    pub fn new(gpu: &mut GPU) -> Fallible<Self> {
         trace!("LayoutBuffer::new");
 
         let glyph_bind_group_layout = GlyphCache::create_bind_group_layout(gpu.device());
@@ -170,14 +170,14 @@ impl TextLayoutBuffer {
             gpu,
         ));
 
-        Ok(Arc::new(RwLock::new(Self {
+        Ok(Self {
             glyph_cache_map,
             glyph_caches,
             layout_map: HashMap::new(),
             layouts: Vec::new(),
             glyph_bind_group_layout,
             layout_bind_group_layout,
-        })))
+        })
     }
 
     pub fn add_font(&mut self, font_name: FontName, font: Box<dyn FontInterface>, gpu: &GPU) {
@@ -243,11 +243,7 @@ impl TextLayoutBuffer {
         Ok(self.layout_mut(handle))
     }
 
-    pub fn make_upload_buffer(
-        &mut self,
-        gpu: &GPU,
-        tracker: &mut FrameStateTracker,
-    ) -> Fallible<()> {
+    pub fn make_upload_buffer(&mut self, gpu: &GPU, tracker: &mut UploadTracker) -> Fallible<()> {
         for layout in self.layouts.iter_mut() {
             layout.make_upload_buffer(
                 &self.glyph_caches[layout.glyph_cache_index()],

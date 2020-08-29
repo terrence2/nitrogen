@@ -28,7 +28,7 @@ mod precompute;
 use crate::earth_consts::AtmosphereParameters;
 use crate::precompute::Precompute;
 use failure::Fallible;
-use gpu::{FrameStateTracker, GPU};
+use gpu::{UploadTracker, GPU};
 use log::trace;
 use nalgebra::Vector3;
 use std::{
@@ -49,7 +49,7 @@ pub struct AtmosphereBuffer {
 }
 
 impl AtmosphereBuffer {
-    pub fn new(gpu: &mut GPU) -> Fallible<Arc<RwLock<Self>>> {
+    pub fn new(gpu: &mut GPU) -> Fallible<Self> {
         trace!("AtmosphereBuffer::new");
 
         let precompute_start = Instant::now();
@@ -261,11 +261,11 @@ impl AtmosphereBuffer {
             ],
         });
 
-        Ok(Arc::new(RwLock::new(Self {
+        Ok(Self {
             bind_group_layout,
             bind_group,
             sun_direction_buffer: camera_and_sun_buffer,
-        })))
+        })
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
@@ -280,7 +280,7 @@ impl AtmosphereBuffer {
         &self,
         sun_direction: Vector3<f32>,
         gpu: &GPU,
-        tracker: &mut FrameStateTracker,
+        tracker: &mut UploadTracker,
     ) -> Fallible<()> {
         let buffer = [[
             sun_direction.x as f32,

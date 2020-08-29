@@ -196,7 +196,7 @@ impl StarsBuffer {
         band.base_index as usize + rai
     }
 
-    pub fn new(gpu: &GPU) -> Fallible<Arc<RwLock<Self>>> {
+    pub fn new(gpu: &GPU) -> Fallible<Self> {
         trace!("StarsBuffer::new");
 
         let mut offset = 0;
@@ -399,10 +399,10 @@ impl StarsBuffer {
             ],
         });
 
-        Ok(Arc::new(RwLock::new(Self {
+        Ok(Self {
             bind_group_layout,
             bind_group,
-        })))
+        })
     }
 }
 

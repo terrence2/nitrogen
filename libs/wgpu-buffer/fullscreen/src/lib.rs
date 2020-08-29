@@ -65,10 +65,10 @@ pub struct FullscreenBuffer {
 }
 
 impl FullscreenBuffer {
-    pub fn new(gpu: &GPU) -> Fallible<Arc<RwLock<Self>>> {
-        Ok(Arc::new(RwLock::new(Self {
+    pub fn new(gpu: &GPU) -> Fallible<Self> {
+        Ok(Self {
             vertex_buffer: FullscreenVertex::buffer(gpu),
-        })))
+        })
     }
 
     pub fn vertex_buffer(&self) -> wgpu::BufferSlice {

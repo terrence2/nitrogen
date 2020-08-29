@@ -35,7 +35,7 @@ use camera::Camera;
 use catalog::Catalog;
 use failure::Fallible;
 use geodesy::{Cartesian, GeoCenter, Graticule};
-use gpu::{FrameStateTracker, GPU};
+use gpu::{UploadTracker, GPU};
 use nalgebra::{Matrix4, Point3};
 use std::{
     mem,
@@ -209,7 +209,7 @@ impl TerrainGeoBuffer {
         cpu_detail_level: CpuDetailLevel,
         gpu_detail_level: GpuDetailLevel,
         gpu: &mut GPU,
-    ) -> Fallible<Arc<RwLock<Self>>> {
+    ) -> Fallible<Self> {
         let cpu_detail = cpu_detail_level.parameters();
         let gpu_detail = gpu_detail_level.parameters();
 
@@ -511,7 +511,7 @@ impl TerrainGeoBuffer {
             })
             .collect::<Vec<_>>();
 
-        Ok(Arc::new(RwLock::new(Self {
+        Ok(Self {
             desired_patch_count: cpu_detail.desired_patch_count,
             patch_tree,
             patch_windings,
@@ -532,7 +532,7 @@ impl TerrainGeoBuffer {
             subdivide_prepare_bind_group,
             subdivide_expand_pipeline,
             subdivide_expand_bind_groups,
-        })))
+        })
     }
 
     pub fn make_upload_buffer(
@@ -541,7 +541,7 @@ impl TerrainGeoBuffer {
         catalog: Arc<AsyncRwLock<Catalog>>,
         async_rt: &mut Runtime,
         gpu: &GPU,
-        tracker: &mut FrameStateTracker,
+        tracker: &mut UploadTracker,
     ) -> Fallible<()> {
         // TODO: keep these allocations across frames
         let mut live_patches = Vec::with_capacity(self.desired_patch_count);

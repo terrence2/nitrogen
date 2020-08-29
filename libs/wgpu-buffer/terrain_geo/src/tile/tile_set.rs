@@ -24,7 +24,7 @@ use absolute_unit::arcseconds;
 use catalog::Catalog;
 use failure::{err_msg, Fallible};
 use geodesy::{GeoCenter, Graticule};
-use gpu::{FrameStateTracker, GPU};
+use gpu::{UploadTracker, GPU};
 use log::trace;
 use std::{
     collections::{BTreeMap, BinaryHeap},
@@ -430,7 +430,7 @@ impl TileSet {
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &mut Runtime,
         gpu: &GPU,
-        tracker: &mut FrameStateTracker,
+        tracker: &mut UploadTracker,
     ) {
         let mut additions = Vec::new();
         let mut removals = Vec::new();

@@ -17,7 +17,7 @@ use camera::Camera;
 use core::num::NonZeroU64;
 use failure::Fallible;
 use geodesy::{Cartesian, GeoCenter};
-use gpu::{FrameStateTracker, GPU};
+use gpu::{UploadTracker, GPU};
 use nalgebra::{convert, Isometry3, Matrix4, Point3, Vector3, Vector4};
 use std::{
     mem,
@@ -150,7 +150,7 @@ impl Globals {
 }
 
 impl GlobalParametersBuffer {
-    pub fn new(device: &wgpu::Device) -> Fallible<Arc<RwLock<Self>>> {
+    pub fn new(device: &wgpu::Device) -> Fallible<Self> {
         let buffer_size = mem::size_of::<Globals>() as wgpu::BufferAddress;
         let parameters_buffer = Arc::new(Box::new(device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("globals-buffer"),
@@ -182,13 +182,13 @@ impl GlobalParametersBuffer {
             }],
         });
 
-        Ok(Arc::new(RwLock::new(Self {
+        Ok(Self {
             bind_group_layout,
             bind_group,
             buffer_size,
             parameters_buffer,
             tile_to_earth: Matrix4::identity(),
-        })))
+        })
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
@@ -203,7 +203,7 @@ impl GlobalParametersBuffer {
         &self,
         camera: &Camera,
         gpu: &GPU,
-        tracker: &mut FrameStateTracker,
+        tracker: &mut UploadTracker,
     ) -> Fallible<()> {
         let globals: Globals = Default::default();
         let globals = globals
@@ -223,7 +223,7 @@ impl GlobalParametersBuffer {
         &self,
         _camera: &Camera,
         _gpu: &GPU,
-        _tracker: &mut FrameStateTracker,
+        _tracker: &mut UploadTracker,
     ) -> Fallible<()> {
         /*
         let globals = Self::arcball_camera_to_buffer(100f32, 100f32, 0f32, 0f32, camera, gpu);
