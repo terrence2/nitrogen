@@ -87,19 +87,6 @@ impl ArcBallCamera {
         self.eye.distance = meters!(distance);
     }
 
-    //pub fn eye_position_relative_to_tile(&self, origin: Position<GeoSurface>) -> Point3<f64> {
-    /*
-    pub fn eye(&self) -> Point3<f64> {
-        let relative = Vector3::new(
-            f64::from(self.distance * self.yaw.cos() * self.pitch.sin()),
-            f64::from(self.distance * self.pitch.cos()),
-            f64::from(self.distance * self.yaw.sin() * self.pitch.sin()),
-        );
-        let position = relative.to_homogeneous() + self.target.to_homogeneous();
-        Point3::from_homogeneous(position).unwrap()
-    }
-    */
-
     pub fn on_mousemove(&mut self, command: &Command) -> Fallible<()> {
         let (x, y) = command.displacement(0)?;
 
@@ -146,26 +133,6 @@ impl ArcBallCamera {
         Ok(())
     }
 
-    /*
-    pub fn projection_matrix(&self) -> Matrix4<f32> {
-        convert(*self.projection.as_matrix())
-    }
-    */
-
-    /*
-    pub fn inverted_projection_matrix(&self) -> Matrix4<f32> {
-        convert(self.projection.inverse())
-    }
-
-    pub fn inverted_view_matrix(&self) -> Matrix4<f32> {
-        convert(self.view().inverse().to_homogeneous())
-    }
-
-    pub fn position(&self) -> Point3<f32> {
-        convert(self.eye())
-    }
-    */
-
     pub fn think(&mut self) {
         let mut fov = degrees!(self.camera.fov_y());
         fov += self.fov_delta;
@@ -191,10 +158,10 @@ impl ArcBallCamera {
 
     pub fn default_bindings() -> Fallible<Bindings> {
         Ok(Bindings::new("arc_ball_camera")
-            .bind("+pan-view", "mouse1")?
-            .bind("+move-view", "mouse3")?
-            .bind("+fov_up", "PageUp")?
-            .bind("+fov_down", "PageDown")?)
+            .bind("arcball.+pan-view", "mouse1")?
+            .bind("arcball.+move-view", "mouse3")?
+            .bind("arcball.+fov_up", "PageUp")?
+            .bind("arcball.+fov_down", "PageDown")?)
     }
 
     pub fn handle_command(&mut self, command: &Command) -> Fallible<()> {

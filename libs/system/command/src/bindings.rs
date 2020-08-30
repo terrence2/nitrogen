@@ -34,26 +34,22 @@ impl Bindings {
         }
     }
 
-    pub fn bind(mut self, command: &str, keyset: &str) -> Fallible<Self> {
-        let (activate, deactivate) = if command.starts_with('+') {
-            (command, Some(format!("-{}", &command[1..])))
-        } else {
-            (command, None)
-        };
+    pub fn bind(mut self, command_raw: &str, keyset: &str) -> Fallible<Self> {
+        let command = Command::parse(command_raw)?;
         for ks in KeySet::from_virtual(keyset)?.drain(..) {
             let sets = self
                 .press_chords
                 .entry(ks.activating())
                 .or_insert_with(Vec::new);
 
-            if let Some(ref d) = deactivate {
+            if command.is_held_command() {
                 for key in &ks.keys {
                     let keys = self.release_keys.entry(*key).or_insert_with(HashSet::new);
-                    keys.insert(d.to_owned());
+                    keys.insert(command.full_release_command());
                 }
             }
 
-            sets.push((ks, activate.to_owned()));
+            sets.push((ks, command.full().to_owned()));
             sets.sort_by_key(|(set, _)| usize::max_value() - set.keys.len());
         }
         Ok(self)

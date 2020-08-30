@@ -87,10 +87,10 @@ fn main() -> Fallible<()> {
     }
 
     let system_bindings = Bindings::new("map")
-        .bind("+target_up", "Up")?
-        .bind("+target_down", "Down")?
-        .bind("exit", "Escape")?
-        .bind("exit", "q")?;
+        .bind("demo.+target_up", "Up")?
+        .bind("demo.+target_down", "Down")?
+        .bind("demo.exit", "Escape")?
+        .bind("demo.exit", "q")?;
     let mut input = InputSystem::new(vec![
         Orrery::debug_bindings()?,
         ArcBallCamera::default_bindings()?,

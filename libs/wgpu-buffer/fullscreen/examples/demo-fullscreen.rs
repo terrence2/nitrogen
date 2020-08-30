@@ -24,8 +24,8 @@ use input::InputSystem;
 
 fn main() -> Fallible<()> {
     let system_bindings = Bindings::new("system")
-        .bind("exit", "Escape")?
-        .bind("exit", "q")?;
+        .bind("demo.exit", "Escape")?
+        .bind("demo.exit", "q")?;
     let mut input = InputSystem::new(vec![ArcBallCamera::default_bindings()?, system_bindings])?;
     let mut gpu = GPU::new(&input, Default::default())?;
 

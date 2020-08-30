@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use failure::{bail, ensure, Fallible};
 use smallvec::{smallvec, SmallVec};
-use std::path::PathBuf;
+use std::{ops::Range, path::PathBuf};
 use winit::{
     dpi::{LogicalPosition, LogicalSize},
     event::DeviceId,
@@ -84,20 +84,28 @@ impl From<bool> for CommandArg {
 
 #[derive(Clone, Debug)]
 pub struct Command {
-    target: String,
-    command: String,
+    content: String,
+    target: Range<usize>,
+    command: Range<usize>,
+    is_held_command: bool,
     args: SmallVec<[CommandArg; 1]>,
 }
 
 impl Command {
     pub fn parse(raw: &str) -> Fallible<Self> {
-        ensure!(raw.contains('.'));
-        let (first, second) = raw.chars().partition(|&c| c == '.');
-        Ok(Self {
-            target: first,
-            command: second,
-            args: smallvec![],
-        })
+        if let Some(position) = raw.chars().position(|c| c == '.') {
+            ensure!(raw.chars().count() > position + 1);
+            let is_held_command = raw[position + 1..].starts_with('+');
+            Ok(Self {
+                content: raw.to_owned(),
+                target: 0..position,
+                command: position + 1..raw.len(),
+                is_held_command,
+                args: smallvec![],
+            })
+        } else {
+            bail!("invalid command string - must have both target and command");
+        }
     }
 
     pub fn with_arg(mut self, arg: CommandArg) -> Self {
@@ -105,12 +113,25 @@ impl Command {
         self
     }
 
-    pub fn full(&self) -> String {
-        format!("{}.{}", self.target, self.command)
+    pub fn full(&self) -> &str {
+        &self.content
+    }
+
+    pub fn target(&self) -> &str {
+        &self.content[self.target.clone()]
     }
 
     pub fn command(&self) -> &str {
-        &self.command
+        &self.content[self.command.clone()]
+    }
+
+    pub fn is_held_command(&self) -> bool {
+        self.is_held_command
+    }
+
+    pub fn full_release_command(&self) -> String {
+        assert!(self.is_held_command);
+        format!("{}.-{}", self.target(), &self.command()[1..])
     }
 
     pub fn boolean(&self, index: usize) -> Fallible<bool> {

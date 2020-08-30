@@ -390,7 +390,7 @@ impl Orrery {
     }
 
     pub fn debug_bindings() -> Fallible<Bindings> {
-        Ok(Bindings::new("orrery").bind("+move-sun", "mouse2")?)
+        Ok(Bindings::new("orrery").bind("orrery.+move-sun", "mouse2")?)
     }
 
     pub fn handle_command(&mut self, command: &Command) -> Fallible<()> {

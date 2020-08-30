@@ -244,9 +244,9 @@ mod tests {
     fn test_create() -> Fallible<()> {
         let mut buf = Buffer::new();
         assert_eq!(buf.value, 0);
-        buf.handle_command(&Command::parse("make_good")?);
+        buf.handle_command(&Command::parse("test.make_good")?);
         assert_eq!(buf.value, 42);
-        buf.handle_command(&Command::parse("make_bad")?);
+        buf.handle_command(&Command::parse("test.make_bad")?);
         assert_eq!(buf.value, 13);
         Ok(())
     }
