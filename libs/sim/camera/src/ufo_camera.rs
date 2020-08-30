@@ -258,10 +258,12 @@ impl UfoCamera {
     }
 
     pub fn handle_command(&mut self, command: &Command) -> Fallible<()> {
-        match command.name.as_str() {
-            "mouse-move" => self.on_mousemove(command.displacement()?.0, command.displacement()?.1),
+        match command.command() {
+            "mouse-move" => {
+                self.on_mousemove(command.displacement(0)?.0, command.displacement(0)?.1)
+            }
             "mouse-wheel" => {
-                if command.displacement()?.1 > 0.0 {
+                if command.displacement(0)?.1 > 0.0 {
                     self.speed *= 0.8;
                 } else {
                     self.speed *= 1.2;

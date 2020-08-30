@@ -101,7 +101,7 @@ impl ArcBallCamera {
     */
 
     pub fn on_mousemove(&mut self, command: &Command) -> Fallible<()> {
-        let (x, y) = command.displacement()?;
+        let (x, y) = command.displacement(0)?;
 
         if self.in_rotate {
             self.eye.longitude -= degrees!(x * 0.5);
@@ -134,7 +134,7 @@ impl ArcBallCamera {
     }
 
     pub fn on_mousescroll(&mut self, command: &Command) -> Fallible<()> {
-        let y = command.displacement()?.1;
+        let y = command.displacement(0)?.1;
 
         // up/down is y
         //   Up is negative
@@ -198,7 +198,7 @@ impl ArcBallCamera {
     }
 
     pub fn handle_command(&mut self, command: &Command) -> Fallible<()> {
-        match command.name.as_str() {
+        match command.command() {
             "+pan-view" => self.in_rotate = true,
             "-pan-view" => self.in_rotate = false,
             "+move-view" => self.in_move = true,

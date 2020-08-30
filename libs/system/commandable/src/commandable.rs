@@ -50,10 +50,10 @@ pub(crate) fn make_commandable_attribute(item: ItemImpl) -> TokenStream2 {
     quote! {
         impl #impl_generics #ty #ty_generics #where_clause {
             fn command_handler_inner(&mut self, command: &::command::Command) {
-                match command.name.as_str() {
+                match command.command() {
                     #(#arms),*,
                     _ => {
-                        log::warn!("Unknown command '{}' passed to {}", command.name, stringify!(#ty));
+                        log::warn!("Unknown command '{}' passed to {}", command.full(), stringify!(#ty));
                     }
                 };
             }

@@ -167,9 +167,10 @@ fn main() -> Fallible<()> {
         let loop_start = Instant::now();
 
         for command in input.poll()? {
+            //frame_graph.handle_command(&command)?;
             arcball.handle_command(&command)?;
             orrery.handle_command(&command)?;
-            match command.name.as_str() {
+            match command.command() {
                 "+target_up" => target_vec = meters!(1),
                 "-target_up" => target_vec = meters!(0),
                 "+target_down" => target_vec = meters!(-1),
@@ -181,7 +182,7 @@ fn main() -> Fallible<()> {
                     arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
                 }
                 "window-cursor-move" => {}
-                _ => trace!("unhandled command: {}", command.name),
+                _ => trace!("unhandled command: {}", command.full()),
             }
         }
         let mut g = arcball.get_target();

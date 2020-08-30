@@ -64,22 +64,22 @@ impl Bindings {
         key: Key,
         state: ElementState,
         key_states: &HashMap<Key, ElementState>,
-    ) -> SmallVec<[Command; 4]> {
+    ) -> Fallible<SmallVec<[Command; 4]>> {
+        let mut out = smallvec![];
         if state == ElementState::Pressed {
             if let Some(chords) = self.press_chords.get(&key) {
                 for (chord, activate) in chords {
                     if Self::chord_is_pressed(&chord.keys, key_states) {
-                        return smallvec![Command::from_string(activate.to_owned())];
+                        out.push(Command::parse(activate)?);
                     }
                 }
             }
         } else if let Some(commands) = self.release_keys.get(&key) {
-            return commands
-                .iter()
-                .map(|v| Command::from_string(v.to_owned()))
-                .collect::<SmallVec<_>>();
+            for v in commands {
+                out.push(Command::parse(v)?);
+            }
         }
-        smallvec![]
+        Ok(out)
     }
 
     fn chord_is_pressed(binding_keys: &[Key], key_states: &HashMap<Key, ElementState>) -> bool {

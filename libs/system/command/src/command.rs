@@ -12,7 +12,8 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use failure::{bail, Fallible};
+use failure::{bail, ensure, Fallible};
+use smallvec::{smallvec, SmallVec};
 use std::path::PathBuf;
 use winit::{
     dpi::{LogicalPosition, LogicalSize},
@@ -83,63 +84,66 @@ impl From<bool> for CommandArg {
 
 #[derive(Clone, Debug)]
 pub struct Command {
-    pub name: String,
-    pub arg: CommandArg,
+    target: String,
+    command: String,
+    args: SmallVec<[CommandArg; 1]>,
 }
 
 impl Command {
-    pub fn from_string(name: String) -> Self {
-        Self {
-            name,
-            arg: CommandArg::None,
-        }
+    pub fn parse(raw: &str) -> Fallible<Self> {
+        ensure!(raw.contains('.'));
+        let (first, second) = raw.chars().partition(|&c| c == '.');
+        Ok(Self {
+            target: first,
+            command: second,
+            args: smallvec![],
+        })
     }
 
-    pub fn new(name: &str) -> Self {
-        Self {
-            name: name.to_owned(),
-            arg: CommandArg::None,
-        }
+    pub fn with_arg(mut self, arg: CommandArg) -> Self {
+        self.args.push(arg);
+        self
     }
 
-    pub fn with_arg(name: &str, arg: CommandArg) -> Self {
-        Self {
-            name: name.to_owned(),
-            arg,
-        }
+    pub fn full(&self) -> String {
+        format!("{}.{}", self.target, self.command)
     }
 
-    pub fn boolean(&self) -> Fallible<bool> {
-        match self.arg {
-            CommandArg::Boolean(v) => Ok(v),
+    pub fn command(&self) -> &str {
+        &self.command
+    }
+
+    pub fn boolean(&self, index: usize) -> Fallible<bool> {
+        match self.args.get(index) {
+            Some(CommandArg::Boolean(v)) => Ok(*v),
             _ => bail!("not a boolean argument"),
         }
     }
 
-    pub fn float(&self) -> Fallible<f64> {
-        match self.arg {
-            CommandArg::Float(v) => Ok(v),
+    pub fn float(&self, index: usize) -> Fallible<f64> {
+        match self.args.get(index) {
+            Some(CommandArg::Float(v)) => Ok(*v),
             _ => bail!("not a float argument"),
         }
     }
 
-    pub fn path(&self) -> Fallible<PathBuf> {
-        match &self.arg {
-            CommandArg::Path(v) => Ok(v.to_path_buf()),
+    pub fn path(&self, index: usize) -> Fallible<PathBuf> {
+        match &self.args.get(index) {
+            Some(CommandArg::Path(v)) => Ok(v.to_path_buf()),
             _ => bail!("not a path argument"),
         }
     }
 
-    pub fn displacement(&self) -> Fallible<(f64, f64)> {
-        match self.arg {
-            CommandArg::Displacement(v) => Ok(v),
+    pub fn displacement(&self, index: usize) -> Fallible<(f64, f64)> {
+        match self.args.get(index) {
+            Some(CommandArg::Displacement(v)) => Ok(*v),
             _ => bail!("not a displacement argument"),
         }
     }
 
-    pub fn device(&self) -> Fallible<DeviceId> {
-        match self.arg {
-            CommandArg::Device(v) => Ok(v),
+    pub fn device(&self, index: usize) -> Fallible<DeviceId> {
+        match self.args.get(index) {
+            Some(CommandArg::Device(v)) => Ok(*v),
             _ => bail!("not a device argument"),
         }
     }

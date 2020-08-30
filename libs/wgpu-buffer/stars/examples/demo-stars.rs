@@ -124,7 +124,7 @@ fn main() -> Fallible<()> {
     loop {
         for command in input.poll()? {
             arcball.handle_command(&command)?;
-            match command.name.as_str() {
+            match command.command() {
                 "window-close" | "window-destroy" | "exit" => return Ok(()),
                 "window-resize" => {
                     gpu.note_resize(&input);
