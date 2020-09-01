@@ -158,6 +158,21 @@ macro_rules! make_frame_graph {
                 Ok(())
             }
         }
+
+        impl ::command::CommandHandler for $name {
+            fn handle_command(&mut self, command: &::command::Command) {
+                $(
+                    if command.target() == stringify!($buffer_name) {
+                        self.$buffer_name.handle_command(command);
+                    }
+                )*
+                $(
+                    if command.target() == stringify!($renderer_name) {
+                        self.$renderer_name.handle_command(command);
+                    }
+                )*
+            }
+        }
     };
 }
 

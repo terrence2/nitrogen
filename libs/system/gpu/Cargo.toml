@@ -7,7 +7,6 @@ edition = "2018"
 [dependencies]
 failure = "^ 0.1.2"
 futures = "^ 0.3"
-
 legion = "= 0.2.4"
 log = "^ 0.4"
 raw-window-handle = "0.1"
@@ -16,5 +15,6 @@ wgpu = "^ 0.6"
 #winit = "0.20.0-alpha3"
 winit = { git = "https://github.com/rust-windowing/winit", rev = "6f5e7e170cd7bd9be1bb302dd91ebd906d29cfe1" }
 #winit = { version = "0.22.1", features = ["web-sys"] }
+command = { path = "../../system/command" }
 input = { path = "../../system/input" }
 universe = { path = "../../sim/universe" }

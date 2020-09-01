@@ -12,6 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use commandable::{commandable, Commandable};
 use failure::Fallible;
 use gpu::GPU;
 use std::mem;
@@ -57,10 +58,12 @@ impl FullscreenVertex {
     }
 }
 
+#[derive(Commandable)]
 pub struct FullscreenBuffer {
     vertex_buffer: wgpu::Buffer,
 }
 
+#[commandable]
 impl FullscreenBuffer {
     pub fn new(gpu: &GPU) -> Fallible<Self> {
         Ok(Self {

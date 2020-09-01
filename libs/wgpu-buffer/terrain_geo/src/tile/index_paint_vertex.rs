@@ -21,11 +21,16 @@ use zerocopy::{AsBytes, FromBytes};
 pub struct IndexPaintVertex {
     position: [f32; 2],
     color: [u16; 2],
+    pad: [u16; 2],
 }
 
 impl IndexPaintVertex {
     pub fn new(position: [f32; 2], color: [u16; 2]) -> Self {
-        Self { position, color }
+        Self {
+            position,
+            color,
+            pad: [0u16; 2],
+        }
     }
 
     pub fn mem_size() -> usize {
@@ -46,7 +51,7 @@ impl IndexPaintVertex {
                 },
                 // color
                 wgpu::VertexAttributeDescriptor {
-                    format: wgpu::VertexFormat::Uint2,
+                    format: wgpu::VertexFormat::Ushort2,
                     offset: 8,
                     shader_location: 1,
                 },
@@ -63,7 +68,7 @@ impl IndexPaintVertex {
             offset_of!(IndexPaintVertex, color) as wgpu::BufferAddress
         );
 
-        assert_eq!(mem::size_of::<IndexPaintVertex>(), 12);
+        assert_eq!(mem::size_of::<IndexPaintVertex>(), 16);
 
         tmp
     }

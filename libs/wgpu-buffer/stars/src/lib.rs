@@ -12,6 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with OpenFA.  If not, see <http://www.gnu.org/licenses/>.
+use commandable::{commandable, Commandable};
 use failure::Fallible;
 use gpu::GPU;
 use log::trace;
@@ -135,11 +136,13 @@ const DEC_BANDS: [BandMetadata; DEC_BINS] = [
     mkband!(63, 1, 5433),
 ];
 
+#[derive(Commandable)]
 pub struct StarsBuffer {
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
 }
 
+#[commandable]
 impl StarsBuffer {
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.bind_group_layout

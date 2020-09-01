@@ -12,6 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use commandable::{commandable, Commandable};
 use failure::Fallible;
 use global_data::GlobalParametersBuffer;
 use gpu::GPU;
@@ -19,10 +20,12 @@ use log::trace;
 use shader_shared::Group;
 use text_layout::{LayoutVertex, TextLayoutBuffer};
 
+#[derive(Commandable)]
 pub struct ScreenTextRenderPass {
     pipeline: wgpu::RenderPipeline,
 }
 
+#[commandable]
 impl ScreenTextRenderPass {
     pub fn new(
         gpu: &mut GPU,

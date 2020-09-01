@@ -16,6 +16,7 @@
 // Accumulate all depthless raymarching passes into one draw operation.
 
 use atmosphere::AtmosphereBuffer;
+use commandable::{commandable, Commandable};
 use failure::Fallible;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::GlobalParametersBuffer;
@@ -24,10 +25,12 @@ use log::trace;
 use shader_shared::Group;
 use stars::StarsBuffer;
 
+#[derive(Commandable)]
 pub struct SkyboxRenderPass {
     pub pipeline: wgpu::RenderPipeline,
 }
 
+#[commandable]
 impl SkyboxRenderPass {
     pub fn new(
         gpu: &mut GPU,

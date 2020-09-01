@@ -22,6 +22,7 @@ use crate::{
     layout::Layout,
 };
 
+use commandable::{commandable, Commandable};
 use failure::Fallible;
 use font_common::FontInterface;
 use font_ttf::TtfFont;
@@ -124,6 +125,7 @@ struct LayoutTextRenderContext {
 
 pub type FontName = String;
 
+#[derive(Commandable)]
 pub struct TextLayoutBuffer {
     glyph_cache_map: HashMap<FontName, GlyphCacheIndex>,
     glyph_caches: Vec<GlyphCache>,
@@ -133,6 +135,7 @@ pub struct TextLayoutBuffer {
     layout_bind_group_layout: wgpu::BindGroupLayout,
 }
 
+#[commandable]
 impl TextLayoutBuffer {
     pub fn new(gpu: &mut GPU) -> Fallible<Self> {
         trace!("LayoutBuffer::new");

@@ -33,6 +33,8 @@ pub use crate::{patch_winding::PatchWinding, terrain_vertex::TerrainVertex};
 use absolute_unit::Kilometers;
 use camera::Camera;
 use catalog::Catalog;
+use command::Command;
+use commandable::{command, commandable, Commandable};
 use failure::Fallible;
 use geodesy::{Cartesian, GeoCenter, Graticule};
 use gpu::{UploadTracker, GPU};
@@ -171,6 +173,7 @@ pub struct SubdivisionExpandContext {
     pad: [u32; 1],
 }
 
+#[derive(Commandable)]
 pub struct TerrainGeoBuffer {
     // Maximum number of patches for the patch buffer.
     desired_patch_count: usize,
@@ -198,6 +201,7 @@ pub struct TerrainGeoBuffer {
     subdivide_expand_bind_groups: Vec<(SubdivisionExpandContext, wgpu::BindGroup)>,
 }
 
+#[commandable]
 impl TerrainGeoBuffer {
     pub fn new(
         catalog: &Catalog,
@@ -535,7 +539,7 @@ impl TerrainGeoBuffer {
         camera: &Camera,
         catalog: Arc<AsyncRwLock<Catalog>>,
         async_rt: &mut Runtime,
-        gpu: &GPU,
+        gpu: &mut GPU,
         tracker: &mut UploadTracker,
     ) -> Fallible<()> {
         // TODO: keep these allocations across frames
@@ -626,6 +630,11 @@ impl TerrainGeoBuffer {
         // }
 
         Ok(cpass)
+    }
+
+    #[command]
+    pub fn snapshot_index(&mut self, _command: &Command) {
+        self.tile_manager.snapshot_index();
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {

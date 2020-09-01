@@ -14,6 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{Kilometers, LengthUnit, Meters};
 use camera::Camera;
+use commandable::{commandable, Commandable};
 use core::num::NonZeroU64;
 use failure::Fallible;
 use geodesy::{Cartesian, GeoCenter};
@@ -36,15 +37,6 @@ pub fn p2v(p: &Point3<f32>) -> [f32; 4] {
 
 pub fn v2v(v: &Vector4<f32>) -> [f32; 4] {
     [v[0], v[1], v[2], v[3]]
-}
-
-pub struct GlobalParametersBuffer {
-    bind_group_layout: wgpu::BindGroupLayout,
-    bind_group: wgpu::BindGroup,
-    buffer_size: wgpu::BufferAddress,
-    parameters_buffer: Arc<Box<wgpu::Buffer>>,
-
-    pub tile_to_earth: Matrix4<f32>,
 }
 
 #[repr(C)]
@@ -146,6 +138,17 @@ impl Globals {
     }
 }
 
+#[derive(Commandable)]
+pub struct GlobalParametersBuffer {
+    bind_group_layout: wgpu::BindGroupLayout,
+    bind_group: wgpu::BindGroup,
+    buffer_size: wgpu::BufferAddress,
+    parameters_buffer: Arc<Box<wgpu::Buffer>>,
+
+    pub tile_to_earth: Matrix4<f32>,
+}
+
+#[commandable]
 impl GlobalParametersBuffer {
     pub fn new(device: &wgpu::Device) -> Fallible<Self> {
         let buffer_size = mem::size_of::<Globals>() as wgpu::BufferAddress;

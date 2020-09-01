@@ -15,6 +15,8 @@ static_assertions = "^ 1"
 wgpu = "^ 0.6"
 zerocopy = "^ 0.2"
 camera = { path = "../../sim/camera" }
+command = { path = "../../system/command" }
+commandable = { path = "../../system/commandable" }
 star_catalog = { path = "../../sim/star_catalog" }
 gpu = { path = "../../system/gpu" }
 

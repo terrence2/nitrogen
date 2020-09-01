@@ -88,11 +88,17 @@ impl TileManager {
         &mut self,
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &mut Runtime,
-        gpu: &GPU,
+        gpu: &mut GPU,
         tracker: &mut UploadTracker,
     ) {
         for ts in self.tile_sets.iter_mut() {
             ts.finish_update(catalog.clone(), async_rt, gpu, tracker);
+        }
+    }
+
+    pub fn snapshot_index(&mut self) {
+        for ts in self.tile_sets.iter_mut() {
+            ts.snapshot_index();
         }
     }
 

@@ -21,6 +21,6 @@ layout(location = 1) in uvec2 vert_color;
 layout(location = 0) out uvec2 result_color;
 
 void main() {
-    result_color = vert_color;
     gl_Position = vec4(vert_position, 0, 1);
+    result_color = vert_color;
 }

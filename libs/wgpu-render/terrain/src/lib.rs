@@ -13,6 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with OpenFA.  If not, see <http://www.gnu.org/licenses/>.
 use atmosphere::AtmosphereBuffer;
+use command::Command;
+use commandable::{command, commandable, Commandable};
 use failure::Fallible;
 use global_data::GlobalParametersBuffer;
 use gpu::GPU;
@@ -20,12 +22,14 @@ use log::trace;
 use shader_shared::Group;
 use terrain_geo::{TerrainGeoBuffer, TerrainVertex};
 
+#[derive(Commandable)]
 pub struct TerrainRenderPass {
     patch_pipeline: wgpu::RenderPipeline,
     wireframe_pipeline: wgpu::RenderPipeline,
     show_wireframe: bool,
 }
 
+#[commandable]
 impl TerrainRenderPass {
     pub fn new(
         gpu: &mut GPU,
@@ -159,6 +163,11 @@ impl TerrainRenderPass {
 
             show_wireframe: true,
         })
+    }
+
+    #[command]
+    pub fn toggle_wireframe(&mut self, _command: &Command) {
+        self.show_wireframe = !self.show_wireframe;
     }
 
     pub fn draw<'a>(

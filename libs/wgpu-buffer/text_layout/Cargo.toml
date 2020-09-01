@@ -11,6 +11,8 @@ image = "^ 0.21"
 memoffset = "^ 0.5"
 wgpu = "^ 0.6"
 zerocopy = "^ 0.2"
+command = { path = "../../system/command" }
+commandable = { path = "../../system/commandable" }
 font_common = { path = "../../wgpu-buffer/font_common" }
 font_ttf = { path = "../../wgpu-buffer/font_ttf" }
 gpu = { path = "../../system/gpu" }

@@ -25,8 +25,8 @@ mod colorspace;
 mod earth_consts;
 mod precompute;
 
-use crate::earth_consts::AtmosphereParameters;
-use crate::precompute::Precompute;
+use crate::{earth_consts::AtmosphereParameters, precompute::Precompute};
+use commandable::{commandable, Commandable};
 use failure::Fallible;
 use gpu::{UploadTracker, GPU};
 use log::trace;
@@ -36,6 +36,7 @@ use std::{mem, num::NonZeroU64, sync::Arc, time::Instant};
 const NUM_PRECOMPUTED_WAVELENGTHS: usize = 40;
 const NUM_SCATTERING_ORDER: usize = 4;
 
+#[derive(Commandable)]
 pub struct AtmosphereBuffer {
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
@@ -43,6 +44,7 @@ pub struct AtmosphereBuffer {
     sun_direction_buffer: Arc<Box<wgpu::Buffer>>,
 }
 
+#[commandable]
 impl AtmosphereBuffer {
     pub fn new(gpu: &mut GPU) -> Fallible<Self> {
         trace!("AtmosphereBuffer::new");

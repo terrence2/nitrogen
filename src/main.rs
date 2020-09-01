@@ -17,7 +17,7 @@ use atmosphere::AtmosphereBuffer;
 use camera::ArcBallCamera;
 use catalog::{Catalog, DirectoryDrawer};
 use chrono::prelude::*;
-use command::Bindings;
+use command::{Bindings, CommandHandler};
 use failure::Fallible;
 use fullscreen::FullscreenBuffer;
 use geodesy::{GeoSurface, Graticule, Target};
@@ -87,6 +87,8 @@ fn main() -> Fallible<()> {
     }
 
     let system_bindings = Bindings::new("map")
+        .bind("terrain.toggle_wireframe", "w")?
+        .bind("terrain_geo.snapshot_index", "i")?
         .bind("demo.+target_up", "Up")?
         .bind("demo.+target_down", "Down")?
         .bind("demo.exit", "Escape")?
@@ -167,7 +169,7 @@ fn main() -> Fallible<()> {
         let loop_start = Instant::now();
 
         for command in input.poll()? {
-            //frame_graph.handle_command(&command)?;
+            frame_graph.handle_command(&command);
             arcball.handle_command(&command)?;
             orrery.handle_command(&command)?;
             match command.command() {
@@ -207,7 +209,7 @@ fn main() -> Fallible<()> {
             arcball.camera(),
             catalog.clone(),
             &mut async_rt,
-            &gpu,
+            &mut gpu,
             &mut tracker,
         )?;
         frame_graph

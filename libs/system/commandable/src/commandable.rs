@@ -27,7 +27,7 @@ pub(crate) fn make_derive_commandable(item: DeriveInput) -> TokenStream2 {
     quote! {
         impl #impl_generics ::command::CommandHandler for #ident #ty_generics #where_clause {
             fn handle_command(&mut self, command: &::command::Command) {
-                self.command_handler_inner(command);
+                self.handle_command_inner(command);
             }
         }
     }
@@ -49,8 +49,13 @@ pub(crate) fn make_commandable_attribute(item: ItemImpl) -> TokenStream2 {
 
     quote! {
         impl #impl_generics #ty #ty_generics #where_clause {
-            fn command_handler_inner(&mut self, command: &::command::Command) {
+            fn handle_command_inner(&mut self, command: &::command::Command) {
                 match command.command() {
+                    // Note: this first case makes the trailing comma valid if there are no
+                    //       actual command arms found above.
+                    "" => {
+                        log::warn!("Empty command '{}' passed to {}", command.full(), stringify!(#ty));
+                    }
                     #(#arms),*,
                     _ => {
                         log::warn!("Unknown command '{}' passed to {}", command.full(), stringify!(#ty));
