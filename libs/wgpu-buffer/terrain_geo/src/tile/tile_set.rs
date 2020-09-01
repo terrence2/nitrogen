@@ -566,6 +566,7 @@ impl TileSet {
         self.take_index_snapshot = true;
     }
 
+    #[allow(clippy::transmute_ptr_to_ptr)]
     fn capture_and_save_index_snapshot(
         &mut self,
         async_rt: &mut Runtime,
@@ -624,8 +625,7 @@ impl TileSet {
             let pix_cnt = extent.width as usize * extent.height as usize;
             let img_len = pix_cnt * 3;
             let shorts: &[u16] = unsafe { std::mem::transmute(&raw as &[u8]) };
-            let mut data = Vec::with_capacity(img_len);
-            data.resize(img_len, 0);
+            let mut data = vec![0u8; img_len];
             for x in 0..extent.width as usize {
                 for y in 0..extent.height as usize {
                     let src_offset = 2 * x + (y * extent.width as usize);

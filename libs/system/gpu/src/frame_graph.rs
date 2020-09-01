@@ -179,11 +179,13 @@ macro_rules! make_frame_graph {
 #[cfg(test)]
 mod test {
     use crate::{UploadTracker, GPU};
+    use commandable::{commandable, Commandable};
     use failure::Fallible;
     use input::InputSystem;
     use legion::prelude::*;
     use std::cell::RefCell;
 
+    #[derive(Commandable)]
     pub struct TestBuffer {
         render_target: wgpu::TextureView,
         update_count: usize,
@@ -192,6 +194,7 @@ mod test {
         screen_count: RefCell<usize>,
         any_count: RefCell<usize>,
     }
+    #[commandable]
     impl TestBuffer {
         fn new(gpu: &GPU) -> Self {
             let texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
@@ -261,9 +264,11 @@ mod test {
         }
     }
 
+    #[derive(Commandable)]
     pub struct TestRenderer {
         render_count: RefCell<usize>,
     }
+    #[commandable]
     impl TestRenderer {
         fn new(_gpu: &GPU, _foo: &TestBuffer) -> Fallible<Self> {
             Ok(Self {
