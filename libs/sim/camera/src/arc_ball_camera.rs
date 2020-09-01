@@ -87,21 +87,8 @@ impl ArcBallCamera {
         self.eye.distance = meters!(distance);
     }
 
-    //pub fn eye_position_relative_to_tile(&self, origin: Position<GeoSurface>) -> Point3<f64> {
-    /*
-    pub fn eye(&self) -> Point3<f64> {
-        let relative = Vector3::new(
-            f64::from(self.distance * self.yaw.cos() * self.pitch.sin()),
-            f64::from(self.distance * self.pitch.cos()),
-            f64::from(self.distance * self.yaw.sin() * self.pitch.sin()),
-        );
-        let position = relative.to_homogeneous() + self.target.to_homogeneous();
-        Point3::from_homogeneous(position).unwrap()
-    }
-    */
-
     pub fn on_mousemove(&mut self, command: &Command) -> Fallible<()> {
-        let (x, y) = command.displacement()?;
+        let (x, y) = command.displacement(0)?;
 
         if self.in_rotate {
             self.eye.longitude -= degrees!(x * 0.5);
@@ -134,7 +121,7 @@ impl ArcBallCamera {
     }
 
     pub fn on_mousescroll(&mut self, command: &Command) -> Fallible<()> {
-        let y = command.displacement()?.1;
+        let y = command.displacement(0)?.1;
 
         // up/down is y
         //   Up is negative
@@ -145,26 +132,6 @@ impl ArcBallCamera {
 
         Ok(())
     }
-
-    /*
-    pub fn projection_matrix(&self) -> Matrix4<f32> {
-        convert(*self.projection.as_matrix())
-    }
-    */
-
-    /*
-    pub fn inverted_projection_matrix(&self) -> Matrix4<f32> {
-        convert(self.projection.inverse())
-    }
-
-    pub fn inverted_view_matrix(&self) -> Matrix4<f32> {
-        convert(self.view().inverse().to_homogeneous())
-    }
-
-    pub fn position(&self) -> Point3<f32> {
-        convert(self.eye())
-    }
-    */
 
     pub fn think(&mut self) {
         let mut fov = degrees!(self.camera.fov_y());
@@ -191,14 +158,14 @@ impl ArcBallCamera {
 
     pub fn default_bindings() -> Fallible<Bindings> {
         Ok(Bindings::new("arc_ball_camera")
-            .bind("+pan-view", "mouse1")?
-            .bind("+move-view", "mouse3")?
-            .bind("+fov_up", "PageUp")?
-            .bind("+fov_down", "PageDown")?)
+            .bind("arcball.+pan-view", "mouse1")?
+            .bind("arcball.+move-view", "mouse3")?
+            .bind("arcball.+fov_up", "PageUp")?
+            .bind("arcball.+fov_down", "PageDown")?)
     }
 
     pub fn handle_command(&mut self, command: &Command) -> Fallible<()> {
-        match command.name.as_str() {
+        match command.command() {
             "+pan-view" => self.in_rotate = true,
             "-pan-view" => self.in_rotate = false,
             "+move-view" => self.in_move = true,

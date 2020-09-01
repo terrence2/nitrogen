@@ -91,9 +91,8 @@ macro_rules! make_frame_graph {
         }
     ) => {
         pub struct $name {
-            tracker: $crate::FrameStateTracker,
             $(
-                $buffer_name: ::std::sync::Arc<::std::cell::RefCell<$buffer_type>>
+                $buffer_name: $buffer_type
             ),*,
             $(
                 $renderer_name: $renderer_type
@@ -103,30 +102,41 @@ macro_rules! make_frame_graph {
         impl $name {
             #[allow(clippy::too_many_arguments)]
             pub fn new(
+                _legion: &mut ::legion::world::World,
                 gpu: &mut $crate::GPU,
                 $(
-                    $buffer_name: &::std::sync::Arc<::std::cell::RefCell<$buffer_type>>
+                    $buffer_name: $buffer_type
                 ),*
             ) -> ::failure::Fallible<Self> {
                 Ok(Self {
-                    tracker: Default::default(),
-                    $(
-                        $buffer_name: $buffer_name.to_owned()
-                    ),*,
                     $(
                         $renderer_name: <$renderer_type>::new(
                             gpu,
                             $(
-                                &$input_buffer_name.borrow()
+                                &$input_buffer_name
                             ),*
                         )?
+                    ),*,
+                    $(
+                        $buffer_name
                     ),*
                 })
             }
 
-            pub fn run(&mut self, gpu: &mut $crate::GPU) -> ::failure::Fallible<()> {
+            $(
+                pub fn $buffer_name(&mut self) -> &mut $buffer_type {
+                    &mut self.$buffer_name
+                }
+            )*
+            $(
+                pub fn $renderer_name(&mut self) -> &mut $renderer_type {
+                    &mut self.$renderer_name
+                }
+            )*
+
+            pub fn run(&mut self, gpu: &mut $crate::GPU, tracker: UploadTracker) -> ::failure::Fallible<()> {
                 $(
-                    let $buffer_name = self.$buffer_name.borrow();
+                    let $buffer_name = &self.$buffer_name;
                 )*
                 $(
                     let $renderer_name = &self.$renderer_name;
@@ -137,20 +147,30 @@ macro_rules! make_frame_graph {
                     .create_command_encoder(&$crate::wgpu::CommandEncoderDescriptor {
                         label: Some("frame-encoder"),
                     });
-                self.tracker.dispatch_uploads(&mut encoder);
+                tracker.dispatch_uploads(&mut encoder);
                 $(
                     $crate::make_frame_graph_pass!($pass_type($($pass_args),*) {
                         self, gpu, encoder, $pass_name, $($pass_item_name ( $($pass_item_input_name),* )),*
                     });
                 )*
                 gpu.queue_mut().submit(vec![encoder.finish()]);
-                self.tracker.reset();
 
                 Ok(())
             }
+        }
 
-            pub fn tracker_mut(&mut self) -> &mut $crate::FrameStateTracker {
-                &mut self.tracker
+        impl ::command::CommandHandler for $name {
+            fn handle_command(&mut self, command: &::command::Command) {
+                $(
+                    if command.target() == stringify!($buffer_name) {
+                        self.$buffer_name.handle_command(command);
+                    }
+                )*
+                $(
+                    if command.target() == stringify!($renderer_name) {
+                        self.$renderer_name.handle_command(command);
+                    }
+                )*
             }
         }
     };
@@ -158,11 +178,14 @@ macro_rules! make_frame_graph {
 
 #[cfg(test)]
 mod test {
-    use crate::GPU;
+    use crate::{UploadTracker, GPU};
+    use commandable::{commandable, Commandable};
     use failure::Fallible;
     use input::InputSystem;
-    use std::{cell::RefCell, sync::Arc};
+    use legion::prelude::*;
+    use std::cell::RefCell;
 
+    #[derive(Commandable)]
     pub struct TestBuffer {
         render_target: wgpu::TextureView,
         update_count: usize,
@@ -171,8 +194,9 @@ mod test {
         screen_count: RefCell<usize>,
         any_count: RefCell<usize>,
     }
+    #[commandable]
     impl TestBuffer {
-        fn new(gpu: &GPU) -> Arc<RefCell<Self>> {
+        fn new(gpu: &GPU) -> Self {
             let texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
                 label: None,
                 size: wgpu::Extent3d {
@@ -196,16 +220,16 @@ mod test {
                 base_array_layer: 0,
                 array_layer_count: None,
             });
-            Arc::new(RefCell::new(Self {
+            Self {
                 render_target,
                 update_count: 0,
                 compute_count: RefCell::new(0),
                 render_count: RefCell::new(0),
                 screen_count: RefCell::new(0),
                 any_count: RefCell::new(0),
-            }))
+            }
         }
-        fn update(&mut self) {
+        fn update(&mut self, _tracker: &mut UploadTracker) {
             self.update_count += 1;
         }
         fn example_compute_pass<'a>(&self, cpass: wgpu::ComputePass<'a>) -> wgpu::ComputePass<'a> {
@@ -240,9 +264,11 @@ mod test {
         }
     }
 
+    #[derive(Commandable)]
     pub struct TestRenderer {
         render_count: RefCell<usize>,
     }
+    #[commandable]
     impl TestRenderer {
         fn new(_gpu: &GPU, _foo: &TestBuffer) -> Fallible<Self> {
             Ok(Self {
@@ -287,24 +313,24 @@ mod test {
 
     #[test]
     fn test_basic() -> Fallible<()> {
+        let mut legion = World::default();
         let input = InputSystem::new(vec![])?;
         let mut gpu = GPU::new(&input, Default::default())?;
         let test_buffer = TestBuffer::new(&gpu);
-        let mut frame_graph = FrameGraph::new(&mut gpu, &test_buffer)?;
+        let mut frame_graph = FrameGraph::new(&mut legion, &mut gpu, test_buffer)?;
 
         for _ in 0..3 {
-            test_buffer.borrow_mut().update();
-            frame_graph.run(&mut gpu)?;
+            let mut upload_tracker = Default::default();
+            frame_graph.test_buffer().update(&mut upload_tracker);
+            frame_graph.run(&mut gpu, upload_tracker)?;
         }
 
-        assert_eq!(test_buffer.borrow().update_count, 3);
-        assert_eq!(*test_buffer.borrow().compute_count.borrow(), 3);
-        assert_eq!(*test_buffer.borrow().screen_count.borrow(), 3);
-        assert_eq!(*test_buffer.borrow().render_count.borrow(), 3);
-        assert_eq!(*test_buffer.borrow().any_count.borrow(), 3);
-        assert_eq!(*frame_graph.test_renderer.render_count.borrow(), 3);
-
-        let _tracker = frame_graph.tracker_mut();
+        assert_eq!(frame_graph.test_buffer().update_count, 3);
+        assert_eq!(*frame_graph.test_buffer().compute_count.borrow(), 3);
+        assert_eq!(*frame_graph.test_buffer().screen_count.borrow(), 3);
+        assert_eq!(*frame_graph.test_buffer().render_count.borrow(), 3);
+        assert_eq!(*frame_graph.test_buffer().any_count.borrow(), 3);
+        assert_eq!(*frame_graph.test_renderer().render_count.borrow(), 3);
         Ok(())
     }
 }

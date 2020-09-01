@@ -245,23 +245,25 @@ impl UfoCamera {
 
     pub fn default_bindings() -> Fallible<Bindings> {
         Ok(Bindings::new("shape")
-            .bind("zoom-in", "Equals")?
-            .bind("zoom-out", "Subtract")?
-            .bind("+rotate-right", "c")?
-            .bind("+rotate-left", "z")?
-            .bind("+move-left", "a")?
-            .bind("+move-right", "d")?
-            .bind("+move-forward", "w")?
-            .bind("+move-backward", "s")?
-            .bind("+move-up", "space")?
-            .bind("+move-down", "Control")?)
+            .bind("ufocamera.zoom-in", "Equals")?
+            .bind("ufocamera.zoom-out", "Subtract")?
+            .bind("ufocamera.+rotate-right", "c")?
+            .bind("ufocamera.+rotate-left", "z")?
+            .bind("ufocamera.+move-left", "a")?
+            .bind("ufocamera.+move-right", "d")?
+            .bind("ufocamera.+move-forward", "w")?
+            .bind("ufocamera.+move-backward", "s")?
+            .bind("ufocamera.+move-up", "space")?
+            .bind("ufocamera.+move-down", "Control")?)
     }
 
     pub fn handle_command(&mut self, command: &Command) -> Fallible<()> {
-        match command.name.as_str() {
-            "mouse-move" => self.on_mousemove(command.displacement()?.0, command.displacement()?.1),
+        match command.command() {
+            "mouse-move" => {
+                self.on_mousemove(command.displacement(0)?.0, command.displacement(0)?.1)
+            }
             "mouse-wheel" => {
-                if command.displacement()?.1 > 0.0 {
+                if command.displacement(0)?.1 > 0.0 {
                     self.speed *= 0.8;
                 } else {
                     self.speed *= 1.2;

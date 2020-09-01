@@ -24,10 +24,12 @@ use absolute_unit::arcseconds;
 use catalog::Catalog;
 use failure::{err_msg, Fallible};
 use geodesy::{GeoCenter, Graticule};
-use gpu::{FrameStateTracker, GPU};
+use gpu::{texture_format_size, UploadTracker, GPU};
+use image::{ImageBuffer, Rgb};
 use log::trace;
 use std::{
     collections::{BTreeMap, BinaryHeap},
+    fs,
     num::NonZeroU32,
     ops::Range,
     sync::Arc,
@@ -83,7 +85,7 @@ impl TileState {
 }
 
 pub(crate) struct TileSet {
-    #[allow(unused)]
+    index_texture_format: wgpu::TextureFormat,
     index_texture_extent: wgpu::Extent3d,
     #[allow(unused)]
     index_texture: wgpu::Texture,
@@ -141,6 +143,9 @@ pub(crate) struct TileSet {
     // Tile transfer from the background read thread to the main thread.
     tile_sender: UnboundedSender<(QuadTreeId, Vec<u8>)>,
     tile_receiver: UnboundedReceiver<(QuadTreeId, Vec<u8>)>,
+
+    // Set to true to take a snapshot at the start of the next frame.
+    take_index_snapshot: bool,
 }
 
 impl TileSet {
@@ -384,6 +389,7 @@ impl TileSet {
         let (tile_sender, tile_receiver) = unbounded_channel();
 
         Ok(Self {
+            index_texture_format,
             index_texture_extent,
             index_texture,
             index_texture_view,
@@ -414,6 +420,8 @@ impl TileSet {
             tile_read_count: 0,
             tile_sender,
             tile_receiver,
+
+            take_index_snapshot: false,
         })
     }
 
@@ -429,9 +437,14 @@ impl TileSet {
         &mut self,
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &mut Runtime,
-        gpu: &GPU,
-        tracker: &mut FrameStateTracker,
+        gpu: &mut GPU,
+        tracker: &mut UploadTracker,
     ) {
+        if self.take_index_snapshot {
+            self.capture_and_save_index_snapshot(async_rt, gpu).unwrap();
+            self.take_index_snapshot = false;
+        }
+
         let mut additions = Vec::new();
         let mut removals = Vec::new();
         self.tile_tree.finish_update(&mut additions, &mut removals);
@@ -523,18 +536,15 @@ impl TileSet {
                 //     "Would paint at {}x{} ({}x{}) -> {} ({})",
                 //     pix_x, pix_y, tex_x, tex_y, pix_s, tex_s
                 // );
-                let c = *slot as u16 * 255;
+                let c = [*slot as u16, 0];
                 // let c = u16::MAX;
                 // let c = 0;
-                tris.push(IndexPaintVertex::new([tex_x, tex_y], [c, 0]));
-                tris.push(IndexPaintVertex::new([tex_x + tex_s, tex_y], [c, 0]));
-                tris.push(IndexPaintVertex::new([tex_x, tex_y + tex_s], [c, 0]));
-                tris.push(IndexPaintVertex::new([tex_x + tex_s, tex_y], [c, 0]));
-                tris.push(IndexPaintVertex::new(
-                    [tex_x + tex_s, tex_y + tex_s],
-                    [c, 0],
-                ));
-                tris.push(IndexPaintVertex::new([tex_x, tex_y + tex_s], [c, 0]));
+                tris.push(IndexPaintVertex::new([tex_x, tex_y], c));
+                tris.push(IndexPaintVertex::new([tex_x + tex_s, tex_y], c));
+                tris.push(IndexPaintVertex::new([tex_x, tex_y + tex_s], c));
+                tris.push(IndexPaintVertex::new([tex_x + tex_s, tex_y], c));
+                tris.push(IndexPaintVertex::new([tex_x + tex_s, tex_y + tex_s], c));
+                tris.push(IndexPaintVertex::new([tex_x, tex_y + tex_s], c));
             }
         }
         while tris.len() < self.index_paint_range.end as usize {
@@ -550,6 +560,92 @@ impl TileSet {
             self.index_paint_vert_buffer.clone(),
             IndexPaintVertex::mem_size() * tris.len(),
         );
+    }
+
+    pub fn snapshot_index(&mut self) {
+        self.take_index_snapshot = true;
+    }
+
+    #[allow(clippy::transmute_ptr_to_ptr)]
+    fn capture_and_save_index_snapshot(
+        &mut self,
+        async_rt: &mut Runtime,
+        gpu: &mut GPU,
+    ) -> Fallible<()> {
+        let _ = fs::create_dir("__dump__");
+        let buf_size = u64::from(
+            self.index_texture_extent.width
+                * self.index_texture_extent.height
+                * texture_format_size(self.index_texture_format),
+        );
+        let index_snapshot_download_buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
+            label: Some("index-snapshot-download-buffer"),
+            size: buf_size,
+            usage: wgpu::BufferUsage::all(),
+            mapped_at_creation: false,
+        });
+        let mut encoder = gpu
+            .device()
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("index-snapshot-download-command-encoder"),
+            });
+        encoder.copy_texture_to_buffer(
+            wgpu::TextureCopyView {
+                texture: &self.index_texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+            },
+            wgpu::BufferCopyView {
+                buffer: &index_snapshot_download_buffer,
+                layout: wgpu::TextureDataLayout {
+                    offset: 0,
+                    bytes_per_row: self.index_texture_extent.width
+                        * texture_format_size(self.index_texture_format),
+                    rows_per_image: self.index_texture_extent.height,
+                },
+            },
+            self.index_texture_extent,
+        );
+        gpu.queue_mut().submit(vec![encoder.finish()]);
+        gpu.device().poll(wgpu::Maintain::Wait);
+        let reader = index_snapshot_download_buffer
+            .slice(..)
+            .map_async(wgpu::MapMode::Read);
+        gpu.device().poll(wgpu::Maintain::Wait);
+        let extent = self.index_texture_extent;
+        async_rt.spawn(async move {
+            reader.await.unwrap();
+            let raw = index_snapshot_download_buffer
+                .slice(..)
+                .get_mapped_range()
+                .to_owned();
+            println!("writing to __dump__/terrain_geo_index_texture_raw.bin");
+            fs::write("__dump__/terrain_geo_index_texture_raw.bin", &raw).unwrap();
+
+            let pix_cnt = extent.width as usize * extent.height as usize;
+            let img_len = pix_cnt * 3;
+            let shorts: &[u16] = unsafe { std::mem::transmute(&raw as &[u8]) };
+            let mut data = vec![0u8; img_len];
+            for x in 0..extent.width as usize {
+                for y in 0..extent.height as usize {
+                    let src_offset = 2 * x + (y * extent.width as usize);
+                    let dst_offset = 3 * x + (y * extent.width as usize);
+                    let a = shorts[src_offset];
+                    let b = shorts[src_offset + 1];
+                    let r = (a & 0x00FF) as u8;
+                    let g = (b & 0x00FF) as u8;
+                    let b = 0;
+                    data[dst_offset] = r;
+                    data[dst_offset + 1] = g;
+                    data[dst_offset + 2] = b;
+                }
+            }
+            let img =
+                ImageBuffer::<Rgb<u8>, _>::from_raw(extent.width, extent.height, data).unwrap();
+            println!("writing to __dump__/terrain_geo_index_texture.png");
+            img.save("__dump__/terrain_geo_index_texture.png")
+        });
+        Ok(())
     }
 
     fn allocate_atlas_slot(&mut self, votes: u32, qtid: QuadTreeId) {

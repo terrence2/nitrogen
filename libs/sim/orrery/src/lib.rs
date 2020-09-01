@@ -390,16 +390,16 @@ impl Orrery {
     }
 
     pub fn debug_bindings() -> Fallible<Bindings> {
-        Ok(Bindings::new("orrery").bind("+move-sun", "mouse2")?)
+        Ok(Bindings::new("orrery").bind("orrery.+move-sun", "mouse2")?)
     }
 
     pub fn handle_command(&mut self, command: &Command) -> Fallible<()> {
-        match command.name.as_str() {
+        match command.command() {
             "+move-sun" => self.in_debug_override = true,
             "-move-sun" => self.in_debug_override = false,
             "mouse-move" => {
                 if self.in_debug_override {
-                    let minutes = command.displacement()?.0 as i64;
+                    let minutes = command.displacement(0)?.0 as i64;
                     self.now = self
                         .now
                         .checked_add_signed(Duration::minutes(minutes))

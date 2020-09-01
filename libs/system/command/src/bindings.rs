@@ -34,26 +34,22 @@ impl Bindings {
         }
     }
 
-    pub fn bind(mut self, command: &str, keyset: &str) -> Fallible<Self> {
-        let (activate, deactivate) = if command.starts_with('+') {
-            (command, Some(format!("-{}", &command[1..])))
-        } else {
-            (command, None)
-        };
+    pub fn bind(mut self, command_raw: &str, keyset: &str) -> Fallible<Self> {
+        let command = Command::parse(command_raw)?;
         for ks in KeySet::from_virtual(keyset)?.drain(..) {
             let sets = self
                 .press_chords
                 .entry(ks.activating())
                 .or_insert_with(Vec::new);
 
-            if let Some(ref d) = deactivate {
+            if command.is_held_command() {
                 for key in &ks.keys {
                     let keys = self.release_keys.entry(*key).or_insert_with(HashSet::new);
-                    keys.insert(d.to_owned());
+                    keys.insert(command.full_release_command());
                 }
             }
 
-            sets.push((ks, activate.to_owned()));
+            sets.push((ks, command.full().to_owned()));
             sets.sort_by_key(|(set, _)| usize::max_value() - set.keys.len());
         }
         Ok(self)
@@ -64,22 +60,22 @@ impl Bindings {
         key: Key,
         state: ElementState,
         key_states: &HashMap<Key, ElementState>,
-    ) -> SmallVec<[Command; 4]> {
+    ) -> Fallible<SmallVec<[Command; 4]>> {
+        let mut out = smallvec![];
         if state == ElementState::Pressed {
             if let Some(chords) = self.press_chords.get(&key) {
                 for (chord, activate) in chords {
                     if Self::chord_is_pressed(&chord.keys, key_states) {
-                        return smallvec![Command::from_string(activate.to_owned())];
+                        out.push(Command::parse(activate)?);
                     }
                 }
             }
         } else if let Some(commands) = self.release_keys.get(&key) {
-            return commands
-                .iter()
-                .map(|v| Command::from_string(v.to_owned()))
-                .collect::<SmallVec<_>>();
+            for v in commands {
+                out.push(Command::parse(v)?);
+            }
         }
-        smallvec![]
+        Ok(out)
     }
 
     fn chord_is_pressed(binding_keys: &[Key], key_states: &HashMap<Key, ElementState>) -> bool {

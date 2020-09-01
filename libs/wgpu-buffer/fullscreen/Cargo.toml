@@ -8,12 +8,14 @@ edition = "2018"
 failure = "^ 0.1.2"
 zerocopy = "^ 0.2"
 wgpu = "^ 0.6"
+log = "^ 0.4"
 camera = { path = "../../sim/camera" }
+command = { path = "../../system/command" }
+commandable = { path = "../../system/commandable" }
 gpu = { path = "../../system/gpu" }
 
 [dev-dependencies]
 absolute_unit = { path = "../../sim/absolute_unit" }
-command = { path = "../../system/command" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 geodesy = { path = "../../sim/geodesy" }
 input = { path = "../../system/input" }

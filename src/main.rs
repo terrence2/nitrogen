@@ -17,13 +17,14 @@ use atmosphere::AtmosphereBuffer;
 use camera::ArcBallCamera;
 use catalog::{Catalog, DirectoryDrawer};
 use chrono::prelude::*;
-use command::Bindings;
+use command::{Bindings, CommandHandler};
 use failure::Fallible;
 use fullscreen::FullscreenBuffer;
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
-use gpu::{make_frame_graph, GPU};
+use gpu::{make_frame_graph, UploadTracker, GPU};
 use input::InputSystem;
+use legion::prelude::*;
 use log::trace;
 use nalgebra::convert;
 use orrery::Orrery;
@@ -36,7 +37,7 @@ use structopt::StructOpt;
 use terrain::TerrainRenderPass;
 use terrain_geo::{CpuDetailLevel, GpuDetailLevel, TerrainGeoBuffer};
 use text_layout::{TextAnchorH, TextAnchorV, TextLayoutBuffer, TextPositionH, TextPositionV};
-use tokio::{runtime::Runtime, sync::RwLock};
+use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 
 /// Show the contents of an MM file
 #[derive(Debug, StructOpt)]
@@ -78,6 +79,7 @@ fn main() -> Fallible<()> {
     let opt = Opt::from_args();
 
     let mut async_rt = Runtime::new()?;
+    let mut legion = World::default();
 
     let mut catalog = Catalog::empty();
     for (i, d) in opt.libdir.iter().enumerate() {
@@ -85,10 +87,12 @@ fn main() -> Fallible<()> {
     }
 
     let system_bindings = Bindings::new("map")
-        .bind("+target_up", "Up")?
-        .bind("+target_down", "Down")?
-        .bind("exit", "Escape")?
-        .bind("exit", "q")?;
+        .bind("terrain.toggle_wireframe", "w")?
+        .bind("terrain_geo.snapshot_index", "i")?
+        .bind("demo.+target_up", "Up")?
+        .bind("demo.+target_down", "Down")?
+        .bind("demo.exit", "Escape")?
+        .bind("demo.exit", "q")?;
     let mut input = InputSystem::new(vec![
         Orrery::debug_bindings()?,
         ArcBallCamera::default_bindings()?,
@@ -109,21 +113,21 @@ fn main() -> Fallible<()> {
     let stars_buffer = StarsBuffer::new(&gpu)?;
     let terrain_geo_buffer = TerrainGeoBuffer::new(&catalog, cpu_detail, gpu_detail, &mut gpu)?;
     let text_layout_buffer = TextLayoutBuffer::new(&mut gpu)?;
-    let catalog = Arc::new(RwLock::new(catalog));
-
+    let catalog = Arc::new(AsyncRwLock::new(catalog));
     let mut frame_graph = FrameGraph::new(
+        &mut legion,
         &mut gpu,
-        &atmosphere_buffer,
-        &fullscreen_buffer,
-        &globals_buffer,
-        &stars_buffer,
-        &terrain_geo_buffer,
-        &text_layout_buffer,
+        atmosphere_buffer,
+        fullscreen_buffer,
+        globals_buffer,
+        stars_buffer,
+        terrain_geo_buffer,
+        text_layout_buffer,
     )?;
     ///////////////////////////////////////////////////////////
 
-    let fps_handle = text_layout_buffer
-        .borrow_mut()
+    let fps_handle = frame_graph
+        .text_layout()
         .add_screen_text("", "", &gpu)?
         .with_color(&[1f32, 0f32, 0f32, 1f32])
         .with_horizontal_position(TextPositionH::Left)
@@ -165,9 +169,10 @@ fn main() -> Fallible<()> {
         let loop_start = Instant::now();
 
         for command in input.poll()? {
+            frame_graph.handle_command(&command);
             arcball.handle_command(&command)?;
             orrery.handle_command(&command)?;
-            match command.name.as_str() {
+            match command.command() {
                 "+target_up" => target_vec = meters!(1),
                 "-target_up" => target_vec = meters!(0),
                 "+target_down" => target_vec = meters!(-1),
@@ -179,7 +184,7 @@ fn main() -> Fallible<()> {
                     arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
                 }
                 "window-cursor-move" => {}
-                _ => trace!("unhandled command: {}", command.name),
+                _ => trace!("unhandled command: {}", command.full()),
             }
         }
         let mut g = arcball.get_target();
@@ -191,27 +196,26 @@ fn main() -> Fallible<()> {
 
         arcball.think();
 
-        globals_buffer.borrow().make_upload_buffer(
-            arcball.camera(),
-            &gpu,
-            frame_graph.tracker_mut(),
-        )?;
-        atmosphere_buffer.borrow().make_upload_buffer(
+        let mut tracker = Default::default();
+        frame_graph
+            .globals()
+            .make_upload_buffer(arcball.camera(), &gpu, &mut tracker)?;
+        frame_graph.atmosphere().make_upload_buffer(
             convert(orrery.sun_direction()),
             &gpu,
-            frame_graph.tracker_mut(),
+            &mut tracker,
         )?;
-        terrain_geo_buffer.borrow_mut().make_upload_buffer(
+        frame_graph.terrain_geo().make_upload_buffer(
             arcball.camera(),
             catalog.clone(),
             &mut async_rt,
-            &gpu,
-            frame_graph.tracker_mut(),
+            &mut gpu,
+            &mut tracker,
         )?;
-        text_layout_buffer
-            .borrow_mut()
-            .make_upload_buffer(&gpu, frame_graph.tracker_mut())?;
-        frame_graph.run(&mut gpu)?;
+        frame_graph
+            .text_layout()
+            .make_upload_buffer(&gpu, &mut tracker)?;
+        frame_graph.run(&mut gpu, tracker)?;
 
         let frame_time = loop_start.elapsed();
         let ts = format!(
@@ -223,8 +227,6 @@ fn main() -> Fallible<()> {
             frame_time.as_secs() * 1000 + u64::from(frame_time.subsec_millis()),
             frame_time.subsec_micros(),
         );
-        fps_handle
-            .grab(&mut text_layout_buffer.borrow_mut())
-            .set_span(&ts);
+        fps_handle.grab(frame_graph.text_layout()).set_span(&ts);
     }
 }

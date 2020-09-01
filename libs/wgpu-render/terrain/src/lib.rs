@@ -13,6 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with OpenFA.  If not, see <http://www.gnu.org/licenses/>.
 use atmosphere::AtmosphereBuffer;
+use command::Command;
+use commandable::{command, commandable, Commandable};
 use failure::Fallible;
 use global_data::GlobalParametersBuffer;
 use gpu::GPU;
@@ -20,12 +22,14 @@ use log::trace;
 use shader_shared::Group;
 use terrain_geo::{TerrainGeoBuffer, TerrainVertex};
 
+#[derive(Commandable)]
 pub struct TerrainRenderPass {
     patch_pipeline: wgpu::RenderPipeline,
     wireframe_pipeline: wgpu::RenderPipeline,
     show_wireframe: bool,
 }
 
+#[commandable]
 impl TerrainRenderPass {
     pub fn new(
         gpu: &mut GPU,
@@ -161,6 +165,11 @@ impl TerrainRenderPass {
         })
     }
 
+    #[command]
+    pub fn toggle_wireframe(&mut self, _command: &Command) {
+        self.show_wireframe = !self.show_wireframe;
+    }
+
     pub fn draw<'a>(
         &'a self,
         mut rpass: wgpu::RenderPass<'a>,
@@ -209,5 +218,45 @@ impl TerrainRenderPass {
         }
 
         rpass
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use command::{Command, CommandHandler};
+    use commandable::{command, commandable, Commandable};
+    use failure::Fallible;
+
+    #[derive(Commandable)]
+    struct Buffer {
+        value: u32,
+    }
+
+    #[commandable]
+    impl Buffer {
+        fn new() -> Self {
+            Self { value: 0 }
+        }
+
+        #[command]
+        fn make_good(&mut self, _command: &Command) {
+            self.value = 42;
+        }
+
+        #[command]
+        fn make_bad(&mut self, _command: &Command) {
+            self.value = 13;
+        }
+    }
+
+    #[test]
+    fn test_create() -> Fallible<()> {
+        let mut buf = Buffer::new();
+        assert_eq!(buf.value, 0);
+        buf.handle_command(&Command::parse("test.make_good")?);
+        assert_eq!(buf.value, 42);
+        buf.handle_command(&Command::parse("test.make_bad")?);
+        assert_eq!(buf.value, 13);
+        Ok(())
     }
 }

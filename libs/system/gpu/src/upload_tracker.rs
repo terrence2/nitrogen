@@ -70,12 +70,12 @@ impl CopyBufferToBufferDescriptor {
 }
 
 // Note: still quite limited; just precompute without dependencies.
-pub struct FrameStateTracker {
+pub struct UploadTracker {
     b2b_uploads: Vec<CopyBufferToBufferDescriptor>,
     b2t_uploads: Vec<CopyBufferToTextureDescriptor>,
 }
 
-impl Default for FrameStateTracker {
+impl Default for UploadTracker {
     fn default() -> Self {
         Self {
             b2b_uploads: Vec::new(),
@@ -84,7 +84,7 @@ impl Default for FrameStateTracker {
     }
 }
 
-impl FrameStateTracker {
+impl UploadTracker {
     pub fn reset(&mut self) {
         self.b2b_uploads.clear();
         self.b2t_uploads.clear();
@@ -132,8 +132,8 @@ impl FrameStateTracker {
         ));
     }
 
-    pub fn dispatch_uploads(&self, encoder: &mut wgpu::CommandEncoder) {
-        for desc in self.b2b_uploads.iter() {
+    pub fn dispatch_uploads(mut self, encoder: &mut wgpu::CommandEncoder) {
+        for desc in self.b2b_uploads.drain(..) {
             encoder.copy_buffer_to_buffer(
                 &desc.source,
                 desc.source_offset,
@@ -143,7 +143,7 @@ impl FrameStateTracker {
             );
         }
 
-        for (i, desc) in self.b2t_uploads.iter().enumerate() {
+        for (i, desc) in self.b2t_uploads.drain(..).enumerate() {
             assert_eq!(desc.target_extent.width * desc.target_element_size % 256, 0);
             encoder.copy_buffer_to_texture(
                 wgpu::BufferCopyView {

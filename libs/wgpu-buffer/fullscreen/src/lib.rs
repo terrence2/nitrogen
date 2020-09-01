@@ -12,9 +12,10 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use commandable::{commandable, Commandable};
 use failure::Fallible;
 use gpu::GPU;
-use std::{cell::RefCell, mem, sync::Arc};
+use std::mem;
 use zerocopy::{AsBytes, FromBytes};
 
 #[repr(C)]
@@ -57,15 +58,17 @@ impl FullscreenVertex {
     }
 }
 
+#[derive(Commandable)]
 pub struct FullscreenBuffer {
     vertex_buffer: wgpu::Buffer,
 }
 
+#[commandable]
 impl FullscreenBuffer {
-    pub fn new(gpu: &GPU) -> Fallible<Arc<RefCell<Self>>> {
-        Ok(Arc::new(RefCell::new(Self {
+    pub fn new(gpu: &GPU) -> Fallible<Self> {
+        Ok(Self {
             vertex_buffer: FullscreenVertex::buffer(gpu),
-        })))
+        })
     }
 
     pub fn vertex_buffer(&self) -> wgpu::BufferSlice {

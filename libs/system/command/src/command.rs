@@ -12,12 +12,17 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use failure::{bail, Fallible};
-use std::path::PathBuf;
+use failure::{bail, ensure, Fallible};
+use smallvec::{smallvec, SmallVec};
+use std::{ops::Range, path::PathBuf};
 use winit::{
     dpi::{LogicalPosition, LogicalSize},
     event::DeviceId,
 };
+
+pub trait CommandHandler {
+    fn handle_command(&mut self, command: &Command);
+}
 
 #[derive(Clone, Debug)]
 pub enum CommandArg {
@@ -79,63 +84,87 @@ impl From<bool> for CommandArg {
 
 #[derive(Clone, Debug)]
 pub struct Command {
-    pub name: String,
-    pub arg: CommandArg,
+    content: String,
+    target: Range<usize>,
+    command: Range<usize>,
+    is_held_command: bool,
+    args: SmallVec<[CommandArg; 1]>,
 }
 
 impl Command {
-    pub fn from_string(name: String) -> Self {
-        Self {
-            name,
-            arg: CommandArg::None,
+    pub fn parse(raw: &str) -> Fallible<Self> {
+        if let Some(position) = raw.chars().position(|c| c == '.') {
+            ensure!(raw.chars().count() > position + 1);
+            let is_held_command = raw[position + 1..].starts_with('+');
+            Ok(Self {
+                content: raw.to_owned(),
+                target: 0..position,
+                command: position + 1..raw.len(),
+                is_held_command,
+                args: smallvec![],
+            })
+        } else {
+            bail!("invalid command string - must have both target and command");
         }
     }
 
-    pub fn new(name: &str) -> Self {
-        Self {
-            name: name.to_owned(),
-            arg: CommandArg::None,
-        }
+    pub fn with_arg(mut self, arg: CommandArg) -> Self {
+        self.args.push(arg);
+        self
     }
 
-    pub fn with_arg(name: &str, arg: CommandArg) -> Self {
-        Self {
-            name: name.to_owned(),
-            arg,
-        }
+    pub fn full(&self) -> &str {
+        &self.content
     }
 
-    pub fn boolean(&self) -> Fallible<bool> {
-        match self.arg {
-            CommandArg::Boolean(v) => Ok(v),
+    pub fn target(&self) -> &str {
+        &self.content[self.target.clone()]
+    }
+
+    pub fn command(&self) -> &str {
+        &self.content[self.command.clone()]
+    }
+
+    pub fn is_held_command(&self) -> bool {
+        self.is_held_command
+    }
+
+    pub fn full_release_command(&self) -> String {
+        assert!(self.is_held_command);
+        format!("{}.-{}", self.target(), &self.command()[1..])
+    }
+
+    pub fn boolean(&self, index: usize) -> Fallible<bool> {
+        match self.args.get(index) {
+            Some(CommandArg::Boolean(v)) => Ok(*v),
             _ => bail!("not a boolean argument"),
         }
     }
 
-    pub fn float(&self) -> Fallible<f64> {
-        match self.arg {
-            CommandArg::Float(v) => Ok(v),
+    pub fn float(&self, index: usize) -> Fallible<f64> {
+        match self.args.get(index) {
+            Some(CommandArg::Float(v)) => Ok(*v),
             _ => bail!("not a float argument"),
         }
     }
 
-    pub fn path(&self) -> Fallible<PathBuf> {
-        match &self.arg {
-            CommandArg::Path(v) => Ok(v.to_path_buf()),
+    pub fn path(&self, index: usize) -> Fallible<PathBuf> {
+        match &self.args.get(index) {
+            Some(CommandArg::Path(v)) => Ok(v.to_path_buf()),
             _ => bail!("not a path argument"),
         }
     }
 
-    pub fn displacement(&self) -> Fallible<(f64, f64)> {
-        match self.arg {
-            CommandArg::Displacement(v) => Ok(v),
+    pub fn displacement(&self, index: usize) -> Fallible<(f64, f64)> {
+        match self.args.get(index) {
+            Some(CommandArg::Displacement(v)) => Ok(*v),
             _ => bail!("not a displacement argument"),
         }
     }
 
-    pub fn device(&self) -> Fallible<DeviceId> {
-        match self.arg {
-            CommandArg::Device(v) => Ok(v),
+    pub fn device(&self, index: usize) -> Fallible<DeviceId> {
+        match self.args.get(index) {
+            Some(CommandArg::Device(v)) => Ok(*v),
             _ => bail!("not a device argument"),
         }
     }

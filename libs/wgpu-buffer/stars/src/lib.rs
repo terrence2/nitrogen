@@ -12,13 +12,14 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with OpenFA.  If not, see <http://www.gnu.org/licenses/>.
+use commandable::{commandable, Commandable};
 use failure::Fallible;
 use gpu::GPU;
 use log::trace;
 use nalgebra::Vector3;
 use star_catalog::Stars;
 use static_assertions::{assert_eq_align, assert_eq_size};
-use std::{cell::RefCell, collections::HashSet, f32::consts::PI, mem, num::NonZeroU64, sync::Arc};
+use std::{collections::HashSet, f32::consts::PI, mem, num::NonZeroU64};
 use zerocopy::{AsBytes, FromBytes};
 
 const TAU: f32 = PI * 2f32;
@@ -135,11 +136,13 @@ const DEC_BANDS: [BandMetadata; DEC_BINS] = [
     mkband!(63, 1, 5433),
 ];
 
+#[derive(Commandable)]
 pub struct StarsBuffer {
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
 }
 
+#[commandable]
 impl StarsBuffer {
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.bind_group_layout
@@ -190,7 +193,7 @@ impl StarsBuffer {
         band.base_index as usize + rai
     }
 
-    pub fn new(gpu: &GPU) -> Fallible<Arc<RefCell<Self>>> {
+    pub fn new(gpu: &GPU) -> Fallible<Self> {
         trace!("StarsBuffer::new");
 
         let mut offset = 0;
@@ -393,10 +396,10 @@ impl StarsBuffer {
             ],
         });
 
-        Ok(Arc::new(RefCell::new(Self {
+        Ok(Self {
             bind_group_layout,
             bind_group,
-        })))
+        })
     }
 }
 

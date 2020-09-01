@@ -14,12 +14,13 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{Kilometers, LengthUnit, Meters};
 use camera::Camera;
+use commandable::{commandable, Commandable};
 use core::num::NonZeroU64;
 use failure::Fallible;
 use geodesy::{Cartesian, GeoCenter};
-use gpu::{FrameStateTracker, GPU};
+use gpu::{UploadTracker, GPU};
 use nalgebra::{convert, Isometry3, Matrix4, Point3, Vector3, Vector4};
-use std::{cell::RefCell, mem, sync::Arc};
+use std::{mem, sync::Arc};
 use zerocopy::{AsBytes, FromBytes};
 
 pub fn m2v(m: &Matrix4<f32>) -> [[f32; 4]; 4] {
@@ -36,15 +37,6 @@ pub fn p2v(p: &Point3<f32>) -> [f32; 4] {
 
 pub fn v2v(v: &Vector4<f32>) -> [f32; 4] {
     [v[0], v[1], v[2], v[3]]
-}
-
-pub struct GlobalParametersBuffer {
-    bind_group_layout: wgpu::BindGroupLayout,
-    bind_group: wgpu::BindGroup,
-    buffer_size: wgpu::BufferAddress,
-    parameters_buffer: Arc<Box<wgpu::Buffer>>,
-
-    pub tile_to_earth: Matrix4<f32>,
 }
 
 #[repr(C)]
@@ -146,8 +138,19 @@ impl Globals {
     }
 }
 
+#[derive(Commandable)]
+pub struct GlobalParametersBuffer {
+    bind_group_layout: wgpu::BindGroupLayout,
+    bind_group: wgpu::BindGroup,
+    buffer_size: wgpu::BufferAddress,
+    parameters_buffer: Arc<Box<wgpu::Buffer>>,
+
+    pub tile_to_earth: Matrix4<f32>,
+}
+
+#[commandable]
 impl GlobalParametersBuffer {
-    pub fn new(device: &wgpu::Device) -> Fallible<Arc<RefCell<Self>>> {
+    pub fn new(device: &wgpu::Device) -> Fallible<Self> {
         let buffer_size = mem::size_of::<Globals>() as wgpu::BufferAddress;
         let parameters_buffer = Arc::new(Box::new(device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("globals-buffer"),
@@ -179,13 +182,13 @@ impl GlobalParametersBuffer {
             }],
         });
 
-        Ok(Arc::new(RefCell::new(Self {
+        Ok(Self {
             bind_group_layout,
             bind_group,
             buffer_size,
             parameters_buffer,
             tile_to_earth: Matrix4::identity(),
-        })))
+        })
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
@@ -200,7 +203,7 @@ impl GlobalParametersBuffer {
         &self,
         camera: &Camera,
         gpu: &GPU,
-        tracker: &mut FrameStateTracker,
+        tracker: &mut UploadTracker,
     ) -> Fallible<()> {
         let globals: Globals = Default::default();
         let globals = globals
@@ -220,7 +223,7 @@ impl GlobalParametersBuffer {
         &self,
         _camera: &Camera,
         _gpu: &GPU,
-        _tracker: &mut FrameStateTracker,
+        _tracker: &mut UploadTracker,
     ) -> Fallible<()> {
         /*
         let globals = Self::arcball_camera_to_buffer(100f32, 100f32, 0f32, 0f32, camera, gpu);
