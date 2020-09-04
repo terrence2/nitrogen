@@ -122,6 +122,30 @@ impl TerrainLevel {
         )
     }
 
+    // We need to cover 360 degrees worth of tiles longitude and 180 degrees of latitude.
+    //   >>> (360 * 60 * 60) / 509
+    //   2546.1689587426326
+    // Response is in lat/lon, which maps to y, x.
+    pub fn index_resolution() -> (u32, u32) {
+        (1280, 2560)
+    }
+
+    pub fn index_base() -> Graticule<GeoCenter> {
+        Graticule::<GeoCenter>::new(
+            arcseconds!(-TILE_EXTENT as f64 * (Self::index_resolution().0 as f64 / 2.0)),
+            arcseconds!(-TILE_EXTENT as f64 * (Self::index_resolution().1 as f64 / 2.0)),
+            meters!(0),
+        )
+    }
+
+    pub fn index_extent() -> (Angle<ArcSeconds>, Angle<ArcSeconds>) {
+        let (pix_lat, pix_lon) = Self::index_resolution();
+        (
+            arcseconds!(pix_lat as i64 * TILE_EXTENT),
+            arcseconds!(pix_lon as i64 * TILE_EXTENT),
+        )
+    }
+
     pub fn as_scale(&self) -> Angle<ArcSeconds> {
         LEVEL_SCALES[self.0]
     }

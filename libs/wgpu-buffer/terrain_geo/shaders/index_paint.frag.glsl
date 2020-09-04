@@ -15,8 +15,8 @@
 #version 450
 #include <wgpu-render/shader_shared/include/consts.glsl>
 
-layout(location = 0) in flat uvec2 vert_color;
-layout(location = 0) out uvec2 result_color;
+layout(location = 0) in flat uint vert_color;
+layout(location = 0) out uint result_color;
 
 void
 main()
