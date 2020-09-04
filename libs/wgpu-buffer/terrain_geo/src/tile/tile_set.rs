@@ -561,31 +561,6 @@ impl TileSet {
                 tris.push(IndexPaintVertex::new([s1, t0], c));
                 tris.push(IndexPaintVertex::new([s1, t1], c));
                 tris.push(IndexPaintVertex::new([s0, t1], c));
-
-                println!("BASE: {:?}: {} {} -> {} {}", qtid, s0, t0, s1, t1);
-
-                /*
-                let base = self.tile_tree.base(qtid);
-                let pix_x = arcseconds!(base.longitude).f64() as i64 / TILE_EXTENT;
-                let pix_y = arcseconds!(base.latitude).f64() as i64 / TILE_EXTENT;
-                let pix_s = self.tile_tree.angular_extent(qtid).f64() as i64 / TILE_EXTENT;
-
-                let tex_x = pix_x as f32 / 2048.;
-                let tex_y = pix_y as f32 / 2048.;
-                let tex_s = pix_s as f32 / 2048.;
-
-                println!(
-                    "Would paint at {}x{} ({}x{}) -> {} ({})",
-                    pix_x, pix_y, tex_x, tex_y, pix_s, tex_s
-                );
-                let c = [*slot as u16, 0];
-                tris.push(IndexPaintVertex::new([tex_x, tex_y], c));
-                tris.push(IndexPaintVertex::new([tex_x + tex_s, tex_y], c));
-                tris.push(IndexPaintVertex::new([tex_x, tex_y + tex_s], c));
-                tris.push(IndexPaintVertex::new([tex_x + tex_s, tex_y], c));
-                tris.push(IndexPaintVertex::new([tex_x + tex_s, tex_y + tex_s], c));
-                tris.push(IndexPaintVertex::new([tex_x, tex_y + tex_s], c));
-                 */
             }
         }
         while tris.len() < self.index_paint_range.end as usize {
