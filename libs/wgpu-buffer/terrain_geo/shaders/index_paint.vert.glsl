@@ -18,9 +18,9 @@
 layout(location = 0) in vec2 vert_position;
 layout(location = 1) in uvec2 vert_color;
 
-layout(location = 0) out uvec2 result_color;
+layout(location = 0) out uint result_color;
 
 void main() {
     gl_Position = vec4(vert_position, 0, 1);
-    result_color = vert_color;
+    result_color = vert_color.r;
 }

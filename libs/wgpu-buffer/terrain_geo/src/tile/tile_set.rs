@@ -16,7 +16,7 @@ use crate::{
     tile::{
         index_paint_vertex::IndexPaintVertex,
         quad_tree::{QuadTree, QuadTreeId},
-        DataSetCoordinates, DataSetDataKind, TerrainLevel, TILE_EXTENT,
+        DataSetCoordinates, DataSetDataKind, TerrainLevel,
     },
     GpuDetail,
 };
@@ -87,7 +87,6 @@ impl TileState {
 pub(crate) struct TileSet {
     index_texture_format: wgpu::TextureFormat,
     index_texture_extent: wgpu::Extent3d,
-    #[allow(unused)]
     index_texture: wgpu::Texture,
     #[allow(unused)]
     index_texture_view: wgpu::TextureView,
@@ -180,12 +179,28 @@ impl TileSet {
         // tile. Tiles are additionally fringed with a border such that linear filtering can be
         // used in the tile lookup without further effort. In combination, this lets us point the
         // full power of the texturing hardware at the problem, with very little extra overhead.
-        let index_texture_format = wgpu::TextureFormat::Rg16Uint; // offset into atlas stack; also depth or scale?
+        let index_texture_format = wgpu::TextureFormat::R16Uint; // offset into atlas stack
+        println!(
+            "base: {} {}",
+            arcseconds!(TerrainLevel::base().latitude),
+            arcseconds!(TerrainLevel::base().longitude)
+        );
+        println!(
+            "index_base: {} {}",
+            arcseconds!(TerrainLevel::index_base().latitude),
+            arcseconds!(TerrainLevel::index_base().longitude)
+        );
+        println!("ang_ext: {}", TerrainLevel::base_angular_extent());
 
         // FIXME: find a way to use a smaller texture.
+        // let index_texture_extent = wgpu::Extent3d {
+        //     width: TerrainLevel::base_scale().f64() as u32,
+        //     height: TerrainLevel::base_scale().f64() as u32,
+        //     depth: 1,
+        // };
         let index_texture_extent = wgpu::Extent3d {
-            width: TerrainLevel::base_scale().f64() as u32,
-            height: TerrainLevel::base_scale().f64() as u32,
+            width: TerrainLevel::index_resolution().1,
+            height: TerrainLevel::index_resolution().0,
             depth: 1,
         };
         let index_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
@@ -518,33 +533,37 @@ impl TileSet {
 
         // Use the list of allocated tiles to generate a vertex buffer to upload.
         // FIXME: don't re-allocate every frame
+        let index_ang_extent = TerrainLevel::index_extent();
+        let iextent_lat = index_ang_extent.0.f64() / 2.; // range from [-1,1]
+        let iextent_lon = index_ang_extent.1.f64() / 2.;
         let mut tris = Vec::new();
         // println!("START");
         for (qtid, tile_state) in self.tile_state.iter() {
             // FIXME: where do we actually want these?
             if let TileState::Active(slot) = tile_state {
-                let base = self.tile_tree.base(qtid);
-                let pix_x = arcseconds!(base.longitude).f64() as i64 / TILE_EXTENT;
-                let pix_y = arcseconds!(base.latitude).f64() as i64 / TILE_EXTENT;
-                let pix_s = self.tile_tree.angular_extent(qtid).f64() as i64 / TILE_EXTENT;
+                // Project the tile base and angular extent into the index.
+                // Note that the base may be outside the index extents.
+                let tile_base = self.tile_tree.base(qtid);
+                let ang_extent = self.tile_tree.angular_extent(qtid);
 
-                let tex_x = pix_x as f32 / (self.index_texture_extent.width / 2) as f32;
-                let tex_y = pix_y as f32 / (self.index_texture_extent.height / 2) as f32;
-                let tex_s = pix_s as f32 / (self.index_texture_extent.width / 2) as f32;
-
-                // println!(
-                //     "Would paint at {}x{} ({}x{}) -> {} ({})",
-                //     pix_x, pix_y, tex_x, tex_y, pix_s, tex_s
-                // );
+                let lat0 = arcseconds!(tile_base.latitude);
+                let lon0 = arcseconds!(tile_base.longitude);
+                let lat1 = arcseconds!(tile_base.latitude + ang_extent);
+                let lon1 = arcseconds!(tile_base.longitude + ang_extent);
+                let t0 = (lat0 / iextent_lat).f32();
+                let s0 = (lon0 / iextent_lon).f32();
+                let t1 = (lat1 / iextent_lat).f32();
+                let s1 = (lon1 / iextent_lon).f32();
                 let c = [*slot as u16, 0];
-                // let c = u16::MAX;
-                // let c = 0;
-                tris.push(IndexPaintVertex::new([tex_x, tex_y], c));
-                tris.push(IndexPaintVertex::new([tex_x + tex_s, tex_y], c));
-                tris.push(IndexPaintVertex::new([tex_x, tex_y + tex_s], c));
-                tris.push(IndexPaintVertex::new([tex_x + tex_s, tex_y], c));
-                tris.push(IndexPaintVertex::new([tex_x + tex_s, tex_y + tex_s], c));
-                tris.push(IndexPaintVertex::new([tex_x, tex_y + tex_s], c));
+
+                // FIXME 1: this could easily be indexed, saving us a bunch of bandwidth.
+                // FIXME 2: we could upload these vertices as shorts, saving some more bandwidth.
+                tris.push(IndexPaintVertex::new([s0, t0], c));
+                tris.push(IndexPaintVertex::new([s1, t0], c));
+                tris.push(IndexPaintVertex::new([s0, t1], c));
+                tris.push(IndexPaintVertex::new([s1, t0], c));
+                tris.push(IndexPaintVertex::new([s1, t1], c));
+                tris.push(IndexPaintVertex::new([s0, t1], c));
             }
         }
         while tris.len() < self.index_paint_range.end as usize {
@@ -628,16 +647,12 @@ impl TileSet {
             let mut data = vec![0u8; img_len];
             for x in 0..extent.width as usize {
                 for y in 0..extent.height as usize {
-                    let src_offset = 2 * x + (y * extent.width as usize);
-                    let dst_offset = 3 * x + (y * extent.width as usize);
-                    let a = shorts[src_offset];
-                    let b = shorts[src_offset + 1];
-                    let r = (a & 0x00FF) as u8;
-                    let g = (b & 0x00FF) as u8;
-                    let b = 0;
-                    data[dst_offset] = r;
-                    data[dst_offset + 1] = g;
-                    data[dst_offset + 2] = b;
+                    let src_offset = x + (y * extent.width as usize);
+                    let dst_offset = 3 * (x + (y * extent.width as usize));
+                    let a = (shorts[src_offset] & 0x00FF) as u8;
+                    data[dst_offset] = a;
+                    data[dst_offset + 1] = a;
+                    data[dst_offset + 2] = a;
                 }
             }
             let img =
