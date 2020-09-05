@@ -16,7 +16,7 @@ use crate::{
     tile::{
         index_paint_vertex::IndexPaintVertex,
         quad_tree::{QuadTree, QuadTreeId},
-        DataSetCoordinates, DataSetDataKind, TerrainLevel, TILE_EXTENT,
+        DataSetCoordinates, DataSetDataKind, TerrainLevel,
     },
     GpuDetail,
 };
@@ -555,6 +555,9 @@ impl TileSet {
                 let t1 = (lat1 / iextent_lat).f32();
                 let s1 = (lon1 / iextent_lon).f32();
                 let c = [*slot as u16, 0];
+
+                // FIXME 1: this could easily be indexed, saving us a bunch of bandwidth.
+                // FIXME 2: we could upload these vertices as shorts, saving some more bandwidth.
                 tris.push(IndexPaintVertex::new([s0, t0], c));
                 tris.push(IndexPaintVertex::new([s1, t0], c));
                 tris.push(IndexPaintVertex::new([s0, t1], c));
