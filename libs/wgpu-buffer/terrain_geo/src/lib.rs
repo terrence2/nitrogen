@@ -199,6 +199,9 @@ pub struct TerrainGeoBuffer {
     subdivide_prepare_bind_group: wgpu::BindGroup,
     subdivide_expand_pipeline: wgpu::ComputePipeline,
     subdivide_expand_bind_groups: Vec<(SubdivisionExpandContext, wgpu::BindGroup)>,
+
+    target_vertex_buffer_count: u32,
+    displace_height_bind_group: wgpu::BindGroup,
 }
 
 #[commandable]
@@ -217,7 +220,6 @@ impl TerrainGeoBuffer {
             cpu_detail.target_refinement,
             cpu_detail.desired_patch_count,
         );
-        let tile_manager = TileManager::new(catalog, &gpu_detail, gpu)?;
 
         let mut patch_windings = Vec::with_capacity(cpu_detail.desired_patch_count);
         patch_windings.resize(cpu_detail.desired_patch_count, PatchWinding::Full);
@@ -248,6 +250,8 @@ impl TerrainGeoBuffer {
         )));
 
         // Create target vertex buffer.
+        let target_vertex_buffer_count =
+            subdivide_context.target_stride * cpu_detail.desired_patch_count as u32;
         let target_patch_byte_size =
             mem::size_of::<TerrainVertex>() * subdivide_context.target_stride as usize;
         assert_eq!(target_patch_byte_size % 4, 0);
@@ -472,6 +476,38 @@ impl TerrainGeoBuffer {
             subdivide_expand_bind_groups.push((expand_context, subdivide_expand_bind_group));
         }
 
+        let displace_height_bind_group_layout =
+            gpu.device()
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("terrain-geo-displace-height-bind-group-layout"),
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStage::COMPUTE,
+                        ty: wgpu::BindingType::StorageBuffer {
+                            dynamic: false,
+                            readonly: false,
+                            min_binding_size: NonZeroU64::new(target_vertex_buffer_size),
+                        },
+                        count: None,
+                    }],
+                });
+        let displace_height_bind_group =
+            gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("terrain-geo-displace-height-bind-group"),
+                layout: &displace_height_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(target_vertex_buffer.slice(..)),
+                }],
+            });
+
+        let tile_manager = TileManager::new(
+            &displace_height_bind_group_layout,
+            catalog,
+            &gpu_detail,
+            gpu,
+        )?;
+
         // Create each of the 4 wireframe index buffers at this subdivision level.
         let wireframe_index_buffers = PatchWinding::all_windings()
             .iter()
@@ -531,6 +567,9 @@ impl TerrainGeoBuffer {
             subdivide_prepare_bind_group,
             subdivide_expand_pipeline,
             subdivide_expand_bind_groups,
+
+            target_vertex_buffer_count,
+            displace_height_bind_group,
         })
     }
 
@@ -626,16 +665,11 @@ impl TerrainGeoBuffer {
         }
 
         // Apply heights to all vertices.
-        //self.tile_manager.displace_heights();
-        //cpass.set_pipeline(&self.displace_heights_pipeline);
-        //cpass.set_bind_group(0, )
-        // for bind_group in self.tile_manager.height_bind_groups() {
-        //     cpass.set_pipeline(&self.apply_height_pipeline);
-        //     cpass.set_bind_group(0, bind_group, &[]);
-        //     cpass.dispatch()
-        // }
-
-        Ok(cpass)
+        self.tile_manager.displace_height(
+            self.target_vertex_buffer_count,
+            &self.displace_height_bind_group,
+            cpass,
+        )
     }
 
     #[command]

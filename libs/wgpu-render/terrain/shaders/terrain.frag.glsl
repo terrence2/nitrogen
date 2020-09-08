@@ -37,6 +37,7 @@ void
 main()
 {
     f_color = v_color;
+
     //f_color = vec4(0, 1, 0, 1);
 /*
     vec3 intersect = v_position.xyz;

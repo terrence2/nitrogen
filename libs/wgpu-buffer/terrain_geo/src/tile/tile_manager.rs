@@ -59,14 +59,25 @@ pub(crate) struct TileManager {
 }
 
 impl TileManager {
-    pub(crate) fn new(catalog: &Catalog, gpu_detail: &GpuDetail, gpu: &mut GPU) -> Fallible<Self> {
+    pub(crate) fn new(
+        displace_height_bind_group_layout: &wgpu::BindGroupLayout,
+        catalog: &Catalog,
+        gpu_detail: &GpuDetail,
+        gpu: &mut GPU,
+    ) -> Fallible<Self> {
         let mut tile_sets = Vec::new();
 
         // Scan catalog for all tile sets.
         for index_fid in catalog.find_matching("*-index.json")? {
             let index_data = from_utf8_string(catalog.read_sync(index_fid)?)?;
             let index_json = json::parse(&index_data)?;
-            tile_sets.push(TileSet::new(catalog, index_json, gpu_detail, gpu)?);
+            tile_sets.push(TileSet::new(
+                displace_height_bind_group_layout,
+                catalog,
+                index_json,
+                gpu_detail,
+                gpu,
+            )?);
         }
 
         Ok(Self { tile_sets })
@@ -107,6 +118,18 @@ impl TileManager {
             ts.paint_atlas_index(&mut encoder)
         }
         encoder
+    }
+
+    pub fn displace_height<'a>(
+        &'a self,
+        vertex_count: u32,
+        mesh_bind_group: &'a wgpu::BindGroup,
+        mut cpass: wgpu::ComputePass<'a>,
+    ) -> Fallible<wgpu::ComputePass<'a>> {
+        for ts in self.tile_sets.iter() {
+            cpass = ts.displace_height(vertex_count, mesh_bind_group, cpass)?;
+        }
+        Ok(cpass)
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {

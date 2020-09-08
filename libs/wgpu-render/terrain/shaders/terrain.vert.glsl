@@ -23,10 +23,10 @@ layout(location = 2) in vec2 v_graticule; // earth centered
 
 layout(location = 0) out vec4 v_color;
 
-layout(set = 2, binding = 0) uniform utexture2D srtm_index_texture;
-layout(set = 2, binding = 1) uniform sampler srtm_index_sampler;
-layout(set = 2, binding = 2) uniform itexture2DArray srtm_atlas_texture;
-layout(set = 2, binding = 3) uniform sampler srtm_atlas_sampler;
+layout(set = 2, binding = 0) uniform utexture2D index_texture;
+layout(set = 2, binding = 1) uniform sampler index_sampler;
+layout(set = 2, binding = 2) uniform itexture2DArray atlas_texture;
+layout(set = 2, binding = 3) uniform sampler atlas_sampler;
 
 const float BASE = -1042432.0 / 60 / 60; // degrees
 const float ANGULAR_EXTENT = 2084864.0 / 60 / 60; // degrees
@@ -65,14 +65,27 @@ void main() {
     */
 
     uvec4 index_texel = texture(
-        usampler2D(srtm_index_texture, srtm_index_sampler),
+        usampler2D(index_texture, index_sampler),
         vec2(
             1.0 - s,
             t
         )
     );
-    float v = float(index_texel.r) / 65535.0 * 128.0;
-    v_color = vec4(v, v, v, 1);
+    uint slot = index_texel.r;
+    float v = float(slot) / 65535.0 * 128.0;
+    //v_color = vec4(v, v, v, 1);
+
+    ivec4 atlas_texel = texture(
+        isampler2DArray(atlas_texture, atlas_sampler),
+        vec3(
+            1.0 - s,
+            t,
+            float(slot)
+        )
+    );
+    float height = float(atlas_texel.r);
+    float clr = height / 8800.0;
+    v_color = vec4(clr, clr, clr, 1.0);
 
     /*
     ivec4 height_texel = texture(

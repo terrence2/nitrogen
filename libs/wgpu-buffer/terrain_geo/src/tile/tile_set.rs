@@ -107,6 +107,7 @@ pub(crate) struct TileSet {
 
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
+    displace_height_pipeline: wgpu::ComputePipeline,
 
     #[allow(unused)]
     kind: DataSetDataKind,
@@ -149,6 +150,7 @@ pub(crate) struct TileSet {
 
 impl TileSet {
     pub(crate) fn new(
+        displace_height_bind_group_layout: &wgpu::BindGroupLayout,
         catalog: &Catalog,
         index_json: json::JsonValue,
         gpu_detail: &GpuDetail,
@@ -342,7 +344,7 @@ impl TileSet {
                         // Index Texture
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
-                            visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStage::all(),
                             ty: wgpu::BindingType::SampledTexture {
                                 dimension: wgpu::TextureViewDimension::D2,
                                 component_type: wgpu::TextureComponentType::Uint,
@@ -352,14 +354,14 @@ impl TileSet {
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
-                            visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStage::all(),
                             ty: wgpu::BindingType::Sampler { comparison: false },
                             count: None,
                         },
                         // Atlas Textures, as referenced by the above index
                         wgpu::BindGroupLayoutEntry {
                             binding: 2,
-                            visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStage::all(),
                             ty: wgpu::BindingType::SampledTexture {
                                 dimension: wgpu::TextureViewDimension::D2Array,
                                 component_type: wgpu::TextureComponentType::Sint,
@@ -369,11 +371,34 @@ impl TileSet {
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 3,
-                            visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStage::all(),
                             ty: wgpu::BindingType::Sampler { comparison: false },
                             count: None,
                         },
                     ],
+                });
+
+        let displace_spherical_height_shader = gpu.create_shader_module(include_bytes!(
+            "../../target/displace_spherical_height.comp.spirv"
+        ))?;
+        let displace_height_pipeline =
+            gpu.device()
+                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some("terrain-displace-height-pipeline"),
+                    layout: Some(&gpu.device().create_pipeline_layout(
+                        &wgpu::PipelineLayoutDescriptor {
+                            label: Some("terrain-displace-height-pipeline-layout"),
+                            push_constant_ranges: &[],
+                            bind_group_layouts: &[
+                                displace_height_bind_group_layout,
+                                &bind_group_layout,
+                            ],
+                        },
+                    )),
+                    compute_stage: wgpu::ProgrammableStageDescriptor {
+                        module: &displace_spherical_height_shader,
+                        entry_point: "main",
+                    },
                 });
 
         let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
@@ -422,6 +447,7 @@ impl TileSet {
 
             bind_group_layout,
             bind_group,
+            displace_height_pipeline,
 
             kind,
             coordinates,
@@ -438,6 +464,16 @@ impl TileSet {
 
             take_index_snapshot: false,
         })
+    }
+
+    #[allow(unused)]
+    pub fn kind(&self) -> DataSetDataKind {
+        self.kind
+    }
+
+    #[allow(unused)]
+    pub fn coordinates(&self) -> DataSetCoordinates {
+        self.coordinates
     }
 
     pub fn begin_update(&mut self) {
@@ -554,7 +590,7 @@ impl TileSet {
                 let s0 = (lon0 / iextent_lon).f32();
                 let t1 = (lat1 / iextent_lat).f32();
                 let s1 = (lon1 / iextent_lon).f32();
-                let c = [*slot as u16, 0];
+                let c = *slot as u16;
 
                 // FIXME 1: this could easily be indexed, saving us a bunch of bandwidth.
                 // FIXME 2: we could upload these vertices as shorts, saving some more bandwidth.
@@ -567,7 +603,7 @@ impl TileSet {
             }
         }
         while tris.len() < self.index_paint_range.end as usize {
-            tris.push(IndexPaintVertex::new([0f32, 0f32], [0, 0]));
+            tris.push(IndexPaintVertex::new([0f32, 0f32], 0));
         }
         let upload_buffer = gpu.push_slice(
             "index-paint-tris-upload",
@@ -712,6 +748,19 @@ impl TileSet {
         rpass.set_vertex_buffer(0, self.index_paint_vert_buffer.slice(..));
         rpass.draw(self.index_paint_range.clone(), 0..1);
         // rpass.draw(6..18, 0..1);
+    }
+
+    pub fn displace_height<'a>(
+        &'a self,
+        vertex_count: u32,
+        mesh_bind_group: &'a wgpu::BindGroup,
+        mut cpass: wgpu::ComputePass<'a>,
+    ) -> Fallible<wgpu::ComputePass<'a>> {
+        cpass.set_pipeline(&self.displace_height_pipeline);
+        cpass.set_bind_group(0, mesh_bind_group, &[]);
+        cpass.set_bind_group(1, &self.bind_group, &[]);
+        cpass.dispatch(vertex_count, 1, 1);
+        Ok(cpass)
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
