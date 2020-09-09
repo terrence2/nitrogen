@@ -16,11 +16,12 @@ use crate::{
     tile::{
         index_paint_vertex::IndexPaintVertex,
         quad_tree::{QuadTree, QuadTreeId},
+        tile_info::TileInfo,
         DataSetCoordinates, DataSetDataKind, TerrainLevel,
     },
     GpuDetail,
 };
-use absolute_unit::arcseconds;
+use absolute_unit::{arcseconds, ArcSeconds};
 use catalog::Catalog;
 use failure::{err_msg, Fallible};
 use geodesy::{GeoCenter, Graticule};
@@ -29,7 +30,7 @@ use image::{ImageBuffer, Rgb};
 use log::trace;
 use std::{
     collections::{BTreeMap, BinaryHeap},
-    fs,
+    fs, mem,
     num::NonZeroU32,
     ops::Range,
     sync::Arc,
@@ -104,6 +105,7 @@ pub(crate) struct TileSet {
     atlas_texture_view: wgpu::TextureView,
     #[allow(unused)]
     atlas_texture_sampler: wgpu::Sampler,
+    atlas_tile_info: Arc<Box<wgpu::Buffer>>,
 
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
@@ -182,24 +184,6 @@ impl TileSet {
         // used in the tile lookup without further effort. In combination, this lets us point the
         // full power of the texturing hardware at the problem, with very little extra overhead.
         let index_texture_format = wgpu::TextureFormat::R16Uint; // offset into atlas stack
-        println!(
-            "base: {} {}",
-            arcseconds!(TerrainLevel::base().latitude),
-            arcseconds!(TerrainLevel::base().longitude)
-        );
-        println!(
-            "index_base: {} {}",
-            arcseconds!(TerrainLevel::index_base().latitude),
-            arcseconds!(TerrainLevel::index_base().longitude)
-        );
-        println!("ang_ext: {}", TerrainLevel::base_angular_extent());
-
-        // FIXME: find a way to use a smaller texture.
-        // let index_texture_extent = wgpu::Extent3d {
-        //     width: TerrainLevel::base_scale().f64() as u32,
-        //     height: TerrainLevel::base_scale().f64() as u32,
-        //     depth: 1,
-        // };
         let index_texture_extent = wgpu::Extent3d {
             width: TerrainLevel::index_resolution().1,
             height: TerrainLevel::index_resolution().0,
@@ -212,7 +196,7 @@ impl TileSet {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: index_texture_format,
-            usage: wgpu::TextureUsage::all(),
+            usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::OUTPUT_ATTACHMENT,
         });
         let index_texture_view = index_texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some("terrain-index-texture-view"),
@@ -310,7 +294,7 @@ impl TileSet {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: atlas_texture_format,
-            usage: wgpu::TextureUsage::all(),
+            usage: wgpu::TextureUsage::COPY_DST | wgpu::TextureUsage::SAMPLED,
         });
         let atlas_texture_view = atlas_texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some("terrain-atlas-texture-view"),
@@ -335,6 +319,15 @@ impl TileSet {
             compare: None,
             anisotropy_clamp: None,
         });
+        let atlas_tile_info = Arc::new(Box::new(gpu.device().create_buffer(
+            &wgpu::BufferDescriptor {
+                label: Some("terrain-geo-tile-info-buffer"),
+                size: (mem::size_of::<TileInfo>() as u32 * gpu_detail.tile_cache_size)
+                    as wgpu::BufferAddress,
+                mapped_at_creation: false,
+                usage: wgpu::BufferUsage::all(),
+            },
+        )));
 
         let bind_group_layout =
             gpu.device()
@@ -444,6 +437,7 @@ impl TileSet {
             atlas_texture: Arc::new(Box::new(atlas_texture)),
             atlas_texture_view,
             atlas_texture_sampler,
+            atlas_tile_info,
 
             bind_group_layout,
             bind_group,
@@ -552,18 +546,35 @@ impl TileSet {
             // TODO: push this into the atlas and update the index
             trace!("uploading {:?} -> {}", qtid, atlas_slot);
 
-            let buffer = gpu.push_slice(
-                "terrain-geo-atlas-tile-upload-buffer",
+            let texture_buffer = gpu.push_slice(
+                "terrain-geo-atlas-tile-texture-upload-buffer",
                 &data,
                 wgpu::BufferUsage::COPY_SRC,
             );
             tracker.upload_to_texture(
-                buffer,
+                texture_buffer,
                 self.atlas_texture.clone(),
                 self.atlas_texture_extent,
                 self.atlas_texture_format,
                 atlas_slot as u32,
                 1,
+            );
+
+            let tile_base_grat = self.tile_tree.base(&qtid);
+            let tile_base = [
+                tile_base_grat.lat::<ArcSeconds>().f32(),
+                tile_base_grat.lon::<ArcSeconds>().f32(),
+            ];
+            let angular_extent = arcseconds!(self.tile_tree.angular_extent(&qtid)).f32();
+            let info_buffer = gpu.push_data(
+                "terrain-geo-atlas-tile-info-upload-buffer",
+                &TileInfo::new(tile_base, angular_extent),
+                wgpu::BufferUsage::COPY_SRC,
+            );
+            tracker.upload_to_array_element::<TileInfo>(
+                info_buffer,
+                self.atlas_tile_info.clone(),
+                atlas_slot,
             );
         }
 
