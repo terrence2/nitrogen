@@ -8,6 +8,7 @@ edition = "2018"
 failure = "^ 0.1.2"
 log = ">= 0.4"
 nalgebra = "^ 0.20"
+num = "^ 0.3"
 absolute_unit = { path = "../../sim/absolute_unit" }
 geometry = { path = "../../sim/geometry" }
 geodesy = { path = "../../sim/geodesy" }

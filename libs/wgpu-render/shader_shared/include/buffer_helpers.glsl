@@ -13,23 +13,18 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Name(String);
-
-impl From<String> for Name {
-    fn from(s: String) -> Self {
-        Self(s)
-    }
+vec2
+arr_to_vec2(float[2] arr) {
+    return vec2(arr[0], arr[1]);
 }
 
-impl From<&str> for Name {
-    fn from(s: &str) -> Self {
-        Self(s.to_owned())
-    }
+vec3
+arr_to_vec3(float[3] arr) {
+    return vec3(arr[0], arr[1], arr[2]);
 }
 
-impl Name {
-    pub fn new(s: &str) -> Self {
-        s.into()
-    }
+float[3]
+vec3_to_arr(vec3 v) {
+    return float[3](v.x, v.y, v.z);
 }
+

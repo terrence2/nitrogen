@@ -198,7 +198,9 @@ impl GPU {
         wgpu::RenderPassDepthStencilAttachmentDescriptor {
             attachment: &self.depth_texture,
             depth_ops: Some(wgpu::Operations {
-                load: wgpu::LoadOp::Clear(1f32),
+                // Note: clear to *behind* the plane so that our skybox raytrace pass can check
+                // for pixels that have not yet been set.
+                load: wgpu::LoadOp::Clear(-1f32),
                 store: true,
             }),
             stencil_ops: Some(wgpu::Operations {

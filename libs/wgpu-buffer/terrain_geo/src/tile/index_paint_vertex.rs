@@ -1,17 +1,17 @@
-// This file is part of OpenFA.
+// This file is part of Nitrogen.
 //
-// OpenFA is free software: you can redistribute it and/or modify
+// Nitrogen is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// OpenFA is distributed in the hope that it will be useful,
+// Nitrogen is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenFA.  If not, see <http://www.gnu.org/licenses/>.
+// along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use memoffset::offset_of;
 use std::mem;
 use zerocopy::{AsBytes, FromBytes};
@@ -20,16 +20,14 @@ use zerocopy::{AsBytes, FromBytes};
 #[derive(AsBytes, FromBytes, Copy, Clone, Default)]
 pub struct IndexPaintVertex {
     position: [f32; 2],
-    color: [u16; 2],
-    pad: [u16; 2],
+    slot: u32,
 }
 
 impl IndexPaintVertex {
-    pub fn new(position: [f32; 2], color: [u16; 2]) -> Self {
+    pub fn new(position: [f32; 2], slot: u16) -> Self {
         Self {
             position,
-            color,
-            pad: [0u16; 2],
+            slot: slot as u32,
         }
     }
 
@@ -51,7 +49,7 @@ impl IndexPaintVertex {
                 },
                 // color
                 wgpu::VertexAttributeDescriptor {
-                    format: wgpu::VertexFormat::Ushort2,
+                    format: wgpu::VertexFormat::Uint,
                     offset: 8,
                     shader_location: 1,
                 },
@@ -65,10 +63,10 @@ impl IndexPaintVertex {
 
         assert_eq!(
             tmp.attributes[1].offset,
-            offset_of!(IndexPaintVertex, color) as wgpu::BufferAddress
+            offset_of!(IndexPaintVertex, slot) as wgpu::BufferAddress
         );
 
-        assert_eq!(mem::size_of::<IndexPaintVertex>(), 16);
+        assert_eq!(mem::size_of::<IndexPaintVertex>(), 12);
 
         tmp
     }

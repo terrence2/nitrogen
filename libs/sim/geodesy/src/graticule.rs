@@ -119,7 +119,7 @@ impl<Unit: LengthUnit> From<Cartesian<GeoCenter, Unit>> for Graticule<GeoCenter>
         let y = f64::from(xyz.coords[1]);
         let z = f64::from(xyz.coords[2]);
         let distance = (x * x + y * y + z * z).sqrt();
-        let lon = (-x).atan2(z);
+        let lon = x.atan2(z);
         let lat = (y / distance).asin();
         Self::new(radians!(lat), radians!(lon), meters!(distance))
     }

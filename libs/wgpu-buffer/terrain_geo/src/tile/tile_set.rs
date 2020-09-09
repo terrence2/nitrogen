@@ -1,26 +1,27 @@
-// This file is part of OpenFA.
+// This file is part of Nitrogen.
 //
-// OpenFA is free software: you can redistribute it and/or modify
+// Nitrogen is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// OpenFA is distributed in the hope that it will be useful,
+// Nitrogen is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenFA.  If not, see <http://www.gnu.org/licenses/>.
+// along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     tile::{
         index_paint_vertex::IndexPaintVertex,
         quad_tree::{QuadTree, QuadTreeId},
+        tile_info::TileInfo,
         DataSetCoordinates, DataSetDataKind, TerrainLevel,
     },
     GpuDetail,
 };
-use absolute_unit::arcseconds;
+use absolute_unit::{arcseconds, ArcSeconds};
 use catalog::Catalog;
 use failure::{err_msg, Fallible};
 use geodesy::{GeoCenter, Graticule};
@@ -29,8 +30,8 @@ use image::{ImageBuffer, Rgb};
 use log::trace;
 use std::{
     collections::{BTreeMap, BinaryHeap},
-    fs,
-    num::NonZeroU32,
+    fs, mem,
+    num::{NonZeroU32, NonZeroU64},
     ops::Range,
     sync::Arc,
 };
@@ -104,9 +105,11 @@ pub(crate) struct TileSet {
     atlas_texture_view: wgpu::TextureView,
     #[allow(unused)]
     atlas_texture_sampler: wgpu::Sampler,
+    atlas_tile_info: Arc<Box<wgpu::Buffer>>,
 
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
+    displace_height_pipeline: wgpu::ComputePipeline,
 
     #[allow(unused)]
     kind: DataSetDataKind,
@@ -149,6 +152,7 @@ pub(crate) struct TileSet {
 
 impl TileSet {
     pub(crate) fn new(
+        displace_height_bind_group_layout: &wgpu::BindGroupLayout,
         catalog: &Catalog,
         index_json: json::JsonValue,
         gpu_detail: &GpuDetail,
@@ -180,24 +184,6 @@ impl TileSet {
         // used in the tile lookup without further effort. In combination, this lets us point the
         // full power of the texturing hardware at the problem, with very little extra overhead.
         let index_texture_format = wgpu::TextureFormat::R16Uint; // offset into atlas stack
-        println!(
-            "base: {} {}",
-            arcseconds!(TerrainLevel::base().latitude),
-            arcseconds!(TerrainLevel::base().longitude)
-        );
-        println!(
-            "index_base: {} {}",
-            arcseconds!(TerrainLevel::index_base().latitude),
-            arcseconds!(TerrainLevel::index_base().longitude)
-        );
-        println!("ang_ext: {}", TerrainLevel::base_angular_extent());
-
-        // FIXME: find a way to use a smaller texture.
-        // let index_texture_extent = wgpu::Extent3d {
-        //     width: TerrainLevel::base_scale().f64() as u32,
-        //     height: TerrainLevel::base_scale().f64() as u32,
-        //     depth: 1,
-        // };
         let index_texture_extent = wgpu::Extent3d {
             width: TerrainLevel::index_resolution().1,
             height: TerrainLevel::index_resolution().0,
@@ -210,7 +196,9 @@ impl TileSet {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: index_texture_format,
-            usage: wgpu::TextureUsage::all(),
+            usage: wgpu::TextureUsage::SAMPLED
+                | wgpu::TextureUsage::OUTPUT_ATTACHMENT
+                | wgpu::TextureUsage::COPY_SRC,
         });
         let index_texture_view = index_texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some("terrain-index-texture-view"),
@@ -308,7 +296,7 @@ impl TileSet {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: atlas_texture_format,
-            usage: wgpu::TextureUsage::all(),
+            usage: wgpu::TextureUsage::COPY_DST | wgpu::TextureUsage::SAMPLED,
         });
         let atlas_texture_view = atlas_texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some("terrain-atlas-texture-view"),
@@ -333,6 +321,16 @@ impl TileSet {
             compare: None,
             anisotropy_clamp: None,
         });
+        let atlas_tile_info_buffer_size =
+            (mem::size_of::<TileInfo>() as u32 * gpu_detail.tile_cache_size) as wgpu::BufferAddress;
+        let atlas_tile_info = Arc::new(Box::new(gpu.device().create_buffer(
+            &wgpu::BufferDescriptor {
+                label: Some("terrain-geo-tile-info-buffer"),
+                size: atlas_tile_info_buffer_size,
+                mapped_at_creation: false,
+                usage: wgpu::BufferUsage::all(),
+            },
+        )));
 
         let bind_group_layout =
             gpu.device()
@@ -342,7 +340,7 @@ impl TileSet {
                         // Index Texture
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
-                            visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStage::all(),
                             ty: wgpu::BindingType::SampledTexture {
                                 dimension: wgpu::TextureViewDimension::D2,
                                 component_type: wgpu::TextureComponentType::Uint,
@@ -352,14 +350,14 @@ impl TileSet {
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
-                            visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStage::all(),
                             ty: wgpu::BindingType::Sampler { comparison: false },
                             count: None,
                         },
                         // Atlas Textures, as referenced by the above index
                         wgpu::BindGroupLayoutEntry {
                             binding: 2,
-                            visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStage::all(),
                             ty: wgpu::BindingType::SampledTexture {
                                 dimension: wgpu::TextureViewDimension::D2Array,
                                 component_type: wgpu::TextureComponentType::Sint,
@@ -369,11 +367,44 @@ impl TileSet {
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 3,
-                            visibility: wgpu::ShaderStage::VERTEX | wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStage::all(),
                             ty: wgpu::BindingType::Sampler { comparison: false },
                             count: None,
                         },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 4,
+                            visibility: wgpu::ShaderStage::all(),
+                            ty: wgpu::BindingType::StorageBuffer {
+                                dynamic: false,
+                                readonly: true,
+                                min_binding_size: NonZeroU64::new(atlas_tile_info_buffer_size),
+                            },
+                            count: None,
+                        },
                     ],
+                });
+
+        let displace_spherical_height_shader = gpu.create_shader_module(include_bytes!(
+            "../../target/displace_spherical_height.comp.spirv"
+        ))?;
+        let displace_height_pipeline =
+            gpu.device()
+                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some("terrain-displace-height-pipeline"),
+                    layout: Some(&gpu.device().create_pipeline_layout(
+                        &wgpu::PipelineLayoutDescriptor {
+                            label: Some("terrain-displace-height-pipeline-layout"),
+                            push_constant_ranges: &[],
+                            bind_group_layouts: &[
+                                displace_height_bind_group_layout,
+                                &bind_group_layout,
+                            ],
+                        },
+                    )),
+                    compute_stage: wgpu::ProgrammableStageDescriptor {
+                        module: &displace_spherical_height_shader,
+                        entry_point: "main",
+                    },
                 });
 
         let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
@@ -398,6 +429,10 @@ impl TileSet {
                     binding: 3,
                     resource: wgpu::BindingResource::Sampler(&atlas_texture_sampler),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Buffer(atlas_tile_info.slice(..)),
+                },
             ],
         });
 
@@ -419,9 +454,11 @@ impl TileSet {
             atlas_texture: Arc::new(Box::new(atlas_texture)),
             atlas_texture_view,
             atlas_texture_sampler,
+            atlas_tile_info,
 
             bind_group_layout,
             bind_group,
+            displace_height_pipeline,
 
             kind,
             coordinates,
@@ -438,6 +475,16 @@ impl TileSet {
 
             take_index_snapshot: false,
         })
+    }
+
+    #[allow(unused)]
+    pub fn kind(&self) -> DataSetDataKind {
+        self.kind
+    }
+
+    #[allow(unused)]
+    pub fn coordinates(&self) -> DataSetCoordinates {
+        self.coordinates
     }
 
     pub fn begin_update(&mut self) {
@@ -513,21 +560,39 @@ impl TileSet {
             self.tile_read_count -= 1;
             self.tile_state.insert(qtid, TileState::Active(atlas_slot));
 
-            // TODO: push this into the atlas and update the index
+            // Push this tile into the atlas; the index gets re-painted every frame.
             trace!("uploading {:?} -> {}", qtid, atlas_slot);
 
-            let buffer = gpu.push_slice(
-                "terrain-geo-atlas-tile-upload-buffer",
+            let texture_buffer = gpu.push_slice(
+                "terrain-geo-atlas-tile-texture-upload-buffer",
                 &data,
                 wgpu::BufferUsage::COPY_SRC,
             );
             tracker.upload_to_texture(
-                buffer,
+                texture_buffer,
                 self.atlas_texture.clone(),
                 self.atlas_texture_extent,
                 self.atlas_texture_format,
                 atlas_slot as u32,
                 1,
+            );
+
+            let tile_base_grat = self.tile_tree.base(&qtid);
+            let tile_base = [
+                tile_base_grat.lat::<ArcSeconds>().f32(),
+                tile_base_grat.lon::<ArcSeconds>().f32(),
+            ];
+            let angular_extent = arcseconds!(self.tile_tree.angular_extent(&qtid)).f32();
+            let tile_info = TileInfo::new(tile_base, angular_extent, atlas_slot);
+            let info_buffer = gpu.push_data(
+                "terrain-geo-atlas-tile-info-upload-buffer",
+                &tile_info,
+                wgpu::BufferUsage::COPY_SRC,
+            );
+            tracker.upload_to_array_element::<TileInfo>(
+                info_buffer,
+                self.atlas_tile_info.clone(),
+                atlas_slot,
             );
         }
 
@@ -539,35 +604,34 @@ impl TileSet {
         let mut tris = Vec::new();
         // println!("START");
         for (qtid, tile_state) in self.tile_state.iter() {
-            // FIXME: where do we actually want these?
             if let TileState::Active(slot) = tile_state {
                 // Project the tile base and angular extent into the index.
                 // Note that the base may be outside the index extents.
                 let tile_base = self.tile_tree.base(qtid);
                 let ang_extent = self.tile_tree.angular_extent(qtid);
 
-                let lat0 = arcseconds!(tile_base.latitude);
+                let lat0 = -arcseconds!(tile_base.latitude);
                 let lon0 = arcseconds!(tile_base.longitude);
-                let lat1 = arcseconds!(tile_base.latitude + ang_extent);
+                let lat1 = -arcseconds!(tile_base.latitude + ang_extent);
                 let lon1 = arcseconds!(tile_base.longitude + ang_extent);
                 let t0 = (lat0 / iextent_lat).f32();
                 let s0 = (lon0 / iextent_lon).f32();
                 let t1 = (lat1 / iextent_lat).f32();
                 let s1 = (lon1 / iextent_lon).f32();
-                let c = [*slot as u16, 0];
+                let c = *slot as u16;
 
                 // FIXME 1: this could easily be indexed, saving us a bunch of bandwidth.
                 // FIXME 2: we could upload these vertices as shorts, saving some more bandwidth.
                 tris.push(IndexPaintVertex::new([s0, t0], c));
-                tris.push(IndexPaintVertex::new([s1, t0], c));
                 tris.push(IndexPaintVertex::new([s0, t1], c));
                 tris.push(IndexPaintVertex::new([s1, t0], c));
+                tris.push(IndexPaintVertex::new([s1, t0], c));
+                tris.push(IndexPaintVertex::new([s0, t1], c));
                 tris.push(IndexPaintVertex::new([s1, t1], c));
-                tris.push(IndexPaintVertex::new([s0, t1], c));
             }
         }
         while tris.len() < self.index_paint_range.end as usize {
-            tris.push(IndexPaintVertex::new([0f32, 0f32], [0, 0]));
+            tris.push(IndexPaintVertex::new([0f32, 0f32], 0));
         }
         let upload_buffer = gpu.push_slice(
             "index-paint-tris-upload",
@@ -711,7 +775,19 @@ impl TileSet {
         rpass.set_pipeline(&self.index_paint_pipeline);
         rpass.set_vertex_buffer(0, self.index_paint_vert_buffer.slice(..));
         rpass.draw(self.index_paint_range.clone(), 0..1);
-        // rpass.draw(6..18, 0..1);
+    }
+
+    pub fn displace_height<'a>(
+        &'a self,
+        vertex_count: u32,
+        mesh_bind_group: &'a wgpu::BindGroup,
+        mut cpass: wgpu::ComputePass<'a>,
+    ) -> Fallible<wgpu::ComputePass<'a>> {
+        cpass.set_pipeline(&self.displace_height_pipeline);
+        cpass.set_bind_group(0, mesh_bind_group, &[]);
+        cpass.set_bind_group(1, &self.bind_group, &[]);
+        cpass.dispatch(vertex_count, 1, 1);
+        Ok(cpass)
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {

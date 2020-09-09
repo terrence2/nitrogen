@@ -1,17 +1,17 @@
-// This file is part of OpenFA.
+// This file is part of Nitrogen.
 //
-// OpenFA is free software: you can redistribute it and/or modify
+// Nitrogen is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// OpenFA is distributed in the hope that it will be useful,
+// Nitrogen is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with OpenFA.  If not, see <http://www.gnu.org/licenses/>.
+// along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 
 // Data Sets:
 //   NASA's Shuttle Radar Topography Map (SRTM); height data
@@ -59,14 +59,25 @@ pub(crate) struct TileManager {
 }
 
 impl TileManager {
-    pub(crate) fn new(catalog: &Catalog, gpu_detail: &GpuDetail, gpu: &mut GPU) -> Fallible<Self> {
+    pub(crate) fn new(
+        displace_height_bind_group_layout: &wgpu::BindGroupLayout,
+        catalog: &Catalog,
+        gpu_detail: &GpuDetail,
+        gpu: &mut GPU,
+    ) -> Fallible<Self> {
         let mut tile_sets = Vec::new();
 
         // Scan catalog for all tile sets.
         for index_fid in catalog.find_matching("*-index.json")? {
             let index_data = from_utf8_string(catalog.read_sync(index_fid)?)?;
             let index_json = json::parse(&index_data)?;
-            tile_sets.push(TileSet::new(catalog, index_json, gpu_detail, gpu)?);
+            tile_sets.push(TileSet::new(
+                displace_height_bind_group_layout,
+                catalog,
+                index_json,
+                gpu_detail,
+                gpu,
+            )?);
         }
 
         Ok(Self { tile_sets })
@@ -109,28 +120,23 @@ impl TileManager {
         encoder
     }
 
+    pub fn displace_height<'a>(
+        &'a self,
+        vertex_count: u32,
+        mesh_bind_group: &'a wgpu::BindGroup,
+        mut cpass: wgpu::ComputePass<'a>,
+    ) -> Fallible<wgpu::ComputePass<'a>> {
+        for ts in self.tile_sets.iter() {
+            cpass = ts.displace_height(vertex_count, mesh_bind_group, cpass)?;
+        }
+        Ok(cpass)
+    }
+
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         self.tile_sets[0].bind_group_layout()
     }
 
     pub fn bind_group(&self) -> &wgpu::BindGroup {
         self.tile_sets[0].bind_group()
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use crate::GpuDetailLevel;
-    use input::InputSystem;
-
-    #[test]
-    fn test_tile_manager() -> Fallible<()> {
-        let catalog = Catalog::empty();
-        let input = InputSystem::new(vec![])?;
-        let mut gpu = GPU::new(&input, Default::default())?;
-        let _tm = TileManager::new(&catalog, &GpuDetailLevel::Low.parameters(), &mut gpu)?;
-        gpu.device().poll(wgpu::Maintain::Wait);
-        Ok(())
     }
 }

@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use std::sync::Arc;
+use std::{mem, sync::Arc};
 
 #[derive(Debug)]
 pub struct CopyBufferToTextureDescriptor {
@@ -67,6 +67,22 @@ impl CopyBufferToBufferDescriptor {
             copy_size,
         }
     }
+
+    pub fn new_raw(
+        source: wgpu::Buffer,
+        source_offset: wgpu::BufferAddress,
+        destination: Arc<Box<wgpu::Buffer>>,
+        destination_offset: wgpu::BufferAddress,
+        copy_size: wgpu::BufferAddress,
+    ) -> Self {
+        Self {
+            source,
+            source_offset,
+            destination,
+            destination_offset,
+            copy_size,
+        }
+    }
 }
 
 // Note: still quite limited; just precompute without dependencies.
@@ -113,6 +129,21 @@ impl UploadTracker {
         ));
     }
 
+    pub fn upload_to_array_element<T: Sized>(
+        &mut self,
+        source: wgpu::Buffer,
+        target_array: Arc<Box<wgpu::Buffer>>,
+        array_offset: usize,
+    ) {
+        self.b2b_uploads.push(CopyBufferToBufferDescriptor::new_raw(
+            source,
+            0,
+            target_array,
+            (mem::size_of::<T>() * array_offset) as wgpu::BufferAddress,
+            mem::size_of::<T>() as wgpu::BufferAddress,
+        ));
+    }
+
     pub fn upload_to_texture(
         &mut self,
         source: wgpu::Buffer,
@@ -143,7 +174,7 @@ impl UploadTracker {
             );
         }
 
-        for (i, desc) in self.b2t_uploads.drain(..).enumerate() {
+        for desc in self.b2t_uploads.drain(..) {
             assert_eq!(desc.target_extent.width * desc.target_element_size % 256, 0);
             encoder.copy_buffer_to_texture(
                 wgpu::BufferCopyView {
@@ -169,10 +200,6 @@ impl UploadTracker {
                     depth: desc.array_layer_count,
                 },
             );
-
-            if i == 1 {
-                break;
-            }
         }
     }
 }

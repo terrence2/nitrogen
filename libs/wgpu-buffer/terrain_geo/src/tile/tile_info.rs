@@ -12,24 +12,23 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use zerocopy::{AsBytes, FromBytes};
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Name(String);
-
-impl From<String> for Name {
-    fn from(s: String) -> Self {
-        Self(s)
-    }
+// We allocate a block of these GPU side to tell us what projection to use for each tile.
+#[repr(C)]
+#[derive(AsBytes, FromBytes, Copy, Clone, Default, Debug)]
+pub struct TileInfo {
+    tile_base_as: [f32; 2],
+    tile_angular_extent_as: f32,
+    atlas_slot: f32,
 }
 
-impl From<&str> for Name {
-    fn from(s: &str) -> Self {
-        Self(s.to_owned())
-    }
-}
-
-impl Name {
-    pub fn new(s: &str) -> Self {
-        s.into()
+impl TileInfo {
+    pub fn new(tile_base_as: [f32; 2], tile_angular_extent_as: f32, slot: usize) -> Self {
+        Self {
+            tile_base_as,
+            tile_angular_extent_as,
+            atlas_slot: slot as f32,
+        }
     }
 }
