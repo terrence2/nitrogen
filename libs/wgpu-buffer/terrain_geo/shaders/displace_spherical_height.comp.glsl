@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with OpenFA.  If not, see <http://www.gnu.org/licenses/>.
 #version 450
+#include <wgpu-render/shader_shared/include/buffer_helpers.glsl>
 #include <wgpu-buffer/terrain_geo/include/terrain_geo.glsl>
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
@@ -30,16 +31,11 @@ main()
     // One invocation per vertex.
     uint i = gl_GlobalInvocationID.x;
 
-    vec2 graticule_rad = vec2(vertices[i].graticule[0], vertices[i].graticule[1]);
-    uint atlas_slot = terrain_geo_atlas_slot_for_graticule(graticule_rad, index_texture, index_sampler);
-    int height = terrain_geo_height_in_tile(graticule_rad, tile_info[atlas_slot], atlas_texture, atlas_sampler);
+    vec2 v_graticule = arr_to_vec2(vertices[i].graticule);
+    uint atlas_slot = terrain_geo_atlas_slot_for_graticule(v_graticule, index_texture, index_sampler);
+    int height = terrain_geo_height_in_tile(v_graticule, tile_info[atlas_slot], atlas_texture, atlas_sampler);
 
-    vec3 planet_norm = vec3(vertices[i].normal[0], vertices[i].normal[1], vertices[i].normal[2]);
-    vec3 surface_pos = vec3(vertices[i].position[0], vertices[i].position[1], vertices[i].position[2]);
-
-    vec3 displaced_pos = surface_pos + (float(height) * 100 * planet_norm);
-
-    vertices[i].position[0] = displaced_pos.x;
-    vertices[i].position[1] = displaced_pos.y;
-    vertices[i].position[2] = displaced_pos.z;
+    vec3 v_normal = arr_to_vec3(vertices[i].normal);
+    vec3 v_position = arr_to_vec3(vertices[i].position);
+    vertices[i].position = vec3_to_arr(v_position + (float(height) * 100 * v_normal));
 }
