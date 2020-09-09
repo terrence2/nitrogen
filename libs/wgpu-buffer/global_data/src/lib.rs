@@ -112,7 +112,7 @@ impl Globals {
             &-camera.up(),
         );
         self.geocenter_km_inverse_view = m2v(&convert(view.inverse().to_homogeneous()));
-        self.geocenter_km_inverse_proj = m2v(&convert(camera.inverse_projection::<Kilometers>()));
+        self.geocenter_km_inverse_proj = m2v(&convert(camera.projection::<Kilometers>().inverse()));
         self.geocenter_km_camera_position = geocenter_cart_to_v(camera.position::<Kilometers>());
         self
     }
