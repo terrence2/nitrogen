@@ -775,7 +775,6 @@ impl TileSet {
         rpass.set_pipeline(&self.index_paint_pipeline);
         rpass.set_vertex_buffer(0, self.index_paint_vert_buffer.slice(..));
         rpass.draw(self.index_paint_range.clone(), 0..1);
-        // rpass.draw(6..18, 0..1);
     }
 
     pub fn displace_height<'a>(
