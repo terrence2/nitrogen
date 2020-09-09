@@ -15,7 +15,7 @@
 use absolute_unit::{radians, Angle, AngleUnit, Kilometers, Length, LengthUnit, Meters, Radians};
 use geodesy::{Cartesian, GeoCenter};
 use geometry::Plane;
-use nalgebra::{Isometry3, Perspective3, Point3, Vector3};
+use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, Vector3};
 
 #[derive(Debug)]
 pub struct Camera {
@@ -104,12 +104,37 @@ impl Camera {
     }
 
     pub fn projection<T: LengthUnit>(&self) -> Perspective3<f64> {
+        // Perspective3::new(
+        //     1f64 / self.aspect_ratio,
+        //     self.fov_y.into(),
+        //     Length::<T>::from(&self.z_near).into(),
+        //     Length::<T>::from(&self.z_far).into(),
+        // )
+        /*
+        float f = 1.0f / tan(fovY_radians / 2.0f);
+        return glm::mat4(
+            f / aspectWbyH, 0.0f,  0.0f,  0.0f,
+            0.0f,    f,  0.0f,  0.0f,
+            0.0f, 0.0f,  0.0f, -1.0f,
+            0.0f, 0.0f, zNear,  0.0f);
+         */
+        let mut matrix: Matrix4<f64> = num::Zero::zero();
+        let f = 1.0 / (self.fov_y.f64() / 2.0).tan();
+        matrix[(0, 0)] = f / self.aspect_ratio;
+        matrix[(1, 1)] = f;
+        matrix[(3, 2)] = -1.0;
+        matrix[(2, 3)] = Length::<T>::from(&self.z_near).into();
+        Perspective3::from_matrix_unchecked(matrix)
+    }
+
+    pub fn inverse_projection<T: LengthUnit>(&self) -> Matrix4<f64> {
         Perspective3::new(
             1f64 / self.aspect_ratio,
             self.fov_y.into(),
             Length::<T>::from(&self.z_near).into(),
             Length::<T>::from(&self.z_far).into(),
         )
+        .inverse()
     }
 
     pub fn view<T: LengthUnit>(&self) -> Isometry3<f64> {

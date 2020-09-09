@@ -198,7 +198,7 @@ impl GPU {
         wgpu::RenderPassDepthStencilAttachmentDescriptor {
             attachment: &self.depth_texture,
             depth_ops: Some(wgpu::Operations {
-                load: wgpu::LoadOp::Clear(1f32),
+                load: wgpu::LoadOp::Clear(0f32),
                 store: true,
             }),
             stencil_ops: Some(wgpu::Operations {

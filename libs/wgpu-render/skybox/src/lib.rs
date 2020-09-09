@@ -89,7 +89,7 @@ impl SkyboxRenderPass {
                 depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
                     format: GPU::DEPTH_FORMAT,
                     depth_write_enabled: false,
-                    depth_compare: wgpu::CompareFunction::Less,
+                    depth_compare: wgpu::CompareFunction::Greater,
                     stencil: wgpu::StencilStateDescriptor {
                         front: wgpu::StencilStateFaceDescriptor::IGNORE,
                         back: wgpu::StencilStateFaceDescriptor::IGNORE,
