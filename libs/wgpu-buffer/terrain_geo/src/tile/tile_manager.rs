@@ -140,20 +140,3 @@ impl TileManager {
         self.tile_sets[0].bind_group()
     }
 }
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use crate::GpuDetailLevel;
-    use input::InputSystem;
-
-    #[test]
-    fn test_tile_manager() -> Fallible<()> {
-        let catalog = Catalog::empty();
-        let input = InputSystem::new(vec![])?;
-        let mut gpu = GPU::new(&input, Default::default())?;
-        let _tm = TileManager::new(&catalog, &GpuDetailLevel::Low.parameters(), &mut gpu)?;
-        gpu.device().poll(wgpu::Maintain::Wait);
-        Ok(())
-    }
-}
