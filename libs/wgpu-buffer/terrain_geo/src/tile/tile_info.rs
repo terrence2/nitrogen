@@ -16,19 +16,19 @@ use zerocopy::{AsBytes, FromBytes};
 
 // We allocate a block of these GPU side to tell us what projection to use for each tile.
 #[repr(C)]
-#[derive(AsBytes, FromBytes, Copy, Clone, Default)]
+#[derive(AsBytes, FromBytes, Copy, Clone, Default, Debug)]
 pub struct TileInfo {
-    base: [f32; 2],
-    angular_extent: f32,
-    _pad: u32,
+    tile_base_as: [f32; 2],
+    tile_angular_extent_as: f32,
+    atlas_slot: f32,
 }
 
 impl TileInfo {
-    pub fn new(base: [f32; 2], angular_extent: f32) -> Self {
+    pub fn new(tile_base_as: [f32; 2], tile_angular_extent_as: f32, slot: usize) -> Self {
         Self {
-            base,
-            angular_extent,
-            _pad: 0,
+            tile_base_as,
+            tile_angular_extent_as,
+            atlas_slot: slot as f32,
         }
     }
 }

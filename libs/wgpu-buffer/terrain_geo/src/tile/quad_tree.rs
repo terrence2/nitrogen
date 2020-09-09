@@ -31,7 +31,7 @@ impl QuadTreeId {
         Self { id: id as u32 }
     }
 
-    fn offset(&self) -> usize {
+    pub(crate) fn offset(&self) -> usize {
         self.id as usize
     }
 }

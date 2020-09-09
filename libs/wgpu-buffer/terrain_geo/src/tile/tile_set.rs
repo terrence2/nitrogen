@@ -31,7 +31,7 @@ use log::trace;
 use std::{
     collections::{BTreeMap, BinaryHeap},
     fs, mem,
-    num::NonZeroU32,
+    num::{NonZeroU32, NonZeroU64},
     ops::Range,
     sync::Arc,
 };
@@ -196,7 +196,9 @@ impl TileSet {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: index_texture_format,
-            usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::OUTPUT_ATTACHMENT,
+            usage: wgpu::TextureUsage::SAMPLED
+                | wgpu::TextureUsage::OUTPUT_ATTACHMENT
+                | wgpu::TextureUsage::COPY_SRC,
         });
         let index_texture_view = index_texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some("terrain-index-texture-view"),
@@ -319,11 +321,12 @@ impl TileSet {
             compare: None,
             anisotropy_clamp: None,
         });
+        let atlas_tile_info_buffer_size =
+            (mem::size_of::<TileInfo>() as u32 * gpu_detail.tile_cache_size) as wgpu::BufferAddress;
         let atlas_tile_info = Arc::new(Box::new(gpu.device().create_buffer(
             &wgpu::BufferDescriptor {
                 label: Some("terrain-geo-tile-info-buffer"),
-                size: (mem::size_of::<TileInfo>() as u32 * gpu_detail.tile_cache_size)
-                    as wgpu::BufferAddress,
+                size: atlas_tile_info_buffer_size,
                 mapped_at_creation: false,
                 usage: wgpu::BufferUsage::all(),
             },
@@ -366,6 +369,16 @@ impl TileSet {
                             binding: 3,
                             visibility: wgpu::ShaderStage::all(),
                             ty: wgpu::BindingType::Sampler { comparison: false },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 4,
+                            visibility: wgpu::ShaderStage::all(),
+                            ty: wgpu::BindingType::StorageBuffer {
+                                dynamic: false,
+                                readonly: true,
+                                min_binding_size: NonZeroU64::new(atlas_tile_info_buffer_size),
+                            },
                             count: None,
                         },
                     ],
@@ -415,6 +428,10 @@ impl TileSet {
                 wgpu::BindGroupEntry {
                     binding: 3,
                     resource: wgpu::BindingResource::Sampler(&atlas_texture_sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Buffer(atlas_tile_info.slice(..)),
                 },
             ],
         });
@@ -543,7 +560,7 @@ impl TileSet {
             self.tile_read_count -= 1;
             self.tile_state.insert(qtid, TileState::Active(atlas_slot));
 
-            // TODO: push this into the atlas and update the index
+            // Push this tile into the atlas; the index gets re-painted every frame.
             trace!("uploading {:?} -> {}", qtid, atlas_slot);
 
             let texture_buffer = gpu.push_slice(
@@ -566,9 +583,10 @@ impl TileSet {
                 tile_base_grat.lon::<ArcSeconds>().f32(),
             ];
             let angular_extent = arcseconds!(self.tile_tree.angular_extent(&qtid)).f32();
+            let tile_info = TileInfo::new(tile_base, angular_extent, atlas_slot);
             let info_buffer = gpu.push_data(
                 "terrain-geo-atlas-tile-info-upload-buffer",
-                &TileInfo::new(tile_base, angular_extent),
+                &tile_info,
                 wgpu::BufferUsage::COPY_SRC,
             );
             tracker.upload_to_array_element::<TileInfo>(
@@ -586,16 +604,15 @@ impl TileSet {
         let mut tris = Vec::new();
         // println!("START");
         for (qtid, tile_state) in self.tile_state.iter() {
-            // FIXME: where do we actually want these?
             if let TileState::Active(slot) = tile_state {
                 // Project the tile base and angular extent into the index.
                 // Note that the base may be outside the index extents.
                 let tile_base = self.tile_tree.base(qtid);
                 let ang_extent = self.tile_tree.angular_extent(qtid);
 
-                let lat0 = arcseconds!(tile_base.latitude);
+                let lat0 = -arcseconds!(tile_base.latitude);
                 let lon0 = arcseconds!(tile_base.longitude);
-                let lat1 = arcseconds!(tile_base.latitude + ang_extent);
+                let lat1 = -arcseconds!(tile_base.latitude + ang_extent);
                 let lon1 = arcseconds!(tile_base.longitude + ang_extent);
                 let t0 = (lat0 / iextent_lat).f32();
                 let s0 = (lon0 / iextent_lon).f32();
@@ -606,11 +623,11 @@ impl TileSet {
                 // FIXME 1: this could easily be indexed, saving us a bunch of bandwidth.
                 // FIXME 2: we could upload these vertices as shorts, saving some more bandwidth.
                 tris.push(IndexPaintVertex::new([s0, t0], c));
-                tris.push(IndexPaintVertex::new([s1, t0], c));
                 tris.push(IndexPaintVertex::new([s0, t1], c));
                 tris.push(IndexPaintVertex::new([s1, t0], c));
+                tris.push(IndexPaintVertex::new([s1, t0], c));
+                tris.push(IndexPaintVertex::new([s0, t1], c));
                 tris.push(IndexPaintVertex::new([s1, t1], c));
-                tris.push(IndexPaintVertex::new([s0, t1], c));
             }
         }
         while tris.len() < self.index_paint_range.end as usize {

@@ -596,18 +596,24 @@ impl TerrainGeoBuffer {
             if offset >= self.desired_patch_count {
                 continue;
             }
+
+            // Points in geocenter KM f64 for precision reasons.
             let [pw0, pw1, pw2] = patch.points();
+
+            // Move normals into view space, still in KM f64.
             let nv0 = view.to_homogeneous() * pw0.coords.normalize().to_homogeneous();
             let nv1 = view.to_homogeneous() * pw1.coords.normalize().to_homogeneous();
             let nv2 = view.to_homogeneous() * pw2.coords.normalize().to_homogeneous();
 
-            // project patch verts from global coordinates into view space.
+            // Move verts from global coordinates into view space, still in KM f64.
             let vv0 = scale * view.to_homogeneous() * pw0.to_homogeneous();
             let vv1 = scale * view.to_homogeneous() * pw1.to_homogeneous();
             let vv2 = scale * view.to_homogeneous() * pw2.to_homogeneous();
             let pv0 = Point3::from(vv0.xyz());
             let pv1 = Point3::from(vv1.xyz());
             let pv2 = Point3::from(vv2.xyz());
+
+            // Convert from geocenter f64 kilometers into graticules.
             let cart0 = Cartesian::<GeoCenter, Kilometers>::from(pw0.coords);
             let cart1 = Cartesian::<GeoCenter, Kilometers>::from(pw1.coords);
             let cart2 = Cartesian::<GeoCenter, Kilometers>::from(pw2.coords);
@@ -615,6 +621,8 @@ impl TerrainGeoBuffer {
             let g1 = Graticule::<GeoCenter>::from(cart1);
             let g2 = Graticule::<GeoCenter>::from(cart2);
 
+            // Use the patch vertices to sample the tile tree, re-using the existing visibility and
+            // solid-angle calculations to avoid having to re-do them for the patch tree as well.
             self.tile_manager.note_required(&g0);
             self.tile_manager.note_required(&g1);
             self.tile_manager.note_required(&g2);
