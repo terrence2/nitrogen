@@ -17,3 +17,12 @@ mod tile;
 
 pub use index::{Index as MipIndex, IndexDataSet as MipIndexDataSet};
 pub use tile::Tile as MipTile;
+
+use absolute_unit::{Angle, ArcSeconds};
+use geodesy::{GeoCenter, Graticule};
+
+#[derive(Copy, Clone, Debug)]
+pub struct Region {
+    pub base: Graticule<GeoCenter>,
+    pub extent: Angle<ArcSeconds>,
+}

@@ -34,6 +34,7 @@ use std::{
     num::{NonZeroU32, NonZeroU64},
     ops::Range,
     sync::Arc,
+    time::Instant,
 };
 use tokio::{
     runtime::Runtime,
@@ -172,7 +173,15 @@ impl TileSet {
                 .ok_or_else(|| err_msg("no coordinates listed in index"))?,
         )?;
 
+        let qt_start = Instant::now();
         let tile_tree = QuadTree::from_catalog(&prefix, catalog)?;
+        let qt_time = qt_start.elapsed();
+        println!(
+            "QuadTree::from_catalog timing: {}.{}ms",
+            qt_time.as_secs() * 1000 + u64::from(qt_time.subsec_millis()),
+            qt_time.subsec_micros()
+        );
+        panic!("stop here");
 
         // The index texture is just a more or less normal texture. The longitude in spherical
         // coordinates maps to `s` and the latitude maps to `t` (with some important finagling).
@@ -608,7 +617,7 @@ impl TileSet {
                 // Project the tile base and angular extent into the index.
                 // Note that the base may be outside the index extents.
                 let tile_base = self.tile_tree.base(qtid);
-                let ang_extent = self.tile_tree.angular_extent(qtid);
+                let ang_extent = arcseconds!(self.tile_tree.angular_extent(qtid));
 
                 let lat0 = -arcseconds!(tile_base.latitude);
                 let lon0 = arcseconds!(tile_base.longitude);

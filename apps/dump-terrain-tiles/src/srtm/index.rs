@@ -12,7 +12,8 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::srtm::tile::Tile;
+use crate::{mip::Region, srtm::tile::Tile};
+use absolute_unit::{degrees, Degrees};
 use failure::Fallible;
 use geodesy::{GeoCenter, Graticule};
 use std::{
@@ -20,6 +21,7 @@ use std::{
     fs::File,
     io::Read,
     path::{Path, PathBuf},
+    sync::{Arc, RwLock},
 };
 
 pub struct Index {
@@ -29,7 +31,7 @@ pub struct Index {
 }
 
 impl Index {
-    pub fn from_directory(directory: &Path) -> Fallible<Self> {
+    pub fn from_directory(directory: &Path) -> Fallible<Arc<RwLock<Self>>> {
         let mut index_filename = PathBuf::from(directory);
         index_filename.push("srtm30m_bounding_boxes.json");
 
@@ -56,10 +58,29 @@ impl Index {
         }
 
         println!("loaded: {} tiles", tiles.len());
-        Ok(Self {
+        Ok(Arc::new(RwLock::new(Self {
             tiles,
             by_graticule,
-        })
+        })))
+    }
+
+    /// Check if this tile-set has any tiles that overlap with the given region.
+    pub fn contains_region(&self, region: Region) -> bool {
+        // Figure out what integer latitudes lie on or in the region.
+        let lo_lat = region.base.lat::<Degrees>().floor() as i16;
+        let hi_lat = degrees!(region.base.latitude + region.extent).floor() as i16;
+        let lo_lon = region.base.lon::<Degrees>().floor() as i16;
+        let hi_lon = degrees!(region.base.longitude + region.extent).floor() as i16;
+        for lat in lo_lat..=hi_lat {
+            if let Some(by_lon) = self.by_graticule.get(&lat) {
+                for lon in lo_lon..=hi_lon {
+                    if let Some(_) = by_lon.get(&lon) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
     }
 
     #[allow(unused)]
@@ -74,24 +95,11 @@ impl Index {
         0f32
     }
 
-    #[allow(unused)]
     pub fn sample_nearest(&self, grat: &Graticule<GeoCenter>) -> i16 {
         let lat = Tile::index(grat.lat());
         let lon = Tile::index(grat.lon());
         if let Some(row) = self.by_graticule.get(&lat) {
             if let Some(&tile_id) = row.get(&lon) {
-                // use absolute_unit::Degrees;
-                // println!(
-                //     "ISN: {}x{} => {}x{} => {}x{} => {} => {}",
-                //     grat.lat::<Degrees>(),
-                //     grat.lon::<Degrees>(),
-                //     lat,
-                //     lon,
-                //     self.tiles[tile_id].latitude(),
-                //     self.tiles[tile_id].longitude(),
-                //     tile_id,
-                //     self.tiles[tile_id].sample_nearest(grat)
-                // );
                 return self.tiles[tile_id].sample_nearest(grat);
             }
         }

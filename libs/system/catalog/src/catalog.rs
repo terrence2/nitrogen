@@ -58,6 +58,7 @@ pub struct Catalog {
 // allowing for multiple sets of unrelated data. This is useful for testing multiple
 // file-sets at once, e.g. in a multi-game situation.
 impl Catalog {
+    /// Create and return a new empty catalog.
     pub fn empty() -> Self {
         let shelf_id = ShelfId(0);
         let mut shelf_index = HashMap::new();
@@ -72,6 +73,7 @@ impl Catalog {
         }
     }
 
+    /// Create a new catalog with the given drawers.
     pub fn with_drawers(mut drawers: Vec<Box<dyn DrawerInterface>>) -> Fallible<Self> {
         let mut catalog = Self::empty();
         for drawer in drawers.drain(..) {
@@ -80,10 +82,12 @@ impl Catalog {
         Ok(catalog)
     }
 
+    /// Add a drawer full of files to the catalog.
     pub fn add_drawer(&mut self, drawer: Box<dyn DrawerInterface>) -> Fallible<()> {
         self.add_labeled_drawer(&self.default_label.clone(), drawer)
     }
 
+    /// Get the label of a given file by id.
     pub fn file_label(&self, fid: FileId) -> Fallible<String> {
         for (name, &sid) in &self.shelf_index {
             if fid.shelf_id == sid {
@@ -93,38 +97,53 @@ impl Catalog {
         bail!("unknown shelf")
     }
 
+    /// Check if the given name exists in the catalog.
     pub fn exists(&self, name: &str) -> bool {
         self.exists_labeled(&self.default_label, name)
     }
 
+    /// Get the file id of the given name.
     pub fn lookup(&self, name: &str) -> Option<FileId> {
         self.lookup_labeled(&self.default_label, name)
     }
 
-    pub fn find_matching(&self, glob: &str) -> Fallible<SmallVec<[FileId; 4]>> {
-        self.find_labeled_matching(&self.default_label, glob)
+    /// Find all files that match the given glob. If with_extension is provided, the name must also
+    /// have the given extension. This can greatly improve the speed of matching, if the extension
+    /// is known up front.
+    pub fn find_matching(
+        &self,
+        glob: &str,
+        with_extension: Option<&str>,
+    ) -> Fallible<SmallVec<[FileId; 4]>> {
+        self.find_labeled_matching(&self.default_label, glob, with_extension)
     }
 
+    // TODO: replace uses and remove.
     pub fn find_matching_names(&self, glob: &str) -> Fallible<Vec<String>> {
         self.find_labeled_matching_names(&self.default_label, glob)
     }
 
+    /// Get metadata about the given file by id.
     pub fn stat_sync(&self, fid: FileId) -> Fallible<FileMetadata> {
         self.shelves[&fid.shelf_id].stat_sync(fid)
     }
 
+    /// Read the given file id and return the contents. Blocks until complete.
     pub fn read_sync(&self, fid: FileId) -> Fallible<Cow<[u8]>> {
         self.shelves[&fid.shelf_id].read_sync(fid)
     }
 
+    /// Read the given file id and return a Future with the contents.
     pub async fn read(&self, fid: FileId) -> Fallible<Vec<u8>> {
         Ok(self.shelves[&fid.shelf_id].read(fid).await?)
     }
 
+    /// Get metadata about the given file by name.
     pub fn stat_name_sync(&self, name: &str) -> Fallible<FileMetadata> {
         self.stat_labeled_name_sync(&self.default_label, name)
     }
 
+    /// Read the given file name and return the contents. Blocks until complete.
     pub fn read_name_sync(&self, name: &str) -> Fallible<Cow<[u8]>> {
         self.read_labeled_name_sync(&self.default_label, name)
     }
@@ -151,8 +170,9 @@ impl Catalog {
         &self,
         label: &str,
         glob: &str,
+        with_extension: Option<&str>,
     ) -> Fallible<SmallVec<[FileId; 4]>> {
-        self.shelves[&self.shelf_index[label]].find_matching(glob)
+        self.shelves[&self.shelf_index[label]].find_matching(glob, with_extension)
     }
 
     pub fn exists_labeled(&self, label: &str, name: &str) -> bool {
@@ -251,7 +271,11 @@ impl Shelf {
         Ok(())
     }
 
-    pub fn find_matching(&self, glob: &str) -> Fallible<SmallVec<[FileId; 4]>> {
+    pub fn find_matching(
+        &self,
+        glob: &str,
+        with_extension: Option<&str>,
+    ) -> Fallible<SmallVec<[FileId; 4]>> {
         let mut matching = SmallVec::new();
         let opts = MatchOptions {
             case_sensitive: false,
@@ -259,9 +283,17 @@ impl Shelf {
             require_literal_separator: true,
         };
         let pattern = Pattern::new(glob)?;
-        for (key, fid) in self.index.iter() {
-            if pattern.matches_with(key, opts) {
-                matching.push(*fid);
+        if let Some(ext) = with_extension {
+            for (key, fid) in self.index.iter() {
+                if key.ends_with(ext) && pattern.matches_with(key, opts) {
+                    matching.push(*fid);
+                }
+            }
+        } else {
+            for (key, fid) in self.index.iter() {
+                if pattern.matches_with(key, opts) {
+                    matching.push(*fid);
+                }
             }
         }
         Ok(matching)

@@ -10,6 +10,7 @@ image = "^ 0.23"
 json = "^ 0.12"
 memmap = "^ 0.7"
 nalgebra = "^ 0.20"
+rayon = "= 1.4.0"
 structopt = "^ 0.3"
 zerocopy = "^ 0.2"
 absolute_unit = { path = "../../libs/sim/absolute_unit" }

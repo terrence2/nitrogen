@@ -49,7 +49,7 @@ use catalog::{from_utf8_string, Catalog};
 use failure::Fallible;
 use geodesy::{GeoCenter, Graticule};
 use gpu::{UploadTracker, GPU};
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 use tokio::{runtime::Runtime, sync::RwLock};
 
 // A collection of TileSet, potentially more than one per kind.
@@ -68,7 +68,7 @@ impl TileManager {
         let mut tile_sets = Vec::new();
 
         // Scan catalog for all tile sets.
-        for index_fid in catalog.find_matching("*-index.json")? {
+        for index_fid in catalog.find_matching("*-index.json", Some("json"))? {
             let index_data = from_utf8_string(catalog.read_sync(index_fid)?)?;
             let index_json = json::parse(&index_data)?;
             tile_sets.push(TileSet::new(
