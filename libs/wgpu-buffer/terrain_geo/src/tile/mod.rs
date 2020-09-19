@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 mod index_paint_vertex;
+mod layer_pack;
 mod quad_tree;
 mod tile_info;
 mod tile_manager;
