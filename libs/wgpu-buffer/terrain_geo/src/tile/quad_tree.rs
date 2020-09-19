@@ -13,12 +13,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::tile::{ChildIndex, TerrainLevel};
-use absolute_unit::{meters, Angle, ArcSeconds};
+use absolute_unit::{arcseconds, meters, Angle, ArcSeconds};
 use catalog::{Catalog, FileId};
 use failure::Fallible;
 use geodesy::{GeoCenter, Graticule};
 use log::trace;
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Write};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub(crate) struct QuadTreeId {
@@ -37,8 +37,9 @@ impl QuadTreeId {
 }
 
 struct QuadTreeNode {
-    angular_extent: Angle<ArcSeconds>,
-    base: Graticule<GeoCenter>,
+    extent_as: i32,
+    base_lat_as: i32,
+    base_lon_as: i32,
     file_id: FileId,
     children: [Option<QuadTreeId>; 4],
 }
@@ -81,57 +82,130 @@ impl QuadTree {
     pub(crate) fn from_catalog(prefix: &str, catalog: &Catalog) -> Fallible<Self> {
         let mut obj = Self {
             root: QuadTreeId::new(0),
-            nodes: Vec::new(),
+            nodes: Vec::with_capacity(2_000_000),
             votes: HashMap::new(),
             additions: Vec::new(),
             generation: 0,
         };
+        let extent_as = arcseconds!(TerrainLevel::base_angular_extent()).f64() as i32;
+        let base_lat_as = TerrainLevel::base().lat::<ArcSeconds>().f64() as i32;
+        let base_lon_as = TerrainLevel::base().lon::<ArcSeconds>().f64() as i32;
+        let mut scratch_filename = String::with_capacity(1_024);
         let root = obj.link_node(
             prefix,
             TerrainLevel::new(0),
-            &TerrainLevel::base(),
-            TerrainLevel::base_angular_extent(),
+            base_lat_as,
+            base_lon_as,
+            extent_as,
             catalog,
+            &mut scratch_filename,
         );
         trace!("loaded quad-tree with {} nodes", obj.nodes.len());
         assert!(root.is_none() || root.unwrap().offset() == 0);
         Ok(obj)
     }
 
+    fn split_hms(v: i32) -> (i32, i32, i32) {
+        let d = v / 3_600;
+        let m = v / 60 - d * 60;
+        let s = v - d * 3_600 - m * 60;
+        (d, m, s)
+    }
+
+    fn write_latitude(mut lat: i32, out: &mut String) -> Fallible<()> {
+        let lat_hemi = if lat >= 0 {
+            "N"
+        } else {
+            lat = -lat;
+            "S"
+        };
+        let (d, m, s) = Self::split_hms(lat);
+        Ok(write!(out, "{}{:03}d{:02}m{:02}s", lat_hemi, d, m, s)?)
+    }
+
+    fn write_longitude(mut lon: i32, out: &mut String) -> Fallible<()> {
+        let lon_hemi = if lon >= 0 {
+            "E"
+        } else {
+            lon = -lon;
+            "W"
+        };
+        let (d, m, s) = Self::split_hms(lon);
+        Ok(write!(out, "{}{:03}d{:02}m{:02}s", lon_hemi, d, m, s)?)
+    }
+
     pub(crate) fn link_node(
         &mut self,
         prefix: &str,
         level: TerrainLevel,
-        base: &Graticule<GeoCenter>,
-        angular_extent: Angle<ArcSeconds>,
+        base_lat_as: i32,
+        base_lon_as: i32,
+        extent_as: i32,
         catalog: &Catalog,
+        filename: &mut String,
     ) -> Option<QuadTreeId> {
-        let filename = format!(
-            "{}-L{}-{}-{}.bin",
-            prefix,
-            level.offset(),
-            base.latitude.format_latitude(),
-            base.longitude.format_longitude(),
-        );
+        // Note: this is a bit weird, but avoids the allocation.
+        filename.clear();
+        write!(filename, "{}-L{}-", prefix, level.offset()).unwrap();
+        Self::write_latitude(base_lat_as, filename).unwrap();
+        write!(filename, "-").unwrap();
+        Self::write_longitude(base_lon_as, filename).unwrap();
+        write!(filename, ".bin").unwrap();
+
         if let Some(file_id) = catalog.lookup(&filename) {
             let child_offset = TerrainLevel::new(level.offset() + 1);
-            let ang = angular_extent / 2.0;
-            let h = meters!(0);
-            let se_base = Graticule::new(base.latitude, base.longitude + ang, h);
-            let nw_base = Graticule::new(base.latitude + ang, base.longitude, h);
-            let ne_base = Graticule::new(base.latitude + ang, base.longitude + ang, h);
+            let ang = extent_as / 2;
             let qid = QuadTreeId::new(self.nodes.len());
             self.nodes.push(QuadTreeNode {
-                angular_extent,
-                base: *base,
+                extent_as,
+                base_lat_as,
+                base_lon_as,
                 file_id,
                 children: [None; 4],
             });
-            let sw_node = self.link_node(prefix, child_offset, base, ang, catalog);
-            let se_node = self.link_node(prefix, child_offset, &se_base, ang, catalog);
-            let nw_node = self.link_node(prefix, child_offset, &nw_base, ang, catalog);
-            let ne_node = self.link_node(prefix, child_offset, &ne_base, ang, catalog);
-            self.nodes[qid.offset()].children = [sw_node, se_node, nw_node, ne_node];
+            if child_offset.offset() <= TerrainLevel::arcsecond_level() {
+                let sw_base = (base_lat_as, base_lon_as);
+                let se_base = (base_lat_as, base_lon_as + ang);
+                let nw_base = (base_lat_as + ang, base_lon_as);
+                let ne_base = (base_lat_as + ang, base_lon_as + ang);
+                let sw_node = self.link_node(
+                    prefix,
+                    child_offset,
+                    sw_base.0,
+                    sw_base.1,
+                    ang,
+                    catalog,
+                    filename,
+                );
+                let se_node = self.link_node(
+                    prefix,
+                    child_offset,
+                    se_base.0,
+                    se_base.1,
+                    ang,
+                    catalog,
+                    filename,
+                );
+                let nw_node = self.link_node(
+                    prefix,
+                    child_offset,
+                    nw_base.0,
+                    nw_base.1,
+                    ang,
+                    catalog,
+                    filename,
+                );
+                let ne_node = self.link_node(
+                    prefix,
+                    child_offset,
+                    ne_base.0,
+                    ne_base.1,
+                    ang,
+                    catalog,
+                    filename,
+                );
+                self.nodes[qid.offset()].children = [sw_node, se_node, nw_node, ne_node];
+            }
             return Some(qid);
         }
         None
@@ -141,12 +215,15 @@ impl QuadTree {
         self.nodes[id.offset()].file_id
     }
 
-    pub(crate) fn base(&self, id: &QuadTreeId) -> Graticule<GeoCenter> {
-        self.nodes[id.offset()].base
+    pub(crate) fn base(&self, id: &QuadTreeId) -> (i32, i32) {
+        (
+            self.nodes[id.offset()].base_lat_as,
+            self.nodes[id.offset()].base_lon_as,
+        )
     }
 
-    pub(crate) fn angular_extent(&self, id: &QuadTreeId) -> Angle<ArcSeconds> {
-        self.nodes[id.offset()].angular_extent
+    pub(crate) fn angular_extent(&self, id: &QuadTreeId) -> i32 {
+        self.nodes[id.offset()].extent_as
     }
 
     pub(crate) fn begin_update(&mut self) {
@@ -159,13 +236,15 @@ impl QuadTree {
     }
 
     fn visit_required_node(&mut self, node_id: QuadTreeId, grat: &Graticule<GeoCenter>) {
+        let lat = grat.lat::<ArcSeconds>().f64() as i32;
+        let lon = grat.lon::<ArcSeconds>().f64() as i32;
         {
             // Ensure that the graticule is actually in this patch.
             let node = &self.nodes[node_id.offset()];
-            assert!(grat.latitude >= node.base.latitude);
-            assert!(grat.latitude <= node.base.latitude + node.angular_extent);
-            assert!(grat.longitude >= node.base.longitude);
-            assert!(grat.longitude <= node.base.longitude + node.angular_extent);
+            assert!(lat >= node.base_lat_as);
+            assert!(lat <= node.base_lat_as + node.extent_as);
+            assert!(lon >= node.base_lon_as);
+            assert!(lon <= node.base_lon_as + node.extent_as);
         }
 
         // Ensure we have a votes structure, potentially noting the addition of a node.
@@ -198,8 +277,8 @@ impl QuadTree {
 
         // Our assertion in the head that we are inside the patch simplifies our check here.
         let node = &self.nodes[node_id.offset()];
-        let is_northern = grat.latitude > node.base.latitude + (node.angular_extent / 2.0);
-        let is_eastern = grat.longitude > node.base.longitude + (node.angular_extent / 2.0);
+        let is_northern = lat > node.base_lat_as + (node.extent_as / 2);
+        let is_eastern = lon > node.base_lon_as + (node.extent_as / 2);
         let child_index = match (is_northern, is_eastern) {
             (true, true) => ChildIndex::NorthEast,
             (true, false) => ChildIndex::NorthWest,

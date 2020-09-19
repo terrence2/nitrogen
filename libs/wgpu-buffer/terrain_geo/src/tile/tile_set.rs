@@ -15,6 +15,7 @@
 use crate::{
     tile::{
         index_paint_vertex::IndexPaintVertex,
+        layer_pack::LayerPack,
         quad_tree::{QuadTree, QuadTreeId},
         tile_info::TileInfo,
         DataSetCoordinates, DataSetDataKind, TerrainLevel,
@@ -173,6 +174,12 @@ impl TileSet {
                 .ok_or_else(|| err_msg("no coordinates listed in index"))?,
         )?;
 
+        // Find all layers in this set.
+        let layer_glob = format!("{}-L??.mip", prefix);
+        for layer_fid in catalog.find_matching(&layer_glob, Some("mip"))? {
+            let pack = LayerPack::new(layer_fid, catalog);
+        }
+
         let qt_start = Instant::now();
         let tile_tree = QuadTree::from_catalog(&prefix, catalog)?;
         let qt_time = qt_start.elapsed();
@@ -181,7 +188,7 @@ impl TileSet {
             qt_time.as_secs() * 1000 + u64::from(qt_time.subsec_millis()),
             qt_time.subsec_micros()
         );
-        panic!("stop here");
+        //panic!("stop here");
 
         // The index texture is just a more or less normal texture. The longitude in spherical
         // coordinates maps to `s` and the latitude maps to `t` (with some important finagling).
@@ -586,11 +593,8 @@ impl TileSet {
                 1,
             );
 
-            let tile_base_grat = self.tile_tree.base(&qtid);
-            let tile_base = [
-                tile_base_grat.lat::<ArcSeconds>().f32(),
-                tile_base_grat.lon::<ArcSeconds>().f32(),
-            ];
+            let (tile_base_lat_as, tile_base_lon_as) = self.tile_tree.base(&qtid);
+            let tile_base = [tile_base_lat_as as f32, tile_base_lon_as as f32];
             let angular_extent = arcseconds!(self.tile_tree.angular_extent(&qtid)).f32();
             let tile_info = TileInfo::new(tile_base, angular_extent, atlas_slot);
             let info_buffer = gpu.push_data(
@@ -608,25 +612,25 @@ impl TileSet {
         // Use the list of allocated tiles to generate a vertex buffer to upload.
         // FIXME: don't re-allocate every frame
         let index_ang_extent = TerrainLevel::index_extent();
-        let iextent_lat = index_ang_extent.0.f64() / 2.; // range from [-1,1]
-        let iextent_lon = index_ang_extent.1.f64() / 2.;
+        let iextent_lat = index_ang_extent.0.f32() / 2.; // range from [-1,1]
+        let iextent_lon = index_ang_extent.1.f32() / 2.;
         let mut tris = Vec::new();
         // println!("START");
         for (qtid, tile_state) in self.tile_state.iter() {
             if let TileState::Active(slot) = tile_state {
                 // Project the tile base and angular extent into the index.
                 // Note that the base may be outside the index extents.
-                let tile_base = self.tile_tree.base(qtid);
-                let ang_extent = arcseconds!(self.tile_tree.angular_extent(qtid));
+                let (tile_base_lat_as, tile_base_lon_as) = self.tile_tree.base(qtid);
+                let ang_extent_as = self.tile_tree.angular_extent(qtid);
 
-                let lat0 = -arcseconds!(tile_base.latitude);
-                let lon0 = arcseconds!(tile_base.longitude);
-                let lat1 = -arcseconds!(tile_base.latitude + ang_extent);
-                let lon1 = arcseconds!(tile_base.longitude + ang_extent);
-                let t0 = (lat0 / iextent_lat).f32();
-                let s0 = (lon0 / iextent_lon).f32();
-                let t1 = (lat1 / iextent_lat).f32();
-                let s1 = (lon1 / iextent_lon).f32();
+                let lat0 = -tile_base_lat_as as f32;
+                let lon0 = tile_base_lon_as as f32;
+                let lat1 = -(tile_base_lat_as + ang_extent_as) as f32;
+                let lon1 = (tile_base_lon_as + ang_extent_as) as f32;
+                let t0 = lat0 / iextent_lat;
+                let s0 = lon0 / iextent_lon;
+                let t1 = lat1 / iextent_lat;
+                let s1 = lon1 / iextent_lon;
                 let c = *slot as u16;
 
                 // FIXME 1: this could easily be indexed, saving us a bunch of bandwidth.

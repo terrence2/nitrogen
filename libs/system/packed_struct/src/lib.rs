@@ -48,10 +48,12 @@ macro_rules! packed_struct {
                 $crate::_make_packed_struct_accessor!($field, $field_name, $field_ty, $($field_name_ty),*);
             )+
 
+            #[allow(unused)]
             pub fn overlay(buf: &[u8]) -> &$name {
                 $crate::LayoutVerified::<&[u8], $name>::new(buf).unwrap().into_ref()
             }
 
+            #[allow(unused)]
             pub fn overlay_slice(buf: &[u8]) -> &[$name] {
                 $crate::LayoutVerified::<&[u8], [$name]>::new_slice(buf).unwrap().into_slice()
             }
