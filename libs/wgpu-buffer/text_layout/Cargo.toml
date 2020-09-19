@@ -10,7 +10,7 @@ log = "^ 0.4"
 image = "^ 0.21"
 memoffset = "^ 0.5"
 wgpu = "^ 0.6"
-zerocopy = "^ 0.2"
+zerocopy = "^ 0.3"
 command = { path = "../../system/command" }
 commandable = { path = "../../system/commandable" }
 font_common = { path = "../../wgpu-buffer/font_common" }

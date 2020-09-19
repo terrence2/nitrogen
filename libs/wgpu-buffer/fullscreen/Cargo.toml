@@ -6,9 +6,9 @@ edition = "2018"
 
 [dependencies]
 failure = "^ 0.1.2"
-zerocopy = "^ 0.2"
-wgpu = "^ 0.6"
 log = "^ 0.4"
+wgpu = "^ 0.6"
+zerocopy = "^ 0.3"
 camera = { path = "../../sim/camera" }
 command = { path = "../../system/command" }
 commandable = { path = "../../system/commandable" }

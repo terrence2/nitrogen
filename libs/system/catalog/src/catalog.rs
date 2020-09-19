@@ -16,7 +16,7 @@ use crate::{DrawerFileId, DrawerInterface, FileMetadata};
 use failure::{bail, ensure, Fallible};
 use glob::{MatchOptions, Pattern};
 use smallvec::SmallVec;
-use std::{borrow::Cow, collections::HashMap};
+use std::{borrow::Cow, collections::HashMap, ops::Range};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 struct DrawerId(u16);
@@ -133,9 +133,19 @@ impl Catalog {
         self.shelves[&fid.shelf_id].read_sync(fid)
     }
 
+    /// Read the given file id and return the contents. Blocks until complete.
+    pub fn read_slice_sync(&self, fid: FileId, extent: Range<usize>) -> Fallible<Cow<[u8]>> {
+        self.shelves[&fid.shelf_id].read_slice_sync(fid, extent)
+    }
+
     /// Read the given file id and return a Future with the contents.
     pub async fn read(&self, fid: FileId) -> Fallible<Vec<u8>> {
         Ok(self.shelves[&fid.shelf_id].read(fid).await?)
+    }
+
+    /// Read the given file id and return a Future with the given slice from that file.
+    pub async fn read_slice(&self, fid: FileId, extent: Range<usize>) -> Fallible<Vec<u8>> {
+        Ok(self.shelves[&fid.shelf_id].read_slice(fid, extent).await?)
     }
 
     /// Get metadata about the given file by name.
@@ -329,9 +339,19 @@ impl Shelf {
         Ok(self.drawers[&fid.drawer_id].read_sync(fid.drawer_file_id)?)
     }
 
+    pub fn read_slice_sync(&self, fid: FileId, extent: Range<usize>) -> Fallible<Cow<[u8]>> {
+        Ok(self.drawers[&fid.drawer_id].read_slice_sync(fid.drawer_file_id, extent)?)
+    }
+
     pub async fn read(&self, fid: FileId) -> Fallible<Vec<u8>> {
         Ok(self.drawers[&fid.drawer_id]
             .read(fid.drawer_file_id)
+            .await?)
+    }
+
+    pub async fn read_slice(&self, fid: FileId, extent: Range<usize>) -> Fallible<Vec<u8>> {
+        Ok(self.drawers[&fid.drawer_id]
+            .read_slice(fid.drawer_file_id, extent)
             .await?)
     }
 

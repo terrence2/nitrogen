@@ -10,7 +10,7 @@ futures = "^ 0.3"
 legion = "= 0.2.4"
 log = "^ 0.4"
 raw-window-handle = "0.1"
-zerocopy = "^ 0.2"
+zerocopy = "^ 0.3"
 wgpu = "^ 0.6"
 #winit = "0.20.0-alpha3"
 winit = { git = "https://github.com/rust-windowing/winit", rev = "6f5e7e170cd7bd9be1bb302dd91ebd906d29cfe1" }
