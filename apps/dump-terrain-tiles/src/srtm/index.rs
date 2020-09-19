@@ -57,7 +57,7 @@ impl Index {
                 .insert(lon, i);
         }
 
-        println!("loaded: {} tiles", tiles.len());
+        println!("Mapped {} SRTM tiles", tiles.len());
         Ok(Arc::new(RwLock::new(Self {
             tiles,
             by_graticule,

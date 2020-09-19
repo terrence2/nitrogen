@@ -25,8 +25,8 @@ use geodesy::{GeoCenter, Graticule};
 use rayon::prelude::*;
 use std::{
     fs,
-    io::stdout,
-    path::PathBuf,
+    io::{stdout, Write},
+    path::{Path, PathBuf},
     sync::{Arc, RwLock},
 };
 use structopt::StructOpt;
@@ -47,6 +47,10 @@ struct Opt {
     /// The directory to save work to.
     #[structopt(short, long)]
     output_directory: PathBuf,
+
+    /// Dump equalized PNGs of created tiles.
+    #[structopt(short, long)]
+    dump_png: bool,
 }
 
 #[inline]
@@ -69,39 +73,37 @@ pub fn maximum_latitude() -> Angle<Radians> {
     radians!(degrees!(90))
 }
 
-fn collect_base_tiles(
+fn build_trees(
     current_level: usize,
     srtm_index: Arc<RwLock<SrtmIndex>>,
-    index: Arc<RwLock<MipIndexDataSet>>,
-    node: Arc<RwLock<MipTile>>,
-    visit_count: &mut usize,
-    mmap_count: &mut usize,
-    base_tiles: &mut Vec<(Arc<RwLock<MipTile>>, usize)>,
+    height_index: Arc<RwLock<MipIndexDataSet>>,
+    height_node: Arc<RwLock<MipTile>>,
+    node_count: &mut usize,
+    leaf_count: &mut usize,
 ) -> Fallible<()> {
     if current_level < TerrainLevel::arcsecond_level() {
-        // Add any missing children.
         {
             let srtm = srtm_index.read().unwrap();
-            let mut node = node.write().unwrap();
+            let mut height_node = height_node.write().unwrap();
             let next_level = TerrainLevel::new(current_level + 1);
             for &child_index in &ChildIndex::all() {
-                if !node.has_child(child_index) {
-                    if srtm.contains_region(node.child_region(child_index)) {
-                        node.add_child(next_level, child_index);
+                if !height_node.has_child(child_index) {
+                    if srtm.contains_region(height_node.child_region(child_index)) {
+                        *node_count += 1;
+                        height_node.add_child(next_level, child_index);
                     }
                 }
             }
         }
-        for maybe_child in node.read().unwrap().maybe_children() {
+        for maybe_child in height_node.read().unwrap().maybe_children() {
             if let Some(child) = maybe_child {
-                collect_base_tiles(
+                build_trees(
                     current_level + 1,
                     srtm_index.clone(),
-                    index.clone(),
+                    height_index.clone(),
                     child.to_owned(),
-                    visit_count,
-                    mmap_count,
-                    base_tiles,
+                    node_count,
+                    leaf_count,
                 )?;
             }
         }
@@ -109,15 +111,7 @@ fn collect_base_tiles(
     }
     assert_eq!(current_level, TerrainLevel::arcsecond_level());
 
-    if node
-        .write()
-        .unwrap()
-        .maybe_map_data(index.read().unwrap().base_path())?
-    {
-        *mmap_count += 1;
-    }
-    base_tiles.push((node, *visit_count));
-    *visit_count += 1;
+    *leaf_count += 1;
     Ok(())
 }
 
@@ -152,7 +146,8 @@ pub fn generate_mip_tile_from_srtm(
     srtm_index: Arc<RwLock<SrtmIndex>>,
     index: Arc<RwLock<MipIndexDataSet>>,
     node: Arc<RwLock<MipTile>>,
-    visit_count: usize,
+    offset: usize,
+    dump_png: bool,
 ) -> Fallible<()> {
     // Assume that tiles we've already created are good.
     if node
@@ -168,16 +163,10 @@ pub fn generate_mip_tile_from_srtm(
     assert_eq!((-1..TILE_SAMPLES + 1).count(), TILE_PHYSICAL_SIZE);
     let level = node.read().unwrap().level();
     let scale = level.as_scale();
-    let extent = level.angular_extent();
     let base = *node.read().unwrap().base_corner_graticule();
 
     let srtm = srtm_index.read().unwrap();
-    println!(
-        "visit: level {} @ {} - {}",
-        level.offset(),
-        base,
-        visit_count
-    );
+    println!("visit: level {} @ {} - {}", level.offset(), base, offset);
     for lat_i in -1..TILE_SAMPLES + 1 {
         // 'actual' unfolds infinitely
         // 'srtm' is clamped or wrapped as appropriate to srtm extents
@@ -212,10 +201,11 @@ pub fn generate_mip_tile_from_srtm(
                 .set_sample(lat_i as i32 + 1, lon_i as i32 + 1, height);
         }
     }
-    // println!();
-    // node.read()
-    //     .unwrap()
-    //     .save_equalized_png(std::path::Path::new("scanout"))?;
+    if dump_png {
+        node.read()
+            .unwrap()
+            .save_equalized_png(std::path::Path::new("scanout"))?;
+    }
     node.write()
         .unwrap()
         .write(index.read().unwrap().base_path())?;
@@ -227,6 +217,7 @@ pub fn generate_mip_tile_from_mip(
     index: Arc<RwLock<MipIndexDataSet>>,
     node: Arc<RwLock<MipTile>>,
     offset: usize,
+    dump_png: bool,
 ) -> Fallible<()> {
     // Assume that tiles we've already created are good.
     if node
@@ -240,53 +231,25 @@ pub fn generate_mip_tile_from_mip(
 
     node.write().unwrap().allocate_scratch_data();
 
-    assert_eq!((-1..TILE_SAMPLES + 1).count(), TILE_PHYSICAL_SIZE);
-    let level = node.read().unwrap().level();
-    let scale = level.as_scale();
-    let extent = level.angular_extent();
-    let base = *node.read().unwrap().base_corner_graticule();
-
-    if offset % 1000 == 0 {
+    if offset % 100 == 0 {
         print!(".");
+        stdout().flush()?;
     }
     //println!("visit: level {} @ {} - {}", level.offset(), base, offset);
     for lat_i in -1..TILE_SAMPLES + 1 {
         // 'actual' unfolds infinitely
         // 'srtm' is clamped or wrapped as appropriate to srtm extents
-
-        let lat_actual = degrees!(base.latitude + (scale * lat_i));
-        let lat_srtm = radians!(if lat_actual > degrees!(90) {
-            degrees!(90)
-        } else if lat_actual < degrees!(-90) {
-            degrees!(-90)
-        } else {
-            lat_actual
-        });
-
         for lon_i in -1..TILE_SAMPLES + 1 {
-            let lon_actual = degrees!(base.longitude + (scale * lon_i));
-            let mut lon_srtm = lon_actual;
-            while lon_srtm < degrees!(-180) {
-                lon_srtm += degrees!(360);
-            }
-            while lon_srtm > degrees!(180) {
-                lon_srtm -= degrees!(360);
-            }
-
-            let real_grat = Graticule::<GeoCenter>::new(
-                arcseconds!(lat_srtm),
-                arcseconds!(lon_srtm),
-                meters!(0),
-            );
             let mut tile = node.write().unwrap();
-            let sample = tile.pull_sample(lat_i as i32 + 1, lon_i as i32 + 1, real_grat);
+            let sample = tile.pull_sample(lat_i as i32 + 1, lon_i as i32 + 1);
             tile.set_sample(lat_i as i32 + 1, lon_i as i32 + 1, sample as i16);
         }
     }
-    // println!();
-    // node.read()
-    //     .unwrap()
-    //     .save_equalized_png(std::path::Path::new("scanout"))?;
+    if dump_png {
+        node.read()
+            .unwrap()
+            .save_equalized_png(std::path::Path::new("scanout"))?;
+    }
     node.write()
         .unwrap()
         .write(index.read().unwrap().base_path())?;
@@ -302,12 +265,51 @@ pub fn generate_mip_tile_from_mip(
     Ok(())
 }
 
+fn map_all_available_tile(
+    tiles: &mut Vec<(Arc<RwLock<MipTile>>, usize)>,
+    base_path: &Path,
+) -> Fallible<usize> {
+    let mmap_count = Arc::new(RwLock::new(0usize));
+    tiles
+        .par_iter_mut()
+        .try_for_each::<_, Fallible<()>>(|(tile, _offset)| {
+            if tile.write().unwrap().maybe_map_data(base_path).unwrap() {
+                *mmap_count.write().unwrap() += 1;
+            }
+            Ok(())
+        })?;
+    println!(
+        "  Mmapped {} existing tiles in {:?}",
+        mmap_count.read().unwrap(),
+        base_path
+    );
+    let cnt = *mmap_count.read().unwrap();
+    Ok(cnt)
+}
+
+const EXPECT_LAYER_COUNTS: [(usize, usize); 13] = [
+    (1, 1),
+    (4, 4),
+    (8, 8),
+    (12, 12),
+    (39, 39),
+    (131, 124),
+    (362, 342),
+    (1_144, 1_048),
+    (3_718, 3_350),
+    (13_258, 11_607),
+    (48_817, 41_859),
+    (186_811, 157_455),
+    (730_452, 608_337),
+];
+
 fn main() -> Fallible<()> {
     let opt = Opt::from_args();
 
     fs::create_dir_all(&opt.output_directory)?;
 
     let srtm = SrtmIndex::from_directory(&opt.srtm_directory)?;
+    assert_eq!((-1..TILE_SAMPLES + 1).count(), TILE_PHYSICAL_SIZE);
 
     let mut mip_index = MipIndex::empty(&opt.output_directory);
     let mip_srtm_heights = mip_index.add_data_set(
@@ -315,77 +317,78 @@ fn main() -> Fallible<()> {
         DataSetDataKind::Height,
         DataSetCoordinates::Spherical,
     )?;
-    let root = mip_srtm_heights.write().unwrap().get_root_tile();
-    let mut visit_count = 0usize;
-    let mut mmap_count = 0usize;
-    let mut base_tiles = Vec::new();
-    collect_base_tiles(
+    let _mip_srtm_normals = mip_index.add_data_set(
+        "srtmn",
+        DataSetDataKind::Normal,
+        DataSetCoordinates::Spherical,
+    )?;
+    let height_root = mip_srtm_heights.write().unwrap().get_root_tile();
+    let mut node_count = 0usize;
+    let mut leaf_count = 0usize;
+    build_trees(
         0,
         srtm.clone(),
         mip_srtm_heights.clone(),
-        root.clone(),
-        &mut visit_count,
-        &mut mmap_count,
-        &mut base_tiles,
+        height_root.clone(),
+        &mut node_count,
+        &mut leaf_count,
     )?;
-    println!(
-        "Collected {} tiles to build from srtm data; {}; {}",
-        base_tiles.len(),
-        visit_count,
-        mmap_count
-    );
-
     // Subdividing the 1 degree tiles results in 730,452 509" tiles. Some of these on the edges
     // are over water and thus have no height values. This reduces the count to 608,337 tiles
     // that will be mmapped as part of the base layer.
-    assert_eq!(visit_count, 730_452);
-    if mmap_count < 608_337 {
-        base_tiles.par_iter().try_for_each(|(node, visit_count)| {
-            generate_mip_tile_from_srtm(
-                srtm.clone(),
-                mip_srtm_heights.clone(),
-                node.to_owned(),
-                *visit_count,
-            )
-        })?;
-    } else {
-        base_tiles.par_iter().for_each(|(node, visit_count)| {
-            node.write().unwrap().promote_absent_to_empty();
-        });
-    }
+    assert_eq!(node_count, 984_756);
+    assert_eq!(leaf_count, 730_452);
+    println!("Built tree with {} nodes", node_count);
 
-    for target_level in (0..=11).rev() {
-        let mut level_tiles = Vec::new();
+    // Generate each level from the bottom up, mipmapping as we go.
+    for target_level in (0..=TerrainLevel::arcsecond_level()).rev() {
+        println!("Level {}:", target_level);
+        let mut height_tiles = Vec::new();
         let mut offset = 0;
-        let root = mip_srtm_heights.write().unwrap().get_root_tile();
-        collect_tiles_at_level(target_level, 0, root, &mut offset, &mut level_tiles)?;
+        let height_root = mip_srtm_heights.write().unwrap().get_root_tile();
+        collect_tiles_at_level(target_level, 0, height_root, &mut offset, &mut height_tiles)?;
         println!(
-            "Collected {} tiles to build at level {}",
-            level_tiles.len(),
+            "  Collected {} tiles to build at level {}",
+            height_tiles.len(),
             target_level
         );
-        level_tiles
-            .par_iter_mut()
-            .try_for_each::<_, Fallible<()>>(|(tile, offset)| {
-                if tile
-                    .write()
-                    .unwrap()
-                    .maybe_map_data(mip_srtm_heights.read().unwrap().base_path())
-                    .unwrap()
-                {
-                    // pass
-                }
-                Ok(())
-            })?;
-        level_tiles.par_iter().try_for_each(|(tile, offset)| {
-            generate_mip_tile_from_mip(mip_srtm_heights.clone(), tile.to_owned(), *offset)
-        })?;
-        println!();
+        assert_eq!(height_tiles.len(), EXPECT_LAYER_COUNTS[target_level].0);
+        let mmap_count = map_all_available_tile(
+            &mut height_tiles,
+            mip_srtm_heights.read().unwrap().base_path(),
+        )?;
+        if mmap_count < EXPECT_LAYER_COUNTS[target_level].1 {
+            println!("  Generating tiles");
+            if target_level == TerrainLevel::arcsecond_level() {
+                height_tiles.par_iter().try_for_each(|(node, offset)| {
+                    generate_mip_tile_from_srtm(
+                        srtm.clone(),
+                        mip_srtm_heights.clone(),
+                        node.to_owned(),
+                        *offset,
+                        opt.dump_png,
+                    )
+                })?;
+            } else {
+                height_tiles.par_iter().try_for_each(|(tile, offset)| {
+                    generate_mip_tile_from_mip(
+                        mip_srtm_heights.clone(),
+                        tile.to_owned(),
+                        *offset,
+                        opt.dump_png,
+                    )
+                })?;
+            }
+            println!();
+        } else {
+            println!("  Found all tiles on disk - promoting absent to empty");
+            height_tiles.par_iter().for_each(|(node, _offset)| {
+                node.write().unwrap().promote_absent_to_empty();
+            });
+        }
     }
 
-    // for i in (0..TerrainLevel::arcsecond_level()).rev() {
-    //     process_srtm_at_level(i, 0, &srtm, mip_srtm_heights.clone(), root.clone())?;
-    // }
+    // Write out our top level index of the data.
     mip_srtm_heights.read().unwrap().write()?;
 
     Ok(())

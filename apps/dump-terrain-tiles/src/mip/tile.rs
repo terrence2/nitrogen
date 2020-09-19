@@ -256,12 +256,7 @@ impl Tile {
     }
 
     // Fill in a sample by linearly interpolating the data from our child's samples.
-    pub fn pull_sample(
-        &mut self,
-        lat_offset: i32,
-        lon_offset: i32,
-        grat: Graticule<GeoCenter>,
-    ) -> i16 {
+    pub fn pull_sample(&mut self, lat_offset: i32, lon_offset: i32) -> i16 {
         assert!(self.data.is_inline());
         assert!(lat_offset >= 0);
         assert!(lon_offset >= 0);
