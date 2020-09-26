@@ -228,6 +228,10 @@ impl QuadTree {
         self.nodes[id.offset()].base
     }
 
+    pub(crate) fn level(&self, id: &QuadTreeId) -> u8 {
+        self.nodes[id.offset()].level
+    }
+
     pub(crate) fn angular_extent_as(&self, id: &QuadTreeId) -> i32 {
         let level = self.nodes[id.offset()].level as usize;
         self.layer_packs[level].angular_extent_as()

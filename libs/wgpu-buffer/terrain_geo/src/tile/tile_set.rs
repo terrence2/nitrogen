@@ -637,11 +637,16 @@ impl TileSet {
         let iextent_lat = index_ang_extent.0.f32() / 2.; // range from [-1,1]
         let iextent_lon = index_ang_extent.1.f32() / 2.;
         let mut active_atlas_slots = 0;
+        let mut max_active_level = 0;
         let mut tris = Vec::new();
         // println!("START");
         for (qtid, tile_state) in self.tile_state.iter() {
             if let TileState::Active(slot) = tile_state {
                 active_atlas_slots += 1;
+                let level = self.tile_tree.level(qtid);
+                if level > max_active_level {
+                    max_active_level = level;
+                }
 
                 // Project the tile base and angular extent into the index.
                 // Note that the base may be outside the index extents.
@@ -683,13 +688,14 @@ impl TileSet {
         );
 
         trace!(
-            "+:{} -:{} st:{} ed:{} out:{}, act:{}",
+            "+:{} -:{} st:{} ed:{} out:{}, act:{}, d:{}",
             additions.len(),
             removals.len(),
             reads_started_count,
             reads_ended_count,
             self.tile_read_count,
-            active_atlas_slots
+            active_atlas_slots,
+            max_active_level
         );
     }
 
