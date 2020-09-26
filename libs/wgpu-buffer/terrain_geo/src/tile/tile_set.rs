@@ -553,6 +553,7 @@ impl TileSet {
         }
 
         // Kick off any loads, if there is space remaining.
+        let mut reads_started_count = 0;
         while !self.tile_load_queue.is_empty() && self.tile_read_count < MAX_CONCURRENT_READS {
             let (_, qtid) = self.tile_load_queue.pop().expect("checked is_empty");
 
@@ -563,6 +564,7 @@ impl TileSet {
             if maybe_state.is_none() || !maybe_state.unwrap().is_pending() {
                 continue;
             }
+            reads_started_count += 1;
 
             // If the state was pending, move us to the reading state and consume a read slot.
             let atlas_slot = maybe_state.unwrap().atlas_slot();
@@ -577,12 +579,18 @@ impl TileSet {
             async_rt.spawn(async move {
                 if let Ok(data) = closure_catalog.read().await.read_slice(fid, extent).await {
                     closer_sender.send((qtid, data)).ok();
+                } else {
+                    panic!("Read failed in {:?}", fid);
                 }
             });
         }
 
         // Check for any completed reads.
+        let mut reads_ended_count = 0;
         while let Ok((qtid, data)) = self.tile_receiver.try_recv() {
+            self.tile_read_count -= 1;
+            reads_ended_count += 1;
+
             // If the reading tile has gone out of view in the time since it was enqueued, we
             // may have lost our atlas slot. That's fine, just dump the bytes on the floor.
             let maybe_state = self.tile_state.get(&qtid);
@@ -591,11 +599,7 @@ impl TileSet {
             }
 
             let atlas_slot = maybe_state.unwrap().atlas_slot();
-            self.tile_read_count -= 1;
             self.tile_state.insert(qtid, TileState::Active(atlas_slot));
-
-            // Push this tile into the atlas; the index gets re-painted every frame.
-            trace!("uploading {:?} -> {}", qtid, atlas_slot);
 
             let texture_buffer = gpu.push_slice(
                 "terrain-geo-atlas-tile-texture-upload-buffer",
@@ -632,10 +636,13 @@ impl TileSet {
         let index_ang_extent = TerrainLevel::index_extent();
         let iextent_lat = index_ang_extent.0.f32() / 2.; // range from [-1,1]
         let iextent_lon = index_ang_extent.1.f32() / 2.;
+        let mut active_atlas_slots = 0;
         let mut tris = Vec::new();
         // println!("START");
         for (qtid, tile_state) in self.tile_state.iter() {
             if let TileState::Active(slot) = tile_state {
+                active_atlas_slots += 1;
+
                 // Project the tile base and angular extent into the index.
                 // Note that the base may be outside the index extents.
                 let (tile_base_lat_as, tile_base_lon_as) = self.tile_tree.base(qtid);
@@ -673,6 +680,16 @@ impl TileSet {
             upload_buffer,
             self.index_paint_vert_buffer.clone(),
             IndexPaintVertex::mem_size() * tris.len(),
+        );
+
+        trace!(
+            "+:{} -:{} st:{} ed:{} out:{}, act:{}",
+            additions.len(),
+            removals.len(),
+            reads_started_count,
+            reads_ended_count,
+            self.tile_read_count,
+            active_atlas_slots
         );
     }
 

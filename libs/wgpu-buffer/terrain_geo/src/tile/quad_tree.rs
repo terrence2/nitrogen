@@ -284,8 +284,9 @@ impl QuadTree {
         }
 
         // Exit before recursing if we have enough pixels at the current level,
-        // based on the edge length of the patch from which grat came.
-        if (self.angular_extent_as(&id) as f64 / TILE_EXTENT as f64) < 2.0 * resolution.f64() {
+        // based on the edge length of the triangle defining the window. Don't forget
+        // the nyquist sampling theorem.
+        if (self.angular_extent_as(&id) as f64 / TILE_EXTENT as f64) < resolution.f64() / 2. {
             return;
         }
 
