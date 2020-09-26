@@ -107,9 +107,16 @@ impl LayerPack {
     }
 }
 
+struct Reservation {
+    base: (i32, i32),
+    index_in_parent: u32,
+    data_location: usize,
+    data_length: u32,
+}
+
 pub struct LayerPackBuilder {
     // Contains start relative to tile_start and the length.
-    reservations: Vec<((i32, i32), u32, (usize, u32))>,
+    reservations: Vec<Reservation>,
     reserve_cursor: usize,
     stream: File,
 }
@@ -127,11 +134,12 @@ impl LayerPackBuilder {
         if data.is_empty() {
             return;
         }
-        self.reservations.push((
+        self.reservations.push(Reservation {
             base,
             index_in_parent,
-            (self.reserve_cursor, data.len() as u32),
-        ));
+            data_location: self.reserve_cursor,
+            data_length: data.len() as u32,
+        });
         self.reserve_cursor += data.len();
     }
 
@@ -154,14 +162,14 @@ impl LayerPackBuilder {
         self.stream.write_all(header.as_bytes())?;
 
         // Write out the index
-        for ((base_lat_as, base_lon_as), index_in_parent, (offset, length)) in &self.reservations {
+        for reservation in &self.reservations {
             let index_item = LayerPackIndexItem::build(
-                *base_lat_as,
-                *base_lon_as,
+                reservation.base.0,
+                reservation.base.1,
                 0,
-                *index_in_parent,
-                tile_start + *offset,
-                tile_start + *offset + *length as usize,
+                reservation.index_in_parent,
+                tile_start + reservation.data_location,
+                tile_start + reservation.data_location + reservation.data_length as usize,
             )?;
             self.stream.write_all(index_item.as_bytes())?;
         }
