@@ -21,10 +21,11 @@ use crate::{
     },
     GpuDetail,
 };
-use absolute_unit::{arcseconds, ArcSeconds};
+use absolute_unit::{arcseconds, Length, Meters};
 use catalog::Catalog;
 use failure::{err_msg, Fallible};
 use geodesy::{GeoCenter, Graticule};
+use geometry::AABB2;
 use gpu::{texture_format_size, UploadTracker, GPU};
 use image::{ImageBuffer, Rgb};
 use log::trace;
@@ -34,6 +35,7 @@ use std::{
     num::{NonZeroU32, NonZeroU64},
     ops::Range,
     sync::Arc,
+    time::Instant,
 };
 use tokio::{
     runtime::Runtime,
@@ -172,7 +174,14 @@ impl TileSet {
                 .ok_or_else(|| err_msg("no coordinates listed in index"))?,
         )?;
 
-        let tile_tree = QuadTree::from_catalog(&prefix, catalog)?;
+        let qt_start = Instant::now();
+        let tile_tree = QuadTree::from_layers(prefix, catalog)?;
+        let qt_time = qt_start.elapsed();
+        println!(
+            "QuadTree::from_catalog timing: {}.{}ms",
+            qt_time.as_secs() * 1000 + u64::from(qt_time.subsec_millis()),
+            qt_time.subsec_micros()
+        );
 
         // The index texture is just a more or less normal texture. The longitude in spherical
         // coordinates maps to `s` and the latitude maps to `t` (with some important finagling).
@@ -491,8 +500,32 @@ impl TileSet {
         self.tile_tree.begin_update();
     }
 
-    pub fn note_required(&mut self, grat: &Graticule<GeoCenter>) {
-        self.tile_tree.note_required(grat);
+    pub fn note_required(
+        &mut self,
+        grat0: &Graticule<GeoCenter>,
+        grat1: &Graticule<GeoCenter>,
+        grat2: &Graticule<GeoCenter>,
+        triangle_edge: Length<Meters>,
+    ) {
+        // Assuming 30m is 1"
+        let angular_resolution = arcseconds!(triangle_edge.f64() / 30.0);
+
+        // Find an aabb for the given triangle.
+        let min_lat = grat0.latitude.min(grat1.latitude).min(grat2.latitude);
+        let max_lat = grat0.latitude.max(grat1.latitude).max(grat2.latitude);
+        let min_lon = grat0.longitude.min(grat1.longitude).min(grat2.longitude);
+        let max_lon = grat0.longitude.max(grat1.longitude).max(grat2.longitude);
+        let aabb = AABB2::new(
+            [
+                arcseconds!(min_lat).round() as i32,
+                arcseconds!(min_lon).round() as i32,
+            ],
+            [
+                arcseconds!(max_lat).round() as i32,
+                arcseconds!(max_lon).round() as i32,
+            ],
+        );
+        self.tile_tree.note_required(&aabb, angular_resolution);
     }
 
     pub fn finish_update(
@@ -520,6 +553,7 @@ impl TileSet {
         }
 
         // Kick off any loads, if there is space remaining.
+        let mut reads_started_count = 0;
         while !self.tile_load_queue.is_empty() && self.tile_read_count < MAX_CONCURRENT_READS {
             let (_, qtid) = self.tile_load_queue.pop().expect("checked is_empty");
 
@@ -530,6 +564,7 @@ impl TileSet {
             if maybe_state.is_none() || !maybe_state.unwrap().is_pending() {
                 continue;
             }
+            reads_started_count += 1;
 
             // If the state was pending, move us to the reading state and consume a read slot.
             let atlas_slot = maybe_state.unwrap().atlas_slot();
@@ -538,17 +573,24 @@ impl TileSet {
 
             // Do the read in a disconnected greenthread and send it back on an mpsc queue.
             let fid = self.tile_tree.file_id(&qtid);
+            let extent = self.tile_tree.file_extent(&qtid);
             let closure_catalog = catalog.clone();
             let closer_sender = self.tile_sender.clone();
             async_rt.spawn(async move {
-                if let Ok(data) = closure_catalog.read().await.read(fid).await {
+                if let Ok(data) = closure_catalog.read().await.read_slice(fid, extent).await {
                     closer_sender.send((qtid, data)).ok();
+                } else {
+                    panic!("Read failed in {:?}", fid);
                 }
             });
         }
 
         // Check for any completed reads.
+        let mut reads_ended_count = 0;
         while let Ok((qtid, data)) = self.tile_receiver.try_recv() {
+            self.tile_read_count -= 1;
+            reads_ended_count += 1;
+
             // If the reading tile has gone out of view in the time since it was enqueued, we
             // may have lost our atlas slot. That's fine, just dump the bytes on the floor.
             let maybe_state = self.tile_state.get(&qtid);
@@ -557,11 +599,7 @@ impl TileSet {
             }
 
             let atlas_slot = maybe_state.unwrap().atlas_slot();
-            self.tile_read_count -= 1;
             self.tile_state.insert(qtid, TileState::Active(atlas_slot));
-
-            // Push this tile into the atlas; the index gets re-painted every frame.
-            trace!("uploading {:?} -> {}", qtid, atlas_slot);
 
             let texture_buffer = gpu.push_slice(
                 "terrain-geo-atlas-tile-texture-upload-buffer",
@@ -577,12 +615,9 @@ impl TileSet {
                 1,
             );
 
-            let tile_base_grat = self.tile_tree.base(&qtid);
-            let tile_base = [
-                tile_base_grat.lat::<ArcSeconds>().f32(),
-                tile_base_grat.lon::<ArcSeconds>().f32(),
-            ];
-            let angular_extent = arcseconds!(self.tile_tree.angular_extent(&qtid)).f32();
+            let (tile_base_lat_as, tile_base_lon_as) = self.tile_tree.base(&qtid);
+            let tile_base = [tile_base_lat_as as f32, tile_base_lon_as as f32];
+            let angular_extent = arcseconds!(self.tile_tree.angular_extent_as(&qtid)).f32();
             let tile_info = TileInfo::new(tile_base, angular_extent, atlas_slot);
             let info_buffer = gpu.push_data(
                 "terrain-geo-atlas-tile-info-upload-buffer",
@@ -599,25 +634,33 @@ impl TileSet {
         // Use the list of allocated tiles to generate a vertex buffer to upload.
         // FIXME: don't re-allocate every frame
         let index_ang_extent = TerrainLevel::index_extent();
-        let iextent_lat = index_ang_extent.0.f64() / 2.; // range from [-1,1]
-        let iextent_lon = index_ang_extent.1.f64() / 2.;
+        let iextent_lat = index_ang_extent.0.f32() / 2.; // range from [-1,1]
+        let iextent_lon = index_ang_extent.1.f32() / 2.;
+        let mut active_atlas_slots = 0;
+        let mut max_active_level = 0;
         let mut tris = Vec::new();
         // println!("START");
         for (qtid, tile_state) in self.tile_state.iter() {
             if let TileState::Active(slot) = tile_state {
+                active_atlas_slots += 1;
+                let level = self.tile_tree.level(qtid);
+                if level > max_active_level {
+                    max_active_level = level;
+                }
+
                 // Project the tile base and angular extent into the index.
                 // Note that the base may be outside the index extents.
-                let tile_base = self.tile_tree.base(qtid);
-                let ang_extent = self.tile_tree.angular_extent(qtid);
+                let (tile_base_lat_as, tile_base_lon_as) = self.tile_tree.base(qtid);
+                let ang_extent_as = self.tile_tree.angular_extent_as(qtid);
 
-                let lat0 = -arcseconds!(tile_base.latitude);
-                let lon0 = arcseconds!(tile_base.longitude);
-                let lat1 = -arcseconds!(tile_base.latitude + ang_extent);
-                let lon1 = arcseconds!(tile_base.longitude + ang_extent);
-                let t0 = (lat0 / iextent_lat).f32();
-                let s0 = (lon0 / iextent_lon).f32();
-                let t1 = (lat1 / iextent_lat).f32();
-                let s1 = (lon1 / iextent_lon).f32();
+                let lat0 = -tile_base_lat_as as f32;
+                let lon0 = tile_base_lon_as as f32;
+                let lat1 = -(tile_base_lat_as + ang_extent_as) as f32;
+                let lon1 = (tile_base_lon_as + ang_extent_as) as f32;
+                let t0 = lat0 / iextent_lat;
+                let s0 = lon0 / iextent_lon;
+                let t1 = lat1 / iextent_lat;
+                let s1 = lon1 / iextent_lon;
                 let c = *slot as u16;
 
                 // FIXME 1: this could easily be indexed, saving us a bunch of bandwidth.
@@ -642,6 +685,17 @@ impl TileSet {
             upload_buffer,
             self.index_paint_vert_buffer.clone(),
             IndexPaintVertex::mem_size() * tris.len(),
+        );
+
+        trace!(
+            "+:{} -:{} st:{} ed:{} out:{}, act:{}, d:{}",
+            additions.len(),
+            removals.len(),
+            reads_started_count,
+            reads_ended_count,
+            self.tile_read_count,
+            active_atlas_slots,
+            max_active_level
         );
     }
 

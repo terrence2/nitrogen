@@ -13,17 +13,21 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 mod index_paint_vertex;
+mod layer_pack;
 mod quad_tree;
 mod tile_info;
 mod tile_manager;
 mod tile_set;
 
+pub(crate) use layer_pack::LayerPack;
+pub use layer_pack::{LayerPackBuilder, LayerPackHeader, LayerPackIndexItem};
 pub(crate) use tile_manager::TileManager;
 
 use absolute_unit::{arcseconds, meters, Angle, ArcSeconds};
 use failure::{bail, Fallible};
 use geodesy::{GeoCenter, Graticule};
 use lazy_static::lazy_static;
+use std::ops::Range;
 
 // The physical number of pixels in the tile.
 pub const TILE_PHYSICAL_SIZE: usize = 512;
@@ -100,7 +104,7 @@ lazy_static! {
     };
 }
 
-#[derive(Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct TerrainLevel(usize);
 
 impl TerrainLevel {
@@ -121,6 +125,10 @@ impl TerrainLevel {
             arcseconds!(-TILE_EXTENT as f64 * (Self::base_scale().f64() / 2.0)),
             meters!(0),
         )
+    }
+
+    pub fn arcsecond_level() -> usize {
+        ARCSEC_LEVEL
     }
 
     // We need to cover 360 degrees worth of tiles longitude and 180 degrees of latitude.
@@ -151,6 +159,10 @@ impl TerrainLevel {
         LEVEL_SCALES[self.0]
     }
 
+    pub fn angular_extent(&self) -> Angle<ArcSeconds> {
+        self.as_scale() * TILE_EXTENT
+    }
+
     pub fn new(level: usize) -> Self {
         Self(level)
     }
@@ -160,6 +172,7 @@ impl TerrainLevel {
     }
 }
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum ChildIndex {
     SouthWest,
     SouthEast,
@@ -175,5 +188,28 @@ impl ChildIndex {
             Self::NorthWest => 2, // 10
             Self::NorthEast => 3, // 11
         }
+    }
+
+    pub fn from_index(index: usize) -> Self {
+        match index {
+            0 => Self::SouthWest, // 00
+            1 => Self::SouthEast, // 01
+            2 => Self::NorthWest, // 10
+            3 => Self::NorthEast, // 11
+            _ => panic!("Not a valid index"),
+        }
+    }
+
+    pub fn all_indices() -> Range<usize> {
+        0..4
+    }
+
+    pub fn all() -> [ChildIndex; 4] {
+        [
+            Self::SouthWest,
+            Self::SouthEast,
+            Self::NorthWest,
+            Self::NorthEast,
+        ]
     }
 }

@@ -37,5 +37,5 @@ main()
 
     vec3 v_normal = arr_to_vec3(vertices[i].normal);
     vec3 v_position = arr_to_vec3(vertices[i].position);
-    vertices[i].position = vec3_to_arr(v_position + (float(height) * 100 * v_normal));
+    vertices[i].position = vec3_to_arr(v_position + (float(height) * v_normal));
 }

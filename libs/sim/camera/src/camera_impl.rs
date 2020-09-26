@@ -113,7 +113,7 @@ impl Camera {
         //     0.0f, 0.0f, zNear,  0.0f);
         let mut matrix: Matrix4<f64> = num::Zero::zero();
         let f = 1.0 / (self.fov_y.f64() / 2.0).tan();
-        matrix[(0, 0)] = f / self.aspect_ratio;
+        matrix[(0, 0)] = self.aspect_ratio / f; // aspect is h/w, so invert.
         matrix[(1, 1)] = f;
         matrix[(3, 2)] = -1.0;
         matrix[(2, 3)] = Length::<T>::from(&self.z_near).into();

@@ -38,5 +38,5 @@ void main() {
     uint atlas_slot = terrain_geo_atlas_slot_for_graticule(v_graticule, index_texture, index_sampler);
     int height = terrain_geo_height_in_tile(v_graticule, tile_info[atlas_slot], atlas_texture, atlas_sampler);
     float clr = float(height) / 8800.0;
-    v_color = vec4(clr, clr, atlas_slot * 255.0 / 65535.0, 1.0);
+    v_color = vec4(clr, clr, atlas_slot / 1024.0 * 255.0, 1.0);
 }

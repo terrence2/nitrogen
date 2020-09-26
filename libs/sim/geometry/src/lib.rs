@@ -15,6 +15,7 @@
 
 pub mod algorithm;
 mod arrow;
+mod axis_aligned_bounding_box;
 mod circle;
 mod ico_sphere;
 pub mod intersect;
@@ -22,6 +23,7 @@ mod plane;
 mod sphere;
 
 pub use arrow::Arrow;
+pub use axis_aligned_bounding_box::AABB2;
 pub use circle::Circle;
 pub use ico_sphere::IcoSphere;
 pub use plane::Plane;

@@ -21,7 +21,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
 };
-use terrain_geo::tile::{DataSetCoordinates, DataSetDataKind, TerrainLevel};
+use terrain_geo::tile::{ChildIndex, DataSetCoordinates, DataSetDataKind, TerrainLevel};
 
 // Files in Catalogs are flat, so each dataset gets its own unique prefix. All datasets can
 // be found by looking for *metadata.json. Each level is laid out flat in the dataset, so the
@@ -69,6 +69,7 @@ impl Index {
 pub struct IndexDataSet {
     prefix: String,
     path: PathBuf,
+    work_path: PathBuf,
     kind: DataSetDataKind,
     coordinates: DataSetCoordinates,
     root: Arc<RwLock<Tile>>,
@@ -87,19 +88,29 @@ impl IndexDataSet {
         Ok(Self {
             prefix: prefix.to_owned(),
             path: path.to_owned(),
+            work_path: path.join("work"),
             kind,
             coordinates,
             root: Arc::new(RwLock::new(Tile::new_uninitialized(
                 prefix,
                 TerrainLevel::new(0),
+                ChildIndex::SouthWest,
                 &TerrainLevel::base(),
                 TerrainLevel::base_angular_extent(),
             ))),
         })
     }
 
+    pub fn prefix(&self) -> &str {
+        &self.prefix
+    }
+
     pub fn base_path(&self) -> &Path {
         &self.path
+    }
+
+    pub fn work_path(&self) -> &Path {
+        &self.work_path
     }
 
     pub fn get_root_tile(&mut self) -> Arc<RwLock<Tile>> {

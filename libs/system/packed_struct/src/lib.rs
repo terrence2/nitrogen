@@ -13,17 +13,18 @@
 // You should have received a copy of the GNU General Public License
 // along with packed_struct.  If not, see <http://www.gnu.org/licenses/>.
 pub use failure::{ensure, Error};
+pub use zerocopy::{AsBytes, FromBytes, LayoutVerified};
 
 #[macro_export]
 macro_rules! _make_packed_struct_accessor {
     ($field:ident, $field_name:ident, $field_ty:ty, $output_ty:ty) => {
-        fn $field_name(&self) -> $output_ty {
+        pub fn $field_name(&self) -> $output_ty {
             self.$field as $output_ty
         }
     };
 
     ($field:ident, $field_name:ident, $field_ty:ty, ) => {
-        fn $field_name(&self) -> $field_ty {
+        pub fn $field_name(&self) -> $field_ty {
             self.$field as $field_ty
         }
     };
@@ -34,8 +35,8 @@ macro_rules! packed_struct {
     ($name:ident {
         $( $field:ident => $field_name:ident : $field_ty:ty $(as $field_name_ty:ty),* ),+
     }) => {
-        #[repr(C)]
-        #[repr(packed)]
+        #[repr(C, packed)]
+        #[derive($crate::AsBytes, $crate::FromBytes)]
         pub struct $name {
             $(
                 $field: $field_ty
@@ -47,17 +48,14 @@ macro_rules! packed_struct {
                 $crate::_make_packed_struct_accessor!($field, $field_name, $field_ty, $($field_name_ty),*);
             )+
 
-            pub fn overlay(buf: &[u8]) -> Result<&$name, $crate::Error> {
-                $crate::ensure!(buf.len() >= std::mem::size_of::<$name>(), "buffer to short to overlay $name");
-                let ptr: *const $name = buf.as_ptr() as *const _;
-                let r: &$name = unsafe { &*ptr };
-                Ok(r)
+            #[allow(unused)]
+            pub fn overlay(buf: &[u8]) -> &$name {
+                $crate::LayoutVerified::<&[u8], $name>::new(buf).unwrap().into_ref()
             }
 
-            pub fn as_bytes(&self) -> Result<&[u8], $crate::Error> {
-                let ptr: *const u8 = self as *const Self as *const u8;
-                let buf: &[u8] = unsafe { std::slice::from_raw_parts(ptr, std::mem::size_of::<Self>()) };
-                Ok(buf)
+            #[allow(unused)]
+            pub fn overlay_slice(buf: &[u8]) -> &[$name] {
+                $crate::LayoutVerified::<&[u8], [$name]>::new_slice(buf).unwrap().into_slice()
             }
 
             #[allow(clippy::too_many_arguments)]
@@ -98,7 +96,7 @@ mod tests {
     #[test]
     fn it_has_accessors() -> Fallible<()> {
         let buf: &[u8] = &[42, 1, 0, 0, 0, 0, 1];
-        let ts = TestStruct::overlay(buf)?;
+        let ts = TestStruct::overlay(buf);
         assert_eq!(ts.a(), 42usize);
         assert_eq!(ts.b(), 1u32);
         assert_eq!(ts.c(), 0u8);
@@ -108,7 +106,7 @@ mod tests {
     #[test]
     fn it_can_debug() -> Fallible<()> {
         let buf: &[u8] = &[42, 1, 0, 0, 0, 0, 1];
-        let ts = TestStruct::overlay(buf)?;
+        let ts = TestStruct::overlay(buf);
         format!("{:?}", ts);
         Ok(())
     }
@@ -117,7 +115,7 @@ mod tests {
     fn it_can_roundtrip() -> Fallible<()> {
         let buf: &[u8] = &[42, 1, 0, 0, 0, 0, 1];
         let ts2 = TestStruct::build(42, 1, 0x100)?;
-        assert_eq!(buf, ts2.as_bytes()?);
+        assert_eq!(buf, ts2.as_bytes());
         Ok(())
     }
 }

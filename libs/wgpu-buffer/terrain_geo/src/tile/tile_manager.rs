@@ -45,6 +45,7 @@
 //       * Q: are there optimizations we can make knowing that it is a quadtree?
 
 use crate::{tile::tile_set::TileSet, GpuDetail};
+use absolute_unit::{Length, Meters};
 use catalog::{from_utf8_string, Catalog};
 use failure::Fallible;
 use geodesy::{GeoCenter, Graticule};
@@ -68,7 +69,7 @@ impl TileManager {
         let mut tile_sets = Vec::new();
 
         // Scan catalog for all tile sets.
-        for index_fid in catalog.find_matching("*-index.json")? {
+        for index_fid in catalog.find_matching("*-index.json", Some("json"))? {
             let index_data = from_utf8_string(catalog.read_sync(index_fid)?)?;
             let index_json = json::parse(&index_data)?;
             tile_sets.push(TileSet::new(
@@ -89,9 +90,15 @@ impl TileManager {
         }
     }
 
-    pub fn note_required(&mut self, grat: &Graticule<GeoCenter>) {
+    pub fn note_required(
+        &mut self,
+        grat0: &Graticule<GeoCenter>,
+        grat1: &Graticule<GeoCenter>,
+        grat2: &Graticule<GeoCenter>,
+        triangle_edge: Length<Meters>,
+    ) {
         for ts in self.tile_sets.iter_mut() {
-            ts.note_required(grat);
+            ts.note_required(grat0, grat1, grat2, triangle_edge);
         }
     }
 

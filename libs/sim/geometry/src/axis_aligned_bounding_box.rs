@@ -12,17 +12,22 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-mod index;
-mod tile;
+pub struct AABB2<T: PartialOrd> {
+    lo: [T; 2],
+    hi: [T; 2],
+}
 
-pub use index::{Index as MipIndex, IndexDataSet as MipIndexDataSet};
-pub use tile::Tile as MipTile;
+impl<T: PartialOrd> AABB2<T> {
+    pub fn new(lo: [T; 2], hi: [T; 2]) -> Self {
+        Self { lo, hi }
+    }
 
-use absolute_unit::{Angle, ArcSeconds};
-use geodesy::{GeoCenter, Graticule};
+    pub fn contains(&self, p: [T; 2]) -> bool {
+        p[0] >= self.lo[0] && p[1] >= self.lo[1] && p[0] <= self.hi[0] && p[1] <= self.hi[1]
+    }
 
-#[derive(Copy, Clone, Debug)]
-pub struct Region {
-    pub base: Graticule<GeoCenter>,
-    pub extent: Angle<ArcSeconds>,
+    pub fn overlaps(&self, other: &Self) -> bool {
+        (self.lo[0] <= other.hi[0] && self.hi[0] >= other.lo[0])
+            && (self.lo[1] <= other.hi[1] && self.hi[1] >= other.lo[1])
+    }
 }

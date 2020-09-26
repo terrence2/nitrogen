@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use async_trait::async_trait;
 use failure::Fallible;
-use std::{borrow::Cow, collections::HashMap, path::PathBuf};
+use std::{borrow::Cow, collections::HashMap, ops::Range, path::PathBuf};
 
 // Files are identified by an id internally.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
@@ -62,9 +62,15 @@ pub trait DrawerInterface: Send + Sync {
     // Stat must fill out the stat struct for the given file.
     fn stat_sync(&self, id: DrawerFileId) -> Fallible<DrawerFileMetadata>;
 
-    // Provide the content of the given file.
+    // Provide the content of the given file, blocking.
     fn read_sync(&self, id: DrawerFileId) -> Fallible<Cow<[u8]>>;
+
+    // Provide a slice of the content of the given file, blocking.
+    fn read_slice_sync(&self, id: DrawerFileId, extent: Range<usize>) -> Fallible<Cow<[u8]>>;
 
     // Provide the content of the given file, async.
     async fn read(&self, id: DrawerFileId) -> Fallible<Vec<u8>>;
+
+    // Provide a slice of the content of the given file, async.
+    async fn read_slice(&self, id: DrawerFileId, extent: Range<usize>) -> Fallible<Vec<u8>>;
 }

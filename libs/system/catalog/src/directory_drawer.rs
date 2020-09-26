@@ -15,7 +15,15 @@
 use crate::{DrawerFileId, DrawerFileMetadata, DrawerInterface};
 use async_trait::async_trait;
 use failure::{ensure, Fallible};
-use std::{borrow::Cow, collections::HashMap, ffi::OsStr, fs, io::Read, path::PathBuf};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    ffi::OsStr,
+    fs,
+    io::{Read, Seek, SeekFrom},
+    ops::Range,
+    path::PathBuf,
+};
 use tokio::fs::File as TokioFile;
 use tokio::io::AsyncReadExt;
 
@@ -24,6 +32,8 @@ pub struct DirectoryDrawer {
     priority: i64,
     path: PathBuf,
     index: HashMap<DrawerFileId, String>,
+    // TODO: cache open files that we read_slice out of, in the expectation that we
+    //       will want to read other slices subsequently.
 }
 
 impl DirectoryDrawer {
@@ -118,6 +128,17 @@ impl DrawerInterface for DirectoryDrawer {
         Ok(Cow::from(content))
     }
 
+    fn read_slice_sync(&self, id: DrawerFileId, extent: Range<usize>) -> Fallible<Cow<[u8]>> {
+        ensure!(self.index.contains_key(&id), "file not found");
+        let mut global_path = self.path.clone();
+        global_path.push(&self.index[&id]);
+        let mut fp = fs::File::open(&global_path)?;
+        fp.seek(SeekFrom::Start(extent.start as u64))?;
+        let mut content = vec![0u8; extent.end - extent.start];
+        fp.read_exact(&mut content)?;
+        Ok(Cow::from(content))
+    }
+
     async fn read(&self, id: DrawerFileId) -> Fallible<Vec<u8>> {
         ensure!(self.index.contains_key(&id), "file not found");
         let mut global_path = self.path.clone();
@@ -125,6 +146,17 @@ impl DrawerInterface for DirectoryDrawer {
         let mut fp = TokioFile::open(&global_path).await?;
         let mut content = Vec::new();
         fp.read_to_end(&mut content).await?;
+        Ok(content)
+    }
+
+    async fn read_slice(&self, id: DrawerFileId, extent: Range<usize>) -> Fallible<Vec<u8>> {
+        ensure!(self.index.contains_key(&id), "file not found");
+        let mut global_path = self.path.clone();
+        global_path.push(&self.index[&id]);
+        let mut fp = TokioFile::open(&global_path).await?;
+        fp.seek(SeekFrom::Start(extent.start as u64)).await?;
+        let mut content = vec![0u8; extent.end - extent.start];
+        fp.read_exact(&mut content).await?;
         Ok(content)
     }
 }
