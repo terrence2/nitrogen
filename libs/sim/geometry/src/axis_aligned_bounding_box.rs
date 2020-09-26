@@ -12,19 +12,22 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+pub struct AABB2<T: PartialOrd> {
+    lo: [T; 2],
+    hi: [T; 2],
+}
 
-pub mod algorithm;
-mod arrow;
-mod axis_aligned_bounding_box;
-mod circle;
-mod ico_sphere;
-pub mod intersect;
-mod plane;
-mod sphere;
+impl<T: PartialOrd> AABB2<T> {
+    pub fn new(lo: [T; 2], hi: [T; 2]) -> Self {
+        Self { lo, hi }
+    }
 
-pub use arrow::Arrow;
-pub use axis_aligned_bounding_box::AABB2;
-pub use circle::Circle;
-pub use ico_sphere::IcoSphere;
-pub use plane::Plane;
-pub use sphere::Sphere;
+    pub fn contains(&self, p: [T; 2]) -> bool {
+        p[0] >= self.lo[0] && p[1] >= self.lo[1] && p[0] <= self.hi[0] && p[1] <= self.hi[1]
+    }
+
+    pub fn overlaps(&self, other: &Self) -> bool {
+        (self.lo[0] <= other.hi[0] && self.hi[0] >= other.lo[0])
+            && (self.lo[1] <= other.hi[1] && self.hi[1] >= other.lo[1])
+    }
+}

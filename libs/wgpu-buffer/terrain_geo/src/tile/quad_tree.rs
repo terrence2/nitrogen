@@ -12,13 +12,13 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::tile::{ChildIndex, TerrainLevel};
-use absolute_unit::{arcseconds, meters, Angle, ArcSeconds};
+use crate::tile::{ChildIndex, LayerPack, LayerPackIndexItem, TerrainLevel, TILE_EXTENT};
+use absolute_unit::{Angle, ArcSeconds};
 use catalog::{Catalog, FileId};
-use failure::Fallible;
-use geodesy::{GeoCenter, Graticule};
+use failure::{ensure, Fallible};
+use geometry::AABB2;
 use log::trace;
-use std::{collections::HashMap, fmt::Write};
+use std::{collections::HashMap, ops::Range};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub(crate) struct QuadTreeId {
@@ -31,17 +31,24 @@ impl QuadTreeId {
         Self { id: id as u32 }
     }
 
+    fn empty() -> Self {
+        Self { id: u32::MAX }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.id == u32::MAX
+    }
+
     fn offset(&self) -> usize {
         self.id as usize
     }
 }
 
 struct QuadTreeNode {
-    extent_as: i32,
-    base_lat_as: i32,
-    base_lon_as: i32,
-    file_id: FileId,
-    children: [Option<QuadTreeId>; 4],
+    span: Range<usize>,
+    children: [QuadTreeId; 4],
+    base: (i32, i32), // lat, lon
+    level: u8,
 }
 
 struct NodeVotes {
@@ -57,6 +64,7 @@ pub(crate) struct QuadTree {
     // An immutable tree discovered based on what nodes are available in catalog at startup.
     root: QuadTreeId,
     nodes: Vec<QuadTreeNode>,
+    layer_packs: Vec<LayerPack>,
 
     // Note that we may be tracking many hundreds of thousands of tiles, so we want to avoid
     // visiting each tile per frame. To do this we use the following side structures to track
@@ -79,151 +87,159 @@ pub(crate) struct QuadTree {
 }
 
 impl QuadTree {
-    pub(crate) fn from_catalog(prefix: &str, catalog: &Catalog) -> Fallible<Self> {
+    pub(crate) fn from_layers(prefix: &str, catalog: &Catalog) -> Fallible<Self> {
+        // Find all layers in this set.
+        let mut layer_packs = Vec::new();
+        let layer_glob = format!("{}-L??.mip", prefix);
+        for layer_fid in catalog.find_matching(&layer_glob, Some("mip"))? {
+            layer_packs.push(LayerPack::new(layer_fid, catalog)?);
+        }
+        layer_packs.sort_by_key(|lp| *lp.terrain_level());
+        ensure!(!layer_packs.is_empty());
+        let mut node_count = 0;
+        for (i, lp) in layer_packs.iter().enumerate() {
+            assert_eq!(lp.terrain_level(), &TerrainLevel::new(i));
+            node_count += lp.tile_count();
+        }
+
         let mut obj = Self {
             root: QuadTreeId::new(0),
-            nodes: Vec::with_capacity(2_000_000),
+            nodes: Vec::with_capacity(node_count),
+            layer_packs,
             votes: HashMap::new(),
             additions: Vec::new(),
             generation: 0,
         };
-        let extent_as = arcseconds!(TerrainLevel::base_angular_extent()).f64() as i32;
-        let base_lat_as = TerrainLevel::base().lat::<ArcSeconds>().f64() as i32;
-        let base_lon_as = TerrainLevel::base().lon::<ArcSeconds>().f64() as i32;
-        let mut scratch_filename = String::with_capacity(1_024);
-        let root = obj.link_node(
-            prefix,
-            TerrainLevel::new(0),
-            base_lat_as,
-            base_lon_as,
-            extent_as,
-            catalog,
-            &mut scratch_filename,
-        );
+
+        let mut acc = HashMap::new();
+        for i in 0..obj.layer_packs.len() {
+            obj.link_layer(&mut acc, i, catalog);
+        }
+
         trace!("loaded quad-tree with {} nodes", obj.nodes.len());
-        assert!(root.is_none() || root.unwrap().offset() == 0);
         Ok(obj)
     }
 
-    fn split_hms(v: i32) -> (i32, i32, i32) {
-        let d = v / 3_600;
-        let m = v / 60 - d * 60;
-        let s = v - d * 3_600 - m * 60;
-        (d, m, s)
-    }
-
-    fn write_latitude(mut lat: i32, out: &mut String) -> Fallible<()> {
-        let lat_hemi = if lat >= 0 {
-            "N"
-        } else {
-            lat = -lat;
-            "S"
-        };
-        let (d, m, s) = Self::split_hms(lat);
-        Ok(write!(out, "{}{:03}d{:02}m{:02}s", lat_hemi, d, m, s)?)
-    }
-
-    fn write_longitude(mut lon: i32, out: &mut String) -> Fallible<()> {
-        let lon_hemi = if lon >= 0 {
-            "E"
-        } else {
-            lon = -lon;
-            "W"
-        };
-        let (d, m, s) = Self::split_hms(lon);
-        Ok(write!(out, "{}{:03}d{:02}m{:02}s", lon_hemi, d, m, s)?)
-    }
-
-    pub(crate) fn link_node(
+    fn link_layer(
         &mut self,
-        prefix: &str,
-        level: TerrainLevel,
-        base_lat_as: i32,
-        base_lon_as: i32,
-        extent_as: i32,
+        acc: &mut HashMap<(i32, i32), QuadTreeId>,
+        layer_num: usize,
         catalog: &Catalog,
-        filename: &mut String,
-    ) -> Option<QuadTreeId> {
-        // Note: this is a bit weird, but avoids the allocation.
-        filename.clear();
-        write!(filename, "{}-L{}-", prefix, level.offset()).unwrap();
-        Self::write_latitude(base_lat_as, filename).unwrap();
-        write!(filename, "-").unwrap();
-        Self::write_longitude(base_lon_as, filename).unwrap();
-        write!(filename, ".bin").unwrap();
+    ) {
+        // Create a node for each item at level i, given we have created nodes for i-1 and that
+        // the base of those nodes are in `acc`.
+        let extent = self.layer_packs[layer_num].angular_extent_as();
 
-        if let Some(file_id) = catalog.lookup(&filename) {
-            let child_offset = TerrainLevel::new(level.offset() + 1);
-            let ang = extent_as / 2;
-            let qid = QuadTreeId::new(self.nodes.len());
+        // Note: we have to overlay manually because the data may not be mapped if the item was a raw file.
+        let mut id_update_cursor = self.nodes.len();
+        let index_bytes = self.layer_packs[layer_num].index_bytes(catalog).unwrap();
+        let raw_index = LayerPackIndexItem::overlay_slice(&index_bytes);
+        for item in raw_index {
+            let base = (item.base_lat_as(), item.base_lon_as());
+            let span = item.tile_start()..item.tile_end();
+            let id = QuadTreeId::new(self.nodes.len());
             self.nodes.push(QuadTreeNode {
-                extent_as,
-                base_lat_as,
-                base_lon_as,
-                file_id,
-                children: [None; 4],
+                span,
+                children: [QuadTreeId::empty(); 4],
+                base,
+                level: layer_num as u8,
             });
-            if child_offset.offset() <= TerrainLevel::arcsecond_level() {
-                let sw_base = (base_lat_as, base_lon_as);
-                let se_base = (base_lat_as, base_lon_as + ang);
-                let nw_base = (base_lat_as + ang, base_lon_as);
-                let ne_base = (base_lat_as + ang, base_lon_as + ang);
-                let sw_node = self.link_node(
-                    prefix,
-                    child_offset,
-                    sw_base.0,
-                    sw_base.1,
-                    ang,
-                    catalog,
-                    filename,
+            let parent_index = ChildIndex::from_index(item.index_in_parent() as usize);
+            let parent_base = match parent_index {
+                ChildIndex::SouthWest => base,
+                ChildIndex::SouthEast => (base.0, base.1 - extent),
+                ChildIndex::NorthWest => (base.0 - extent, base.1),
+                ChildIndex::NorthEast => (base.0 - extent, base.1 - extent),
+            };
+
+            if layer_num != 0 {
+                let parent_id = acc[&parent_base];
+                assert_eq!(
+                    self.nodes[parent_id.offset()].children[parent_index.to_index()],
+                    QuadTreeId::empty()
                 );
-                let se_node = self.link_node(
-                    prefix,
-                    child_offset,
-                    se_base.0,
-                    se_base.1,
-                    ang,
-                    catalog,
-                    filename,
-                );
-                let nw_node = self.link_node(
-                    prefix,
-                    child_offset,
-                    nw_base.0,
-                    nw_base.1,
-                    ang,
-                    catalog,
-                    filename,
-                );
-                let ne_node = self.link_node(
-                    prefix,
-                    child_offset,
-                    ne_base.0,
-                    ne_base.1,
-                    ang,
-                    catalog,
-                    filename,
-                );
-                self.nodes[qid.offset()].children = [sw_node, se_node, nw_node, ne_node];
+                self.nodes[parent_id.offset()].children[parent_index.to_index()] = id;
             }
-            return Some(qid);
         }
-        None
+
+        acc.clear();
+        if layer_num != 12 {
+            for item in raw_index {
+                let base = (item.base_lat_as(), item.base_lon_as());
+                let id = QuadTreeId::new(id_update_cursor);
+                id_update_cursor += 1;
+                acc.insert(base, id);
+            }
+        }
+
+        #[cfg(debug_assertions)]
+        self.sanity_check_tree(&self.nodes[self.root.offset()]);
+    }
+
+    #[cfg(debug_assertions)]
+    fn sanity_check_tree(&self, node: &QuadTreeNode) {
+        if !node.children[ChildIndex::SouthWest.to_index()].is_empty() {
+            let child_id = node.children[ChildIndex::SouthWest.to_index()];
+            let child = &self.nodes[child_id.offset()];
+            assert_eq!(node.base.0, child.base.0);
+            assert_eq!(node.base.1, child.base.1);
+            assert_eq!(node.level, child.level - 1);
+            self.sanity_check_tree(child);
+        }
+        if !node.children[ChildIndex::SouthEast.to_index()].is_empty() {
+            let child_id = node.children[ChildIndex::SouthEast.to_index()];
+            let child = &self.nodes[child_id.offset()];
+            let extent = self.angular_extent_as(&child_id);
+            assert_eq!(node.base.0, child.base.0);
+            assert_eq!(node.base.1 + extent, child.base.1);
+            assert_eq!(node.level, child.level - 1);
+            self.sanity_check_tree(child);
+        }
+        if !node.children[ChildIndex::NorthWest.to_index()].is_empty() {
+            let child_id = node.children[ChildIndex::NorthWest.to_index()];
+            let child = &self.nodes[child_id.offset()];
+            let extent = self.angular_extent_as(&child_id);
+            assert_eq!(node.base.0 + extent, child.base.0);
+            assert_eq!(node.base.1, child.base.1);
+            assert_eq!(node.level, child.level - 1);
+            self.sanity_check_tree(child);
+        }
+        if !node.children[ChildIndex::NorthEast.to_index()].is_empty() {
+            let child_id = node.children[ChildIndex::NorthEast.to_index()];
+            let child = &self.nodes[child_id.offset()];
+            let extent = self.angular_extent_as(&child_id);
+            assert_eq!(node.base.0 + extent, child.base.0);
+            assert_eq!(node.base.1 + extent, child.base.1);
+            assert_eq!(node.level, child.level - 1);
+            self.sanity_check_tree(child);
+        }
     }
 
     pub(crate) fn file_id(&self, id: &QuadTreeId) -> FileId {
-        self.nodes[id.offset()].file_id
+        let level = self.nodes[id.offset()].level as usize;
+        self.layer_packs[level].file_id()
+    }
+
+    pub(crate) fn file_extent(&self, id: &QuadTreeId) -> Range<usize> {
+        self.nodes[id.offset()].span.clone()
     }
 
     pub(crate) fn base(&self, id: &QuadTreeId) -> (i32, i32) {
-        (
-            self.nodes[id.offset()].base_lat_as,
-            self.nodes[id.offset()].base_lon_as,
-        )
+        self.nodes[id.offset()].base
     }
 
-    pub(crate) fn angular_extent(&self, id: &QuadTreeId) -> i32 {
-        self.nodes[id.offset()].extent_as
+    pub(crate) fn angular_extent_as(&self, id: &QuadTreeId) -> i32 {
+        let level = self.nodes[id.offset()].level as usize;
+        self.layer_packs[level].angular_extent_as()
+    }
+
+    pub(crate) fn aabb_as(&self, id: &QuadTreeId) -> AABB2<i32> {
+        let extent = self.angular_extent_as(id);
+        let node = &self.nodes[id.offset()];
+        AABB2::new(
+            [node.base.0, node.base.1],
+            [node.base.0 + extent, node.base.1 + extent],
+        )
     }
 
     pub(crate) fn begin_update(&mut self) {
@@ -231,29 +247,26 @@ impl QuadTree {
         self.additions.clear();
     }
 
-    pub(crate) fn note_required(&mut self, grat: &Graticule<GeoCenter>) {
-        self.visit_required_node(self.root, grat);
+    pub(crate) fn note_required(&mut self, window: &AABB2<i32>, resolution: Angle<ArcSeconds>) {
+        self.visit_required_node(0, self.root, window, resolution);
     }
 
-    fn visit_required_node(&mut self, node_id: QuadTreeId, grat: &Graticule<GeoCenter>) {
-        let lat = grat.lat::<ArcSeconds>().f64() as i32;
-        let lon = grat.lon::<ArcSeconds>().f64() as i32;
-        {
-            // Ensure that the graticule is actually in this patch.
-            let node = &self.nodes[node_id.offset()];
-            assert!(lat >= node.base_lat_as);
-            assert!(lat <= node.base_lat_as + node.extent_as);
-            assert!(lon >= node.base_lon_as);
-            assert!(lon <= node.base_lon_as + node.extent_as);
-        }
+    fn visit_required_node(
+        &mut self,
+        level: usize,
+        id: QuadTreeId,
+        window: &AABB2<i32>,
+        resolution: Angle<ArcSeconds>,
+    ) {
+        debug_assert!(window.overlaps(&self.aabb_as(&id)));
 
         // Ensure we have a votes structure, potentially noting the addition of a node.
         // We cannot use `.entry` because of the need to re-borrow self here.
         #[allow(clippy::map_entry)]
-        if !self.votes.contains_key(&node_id) {
-            self.additions.push(node_id);
+        if !self.votes.contains_key(&id) {
+            self.additions.push(id);
             self.votes.insert(
-                node_id,
+                id,
                 NodeVotes {
                     votes: 0,
                     generation: self.generation,
@@ -265,28 +278,23 @@ impl QuadTree {
         // Note that we reset all vote counts at the end of the frame, meaning that we do not
         // need to take a branch on the generation in our inner loop here.
         {
-            let vote_ref = self.votes.get_mut(&node_id).unwrap();
+            let vote_ref = self.votes.get_mut(&id).unwrap();
             vote_ref.generation = self.generation;
             vote_ref.votes += 1;
         }
 
-        // If we have not yet reached full refinement, continue walking down.
-        // FIXME: exit before recursing if we have enough pixels at the current level,
-        //        based on the edge length of the patch from which grat came and our known gpu
-        //        subdivision level.
+        // Exit before recursing if we have enough pixels at the current level,
+        // based on the edge length of the patch from which grat came.
+        if (self.angular_extent_as(&id) as f64 / TILE_EXTENT as f64) < 2.0 * resolution.f64() {
+            return;
+        }
 
-        // Our assertion in the head that we are inside the patch simplifies our check here.
-        let node = &self.nodes[node_id.offset()];
-        let is_northern = lat > node.base_lat_as + (node.extent_as / 2);
-        let is_eastern = lon > node.base_lon_as + (node.extent_as / 2);
-        let child_index = match (is_northern, is_eastern) {
-            (true, true) => ChildIndex::NorthEast,
-            (true, false) => ChildIndex::NorthWest,
-            (false, true) => ChildIndex::SouthEast,
-            (false, false) => ChildIndex::SouthWest,
-        };
-        if let Some(child_id) = node.children[child_index.to_index()] {
-            self.visit_required_node(child_id, grat);
+        // If we have not yet reached full refinement, continue walking down.
+        let children = self.nodes[id.offset()].children;
+        for child in &children {
+            if !child.is_empty() && self.aabb_as(child).overlaps(window) {
+                self.visit_required_node(level + 1, *child, window, resolution);
+            }
         }
     }
 

@@ -30,7 +30,7 @@ use crate::{
 };
 pub use crate::{patch_winding::PatchWinding, terrain_vertex::TerrainVertex};
 
-use absolute_unit::Kilometers;
+use absolute_unit::{meters, Kilometers};
 use camera::Camera;
 use catalog::Catalog;
 use command::Command;
@@ -623,9 +623,9 @@ impl TerrainGeoBuffer {
 
             // Use the patch vertices to sample the tile tree, re-using the existing visibility and
             // solid-angle calculations to avoid having to re-do them for the patch tree as well.
-            self.tile_manager.note_required(&g0);
-            self.tile_manager.note_required(&g1);
-            self.tile_manager.note_required(&g2);
+            let segments = 2i32.pow(self.subdivisions as u32);
+            let edge_length = meters!((pv0 - pv1).magnitude() / segments as f64);
+            self.tile_manager.note_required(&g0, &g1, &g2, edge_length);
 
             verts.push(TerrainVertex::new(&pv0, &nv0.xyz(), &g0));
             verts.push(TerrainVertex::new(&pv1, &nv1.xyz(), &g1));

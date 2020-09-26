@@ -26,7 +26,7 @@ use std::{
     sync::{Arc, RwLock},
 };
 use terrain_geo::tile::{ChildIndex, TerrainLevel, TILE_PHYSICAL_SIZE};
-use zerocopy::AsBytes;
+use zerocopy::{AsBytes, LayoutVerified};
 
 enum TileData {
     Absent,                                                       // Not yet generated or loaded.
@@ -81,6 +81,15 @@ impl TileData {
         }
     }
 
+    fn raw_data(&self) -> &[u8] {
+        match self {
+            Self::Absent => &[],
+            Self::Empty => &[],
+            Self::Inline(ba) => ba.as_bytes(),
+            Self::Mapped(mm) => mm.as_bytes(),
+        }
+    }
+
     fn as_inline(&self) -> &[[i16; TILE_PHYSICAL_SIZE]; TILE_PHYSICAL_SIZE] {
         match self {
             Self::Inline(ba) => ba,
@@ -119,6 +128,11 @@ pub struct Tile {
     // Number of arcseconds in a sample.
     level: TerrainLevel,
 
+    // Record which child of the parent this is. Given Angular extent and base, we can
+    // work out our parents base; this is important when rebuilding efficiently from
+    // layers.
+    index_in_parent: ChildIndex,
+
     // The tile's bottom left corner. Note the full extent, not the extent clipped.
     base: Graticule<GeoCenter>,
 
@@ -136,12 +150,14 @@ impl Tile {
     pub fn new_uninitialized(
         prefix: &str,
         level: TerrainLevel,
+        index_in_parent: ChildIndex,
         base: &Graticule<GeoCenter>,
         angular_extent: Angle<ArcSeconds>,
     ) -> Self {
         Self {
             prefix: prefix.to_owned(),
             level,
+            index_in_parent,
             base: *base,
             angular_extent,
             data: TileData::Absent,
@@ -151,6 +167,10 @@ impl Tile {
 
     pub fn level(&self) -> TerrainLevel {
         self.level
+    }
+
+    pub fn index_in_parent(&self) -> ChildIndex {
+        self.index_in_parent
     }
 
     pub fn base(&self) -> &Graticule<GeoCenter> {
@@ -199,6 +219,7 @@ impl Tile {
         let tile = Arc::new(RwLock::new(Tile::new_uninitialized(
             &self.prefix,
             target_level,
+            index,
             &base,
             self.child_angular_extent(),
         )));
@@ -273,52 +294,55 @@ impl Tile {
         //    .  .  .  .  .  .
         // 0..255
 
-        if lat_offset < 256 && lon_offset < 256 {
+        let s: i32 = if lat_offset < 256 && lon_offset < 256 {
             if let Some(childref) = &self.children[ChildIndex::SouthWest.to_index()] {
                 let child = childref.read().unwrap();
                 let child_lat = lat_offset * 2;
                 let child_lon = lon_offset * 2;
-                return (child.get_sample(child_lat, child_lon)
-                    + child.get_sample(child_lat, child_lon + 1)
-                    + child.get_sample(child_lat + 1, child_lon)
-                    + child.get_sample(child_lat + 1, child_lon + 1))
-                    / 4;
+                child.get_sample(child_lat, child_lon) as i32
+                    + child.get_sample(child_lat, child_lon + 1) as i32
+                    + child.get_sample(child_lat + 1, child_lon) as i32
+                    + child.get_sample(child_lat + 1, child_lon + 1) as i32
+            } else {
+                0
             }
         } else if lat_offset < 256 {
             if let Some(childref) = &self.children[ChildIndex::SouthEast.to_index()] {
                 let child = childref.read().unwrap();
                 let child_lat = lat_offset * 2;
                 let child_lon = (lon_offset - 256) * 2;
-                return (child.get_sample(child_lat, child_lon)
-                    + child.get_sample(child_lat, child_lon + 1)
-                    + child.get_sample(child_lat + 1, child_lon)
-                    + child.get_sample(child_lat + 1, child_lon + 1))
-                    / 4;
+                child.get_sample(child_lat, child_lon) as i32
+                    + child.get_sample(child_lat, child_lon + 1) as i32
+                    + child.get_sample(child_lat + 1, child_lon) as i32
+                    + child.get_sample(child_lat + 1, child_lon + 1) as i32
+            } else {
+                0
             }
         } else if lon_offset < 256 {
             if let Some(childref) = &self.children[ChildIndex::NorthWest.to_index()] {
                 let child = childref.read().unwrap();
                 let child_lat = (lat_offset - 256) * 2;
                 let child_lon = lon_offset * 2;
-                return (child.get_sample(child_lat, child_lon)
-                    + child.get_sample(child_lat, child_lon + 1)
-                    + child.get_sample(child_lat + 1, child_lon)
-                    + child.get_sample(child_lat + 1, child_lon + 1))
-                    / 4;
+                child.get_sample(child_lat, child_lon) as i32
+                    + child.get_sample(child_lat, child_lon + 1) as i32
+                    + child.get_sample(child_lat + 1, child_lon) as i32
+                    + child.get_sample(child_lat + 1, child_lon + 1) as i32
+            } else {
+                0
             }
+        } else if let Some(childref) = &self.children[ChildIndex::NorthEast.to_index()] {
+            let child = childref.read().unwrap();
+            let child_lat = (lat_offset - 256) * 2;
+            let child_lon = (lon_offset - 256) * 2;
+            child.get_sample(child_lat, child_lon) as i32
+                + child.get_sample(child_lat, child_lon + 1) as i32
+                + child.get_sample(child_lat + 1, child_lon) as i32
+                + child.get_sample(child_lat + 1, child_lon + 1) as i32
         } else {
-            if let Some(childref) = &self.children[ChildIndex::NorthEast.to_index()] {
-                let child = childref.read().unwrap();
-                let child_lat = (lat_offset - 256) * 2;
-                let child_lon = (lon_offset - 256) * 2;
-                return (child.get_sample(child_lat, child_lon)
-                    + child.get_sample(child_lat, child_lon + 1)
-                    + child.get_sample(child_lat + 1, child_lon)
-                    + child.get_sample(child_lat + 1, child_lon + 1))
-                    / 4;
-            }
-        }
-        0
+            0
+        };
+
+        ((s as f64) / 4f64).round() as i16
     }
 
     pub fn is_empty_tile(&self) -> bool {
@@ -353,6 +377,10 @@ impl Tile {
         self.data.state()
     }
 
+    pub fn raw_data(&self) -> &[u8] {
+        self.data.raw_data()
+    }
+
     // Set a sample, offset in samples from the base corner.
     pub fn set_sample(&mut self, lat_offset: i32, lon_offset: i32, sample: i16) {
         debug_assert!(self.data.is_inline());
@@ -362,11 +390,11 @@ impl Tile {
     pub fn get_sample(&self, lat_offset: i32, lon_offset: i32) -> i16 {
         if self.data.is_mapped() {
             let m = self.data.as_mmap();
-            let n: &[i16] = unsafe { std::mem::transmute(m.as_bytes()) };
+            let n = LayoutVerified::<&[u8], [i16]>::new_slice(m.as_bytes()).unwrap();
             return n[TILE_PHYSICAL_SIZE * lat_offset as usize + lon_offset as usize];
         }
         assert!(self.data.is_empty());
-        return 0;
+        0
     }
 
     pub fn save_equalized_png(&self, directory: &Path) -> Fallible<()> {
@@ -399,15 +427,17 @@ impl Tile {
         self.filename(directory).exists()
     }
 
-    pub fn write(&mut self, directory: &Path) -> Fallible<()> {
+    pub fn write(&mut self, directory: &Path, allow_empty: bool) -> Fallible<()> {
         assert!(self.data.is_inline());
-        if self.is_empty_tile() {
+        if !allow_empty && self.is_empty_tile() {
             self.data = TileData::Empty;
             return Ok(());
         }
         let path = self.filename(directory);
         if !path.parent().expect("subdir").exists() {
-            fs::create_dir(path.parent().expect("subdir"))?;
+            println!("Creating directory: {:?}", path.parent());
+            fs::create_dir(path.parent().expect("subdir")).ok();
+            assert!(path.parent().expect("subdir").exists());
         }
         {
             let mut fp = File::create(&path)?;

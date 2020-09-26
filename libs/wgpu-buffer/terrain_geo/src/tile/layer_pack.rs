@@ -12,11 +12,19 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use crate::tile::TerrainLevel;
 use catalog::{Catalog, FileId};
-use failure::{ensure, err_msg, Fallible};
+use failure::{ensure, Fallible};
 use packed_struct::packed_struct;
-use std::{collections::HashMap, mem};
-use zerocopy::LayoutVerified;
+use std::{
+    borrow::Cow,
+    fs::File,
+    io::{Seek, SeekFrom, Write},
+    mem,
+    ops::Range,
+    path::Path,
+};
+use zerocopy::AsBytes;
 
 // Terrain tile layers typically hold hundreds of thousands or even millions of
 // individual tiles. This is enough that even naming them adds significant cost
@@ -28,8 +36,10 @@ packed_struct!(LayerPackHeader {
     _0 => magic: [u8; 3],
     _1 => version: u8,
     _2 => angular_extent_as: i32,
-    _3 => index_start: u32 as usize,
-    _4 => tile_start: u32 as usize
+    _3 => tile_count: u32,
+    _4 => tile_level: u32,
+    _5 => index_start: u32 as usize,
+    _6 => tile_start: u32 as usize
     // Followed immediately by index data at file[index_start..tile_start]
     // Followed by tile data at files[tile_start..] with offsets determined by
 });
@@ -37,8 +47,10 @@ packed_struct!(LayerPackHeader {
 packed_struct!(LayerPackIndexItem {
     _0 => base_lat_as: i32,
     _1 => base_lon_as: i32,
-    _2 => tile_start: usize,
-    _3 => tile_end: usize
+    _2 => tile_kind: u32,
+    _3 => index_in_parent: u32,
+    _4 => tile_start: usize,
+    _5 => tile_end: usize
 });
 
 const HEADER_MAGIC: [u8; 3] = [b'L', b'P', b'K'];
@@ -47,8 +59,10 @@ const HEADER_VERSION: u8 = 0;
 pub struct LayerPack {
     // Map from base lat/lon in arcseconds, to start and end offsets in the file.
     layer_pack_fid: FileId,
+    terrain_level: TerrainLevel,
     angular_extent_as: i32,
-    index: HashMap<(i32, i32), (usize, usize)>,
+    index_extent: Range<usize>,
+    tile_count: usize,
 }
 
 impl LayerPack {
@@ -58,25 +72,110 @@ impl LayerPack {
         let header = LayerPackHeader::overlay(&header_raw);
         ensure!(header.magic() == HEADER_MAGIC);
         ensure!(header.version() == HEADER_VERSION);
-        let index_buf =
-            catalog.read_slice_sync(layer_pack_fid, header.index_start()..header.tile_start())?;
-        let raw_index = LayerPackIndexItem::overlay_slice(&index_buf);
-        let mut index = HashMap::with_capacity(raw_index.len());
-        for item in raw_index {
-            index.insert(
-                (item.base_lat_as(), item.base_lon_as()),
-                (item.tile_start(), item.tile_end()),
-            );
-        }
+        ensure!(
+            (header.tile_start() - header.index_start()) % mem::size_of::<LayerPackIndexItem>()
+                == 0
+        );
         Ok(Self {
             layer_pack_fid,
             angular_extent_as: header.angular_extent_as(),
-            index,
+            terrain_level: TerrainLevel::new(header.tile_level() as usize),
+            index_extent: header.index_start()..header.tile_start(),
+            tile_count: (header.tile_start() - header.index_start())
+                / mem::size_of::<LayerPackIndexItem>(),
         })
     }
 
-    pub async fn load_tile(&self, base: (i32, i32), catalog: &Catalog) -> Fallible<Vec<u8>> {
-        let (start, end) = self.index[&base];
-        Ok(catalog.read_slice(self.layer_pack_fid, start..end).await?)
+    pub(crate) fn index_bytes<'a>(&self, catalog: &'a Catalog) -> Fallible<Cow<'a, [u8]>> {
+        catalog.read_slice_sync(self.layer_pack_fid, self.index_extent.clone())
+    }
+
+    pub fn angular_extent_as(&self) -> i32 {
+        self.angular_extent_as
+    }
+
+    pub fn terrain_level(&self) -> &TerrainLevel {
+        &self.terrain_level
+    }
+
+    pub fn tile_count(&self) -> usize {
+        self.tile_count
+    }
+
+    pub fn file_id(&self) -> FileId {
+        self.layer_pack_fid
+    }
+}
+
+pub struct LayerPackBuilder {
+    // Contains start relative to tile_start and the length.
+    reservations: Vec<((i32, i32), u32, (usize, u32))>,
+    reserve_cursor: usize,
+    stream: File,
+}
+
+impl LayerPackBuilder {
+    pub fn new(path: &Path) -> Fallible<Self> {
+        Ok(Self {
+            reservations: Vec::new(),
+            reserve_cursor: 0,
+            stream: File::create(path)?,
+        })
+    }
+
+    pub fn reserve(&mut self, base: (i32, i32), index_in_parent: u32, data: &[u8]) {
+        if data.is_empty() {
+            return;
+        }
+        self.reservations.push((
+            base,
+            index_in_parent,
+            (self.reserve_cursor, data.len() as u32),
+        ));
+        self.reserve_cursor += data.len();
+    }
+
+    pub fn write_header(&mut self, tile_level: u32, angular_extent_as: i32) -> Fallible<()> {
+        assert_eq!(self.stream.seek(SeekFrom::Current(0))?, 0u64);
+
+        // Write out the header
+        let index_start = mem::size_of::<LayerPackHeader>();
+        let tile_start =
+            index_start + mem::size_of::<LayerPackIndexItem>() * self.reservations.len();
+        let header = LayerPackHeader::build(
+            HEADER_MAGIC,
+            HEADER_VERSION,
+            angular_extent_as,
+            self.reservations.len() as u32,
+            tile_level,
+            index_start as u32,
+            tile_start as u32,
+        )?;
+        self.stream.write_all(header.as_bytes())?;
+
+        // Write out the index
+        for ((base_lat_as, base_lon_as), index_in_parent, (offset, length)) in &self.reservations {
+            let index_item = LayerPackIndexItem::build(
+                *base_lat_as,
+                *base_lon_as,
+                0,
+                *index_in_parent,
+                tile_start + *offset,
+                tile_start + *offset + *length as usize,
+            )?;
+            self.stream.write_all(index_item.as_bytes())?;
+        }
+
+        // Assuming our math is right:
+        assert_eq!(self.stream.seek(SeekFrom::Current(0))?, tile_start as u64);
+        Ok(())
+    }
+
+    pub fn push_tile(&mut self, data: &[u8]) -> Fallible<()> {
+        if data.is_empty() {
+            return Ok(());
+        }
+        self.stream.write_all(data)?;
+        Ok(())
     }
 }

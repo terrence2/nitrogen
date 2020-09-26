@@ -18,13 +18,13 @@ pub use zerocopy::{AsBytes, FromBytes, LayoutVerified};
 #[macro_export]
 macro_rules! _make_packed_struct_accessor {
     ($field:ident, $field_name:ident, $field_ty:ty, $output_ty:ty) => {
-        fn $field_name(&self) -> $output_ty {
+        pub fn $field_name(&self) -> $output_ty {
             self.$field as $output_ty
         }
     };
 
     ($field:ident, $field_name:ident, $field_ty:ty, ) => {
-        fn $field_name(&self) -> $field_ty {
+        pub fn $field_name(&self) -> $field_ty {
             self.$field as $field_ty
         }
     };

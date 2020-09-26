@@ -19,6 +19,8 @@ mod tile_info;
 mod tile_manager;
 mod tile_set;
 
+pub(crate) use layer_pack::LayerPack;
+pub use layer_pack::{LayerPackBuilder, LayerPackHeader, LayerPackIndexItem};
 pub(crate) use tile_manager::TileManager;
 
 use absolute_unit::{arcseconds, meters, Angle, ArcSeconds};
@@ -185,6 +187,16 @@ impl ChildIndex {
             Self::SouthEast => 1, // 01
             Self::NorthWest => 2, // 10
             Self::NorthEast => 3, // 11
+        }
+    }
+
+    pub fn from_index(index: usize) -> Self {
+        match index {
+            0 => Self::SouthWest, // 00
+            1 => Self::SouthEast, // 01
+            2 => Self::NorthWest, // 10
+            3 => Self::NorthEast, // 11
+            _ => panic!("Not a valid index"),
         }
     }
 

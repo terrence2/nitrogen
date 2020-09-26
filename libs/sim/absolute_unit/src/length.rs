@@ -32,6 +32,12 @@ pub struct Length<Unit: LengthUnit> {
     phantom: PhantomData<Unit>,
 }
 
+impl<Unit: LengthUnit> Length<Unit> {
+    pub fn f64(self) -> f64 {
+        f64::from(self)
+    }
+}
+
 impl<Unit> fmt::Display for Length<Unit>
 where
     Unit: LengthUnit,

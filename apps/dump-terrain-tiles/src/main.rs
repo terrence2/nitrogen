@@ -19,7 +19,7 @@ use crate::{
     mip::{MipIndex, MipIndexDataSet, MipTile},
     srtm::SrtmIndex,
 };
-use absolute_unit::{arcseconds, degrees, meters, radians, Angle, Radians};
+use absolute_unit::{arcseconds, degrees, meters, radians, Angle, ArcSeconds, Radians};
 use failure::Fallible;
 use geodesy::{GeoCenter, Graticule};
 use rayon::prelude::*;
@@ -28,10 +28,12 @@ use std::{
     io::{stdout, Write},
     path::{Path, PathBuf},
     sync::{Arc, RwLock},
+    time::Instant,
 };
 use structopt::StructOpt;
 use terrain_geo::tile::{
-    ChildIndex, DataSetCoordinates, DataSetDataKind, TerrainLevel, TILE_PHYSICAL_SIZE, TILE_SAMPLES,
+    ChildIndex, DataSetCoordinates, DataSetDataKind, LayerPackBuilder, TerrainLevel,
+    TILE_PHYSICAL_SIZE, TILE_SAMPLES,
 };
 
 #[derive(Debug, StructOpt)]
@@ -51,6 +53,10 @@ struct Opt {
     /// Dump equalized PNGs of created tiles.
     #[structopt(short, long)]
     dump_png: bool,
+
+    /// Overwrite existing files.
+    #[structopt(short, long)]
+    force: bool,
 }
 
 #[inline]
@@ -73,6 +79,43 @@ pub fn maximum_latitude() -> Angle<Radians> {
     radians!(degrees!(90))
 }
 
+struct InlinePercentProgress {
+    total: usize,
+    current: usize,
+    start_time: Instant,
+}
+
+impl InlinePercentProgress {
+    pub fn new(label: &str, total: usize) -> Self {
+        print!("{} 000.00%", label);
+        stdout().flush().ok();
+        Self {
+            total,
+            current: 0,
+            start_time: Instant::now(),
+        }
+    }
+
+    pub fn set(&mut self, current: usize) {
+        self.current = current;
+        let percent = (self.current as f64 / self.total as f64) * 100f64;
+        print!(
+            "\x1B[7D{:03}.{:02}%",
+            percent.floor() as u8,
+            ((percent - percent.floor()) * 100f64) as u8
+        );
+        stdout().flush().ok();
+    }
+
+    pub fn poke(&mut self) {
+        self.set(self.current + 1);
+    }
+
+    pub fn finish(&self) {
+        println!(", completed in {:?}", self.start_time.elapsed());
+    }
+}
+
 fn build_trees(
     current_level: usize,
     srtm_index: Arc<RwLock<SrtmIndex>>,
@@ -87,11 +130,11 @@ fn build_trees(
             let mut height_node = height_node.write().unwrap();
             let next_level = TerrainLevel::new(current_level + 1);
             for &child_index in &ChildIndex::all() {
-                if !height_node.has_child(child_index) {
-                    if srtm.contains_region(height_node.child_region(child_index)) {
-                        *node_count += 1;
-                        height_node.add_child(next_level, child_index);
-                    }
+                if !height_node.has_child(child_index)
+                    && srtm.contains_region(height_node.child_region(child_index))
+                {
+                    *node_count += 1;
+                    height_node.add_child(next_level, child_index);
                 }
             }
         }
@@ -146,14 +189,13 @@ pub fn generate_mip_tile_from_srtm(
     srtm_index: Arc<RwLock<SrtmIndex>>,
     index: Arc<RwLock<MipIndexDataSet>>,
     node: Arc<RwLock<MipTile>>,
-    offset: usize,
     dump_png: bool,
 ) -> Fallible<()> {
     // Assume that tiles we've already created are good.
     if node
         .read()
         .unwrap()
-        .file_exists(index.read().unwrap().base_path())
+        .file_exists(index.read().unwrap().work_path())
     {
         return Ok(());
     }
@@ -166,7 +208,7 @@ pub fn generate_mip_tile_from_srtm(
     let base = *node.read().unwrap().base_corner_graticule();
 
     let srtm = srtm_index.read().unwrap();
-    println!("visit: level {} @ {} - {}", level.offset(), base, offset);
+    // println!("visit: level {} @ {} - {}", level.offset(), base, offset);
     for lat_i in -1..TILE_SAMPLES + 1 {
         // 'actual' unfolds infinitely
         // 'srtm' is clamped or wrapped as appropriate to srtm extents
@@ -204,11 +246,11 @@ pub fn generate_mip_tile_from_srtm(
     if dump_png {
         node.read()
             .unwrap()
-            .save_equalized_png(std::path::Path::new("scanout"))?;
+            .save_equalized_png(std::path::Path::new("__dump__/terrain-tiles/"))?;
     }
     node.write()
         .unwrap()
-        .write(index.read().unwrap().base_path())?;
+        .write(index.read().unwrap().work_path(), false)?;
 
     Ok(())
 }
@@ -216,14 +258,13 @@ pub fn generate_mip_tile_from_srtm(
 pub fn generate_mip_tile_from_mip(
     index: Arc<RwLock<MipIndexDataSet>>,
     node: Arc<RwLock<MipTile>>,
-    offset: usize,
     dump_png: bool,
 ) -> Fallible<()> {
     // Assume that tiles we've already created are good.
     if node
         .read()
         .unwrap()
-        .file_exists(index.read().unwrap().base_path())
+        .file_exists(index.read().unwrap().work_path())
     {
         assert_eq!(node.read().unwrap().data_state(), "mapped");
         return Ok(());
@@ -231,11 +272,6 @@ pub fn generate_mip_tile_from_mip(
 
     node.write().unwrap().allocate_scratch_data();
 
-    if offset % 100 == 0 {
-        print!(".");
-        stdout().flush()?;
-    }
-    //println!("visit: level {} @ {} - {}", level.offset(), base, offset);
     for lat_i in -1..TILE_SAMPLES + 1 {
         // 'actual' unfolds infinitely
         // 'srtm' is clamped or wrapped as appropriate to srtm extents
@@ -248,11 +284,11 @@ pub fn generate_mip_tile_from_mip(
     if dump_png {
         node.read()
             .unwrap()
-            .save_equalized_png(std::path::Path::new("scanout"))?;
+            .save_equalized_png(std::path::Path::new("__dump__/terrain-tiles/"))?;
     }
     node.write()
         .unwrap()
-        .write(index.read().unwrap().base_path())?;
+        .write(index.read().unwrap().work_path(), true)?;
 
     // Note that though we have non-none tiles, our mips do not line up with the underlying 1
     // degree slicing so we may have corners that are non-None but still empty. This results in
@@ -267,13 +303,13 @@ pub fn generate_mip_tile_from_mip(
 
 fn map_all_available_tile(
     tiles: &mut Vec<(Arc<RwLock<MipTile>>, usize)>,
-    base_path: &Path,
+    path: &Path,
 ) -> Fallible<usize> {
     let mmap_count = Arc::new(RwLock::new(0usize));
     tiles
         .par_iter_mut()
         .try_for_each::<_, Fallible<()>>(|(tile, _offset)| {
-            if tile.write().unwrap().maybe_map_data(base_path).unwrap() {
+            if tile.write().unwrap().maybe_map_data(path).unwrap() {
                 *mmap_count.write().unwrap() += 1;
             }
             Ok(())
@@ -281,10 +317,52 @@ fn map_all_available_tile(
     println!(
         "  Mmapped {} existing tiles in {:?}",
         mmap_count.read().unwrap(),
-        base_path
+        path
     );
     let cnt = *mmap_count.read().unwrap();
     Ok(cnt)
+}
+
+fn write_layer_pack(
+    height_tiles: &[(Arc<RwLock<MipTile>>, usize)],
+    index: Arc<RwLock<MipIndexDataSet>>,
+    target_level: usize,
+    force: bool,
+) -> Fallible<()> {
+    let layer_pack_path = index.read().unwrap().base_path().join(&format!(
+        "{}-L{:02}.mip",
+        index.read().unwrap().prefix(),
+        target_level
+    ));
+    if layer_pack_path.exists() && !force {
+        return Ok(());
+    }
+    let mut layer_pack_builder = LayerPackBuilder::new(&layer_pack_path)?;
+    let mut progress = InlinePercentProgress::new("  Reserving pack entries:", height_tiles.len());
+    for (tile, _) in height_tiles {
+        let tile = tile.read().unwrap();
+        let base_lat_as = tile.base().lat::<ArcSeconds>().round() as i32;
+        let base_lon_as = tile.base().lon::<ArcSeconds>().round() as i32;
+        layer_pack_builder.reserve(
+            (base_lat_as, base_lon_as),
+            tile.index_in_parent().to_index() as u32,
+            tile.raw_data(),
+        );
+        progress.poke();
+    }
+    layer_pack_builder.write_header(
+        target_level as u32,
+        TerrainLevel::new(target_level).angular_extent().round() as i32,
+    )?;
+    progress.finish();
+    let mut progress =
+        InlinePercentProgress::new("  Writing Pack File:", EXPECT_LAYER_COUNTS[target_level].0);
+    for (tile, _) in height_tiles {
+        layer_pack_builder.push_tile(tile.read().unwrap().raw_data())?;
+        progress.poke();
+    }
+    progress.finish();
+    Ok(())
 }
 
 const EXPECT_LAYER_COUNTS: [(usize, usize); 13] = [
@@ -329,7 +407,7 @@ fn main() -> Fallible<()> {
         0,
         srtm.clone(),
         mip_srtm_heights.clone(),
-        height_root.clone(),
+        height_root,
         &mut node_count,
         &mut leaf_count,
     )?;
@@ -355,37 +433,46 @@ fn main() -> Fallible<()> {
         assert_eq!(height_tiles.len(), EXPECT_LAYER_COUNTS[target_level].0);
         let mmap_count = map_all_available_tile(
             &mut height_tiles,
-            mip_srtm_heights.read().unwrap().base_path(),
+            mip_srtm_heights.read().unwrap().work_path(),
         )?;
         if mmap_count < EXPECT_LAYER_COUNTS[target_level].1 {
-            println!("  Generating tiles");
+            let progress = Arc::new(RwLock::new(InlinePercentProgress::new(
+                "  Building tiles:",
+                height_tiles.len(),
+            )));
             if target_level == TerrainLevel::arcsecond_level() {
-                height_tiles.par_iter().try_for_each(|(node, offset)| {
+                height_tiles.par_iter().try_for_each(|(tile, _)| {
+                    progress.write().unwrap().poke();
                     generate_mip_tile_from_srtm(
                         srtm.clone(),
                         mip_srtm_heights.clone(),
-                        node.to_owned(),
-                        *offset,
+                        tile.to_owned(),
                         opt.dump_png,
                     )
                 })?;
             } else {
-                height_tiles.par_iter().try_for_each(|(tile, offset)| {
+                height_tiles.par_iter().try_for_each(|(tile, _)| {
+                    progress.write().unwrap().poke();
                     generate_mip_tile_from_mip(
                         mip_srtm_heights.clone(),
                         tile.to_owned(),
-                        *offset,
                         opt.dump_png,
                     )
                 })?;
             }
-            println!();
+            progress.write().unwrap().finish();
         } else {
             println!("  Found all tiles on disk - promoting absent to empty");
             height_tiles.par_iter().for_each(|(node, _offset)| {
                 node.write().unwrap().promote_absent_to_empty();
             });
         }
+        write_layer_pack(
+            &height_tiles,
+            mip_srtm_heights.clone(),
+            target_level,
+            opt.force,
+        )?;
     }
 
     // Write out our top level index of the data.

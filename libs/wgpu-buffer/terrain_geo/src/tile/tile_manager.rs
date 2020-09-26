@@ -45,11 +45,12 @@
 //       * Q: are there optimizations we can make knowing that it is a quadtree?
 
 use crate::{tile::tile_set::TileSet, GpuDetail};
+use absolute_unit::{Length, Meters};
 use catalog::{from_utf8_string, Catalog};
 use failure::Fallible;
 use geodesy::{GeoCenter, Graticule};
 use gpu::{UploadTracker, GPU};
-use std::{sync::Arc, time::Instant};
+use std::sync::Arc;
 use tokio::{runtime::Runtime, sync::RwLock};
 
 // A collection of TileSet, potentially more than one per kind.
@@ -89,9 +90,15 @@ impl TileManager {
         }
     }
 
-    pub fn note_required(&mut self, grat: &Graticule<GeoCenter>) {
+    pub fn note_required(
+        &mut self,
+        grat0: &Graticule<GeoCenter>,
+        grat1: &Graticule<GeoCenter>,
+        grat2: &Graticule<GeoCenter>,
+        triangle_edge: Length<Meters>,
+    ) {
         for ts in self.tile_sets.iter_mut() {
-            ts.note_required(grat);
+            ts.note_required(grat0, grat1, grat2, triangle_edge);
         }
     }
 

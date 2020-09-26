@@ -74,7 +74,7 @@ impl Index {
         for lat in lo_lat..=hi_lat {
             if let Some(by_lon) = self.by_graticule.get(&lat) {
                 for lon in lo_lon..=hi_lon {
-                    if let Some(_) = by_lon.get(&lon) {
+                    if by_lon.get(&lon).is_some() {
                         return true;
                     }
                 }
