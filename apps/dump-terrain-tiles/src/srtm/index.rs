@@ -16,13 +16,15 @@ use crate::{mip::Region, srtm::tile::Tile};
 use absolute_unit::{degrees, Degrees};
 use failure::Fallible;
 use geodesy::{GeoCenter, Graticule};
+use parking_lot::RwLock;
 use std::{
     collections::HashMap,
     fs::File,
     io::Read,
     path::{Path, PathBuf},
-    sync::{Arc, RwLock},
+    sync::Arc,
 };
+use terrain_geo::tile::TerrainLevel;
 
 pub struct Index {
     tiles: Vec<Tile>,
@@ -31,6 +33,10 @@ pub struct Index {
 }
 
 impl Index {
+    pub fn max_resolution_level() -> usize {
+        TerrainLevel::arcsecond_level()
+    }
+
     pub fn from_directory(directory: &Path) -> Fallible<Arc<RwLock<Self>>> {
         let mut index_filename = PathBuf::from(directory);
         index_filename.push("srtm30m_bounding_boxes.json");

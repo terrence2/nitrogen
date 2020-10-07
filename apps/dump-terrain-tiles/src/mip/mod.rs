@@ -16,7 +16,7 @@ mod index;
 mod tile;
 
 pub use index::{Index as MipIndex, IndexDataSet as MipIndexDataSet};
-pub use tile::Tile as MipTile;
+pub use tile::{NeighborIndex, Tile as MipTile};
 
 use absolute_unit::{Angle, ArcSeconds};
 use geodesy::{GeoCenter, Graticule};

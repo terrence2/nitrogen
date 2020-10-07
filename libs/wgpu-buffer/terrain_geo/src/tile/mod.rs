@@ -173,6 +173,7 @@ impl TerrainLevel {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[repr(u8)]
 pub enum ChildIndex {
     SouthWest,
     SouthEast,
