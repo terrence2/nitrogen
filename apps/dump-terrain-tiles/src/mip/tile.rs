@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::mip::{MipIndexDataSet, Region};
+use crate::mip::Region;
 use absolute_unit::{arcseconds, meters, Angle, ArcSeconds};
 use failure::Fallible;
 use geodesy::{GeoCenter, Graticule};
@@ -56,6 +56,7 @@ impl NeighborIndex {
         8
     }
 
+    #[allow(unused)]
     pub fn from_index(i: usize) -> Self {
         match i {
             0 => Self::West,
@@ -86,10 +87,7 @@ impl NeighborIndex {
 
 impl TileData {
     fn is_absent(&self) -> bool {
-        match self {
-            Self::Absent => true,
-            _ => false,
-        }
+        matches!(self, Self::Absent)
     }
 
     fn is_inline(&self) -> bool {
@@ -109,10 +107,7 @@ impl TileData {
     }
 
     fn is_empty(&self) -> bool {
-        match self {
-            Self::Empty => true,
-            _ => false,
-        }
+        matches!(self, Self::Empty)
     }
 
     fn state(&self) -> &'static str {
@@ -376,12 +371,7 @@ impl Tile {
     }
 
     // Fill in a sample by linearly interpolating the data from our child's samples.
-    pub fn pull_height_sample(
-        &mut self,
-        dataset: Arc<RwLock<MipIndexDataSet>>,
-        lat_offset: i32,
-        lon_offset: i32,
-    ) -> i16 {
+    pub fn pull_height_sample(&mut self, lat_offset: i32, lon_offset: i32) -> i16 {
         assert!(self.data.is_inline());
         assert!(lat_offset >= 0);
         assert!(lon_offset >= 0);
@@ -395,7 +385,7 @@ impl Tile {
         // We can reach right and up in our children without issue. Left and/or down is problematic.
         // If we are at the top or left, we need to reach to our siblings.
 
-        let s = if lat_offset < 256 && lon_offset < 256 {
+        let total_height = if lat_offset < 256 && lon_offset < 256 {
             self.children[ChildIndex::SouthWest.to_index()]
                 .as_ref()
                 .map(|child| {
@@ -419,7 +409,7 @@ impl Tile {
                     let lon = lon_offset * 2;
                     child.read().sum_region(lat, lon)
                 })
-        } else if let Some(childref) = &self.children[ChildIndex::NorthEast.to_index()] {
+        } else {
             self.children[ChildIndex::NorthEast.to_index()]
                 .as_ref()
                 .map(|child| {
@@ -427,29 +417,11 @@ impl Tile {
                     let lon = (lon_offset - 256) * 2;
                     child.read().sum_region(lat, lon)
                 })
-        } else {
-            None
         };
 
-        if let Some(sum_height) = s {
-            let height = ((sum_height as f64) / 9f64).round() as i16;
-            height
-        } else {
-            0
-        }
-        // if let Some((childref, child_lat, child_lon)) = s {
-        //     let sum_height = childref.read().get_height_sample(child_lat, child_lon) as i32
-        //         + childref.read().get_height_sample(child_lat, child_lon + 1) as i32
-        //         + childref.read().get_height_sample(child_lat + 1, child_lon) as i32
-        //         + childref
-        //             .read()
-        //             .get_height_sample(child_lat + 1, child_lon + 1) as i32;
-        //     let height = ((sum_height as f64) / 4f64).round() as i16;
-        //     // FIXME: how do we compute an average normal?
-        //     height
-        // } else {
-        //     0
-        // }
+        total_height
+            .map(|h| ((h as f64) / 9f64).round() as i16)
+            .unwrap_or(0)
     }
 
     pub fn is_empty_tile(&self) -> bool {

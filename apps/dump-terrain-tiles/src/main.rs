@@ -346,8 +346,7 @@ pub fn generate_mip_tile_from_mip(
             let mut tile = node.write();
             match kind {
                 DataSetDataKind::Height => {
-                    let height =
-                        tile.pull_height_sample(index.clone(), lat_i as i32 + 1, lon_i as i32 + 1);
+                    let height = tile.pull_height_sample(lat_i as i32 + 1, lon_i as i32 + 1);
                     tile.set_height_sample(lat_i as i32 + 1, lon_i as i32 + 1, height);
                 }
                 _ => panic!("unsupported kind"),
