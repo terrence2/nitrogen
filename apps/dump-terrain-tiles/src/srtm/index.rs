@@ -15,7 +15,7 @@
 use crate::{mip::Region, srtm::tile::Tile};
 use absolute_unit::{arcseconds, degrees, meters, ArcSeconds, Degrees, Meters};
 use failure::Fallible;
-use geodesy::{Cartesian, GeoCenter, Graticule};
+use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule};
 use parking_lot::RwLock;
 use std::{
     collections::HashMap,
@@ -90,7 +90,7 @@ impl Index {
     }
 
     #[allow(unused)]
-    pub fn sample_linear(&self, grat: &Graticule<GeoCenter>) -> f32 {
+    pub fn sample_linear(&self, grat: &Graticule<GeoSurface>) -> f32 {
         let lat = Tile::index(grat.lat());
         let lon = Tile::index(grat.lon());
         if let Some(row) = self.by_graticule.get(&lat) {
@@ -101,7 +101,7 @@ impl Index {
         0f32
     }
 
-    pub fn sample_nearest(&self, grat: &Graticule<GeoCenter>) -> i16 {
+    pub fn sample_nearest(&self, grat: &Graticule<GeoSurface>) -> i16 {
         let lat = Tile::index(grat.lat());
         let lon = Tile::index(grat.lon());
         if let Some(row) = self.by_graticule.get(&lat) {
@@ -113,11 +113,11 @@ impl Index {
     }
 
     fn unit_offset(
-        grat: &Graticule<GeoCenter>,
+        grat: &Graticule<GeoSurface>,
         lat_offset: i16,
         lon_offset: i16,
-    ) -> Graticule<GeoCenter> {
-        Graticule::<GeoCenter>::new(
+    ) -> Graticule<GeoSurface> {
+        Graticule::<GeoSurface>::new(
             degrees!(grat.lat::<ArcSeconds>() + arcseconds!(lat_offset))
                 .clamp(degrees!(-60), degrees!(60)),
             degrees!(grat.lon::<ArcSeconds>() + arcseconds!(lon_offset))
@@ -133,7 +133,7 @@ impl Index {
     //       cases as well. Would be nice to prove though.
     // TODO: How much does latitude affect things? Should we just compute real coordinates from
     //       our graticule?
-    pub fn compute_normal_at(&self, grat: &Graticule<GeoCenter>) -> [i16; 2] {
+    pub fn compute_normal_at(&self, grat: &Graticule<GeoSurface>) -> [i16; 2] {
         // Compute 9 tap locations for computing our normal.
         let g_c = *grat;
         let g_sw = Self::unit_offset(grat, -1, -1);
@@ -157,15 +157,15 @@ impl Index {
         let h_ne = self.sample_nearest(&g_ne) as f64;
 
         // Convert all graticules to raw cartesian.
-        let c_c = Cartesian::<GeoCenter, Meters>::from(g_c).vec64();
-        let c_sw = Cartesian::<GeoCenter, Meters>::from(g_sw).vec64();
-        let c_s = Cartesian::<GeoCenter, Meters>::from(g_s).vec64();
-        let c_se = Cartesian::<GeoCenter, Meters>::from(g_se).vec64();
-        let c_w = Cartesian::<GeoCenter, Meters>::from(g_w).vec64();
-        let c_e = Cartesian::<GeoCenter, Meters>::from(g_e).vec64();
-        let c_nw = Cartesian::<GeoCenter, Meters>::from(g_nw).vec64();
-        let c_n = Cartesian::<GeoCenter, Meters>::from(g_n).vec64();
-        let c_ne = Cartesian::<GeoCenter, Meters>::from(g_ne).vec64();
+        let c_c = Cartesian::<GeoCenter, Meters>::from(Graticule::<GeoCenter>::from(g_c)).vec64();
+        let c_sw = Cartesian::<GeoCenter, Meters>::from(Graticule::<GeoCenter>::from(g_sw)).vec64();
+        let c_s = Cartesian::<GeoCenter, Meters>::from(Graticule::<GeoCenter>::from(g_s)).vec64();
+        let c_se = Cartesian::<GeoCenter, Meters>::from(Graticule::<GeoCenter>::from(g_se)).vec64();
+        let c_w = Cartesian::<GeoCenter, Meters>::from(Graticule::<GeoCenter>::from(g_w)).vec64();
+        let c_e = Cartesian::<GeoCenter, Meters>::from(Graticule::<GeoCenter>::from(g_e)).vec64();
+        let c_nw = Cartesian::<GeoCenter, Meters>::from(Graticule::<GeoCenter>::from(g_nw)).vec64();
+        let c_n = Cartesian::<GeoCenter, Meters>::from(Graticule::<GeoCenter>::from(g_n)).vec64();
+        let c_ne = Cartesian::<GeoCenter, Meters>::from(Graticule::<GeoCenter>::from(g_ne)).vec64();
 
         // Displace by heights.
         let v_c = c_c + c_c.normalize() * h_c;
@@ -189,7 +189,7 @@ impl Index {
         v_ne -= v_c;
 
         // Get right handed normals.
-        let cart_normal = ((v_sw.cross(&v_s).normalize()
+        let avg_normal = ((v_sw.cross(&v_s).normalize()
             + v_s.cross(&v_se).normalize()
             + v_se.cross(&v_e).normalize()
             + v_e.cross(&v_ne).normalize()
@@ -201,11 +201,12 @@ impl Index {
             .normalize();
 
         // Note that this result is relative to `norm`.
-        let rel = Graticule::<GeoCenter>::from(Cartesian::<GeoCenter, Meters>::from(cart_normal));
+        let norm_cart = Cartesian::<GeoCenter, Meters>::from(avg_normal);
+        let norm_grat = Graticule::<GeoCenter>::from(norm_cart);
         // let lat_deg = rel.lat::<Degrees>().f64();
         // let lon_deg = rel.lon::<Degrees>().f64();
-        let lat_deg = (rel.lat::<Degrees>() - grat.lat::<Degrees>()).f64();
-        let lon_deg = (rel.lon::<Degrees>() - grat.lon::<Degrees>()).f64();
+        let lat_deg = (norm_grat.lat::<Degrees>() - grat.lat::<Degrees>()).f64();
+        let lon_deg = (norm_grat.lon::<Degrees>() - grat.lon::<Degrees>()).f64();
         let lat = (lat_deg / 90f64 * (1 << 15) as f64).round() as i16;
         let lon = (lon_deg / 180f64 * (1 << 15) as f64).round() as i16;
         // println!("LL: {} => {}, {}", grat, lat_deg, lon_deg);

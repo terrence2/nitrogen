@@ -13,9 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{GeoCenter, Graticule, Target};
-use absolute_unit::{kilometers, Length, LengthUnit, Radians};
+use absolute_unit::{Length, LengthUnit, Radians};
 use nalgebra::{Point3, Vector3};
-use physical_constants::EARTH_RADIUS_KM;
 use std::{
     fmt,
     marker::PhantomData,
@@ -123,7 +122,7 @@ where
     fn from(graticule: Graticule<GeoCenter>) -> Self {
         let lat = graticule.lat::<Radians>().f64();
         let lon = graticule.lon::<Radians>().f64();
-        let base = kilometers!(EARTH_RADIUS_KM) + graticule.distance;
+        let base = graticule.distance;
         Self {
             coords: [
                 (&(base * -lon.sin() * lat.cos())).into(),

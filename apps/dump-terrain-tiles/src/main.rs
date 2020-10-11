@@ -21,8 +21,8 @@ use crate::{
 };
 use absolute_unit::{arcseconds, degrees, meters, radians, Angle, Radians};
 use failure::Fallible;
-use geodesy::{GeoCenter, Graticule};
-use parking_lot::RwLock;
+use geodesy::{GeoSurface, Graticule};
+use parking_lot::{Mutex, RwLock};
 use rayon::prelude::*;
 use std::{
     fs,
@@ -300,7 +300,7 @@ pub fn generate_mip_tile_from_srtm(
                 lon_srtm -= degrees!(360);
             }
 
-            let srtm_grat = Graticule::<GeoCenter>::new(
+            let srtm_grat = Graticule::<GeoSurface>::new(
                 arcseconds!(lat_srtm),
                 arcseconds!(lon_srtm),
                 meters!(0),
@@ -445,22 +445,25 @@ fn write_layer_pack(
     Ok(())
 }
 
-fn analyze_tile_compressibility(tile: &MipTile) {
+fn analyze_tile_compressibility(_tile: &MipTile) {
     // Get symbol dictionary size with delta compression.
-    let mut symbols = tile.reorder_for_compression();
-    let base = symbols.next().unwrap();
-    println!("BASE: {}", base);
+    // let mut symbols = tile.reorder_for_compression();
+    // let base = symbols.next().unwrap();
+    // println!("BASE: {}", base);
 }
 
 fn analyze_compressibility(tiles: &[(Arc<RwLock<MipTile>>, usize)]) {
-    let mut progress = InlinePercentProgress::new("  Analyzing Compressibility:", tiles.len());
+    let progress = Mutex::new(InlinePercentProgress::new(
+        "  Analyzing Compressibility:",
+        tiles.len(),
+    ));
     tiles.par_chunks(4096).for_each(|chunk| {
         for (tile, _) in chunk {
-            let result = analyze_tile_compressiblity(&tile.read());
-            progress.poke();
+            let _result = analyze_tile_compressibility(&tile.read());
+            progress.lock().poke();
         }
     });
-    progress.finish();
+    progress.lock().finish();
 }
 
 const EXPECT_LAYER_COUNTS: [(usize, usize); 13] = [
