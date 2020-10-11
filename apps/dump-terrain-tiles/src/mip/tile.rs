@@ -16,7 +16,7 @@ use crate::mip::Region;
 use absolute_unit::{arcseconds, meters, Angle, ArcSeconds};
 use failure::Fallible;
 use geodesy::{GeoCenter, Graticule};
-use image::{ImageBuffer, Luma};
+use image::{ImageBuffer, Luma, Rgb};
 use memmap::{Mmap, MmapOptions};
 use parking_lot::RwLock;
 use std::{
@@ -135,14 +135,21 @@ impl TileData {
     fn as_inline_heights(&self) -> &[[i16; TILE_PHYSICAL_SIZE]; TILE_PHYSICAL_SIZE] {
         match self {
             Self::InlineHeights(ba) => ba,
-            _ => panic!("not an inline data"),
+            _ => panic!("not an inline height data"),
         }
     }
 
     fn as_inline_heights_mut(&mut self) -> &mut [[i16; TILE_PHYSICAL_SIZE]; TILE_PHYSICAL_SIZE] {
         match self {
             Self::InlineHeights(ba) => ba,
-            _ => panic!("not an inline data"),
+            _ => panic!("not an inline height data"),
+        }
+    }
+
+    fn as_inline_normals(&self) -> &[[[i16; 2]; TILE_PHYSICAL_SIZE]; TILE_PHYSICAL_SIZE] {
+        match self {
+            Self::InlineNormals(ba) => ba,
+            _ => panic!("not an inline normals data"),
         }
     }
 
@@ -151,14 +158,21 @@ impl TileData {
     ) -> &mut [[[i16; 2]; TILE_PHYSICAL_SIZE]; TILE_PHYSICAL_SIZE] {
         match self {
             Self::InlineNormals(ba) => ba,
-            _ => panic!("not an inline data"),
+            _ => panic!("not an inline normals data"),
         }
     }
 
     fn as_mmap_heights(&self) -> &Mmap {
         match self {
             Self::MappedHeights(ba) => ba,
-            _ => panic!("not an inline data"),
+            _ => panic!("not an inline heights data"),
+        }
+    }
+
+    fn as_mmap_normals(&self) -> &Mmap {
+        match self {
+            Self::MappedNormals(ba) => ba,
+            _ => panic!("not an inline normals data"),
         }
     }
 }
@@ -321,7 +335,7 @@ impl Tile {
         buf.with_extension("bin")
     }
 
-    pub fn find_sampled_extremes(&self) -> (i16, i16) {
+    pub fn find_sampled_height_extremes(&self) -> (i16, i16) {
         assert!(self.data.is_inline());
         let mut lo = i16::MAX;
         let mut hi = i16::MIN;
@@ -332,6 +346,25 @@ impl Tile {
                 }
                 if v < lo {
                     lo = v;
+                }
+            }
+        }
+        (lo, hi)
+    }
+
+    pub fn find_sampled_normal_extremes(&self) -> ([i16; 2], [i16; 2]) {
+        let mut lo = [i16::MAX; 2];
+        let mut hi = [i16::MIN; 2];
+        assert!(self.data.is_inline());
+        for row in self.data.as_inline_normals().iter() {
+            for normal in row.iter() {
+                for i in 0..1 {
+                    if normal[i] > hi[i] {
+                        hi[i] = normal[i];
+                    }
+                    if normal[i] < lo[i] {
+                        lo[i] = normal[i];
+                    }
                 }
             }
         }
@@ -360,7 +393,19 @@ impl Tile {
         None
     }
 
-    fn sum_region(&self, lat: i32, lon: i32) -> i32 {
+    fn sum_region_normals(&self, lat: i32, lon: i32) -> [i32; 2] {
+        let mut total = [0; 2];
+        for a in -1..=1 {
+            for b in -1..=1 {
+                let norm = self.get_normal_sample(lat + a, lon + b);
+                total[0] += norm[0] as i32;
+                total[1] += norm[1] as i32;
+            }
+        }
+        total
+    }
+
+    fn sum_region_heights(&self, lat: i32, lon: i32) -> i32 {
         let mut total = 0;
         for a in -1..=1 {
             for b in -1..=1 {
@@ -391,7 +436,7 @@ impl Tile {
                 .map(|child| {
                     let lat = lat_offset * 2;
                     let lon = lon_offset * 2;
-                    child.read().sum_region(lat, lon)
+                    child.read().sum_region_heights(lat, lon)
                 })
         } else if lat_offset < 256 {
             self.children[ChildIndex::SouthEast.to_index()]
@@ -399,7 +444,7 @@ impl Tile {
                 .map(|child| {
                     let lat = lat_offset * 2;
                     let lon = (lon_offset - 256) * 2;
-                    child.read().sum_region(lat, lon)
+                    child.read().sum_region_heights(lat, lon)
                 })
         } else if lon_offset < 256 {
             self.children[ChildIndex::NorthWest.to_index()]
@@ -407,7 +452,7 @@ impl Tile {
                 .map(|child| {
                     let lat = (lat_offset - 256) * 2;
                     let lon = lon_offset * 2;
-                    child.read().sum_region(lat, lon)
+                    child.read().sum_region_heights(lat, lon)
                 })
         } else {
             self.children[ChildIndex::NorthEast.to_index()]
@@ -415,7 +460,7 @@ impl Tile {
                 .map(|child| {
                     let lat = (lat_offset - 256) * 2;
                     let lon = (lon_offset - 256) * 2;
-                    child.read().sum_region(lat, lon)
+                    child.read().sum_region_heights(lat, lon)
                 })
         };
 
@@ -424,9 +469,88 @@ impl Tile {
             .unwrap_or(0)
     }
 
+    // Fill in a sample by linearly interpolating the data from our child's samples.
+    pub fn pull_normal_sample(&mut self, lat_offset: i32, lon_offset: i32) -> [i16; 2] {
+        assert!(self.data.is_inline());
+        assert!(lat_offset >= 0);
+        assert!(lon_offset >= 0);
+        assert!(lat_offset < TILE_PHYSICAL_SIZE as i32);
+        assert!(lon_offset < TILE_PHYSICAL_SIZE as i32);
+
+        //    .  .  .  .  .  .
+        //    x  .  x  .  x  .
+        //    .  .  .  .  .  .
+        //    x  .  x  .  x  .
+        // We can reach right and up in our children without issue. Left and/or down is problematic.
+        // If we are at the top or left, we need to reach to our siblings.
+
+        let total_normal = if lat_offset < 256 && lon_offset < 256 {
+            self.children[ChildIndex::SouthWest.to_index()]
+                .as_ref()
+                .map(|child| {
+                    let lat = lat_offset * 2;
+                    let lon = lon_offset * 2;
+                    child.read().sum_region_normals(lat, lon)
+                })
+        } else if lat_offset < 256 {
+            self.children[ChildIndex::SouthEast.to_index()]
+                .as_ref()
+                .map(|child| {
+                    let lat = lat_offset * 2;
+                    let lon = (lon_offset - 256) * 2;
+                    child.read().sum_region_normals(lat, lon)
+                })
+        } else if lon_offset < 256 {
+            self.children[ChildIndex::NorthWest.to_index()]
+                .as_ref()
+                .map(|child| {
+                    let lat = (lat_offset - 256) * 2;
+                    let lon = lon_offset * 2;
+                    child.read().sum_region_normals(lat, lon)
+                })
+        } else {
+            self.children[ChildIndex::NorthEast.to_index()]
+                .as_ref()
+                .map(|child| {
+                    let lat = (lat_offset - 256) * 2;
+                    let lon = (lon_offset - 256) * 2;
+                    child.read().sum_region_normals(lat, lon)
+                })
+        };
+
+        total_normal
+            .map(|[n0, n1]| {
+                [
+                    ((n0 as f64) / 9f64).round() as i16,
+                    ((n1 as f64) / 9f64).round() as i16,
+                ]
+            })
+            .unwrap_or([0; 2])
+    }
+
     pub fn is_empty_tile(&self) -> bool {
-        let (lo, hi) = self.find_sampled_extremes();
-        lo == 0 && hi == 0
+        match &self.data {
+            TileData::InlineHeights(ba) => {
+                for row in ba.iter() {
+                    for &h in row {
+                        if h != 0 {
+                            return false;
+                        }
+                    }
+                }
+            }
+            TileData::InlineNormals(ba) => {
+                for row in ba.iter() {
+                    for normal in row {
+                        if normal[0] != 0 || normal[1] != 0 {
+                            return false;
+                        }
+                    }
+                }
+            }
+            _ => panic!("cannot check if a non-inline tile is empty"),
+        }
+        return true;
     }
 
     pub fn allocate_scratch_data(&mut self, kind: DataSetDataKind) {
@@ -534,9 +658,76 @@ impl Tile {
         0
     }
 
+    pub fn get_normal_sample(&self, lat_offset: i32, lon_offset: i32) -> [i16; 2] {
+        // FIXME: debug asserts once we've validated our indexing
+        const END: i32 = TILE_PHYSICAL_SIZE as i32;
+        const LAST: i32 = END - 1;
+        assert!(lat_offset >= -1);
+        assert!(lat_offset <= END);
+        assert!(lon_offset >= -1);
+        assert!(lon_offset <= END);
+        // Note: first with matching pattern matches, so we have to put the exact matches (corners)
+        //       at the top and only put the edges (with placeholder match) later.
+        match (lat_offset, lon_offset) {
+            (-1, -1) => self.neighbors[NeighborIndex::SouthWest.index()]
+                .clone()
+                .map(|t| t.read().get_own_normal_sample(LAST, LAST))
+                .unwrap_or([0; 2]),
+            (-1, END) => self.neighbors[NeighborIndex::SouthEast.index()]
+                .clone()
+                .map(|t| t.read().get_own_normal_sample(LAST, 0))
+                .unwrap_or([0; 2]),
+            (END, -1) => self.neighbors[NeighborIndex::NorthWest.index()]
+                .clone()
+                .map(|t| t.read().get_own_normal_sample(0, LAST))
+                .unwrap_or([0; 2]),
+            (END, END) => self.neighbors[NeighborIndex::NorthEast.index()]
+                .clone()
+                .map(|t| t.read().get_own_normal_sample(0, 0))
+                .unwrap_or([0; 2]),
+            (-1, lon) => self.neighbors[NeighborIndex::South.index()]
+                .clone()
+                .map(|t| t.read().get_own_normal_sample(LAST, lon))
+                .unwrap_or([0; 2]),
+            (END, lon) => self.neighbors[NeighborIndex::North.index()]
+                .clone()
+                .map(|t| t.read().get_own_normal_sample(0, lon))
+                .unwrap_or([0; 2]),
+            (lat, -1) => self.neighbors[NeighborIndex::West.index()]
+                .clone()
+                .map(|t| t.read().get_own_normal_sample(lat, LAST))
+                .unwrap_or([0; 2]),
+            (lat, END) => self.neighbors[NeighborIndex::East.index()]
+                .clone()
+                .map(|t| t.read().get_own_normal_sample(lat, 0))
+                .unwrap_or([0; 2]),
+            _ => self.get_own_normal_sample(lat_offset, lon_offset),
+        }
+    }
+
+    pub fn get_own_normal_sample(&self, lat_offset: i32, lon_offset: i32) -> [i16; 2] {
+        // FIXME: debug asserts once we've validated our indexing
+        assert!(lat_offset > -1);
+        assert!(lat_offset < 512);
+        assert!(lon_offset > -1);
+        assert!(lon_offset < 512);
+        if self.data.is_mapped() {
+            let m = self.data.as_mmap_normals();
+            let n = LayoutVerified::<&[u8], [[i16; 2]]>::new_slice(m.as_bytes()).unwrap();
+            return n[TILE_PHYSICAL_SIZE * lat_offset as usize + lon_offset as usize];
+        }
+        assert!(self.data.is_empty());
+        [0; 2]
+    }
+
     pub fn set_height_sample(&mut self, lat_offset: i32, lon_offset: i32, height: i16) {
         debug_assert!(self.data.is_inline());
         self.data.as_inline_heights_mut()[lat_offset as usize][lon_offset as usize] = height;
+    }
+
+    pub fn set_normal_sample(&mut self, lat_offset: i32, lon_offset: i32, normal: [i16; 2]) {
+        debug_assert!(self.data.is_inline());
+        self.data.as_inline_normals_mut()[lat_offset as usize][lon_offset as usize] = normal;
     }
 
     pub fn save_equalized_png(&self, kind: DataSetDataKind, directory: &Path) -> Fallible<()> {
@@ -545,11 +736,13 @@ impl Tile {
             return Ok(());
         }
         let path = self.mip_filename(directory);
+        fs::create_dir_all(directory).ok();
 
         match kind {
             DataSetDataKind::Height => {
-                let (_, high) = self.find_sampled_extremes();
-                let mut pic: ImageBuffer<Luma<u8>, Vec<u8>> = ImageBuffer::new(512, 512);
+                let (_, high) = self.find_sampled_height_extremes();
+                let mut pic: ImageBuffer<Luma<u8>, Vec<u8>> =
+                    ImageBuffer::new(TILE_PHYSICAL_SIZE as u32, TILE_PHYSICAL_SIZE as u32);
                 for (y, row) in self.data.as_inline_heights().iter().enumerate() {
                     for (x, &v) in row.iter().enumerate() {
                         // Scale 0..high into 0..255
@@ -562,6 +755,29 @@ impl Tile {
                         );
                     }
                 }
+                pic.save(path.with_extension("png"))?;
+            }
+            DataSetDataKind::Normal => {
+                let (lo, hi) = self.find_sampled_normal_extremes();
+                let mut pic: ImageBuffer<Rgb<u8>, Vec<u8>> =
+                    ImageBuffer::new(TILE_PHYSICAL_SIZE as u32, TILE_PHYSICAL_SIZE as u32);
+                for (y, row) in self.data.as_inline_normals().iter().enumerate() {
+                    for (x, normal) in row.iter().enumerate() {
+                        // scale i16 to u8
+                        let n0 = ((normal[0] as f64 + lo[0] as f64) / (hi[0] - lo[0]) as f64
+                            * u8::MAX as f64)
+                            .round() as u8;
+                        let n1 = ((normal[1] as f64 + lo[1] as f64) / (hi[0] - lo[0]) as f64
+                            * u8::MAX as f64)
+                            .round() as u8;
+                        pic.put_pixel(
+                            x as u32,
+                            (TILE_PHYSICAL_SIZE - y - 1) as u32,
+                            Rgb([n0, n1, 0]),
+                        );
+                    }
+                }
+                println!("saving: {:?}", path.with_extension("png"));
                 pic.save(path.with_extension("png"))?;
             }
             _ => panic!("unsupported png output type"),

@@ -49,8 +49,10 @@ packed_struct!(LayerPackIndexItem {
     _1 => base_lon_as: i32,
     _2 => tile_kind: u32,
     _3 => index_in_parent: u32,
-    _4 => tile_start: usize,
-    _5 => tile_end: usize
+
+    // Relative to file start, no offset needed.
+    _4 => tile_start: u64,
+    _5 => tile_end: u64
 });
 
 const HEADER_MAGIC: [u8; 3] = [b'L', b'P', b'K'];
@@ -107,83 +109,75 @@ impl LayerPack {
     }
 }
 
-struct Reservation {
-    base: (i32, i32),
-    index_in_parent: u32,
-    data_location: usize,
-    data_length: u32,
-}
-
 pub struct LayerPackBuilder {
-    // Contains start relative to tile_start and the length.
-    reservations: Vec<Reservation>,
-    reserve_cursor: usize,
+    // Relative to file start, no offset needed.
+    index_cursor: u64,
+
+    // Relative to file start, no offset needed.
+    tile_cursor: u64,
+
+    // The output file.
     stream: File,
 }
 
 impl LayerPackBuilder {
-    pub fn new(path: &Path) -> Fallible<Self> {
-        Ok(Self {
-            reservations: Vec::new(),
-            reserve_cursor: 0,
-            stream: File::create(path)?,
-        })
-    }
+    pub fn new(
+        path: &Path,
+        tile_count: usize,
+        tile_level: u32,
+        angular_extent_as: i32,
+    ) -> Fallible<Self> {
+        let mut stream = File::create(path)?;
 
-    pub fn reserve(&mut self, base: (i32, i32), index_in_parent: u32, data: &[u8]) {
-        if data.is_empty() {
-            return;
-        }
-        self.reservations.push(Reservation {
-            base,
-            index_in_parent,
-            data_location: self.reserve_cursor,
-            data_length: data.len() as u32,
-        });
-        self.reserve_cursor += data.len();
-    }
-
-    pub fn write_header(&mut self, tile_level: u32, angular_extent_as: i32) -> Fallible<()> {
-        assert_eq!(self.stream.seek(SeekFrom::Current(0))?, 0u64);
-
-        // Write out the header
+        // Emit the header
         let index_start = mem::size_of::<LayerPackHeader>();
-        let tile_start =
-            index_start + mem::size_of::<LayerPackIndexItem>() * self.reservations.len();
+        let tile_start = index_start + mem::size_of::<LayerPackIndexItem>() * tile_count;
         let header = LayerPackHeader::build(
             HEADER_MAGIC,
             HEADER_VERSION,
             angular_extent_as,
-            self.reservations.len() as u32,
+            tile_count as u32,
             tile_level,
             index_start as u32,
             tile_start as u32,
         )?;
-        self.stream.write_all(header.as_bytes())?;
+        stream.write_all(header.as_bytes())?;
 
-        // Write out the index
-        for reservation in &self.reservations {
-            let index_item = LayerPackIndexItem::build(
-                reservation.base.0,
-                reservation.base.1,
-                0,
-                reservation.index_in_parent,
-                tile_start + reservation.data_location,
-                tile_start + reservation.data_location + reservation.data_length as usize,
-            )?;
-            self.stream.write_all(index_item.as_bytes())?;
-        }
-
-        // Assuming our math is right:
-        assert_eq!(self.stream.seek(SeekFrom::Current(0))?, tile_start as u64);
-        Ok(())
+        Ok(Self {
+            // reservations: Vec::new(),
+            // reserve_cursor: 0,
+            index_cursor: index_start as u64,
+            tile_cursor: tile_start as u64,
+            stream,
+        })
     }
 
-    pub fn push_tile(&mut self, data: &[u8]) -> Fallible<()> {
+    pub fn push_tile(
+        &mut self,
+        base: (i32, i32),
+        index_in_parent: u32,
+        data: &[u8],
+    ) -> Fallible<()> {
         if data.is_empty() {
             return Ok(());
         }
+
+        self.stream.seek(SeekFrom::Start(self.index_cursor))?;
+        let index_item = LayerPackIndexItem::build(
+            base.0,
+            base.1,
+            0,
+            index_in_parent,
+            self.tile_cursor,
+            self.tile_cursor + data.len() as u64,
+        )?;
+        self.stream.write_all(index_item.as_bytes())?;
+        self.index_cursor += mem::size_of::<LayerPackIndexItem>() as u64;
+
+        self.stream.seek(SeekFrom::Start(self.tile_cursor))?;
         self.stream.write_all(data)?;
+        self.tile_cursor += data.len() as u64;
+
         Ok(())
     }
 }

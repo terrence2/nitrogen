@@ -173,7 +173,6 @@ impl Tile {
 
     // If our sampling algorithm is careful to line up on arcsecond boundaries, then we can get
     // away with a much cheaper lookup (about 2x faster).
-    #[allow(unused)]
     pub fn sample_nearest(&self, grat: &Graticule<GeoCenter>) -> i16 {
         // println!(
         //     "  TSN: {} in {}, {}, {}, {}",

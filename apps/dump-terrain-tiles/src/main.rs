@@ -51,6 +51,10 @@ struct Opt {
     #[structopt(short, long)]
     output_directory: PathBuf,
 
+    /// Compute and print some aggregate statistics.
+    #[structopt(short, long)]
+    analyze_compressibility: bool,
+
     /// Dump equalized PNGs of created tiles.
     #[structopt(short, long)]
     dump_png: bool,
@@ -309,6 +313,11 @@ pub fn generate_mip_tile_from_srtm(
                     node.write()
                         .set_height_sample(lat_i as i32 + 1, lon_i as i32 + 1, height);
                 }
+                DataSetDataKind::Normal => {
+                    let normal = srtm.compute_normal_at(&srtm_grat);
+                    node.write()
+                        .set_normal_sample(lat_i as i32 + 1, lon_i as i32 + 1, normal);
+                }
                 _ => panic!("unsupported"),
             }
         }
@@ -339,15 +348,19 @@ pub fn generate_mip_tile_from_mip(
 
     let kind = index.read().kind();
 
-    for lat_i in -1..TILE_SAMPLES + 1 {
+    for lat_off in 0..TILE_PHYSICAL_SIZE {
         // 'actual' unfolds infinitely
         // 'srtm' is clamped or wrapped as appropriate to srtm extents
-        for lon_i in -1..TILE_SAMPLES + 1 {
+        for lon_off in 0..TILE_PHYSICAL_SIZE {
             let mut tile = node.write();
             match kind {
                 DataSetDataKind::Height => {
-                    let height = tile.pull_height_sample(lat_i as i32 + 1, lon_i as i32 + 1);
-                    tile.set_height_sample(lat_i as i32 + 1, lon_i as i32 + 1, height);
+                    let height = tile.pull_height_sample(lat_off as i32, lon_off as i32);
+                    tile.set_height_sample(lat_off as i32, lon_off as i32, height);
+                }
+                DataSetDataKind::Normal => {
+                    let normal = tile.pull_normal_sample(lat_off as i32, lon_off as i32);
+                    tile.set_normal_sample(lat_off as i32, lon_off as i32, normal);
                 }
                 _ => panic!("unsupported kind"),
             }
@@ -376,10 +389,12 @@ fn map_all_available_tile(
 ) -> Fallible<usize> {
     let mmap_count = Arc::new(RwLock::new(0usize));
     tiles
-        .par_iter_mut()
-        .try_for_each::<_, Fallible<()>>(|(tile, _offset)| {
-            if tile.write().maybe_map_data(kind, path).expect("mmap file") {
-                *mmap_count.write() += 1;
+        .par_chunks_mut(256)
+        .try_for_each::<_, Fallible<()>>(|chunk| {
+            for (tile, _offset) in chunk {
+                if tile.write().maybe_map_data(kind, path).expect("mmap file") {
+                    *mmap_count.write() += 1;
+                }
             }
             Ok(())
         })?;
@@ -404,35 +419,48 @@ fn write_layer_pack(
         target_level
     ));
     if layer_pack_path.exists() && !force {
+        println!(
+            "  skipping write because have layerpack file at {:?}",
+            layer_pack_path
+        );
         return Ok(());
     }
-    let start = Instant::now();
-    let mut layer_pack_builder = LayerPackBuilder::new(&layer_pack_path)?;
-    for (tile, _) in tiles {
-        let tile = tile.read();
-        layer_pack_builder.reserve(
-            tile.base(),
-            tile.index_in_parent().to_index() as u32,
-            tile.raw_data(),
-        );
-    }
-    layer_pack_builder.write_header(
+    let mut layer_pack_builder = LayerPackBuilder::new(
+        &layer_pack_path,
+        tiles.len(),
         target_level as u32,
         TerrainLevel::new(target_level).angular_extent().round() as i32,
     )?;
-    println!(
-        "  Reserved {} indexes into layer pack in {:?}",
-        tiles.len(),
-        start.elapsed()
-    );
-    let mut progress =
-        InlinePercentProgress::new("  Writing Pack File:", EXPECT_LAYER_COUNTS[target_level].0);
+    let mut progress = InlinePercentProgress::new("  Writing Pack File:", tiles.len());
     for (tile, _) in tiles {
-        layer_pack_builder.push_tile(tile.read().raw_data())?;
+        let tile = tile.read();
+        layer_pack_builder.push_tile(
+            tile.base(),
+            tile.index_in_parent().to_index() as u32,
+            tile.raw_data(),
+        )?;
         progress.poke();
     }
     progress.finish();
     Ok(())
+}
+
+fn analyze_tile_compressibility(tile: &MipTile) {
+    // Get symbol dictionary size with delta compression.
+    let mut symbols = tile.reorder_for_compression();
+    let base = symbols.next().unwrap();
+    println!("BASE: {}", base);
+}
+
+fn analyze_compressibility(tiles: &[(Arc<RwLock<MipTile>>, usize)]) {
+    let mut progress = InlinePercentProgress::new("  Analyzing Compressibility:", tiles.len());
+    tiles.par_chunks(4096).for_each(|chunk| {
+        for (tile, _) in chunk {
+            let result = analyze_tile_compressiblity(&tile.read());
+            progress.poke();
+        }
+    });
+    progress.finish();
 }
 
 const EXPECT_LAYER_COUNTS: [(usize, usize); 13] = [
@@ -465,11 +493,11 @@ fn main() -> Fallible<()> {
         DataSetDataKind::Height,
         DataSetCoordinates::Spherical,
     )?;
-    // mip_index.add_data_set(
-    //     "srtmn",
-    //     DataSetDataKind::Normal,
-    //     DataSetCoordinates::Spherical,
-    // )?;
+    mip_index.add_data_set(
+        "srtmn",
+        DataSetDataKind::Normal,
+        DataSetCoordinates::Spherical,
+    )?;
 
     for dataset in mip_index.data_sets(DataSetCoordinates::Spherical) {
         let start = Instant::now();
@@ -498,58 +526,6 @@ fn main() -> Fallible<()> {
         );
     }
 
-    /*
-    {
-        let start = Instant::now();
-        let height_root = mip_srtm_heights.write().get_root_tile();
-        let mut node_count = 0usize;
-        let mut leaf_count = 0usize;
-        build_tree(
-            0,
-            srtm.clone(),
-            mip_srtm_heights.clone(),
-            height_root,
-            &mut node_count,
-            &mut leaf_count,
-        )?;
-        // Subdividing the 1 degree tiles results in 730,452 509" tiles. Some of these on the edges
-        // are over water and thus have no height values. This reduces the count to 608,337 tiles
-        // that will be mmapped as part of the base layer.
-        assert_eq!(node_count, 984_756);
-        assert_eq!(leaf_count, 730_452);
-        println!(
-            "Built heights tile tree with {} nodes in {:?}",
-            node_count,
-            start.elapsed()
-        );
-    }
-
-    {
-        let start = Instant::now();
-        let normals_root = mip_srtm_normals.write().get_root_tile();
-        let mut node_count = 0usize;
-        let mut leaf_count = 0usize;
-        build_tree(
-            0,
-            srtm.clone(),
-            mip_srtm_normals.clone(),
-            normals_root,
-            &mut node_count,
-            &mut leaf_count,
-        )?;
-        // Subdividing the 1 degree tiles results in 730,452 509" tiles. Some of these on the edges
-        // are over water and thus have no height values. This reduces the count to 608,337 tiles
-        // that will be mmapped as part of the base layer.
-        assert_eq!(node_count, 984_756);
-        assert_eq!(leaf_count, 730_452);
-        println!(
-            "Built normals tile tree with {} nodes in {:?}",
-            node_count,
-            start.elapsed()
-        );
-    }
-     */
-
     // Generate each level from the bottom up, mipmapping as we go.
     for target_level in (0..=SrtmIndex::max_resolution_level()).rev() {
         for dataset in mip_index.data_sets(DataSetCoordinates::Spherical) {
@@ -575,29 +551,44 @@ fn main() -> Fallible<()> {
                     current_tiles.len(),
                 )));
                 if target_level == TerrainLevel::arcsecond_level() {
-                    current_tiles.par_iter().try_for_each(|(tile, _)| {
-                        progress.write().poke();
-                        generate_mip_tile_from_srtm(
-                            srtm.clone(),
-                            dataset.clone(),
-                            tile.to_owned(),
-                            opt.dump_png,
-                        )
-                    })?;
+                    current_tiles.par_chunks(1024).for_each(|chunk| {
+                        for (tile, _) in chunk {
+                            progress.write().poke();
+                            generate_mip_tile_from_srtm(
+                                srtm.clone(),
+                                dataset.clone(),
+                                tile.to_owned(),
+                                opt.dump_png,
+                            )
+                            .expect("generate_mip_tile_from_srtm");
+                        }
+                    });
                 } else {
-                    current_tiles.par_iter().try_for_each(|(tile, _)| {
-                        progress.write().poke();
-                        generate_mip_tile_from_mip(dataset.clone(), tile.to_owned(), opt.dump_png)
-                    })?;
+                    current_tiles.par_chunks(1024).for_each(|chunk| {
+                        for (tile, _) in chunk {
+                            progress.write().poke();
+                            generate_mip_tile_from_mip(
+                                dataset.clone(),
+                                tile.to_owned(),
+                                opt.dump_png,
+                            )
+                            .expect("generate_mip_tile_from_mip");
+                        }
+                    });
                 }
                 progress.write().finish();
             } else {
-                println!("  Found all tiles on disk - promoting absent to empty");
-                current_tiles.par_iter().for_each(|(node, _offset)| {
-                    node.write().promote_absent_to_empty();
+                println!("  Found all tiles on disk - demoting absent to empty");
+                current_tiles.par_chunks(4096).for_each(|chunk| {
+                    for (node, _) in chunk {
+                        node.write().promote_absent_to_empty();
+                    }
                 });
             }
             write_layer_pack(&current_tiles, dataset.clone(), target_level, opt.force)?;
+            if opt.analyze_compressibility {
+                analyze_compressibility(&current_tiles);
+            }
         }
     }
 
