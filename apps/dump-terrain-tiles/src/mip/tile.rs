@@ -550,7 +550,7 @@ impl Tile {
             }
             _ => panic!("cannot check if a non-inline tile is empty"),
         }
-        return true;
+        true
     }
 
     pub fn allocate_scratch_data(&mut self, kind: DataSetDataKind) {
