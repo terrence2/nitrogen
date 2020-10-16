@@ -104,6 +104,8 @@ impl Camera {
     }
 
     pub fn projection<T: LengthUnit>(&self) -> Perspective3<f64> {
+        // Source: https://nlguillemot.wordpress.com/2016/12/07/reversed-z-in-opengl/
+        // See also: https://outerra.blogspot.com/2012/11/maximizing-depth-buffer-range-and.html
         // Infinite depth perspective with flipped w so that we can use inverted depths.
         // float f = 1.0f / tan(fovY_radians / 2.0f);
         // return glm::mat4(

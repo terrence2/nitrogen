@@ -44,6 +44,28 @@ impl<Unit: AngleUnit> Angle<Unit> {
         f64::from(self).round()
     }
 
+    pub fn clamp(self, min: Self, max: Self) -> Self {
+        if self.femto_rad < min.femto_rad {
+            min
+        } else if self.femto_rad > max.femto_rad {
+            max
+        } else {
+            self
+        }
+    }
+
+    pub fn wrap(self, min: Self, max: Self) -> Self {
+        // This clever approach is from: https://stackoverflow.com/a/707426/11820706
+        debug_assert!(max.femto_rad > min.femto_rad);
+        let range_size = max.femto_rad - min.femto_rad;
+        let mut out = self;
+        if out.femto_rad < min.femto_rad {
+            out.femto_rad += range_size * ((min.femto_rad - out.femto_rad) / range_size + 1);
+        }
+        out.femto_rad = min.femto_rad + (out.femto_rad - min.femto_rad) % range_size;
+        out
+    }
+
     pub fn cos(self) -> f64 {
         f64::from(self).cos()
     }
@@ -69,8 +91,6 @@ impl<Unit: AngleUnit> Angle<Unit> {
 
         let mut arcsecs = Angle::<ArcSeconds>::from(self).f64() as i64;
         let degrees = Angle::<Degrees>::from(self).f64() as i64;
-        //let mut arcsecs = arcseconds!(self).f64() as i64;
-        //let degrees = degrees!(self).f64() as i64;
         arcsecs -= degrees * 3_600;
         let minutes = arcsecs / 60;
         arcsecs -= minutes * 60;
@@ -289,5 +309,31 @@ mod test {
         let a = degrees!(1);
         assert_relative_eq!(arcminutes!(a).f32(), 60f32);
         assert_relative_eq!(arcseconds!(a).f32(), 60f32 * 60f32);
+    }
+
+    #[test]
+    fn test_wrapping() {
+        assert_eq!(
+            degrees!(179),
+            degrees!(-181).wrap(degrees!(-180), degrees!(180))
+        );
+        assert_eq!(
+            degrees!(-179),
+            degrees!(181).wrap(degrees!(-180), degrees!(180))
+        );
+        assert_relative_eq!(
+            degrees!(-179).f64(),
+            degrees!(180 + 3_600 + 1)
+                .wrap(degrees!(-180), degrees!(180))
+                .f64(),
+            epsilon = 0.000_000_000_001
+        );
+        assert_relative_eq!(
+            degrees!(179).f64(),
+            degrees!(-180 - 3_600 - 1)
+                .wrap(degrees!(-180), degrees!(180))
+                .f64(),
+            epsilon = 0.000_000_000_001
+        );
     }
 }

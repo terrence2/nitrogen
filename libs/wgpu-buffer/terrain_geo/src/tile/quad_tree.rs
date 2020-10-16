@@ -136,7 +136,8 @@ impl QuadTree {
         let raw_index = LayerPackIndexItem::overlay_slice(&index_bytes);
         for item in raw_index {
             let base = (item.base_lat_as(), item.base_lon_as());
-            let span = item.tile_start()..item.tile_end();
+            // FIXME: are we making a decision to not support 32bit here?
+            let span = item.tile_start() as usize..item.tile_end() as usize;
             let id = QuadTreeId::new(self.nodes.len());
             self.nodes.push(QuadTreeNode {
                 span,

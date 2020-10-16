@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{degrees, meters, Angle, ArcSeconds, Degrees};
 use failure::Fallible;
-use geodesy::{GeoCenter, Graticule};
+use geodesy::{GeoSurface, Graticule};
 use json::JsonValue;
 use memmap::{Mmap, MmapOptions};
 use std::{
@@ -38,11 +38,11 @@ pub struct Tile {
     // aligned to the *center* of the lower left sample. This means that the actual terrain
     // covered by the edge samples extends half an arcsecond beyond the box. Thus the "corners"
     // box containing the terrain extends beyond the tile extents somewhat.
-    terrain_extent: [Graticule<GeoCenter>; 4],
+    terrain_extent: [Graticule<GeoSurface>; 4],
 
     // Samples, however, should only be made within the tile boundary, which ends at the centers
     // of the corner samples.
-    tile_extent: [Graticule<GeoCenter>; 4],
+    tile_extent: [Graticule<GeoSurface>; 4],
 
     // Tile indices are derived by rounding the corners.
     latitude: i16,
@@ -69,7 +69,7 @@ impl Tile {
 
         let mut tile_extent = [Default::default(); 4];
         for (extent, corner) in tile_extent.iter_mut().zip(&corners) {
-            *extent = Graticule::<GeoCenter>::new(
+            *extent = Graticule::<GeoSurface>::new(
                 degrees!(corner.lat::<Degrees>().round()),
                 degrees!(corner.lon::<Degrees>().round()),
                 meters!(0),
@@ -129,7 +129,7 @@ impl Tile {
 
     // Does linear weighting between the 4 nearest samples.
     #[allow(unused)]
-    pub fn sample_linear(&self, grat: &Graticule<GeoCenter>) -> f32 {
+    pub fn sample_linear(&self, grat: &Graticule<GeoSurface>) -> f32 {
         assert!(grat.lon::<Degrees>() > self.tile_extent[0].lon());
         assert!(grat.lon::<Degrees>() > self.tile_extent[1].lon());
         assert!(grat.lon::<Degrees>() < self.tile_extent[2].lon());
@@ -173,8 +173,7 @@ impl Tile {
 
     // If our sampling algorithm is careful to line up on arcsecond boundaries, then we can get
     // away with a much cheaper lookup (about 2x faster).
-    #[allow(unused)]
-    pub fn sample_nearest(&self, grat: &Graticule<GeoCenter>) -> i16 {
+    pub fn sample_nearest(&self, grat: &Graticule<GeoSurface>) -> i16 {
         // println!(
         //     "  TSN: {} in {}, {}, {}, {}",
         //     grat,
@@ -224,7 +223,7 @@ impl Tile {
     }
 
     #[allow(unused)]
-    pub fn corners(&self) -> &[Graticule<GeoCenter>; 4] {
+    pub fn corners(&self) -> &[Graticule<GeoSurface>; 4] {
         &self.terrain_extent
     }
 }

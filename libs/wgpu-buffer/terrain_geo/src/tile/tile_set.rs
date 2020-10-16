@@ -837,6 +837,9 @@ impl TileSet {
         mesh_bind_group: &'a wgpu::BindGroup,
         mut cpass: wgpu::ComputePass<'a>,
     ) -> Fallible<wgpu::ComputePass<'a>> {
+        if self.kind != DataSetDataKind::Height {
+            return Ok(cpass);
+        }
         cpass.set_pipeline(&self.displace_height_pipeline);
         cpass.set_bind_group(0, mesh_bind_group, &[]);
         cpass.set_bind_group(1, &self.bind_group, &[]);

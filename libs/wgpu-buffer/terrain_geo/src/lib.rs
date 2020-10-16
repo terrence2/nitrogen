@@ -129,10 +129,10 @@ impl GpuDetailLevel {
     // subdivisions
     fn parameters(&self) -> GpuDetail {
         match self {
-            Self::Low => GpuDetail::new(3, 128), // 64MiB
-            Self::Medium => GpuDetail::new(4, 256),
-            Self::High => GpuDetail::new(6, 512),
-            Self::Ultra => GpuDetail::new(7, 1024),
+            Self::Low => GpuDetail::new(3, 32), // 64MiB
+            Self::Medium => GpuDetail::new(4, 64),
+            Self::High => GpuDetail::new(6, 128),
+            Self::Ultra => GpuDetail::new(7, 256),
         }
     }
 

@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{GeoCenter, Graticule, Target};
-use absolute_unit::{Length, LengthUnit};
+use absolute_unit::{Length, LengthUnit, Radians};
 use nalgebra::{Point3, Vector3};
 use std::{
     fmt,
@@ -120,13 +120,14 @@ where
     Unit: LengthUnit,
 {
     fn from(graticule: Graticule<GeoCenter>) -> Self {
-        let lat = f64::from(graticule.latitude);
-        let lon = f64::from(graticule.longitude);
+        let lat = graticule.lat::<Radians>().f64();
+        let lon = graticule.lon::<Radians>().f64();
+        let base = graticule.distance;
         Self {
             coords: [
-                (&(graticule.distance * -lon.sin() * lat.cos())).into(),
-                (&(graticule.distance * lat.sin())).into(),
-                (&(graticule.distance * lon.cos() * lat.cos())).into(),
+                (&(base * -lon.sin() * lat.cos())).into(),
+                (&(base * lat.sin())).into(),
+                (&(base * lon.cos() * lat.cos())).into(),
             ],
             phantom: PhantomData,
         }
