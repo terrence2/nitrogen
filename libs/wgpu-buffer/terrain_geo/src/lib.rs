@@ -12,23 +12,17 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-mod icosahedron;
-mod index_dependency_lut;
 mod patch;
-mod patch_tree;
-mod patch_winding;
-mod queue;
-mod terrain_vertex;
-mod tri_strip_indices;
-mod wireframe_indices;
+mod tables;
 
 pub mod tile;
 
+pub use crate::patch::{PatchWinding, TerrainVertex};
 use crate::{
-    index_dependency_lut::get_index_dependency_lut, patch_tree::PatchTree, tile::TileManager,
-    tri_strip_indices::get_tri_strip_index_buffer, wireframe_indices::get_wireframe_index_buffer,
+    patch::PatchTree,
+    tables::{get_index_dependency_lut, get_tri_strip_index_buffer, get_wireframe_index_buffer},
+    tile::TileManager,
 };
-pub use crate::{patch_winding::PatchWinding, terrain_vertex::TerrainVertex};
 
 use absolute_unit::{meters, Kilometers};
 use camera::Camera;

@@ -224,7 +224,7 @@ fn make_wireframe_list(max_level: usize) {
         }
     }
     let mut func = "".to_owned();
-    func += "use crate::patch_winding::PatchWinding;";
+    func += "use crate::patch::patch_winding::PatchWinding;";
     func += "pub fn get_wireframe_index_buffer(subdivisions: usize, winding: PatchWinding) -> &'static [u32] {\n";
     func += "    match subdivisions {\n";
     for subdivisions in 0..=max_level {
@@ -269,7 +269,7 @@ fn make_triangle_strips(max_level: usize) {
         }
     }
     let mut func = "".to_owned();
-    func += "use crate::patch_winding::PatchWinding;";
+    func += "use crate::patch::patch_winding::PatchWinding;";
     func += "pub fn get_tri_strip_index_buffer(subdivisions: usize, winding: PatchWinding) -> &'static [u32] {\n";
     func += "    match subdivisions {\n";
     for subdivisions in 0..=max_level {
