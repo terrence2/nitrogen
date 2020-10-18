@@ -64,7 +64,7 @@ make_frame_graph!(
         ];
         passes: [
             paint_atlas_indices: Any() { terrain_geo() },
-            tesselate: Compute() { terrain_geo() },
+            tessellate: Compute() { terrain_geo() },
             draw: Render(Screen) {
                 skybox( globals, fullscreen, stars, atmosphere ),
                 terrain( globals, atmosphere, terrain_geo ),

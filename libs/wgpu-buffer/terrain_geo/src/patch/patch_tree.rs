@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::patch::{
     icosahedron::Icosahedron,
-    patch::Patch,
+    patch_info::Patch,
     patch_winding::PatchWinding,
     queue::{MaxHeap, MinHeap, Queue},
 };

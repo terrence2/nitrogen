@@ -13,12 +13,16 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 mod icosahedron;
-mod patch;
+mod patch_info;
+mod patch_manager;
 mod patch_tree;
 mod queue;
 
 pub mod patch_winding;
 pub mod terrain_vertex;
 
-pub(crate) use crate::patch::patch_tree::PatchTree;
+pub(crate) use crate::patch::{
+    patch_manager::PatchManager,
+    patch_tree::{PatchIndex, PatchTree},
+};
 pub use crate::patch::{patch_winding::PatchWinding, terrain_vertex::TerrainVertex};
