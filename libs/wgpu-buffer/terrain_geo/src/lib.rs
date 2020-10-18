@@ -185,8 +185,7 @@ impl TerrainGeoBuffer {
         tracker: &mut UploadTracker,
     ) -> Fallible<()> {
         // Upload patches and capture visibility regions.
-        // FIXME: make this frame-coherent.
-        //let mut visible_regions = Vec::new();
+        self.visible_regions.clear();
         self.patch_manager
             .make_upload_buffer(camera, gpu, tracker, &mut self.visible_regions)?;
 
