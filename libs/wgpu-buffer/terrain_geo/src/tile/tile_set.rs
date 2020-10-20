@@ -19,12 +19,11 @@ use crate::{
         tile_info::TileInfo,
         DataSetCoordinates, DataSetDataKind, TerrainLevel,
     },
-    GpuDetail,
+    GpuDetail, VisiblePatch,
 };
-use absolute_unit::{arcseconds, Length, Meters};
+use absolute_unit::arcseconds;
 use catalog::Catalog;
 use failure::{err_msg, Fallible};
-use geodesy::{GeoCenter, Graticule};
 use geometry::AABB2;
 use gpu::{texture_format_size, UploadTracker, GPU};
 use image::{ImageBuffer, Rgb};
@@ -500,21 +499,18 @@ impl TileSet {
         self.tile_tree.begin_update();
     }
 
-    pub fn note_required(
-        &mut self,
-        grat0: &Graticule<GeoCenter>,
-        grat1: &Graticule<GeoCenter>,
-        grat2: &Graticule<GeoCenter>,
-        triangle_edge: Length<Meters>,
-    ) {
+    pub fn note_required(&mut self, visible_patch: &VisiblePatch) {
         // Assuming 30m is 1"
-        let angular_resolution = arcseconds!(triangle_edge.f64() / 30.0);
+        let angular_resolution = arcseconds!(visible_patch.edge_length.f64() / 30.0);
 
         // Find an aabb for the given triangle.
-        let min_lat = grat0.latitude.min(grat1.latitude).min(grat2.latitude);
-        let max_lat = grat0.latitude.max(grat1.latitude).max(grat2.latitude);
-        let min_lon = grat0.longitude.min(grat1.longitude).min(grat2.longitude);
-        let max_lon = grat0.longitude.max(grat1.longitude).max(grat2.longitude);
+        let g0 = &visible_patch.g0;
+        let g1 = &visible_patch.g1;
+        let g2 = &visible_patch.g2;
+        let min_lat = g0.latitude.min(g1.latitude).min(g2.latitude);
+        let max_lat = g0.latitude.max(g1.latitude).max(g2.latitude);
+        let min_lon = g0.longitude.min(g1.longitude).min(g2.longitude);
+        let max_lon = g0.longitude.max(g1.longitude).max(g2.longitude);
         let aabb = AABB2::new(
             [
                 arcseconds!(min_lat).round() as i32,

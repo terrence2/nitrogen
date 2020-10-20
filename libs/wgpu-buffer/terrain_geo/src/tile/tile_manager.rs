@@ -44,11 +44,9 @@
 //     * We update the index texture with a compute shader that overwrites if the scale is smaller.
 //       * Q: are there optimizations we can make knowing that it is a quadtree?
 
-use crate::{tile::tile_set::TileSet, GpuDetail};
-use absolute_unit::{Length, Meters};
+use crate::{tile::tile_set::TileSet, GpuDetail, VisiblePatch};
 use catalog::{from_utf8_string, Catalog};
 use failure::Fallible;
-use geodesy::{GeoCenter, Graticule};
 use gpu::{UploadTracker, GPU};
 use std::sync::Arc;
 use tokio::{runtime::Runtime, sync::RwLock};
@@ -90,15 +88,9 @@ impl TileManager {
         }
     }
 
-    pub fn note_required(
-        &mut self,
-        grat0: &Graticule<GeoCenter>,
-        grat1: &Graticule<GeoCenter>,
-        grat2: &Graticule<GeoCenter>,
-        triangle_edge: Length<Meters>,
-    ) {
+    pub fn note_required(&mut self, visible_patch: &VisiblePatch) {
         for ts in self.tile_sets.iter_mut() {
-            ts.note_required(grat0, grat1, grat2, triangle_edge);
+            ts.note_required(visible_patch);
         }
     }
 
