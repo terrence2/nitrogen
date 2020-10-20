@@ -27,9 +27,13 @@ use command::Command;
 use commandable::{command, commandable, Commandable};
 use failure::Fallible;
 use geodesy::{GeoCenter, Graticule};
-use gpu::{UploadTracker, GPU};
+use global_data::GlobalParametersBuffer;
+use gpu::{texture_format_size, UploadTracker, GPU};
+use image::{ImageBuffer, Rgb};
+use shader_shared::Group;
 use std::{ops::Range, sync::Arc};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
+use zerocopy::LayoutVerified;
 
 #[allow(unused)]
 const DBG_COLORS_BY_LEVEL: [[f32; 3]; 19] = [
@@ -143,14 +147,26 @@ pub struct TerrainGeoBuffer {
 
     // Cache allocation for transferring visible allocations from patches to tiles.
     visible_regions: Vec<VisiblePatch>,
+
+    deferred_texture_pipeline: wgpu::RenderPipeline,
+    deferred_texture: wgpu::Texture,
+    deferred_texture_view: wgpu::TextureView,
+    empty_bind_group: wgpu::BindGroup,
+    take_deferred_texture_snapshot: bool,
 }
 
 #[commandable]
 impl TerrainGeoBuffer {
+    const DEFERRED_TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
+    const DEFERRED_TEXTURE_DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+    const NORMAL_ACCUMULATION_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Sint;
+    const COLOR_ACCUMULATION_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Uint;
+
     pub fn new(
         catalog: &Catalog,
         cpu_detail_level: CpuDetailLevel,
         gpu_detail_level: GpuDetailLevel,
+        globals_buffer: &GlobalParametersBuffer,
         gpu: &mut GPU,
     ) -> Fallible<Self> {
         let cpu_detail = cpu_detail_level.parameters();
@@ -171,11 +187,114 @@ impl TerrainGeoBuffer {
             gpu,
         )?;
 
+        let empty_layout =
+            gpu.device()
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("empty-bind-group-layout"),
+                    entries: &[],
+                });
+        let empty_bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("empty-bind-group"),
+            layout: &empty_layout,
+            entries: &[],
+        });
+        let (deferred_texture, deferred_texture_view) = Self::_make_deferred_texture_target(gpu);
+        let deferred_texture_pipeline =
+            gpu.device()
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("deferred-texture-pipeline"),
+                    layout: Some(&gpu.device().create_pipeline_layout(
+                        &wgpu::PipelineLayoutDescriptor {
+                            label: Some("deferred-texture-pipeline-layout"),
+                            push_constant_ranges: &[],
+                            bind_group_layouts: &[
+                                globals_buffer.bind_group_layout(),
+                                &empty_layout, // atmosphere otherwise
+                                tile_manager.bind_group_layout(),
+                            ],
+                        },
+                    )),
+                    vertex_stage: wgpu::ProgrammableStageDescriptor {
+                        module: &gpu.create_shader_module(include_bytes!(
+                            "../target/draw_deferred_texture.vert.spirv"
+                        ))?,
+                        entry_point: "main",
+                    },
+                    fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
+                        module: &gpu.create_shader_module(include_bytes!(
+                            "../target/draw_deferred_texture.frag.spirv"
+                        ))?,
+                        entry_point: "main",
+                    }),
+                    rasterization_state: Some(wgpu::RasterizationStateDescriptor {
+                        front_face: wgpu::FrontFace::Cw,
+                        cull_mode: wgpu::CullMode::Back,
+                        depth_bias: 0,
+                        depth_bias_slope_scale: 0.0,
+                        depth_bias_clamp: 0.0,
+                        clamp_depth: false,
+                    }),
+                    primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
+                    color_states: &[wgpu::ColorStateDescriptor {
+                        format: Self::DEFERRED_TEXTURE_FORMAT,
+                        color_blend: wgpu::BlendDescriptor::REPLACE,
+                        alpha_blend: wgpu::BlendDescriptor::REPLACE,
+                        write_mask: wgpu::ColorWrite::ALL,
+                    }],
+                    depth_stencil_state: None,
+                    vertex_state: wgpu::VertexStateDescriptor {
+                        index_format: wgpu::IndexFormat::Uint32,
+                        vertex_buffers: &[TerrainVertex::descriptor()],
+                    },
+                    sample_count: 1,
+                    sample_mask: !0,
+                    alpha_to_coverage_enabled: false,
+                });
+
         Ok(Self {
             patch_manager,
             tile_manager,
             visible_regions: Vec::new(),
+            deferred_texture_pipeline,
+            deferred_texture,
+            deferred_texture_view,
+            empty_bind_group,
+            take_deferred_texture_snapshot: false,
         })
+    }
+
+    fn _make_deferred_texture_target(gpu: &GPU) -> (wgpu::Texture, wgpu::TextureView) {
+        let sz = gpu.physical_size();
+        let target = gpu.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("deferred-texture-target"),
+            size: wgpu::Extent3d {
+                width: sz.width as u32,
+                height: sz.height as u32,
+                depth: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: Self::DEFERRED_TEXTURE_FORMAT,
+            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT | wgpu::TextureUsage::COPY_SRC,
+        });
+        let view = target.create_view(&wgpu::TextureViewDescriptor {
+            label: Some("deferred-texture-target-view"),
+            format: None,
+            dimension: None,
+            aspect: wgpu::TextureAspect::All,
+            base_mip_level: 0,
+            level_count: None,
+            base_array_layer: 0,
+            array_layer_count: None,
+        });
+        (target, view)
+    }
+
+    pub fn note_resize(&mut self, gpu: &GPU) {
+        let (target, view) = Self::_make_deferred_texture_target(gpu);
+        self.deferred_texture = target;
+        self.deferred_texture_view = view;
     }
 
     pub fn make_upload_buffer(
@@ -199,7 +318,51 @@ impl TerrainGeoBuffer {
         self.tile_manager
             .finish_update(catalog, async_rt, gpu, tracker);
 
+        if self.take_deferred_texture_snapshot {
+            self.capture_and_save_deferred_texture_snapshot(async_rt, gpu)?;
+            self.take_deferred_texture_snapshot = false;
+        }
+
         Ok(())
+    }
+
+    fn capture_and_save_deferred_texture_snapshot(
+        &mut self,
+        async_rt: &mut Runtime,
+        gpu: &mut GPU,
+    ) -> Fallible<()> {
+        fn write_image(extent: wgpu::Extent3d, format: wgpu::TextureFormat, data: Vec<u8>) {
+            let pix_cnt = extent.width as usize * extent.height as usize;
+            let img_len = pix_cnt * 3;
+            let samples = LayoutVerified::<&[u8], [f32]>::new_slice(&data).expect("as [f32]");
+            let src_stride = GPU::stride_for_row_size(extent.width * texture_format_size(format))
+                / texture_format_size(format);
+            let mut data = vec![0u8; img_len];
+            for x in 0..extent.width as usize {
+                for y in 0..extent.height as usize {
+                    let src_offset = 4 * (x + (y * src_stride as usize));
+                    let dst_offset = 3 * (x + (y * extent.width as usize));
+                    let r = (samples[src_offset] * 255.0).floor() as u8;
+                    let g = (samples[src_offset + 1] * 255.0).floor() as u8;
+                    data[dst_offset] = r;
+                    data[dst_offset + 1] = g;
+                    data[dst_offset + 2] = 0;
+                }
+            }
+            let img = ImageBuffer::<Rgb<u8>, _>::from_raw(extent.width, extent.height, data)
+                .expect("built image");
+            println!("writing to __dump__/terrain_geo_deferred_texture.png");
+            img.save("__dump__/terrain_geo_deferred_texture.png")
+                .expect("wrote file");
+        }
+        Ok(GPU::dump_texture(
+            &self.deferred_texture,
+            gpu.attachment_extent(),
+            Self::DEFERRED_TEXTURE_FORMAT,
+            async_rt,
+            gpu,
+            Box::new(write_image),
+        )?)
     }
 
     pub fn paint_atlas_indices(&self, encoder: wgpu::CommandEncoder) -> wgpu::CommandEncoder {
@@ -221,9 +384,57 @@ impl TerrainGeoBuffer {
         )
     }
 
+    pub fn deferred_texture_target(
+        &self,
+    ) -> (
+        [wgpu::RenderPassColorAttachmentDescriptor; 1],
+        Option<wgpu::RenderPassDepthStencilAttachmentDescriptor>,
+    ) {
+        (
+            [wgpu::RenderPassColorAttachmentDescriptor {
+                attachment: &self.deferred_texture_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::RED),
+                    store: true,
+                },
+            }],
+            None,
+        )
+    }
+
+    pub fn deferred_texture<'a>(
+        &'a self,
+        mut rpass: wgpu::RenderPass<'a>,
+        globals_buffer: &'a GlobalParametersBuffer,
+    ) -> wgpu::RenderPass<'a> {
+        rpass.set_pipeline(&self.deferred_texture_pipeline);
+        rpass.set_bind_group(Group::Globals.index(), &globals_buffer.bind_group(), &[]);
+        rpass.set_bind_group(1, &self.empty_bind_group, &[]);
+        rpass.set_bind_group(Group::Terrain.index(), &self.tile_manager.bind_group(), &[]);
+        rpass.set_vertex_buffer(0, self.patch_manager.vertex_buffer());
+        for i in 0..self.patch_manager.num_patches() {
+            let winding = self.patch_manager.patch_winding(i);
+            let base_vertex = self.patch_manager.patch_vertex_buffer_offset(i);
+            rpass.set_index_buffer(self.patch_manager.tristrip_index_buffer(winding));
+            rpass.draw_indexed(
+                self.patch_manager.tristrip_index_range(winding),
+                base_vertex,
+                0..1,
+            );
+        }
+
+        rpass
+    }
+
     #[command]
     pub fn snapshot_index(&mut self, _command: &Command) {
         self.tile_manager.snapshot_index();
+    }
+
+    #[command]
+    pub fn snapshot_deferred_texture_buffer(&mut self, _command: &Command) {
+        self.take_deferred_texture_snapshot = true;
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
@@ -234,21 +445,21 @@ impl TerrainGeoBuffer {
         self.tile_manager.bind_group()
     }
 
-    pub fn num_patches(&self) -> i32 {
-        self.patch_manager.num_patches()
-    }
+    // pub fn num_patches(&self) -> i32 {
+    //     self.patch_manager.num_patches()
+    // }
 
-    pub fn vertex_buffer(&self) -> wgpu::BufferSlice {
-        self.patch_manager.vertex_buffer()
-    }
+    // pub fn vertex_buffer(&self) -> wgpu::BufferSlice {
+    //     self.patch_manager.vertex_buffer()
+    // }
 
-    pub fn patch_vertex_buffer_offset(&self, patch_number: i32) -> i32 {
-        self.patch_manager.patch_vertex_buffer_offset(patch_number)
-    }
+    // pub fn patch_vertex_buffer_offset(&self, patch_number: i32) -> i32 {
+    //     self.patch_manager.patch_vertex_buffer_offset(patch_number)
+    // }
 
-    pub fn patch_winding(&self, patch_number: i32) -> PatchWinding {
-        self.patch_manager.patch_winding(patch_number)
-    }
+    // pub fn patch_winding(&self, patch_number: i32) -> PatchWinding {
+    //     self.patch_manager.patch_winding(patch_number)
+    // }
 
     pub fn wireframe_index_buffer(&self, winding: PatchWinding) -> wgpu::BufferSlice {
         self.patch_manager.wireframe_index_buffer(winding)
@@ -258,13 +469,13 @@ impl TerrainGeoBuffer {
         self.patch_manager.wireframe_index_range(winding)
     }
 
-    pub fn tristrip_index_buffer(&self, winding: PatchWinding) -> wgpu::BufferSlice {
-        self.patch_manager.tristrip_index_buffer(winding)
-    }
+    // pub fn tristrip_index_buffer(&self, winding: PatchWinding) -> wgpu::BufferSlice {
+    //     self.patch_manager.tristrip_index_buffer(winding)
+    // }
 
-    pub fn tristrip_index_range(&self, winding: PatchWinding) -> Range<u32> {
-        self.patch_manager.tristrip_index_range(winding)
-    }
+    // pub fn tristrip_index_range(&self, winding: PatchWinding) -> Range<u32> {
+    //     self.patch_manager.tristrip_index_range(winding)
+    // }
 }
 
 #[cfg(test)]

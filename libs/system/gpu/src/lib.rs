@@ -24,7 +24,8 @@ use failure::{err_msg, Fallible};
 use futures::executor::block_on;
 use input::InputSystem;
 use log::trace;
-use std::{mem, path::PathBuf, sync::Arc};
+use std::{fs, mem, path::PathBuf, sync::Arc};
+use tokio::runtime::Runtime;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
 use zerocopy::{AsBytes, FromBytes};
@@ -165,6 +166,14 @@ impl GPU {
             base_array_layer: 0,
             array_layer_count: None,
         })
+    }
+
+    pub fn attachment_extent(&self) -> wgpu::Extent3d {
+        wgpu::Extent3d {
+            width: self.size.width.floor() as u32,
+            height: self.size.height.floor() as u32,
+            depth: 1,
+        }
     }
 
     pub fn note_resize(&mut self, input: &InputSystem) {
@@ -317,6 +326,69 @@ impl GPU {
     pub fn create_shader_module(&self, spirv: &[u8]) -> Fallible<wgpu::ShaderModule> {
         let spirv_words = wgpu::util::make_spirv(spirv);
         Ok(self.device.create_shader_module(spirv_words))
+    }
+
+    pub fn stride_for_row_size(size: u32) -> u32 {
+        (size + wgpu::COPY_BYTES_PER_ROW_ALIGNMENT - 1) / wgpu::COPY_BYTES_PER_ROW_ALIGNMENT
+            * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT
+    }
+
+    pub fn dump_texture(
+        texture: &wgpu::Texture,
+        extent: wgpu::Extent3d,
+        format: wgpu::TextureFormat,
+        async_rt: &mut Runtime,
+        gpu: &mut GPU,
+        callback: Box<
+            dyn FnOnce(wgpu::Extent3d, wgpu::TextureFormat, Vec<u8>) + Send + Sync + 'static,
+        >,
+    ) -> Fallible<()> {
+        let _ = fs::create_dir("__dump__");
+        let bytes_per_row = Self::stride_for_row_size(extent.width * texture_format_size(format));
+        let buf_size = u64::from(bytes_per_row * extent.height);
+        let download_buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
+            label: Some("dump-download-buffer"),
+            size: buf_size,
+            usage: wgpu::BufferUsage::all(),
+            mapped_at_creation: false,
+        });
+        let mut encoder = gpu
+            .device()
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("dump-download-command-encoder"),
+            });
+        println!(
+            "TX SIZE: {}, byes_per_row: {}, stride: {}",
+            texture_format_size(format),
+            extent.width * texture_format_size(format),
+            Self::stride_for_row_size(extent.width * texture_format_size(format))
+        );
+        encoder.copy_texture_to_buffer(
+            wgpu::TextureCopyView {
+                texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+            },
+            wgpu::BufferCopyView {
+                buffer: &download_buffer,
+                layout: wgpu::TextureDataLayout {
+                    offset: 0,
+                    bytes_per_row,
+                    rows_per_image: extent.height,
+                },
+            },
+            extent,
+        );
+        gpu.queue_mut().submit(vec![encoder.finish()]);
+        gpu.device().poll(wgpu::Maintain::Wait);
+        let reader = download_buffer.slice(..).map_async(wgpu::MapMode::Read);
+        gpu.device().poll(wgpu::Maintain::Wait);
+        async_rt.spawn(async move {
+            reader.await.unwrap();
+            let raw = download_buffer.slice(..).get_mapped_range().to_owned();
+            callback(extent, format, raw);
+        });
+        Ok(())
     }
 
     pub fn device(&self) -> &wgpu::Device {

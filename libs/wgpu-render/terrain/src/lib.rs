@@ -29,6 +29,11 @@ pub struct TerrainRenderPass {
     show_wireframe: bool,
 }
 
+// 1) Render tris to an offscreen buffer, collecting (a) grat, (b) norm, (c) depth per pixel
+// 2) Clear diffuse color and normal accumulation buffers
+// 3) For each layer, for each pixel of the offscreen buffer, accumulate the color and normal
+// 4) For each pixel of the accumulator and depth, compute lighting, skybox, stars, etc.
+
 #[commandable]
 impl TerrainRenderPass {
     pub fn new(
@@ -38,64 +43,6 @@ impl TerrainRenderPass {
         terrain_geo_buffer: &TerrainGeoBuffer,
     ) -> Fallible<Self> {
         trace!("TerrainRenderPass::new");
-
-        let wireframe_pipeline =
-            gpu.device()
-                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some("terrain-wireframe-pipeline"),
-                    layout: Some(&gpu.device().create_pipeline_layout(
-                        &wgpu::PipelineLayoutDescriptor {
-                            label: Some("terrain-wireframe-pipeline-layout"),
-                            push_constant_ranges: &[],
-                            bind_group_layouts: &[globals_buffer.bind_group_layout()],
-                        },
-                    )),
-                    vertex_stage: wgpu::ProgrammableStageDescriptor {
-                        module: &gpu.create_shader_module(include_bytes!(
-                            "../target/terrain-wireframe.vert.spirv"
-                        ))?,
-                        entry_point: "main",
-                    },
-                    fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                        module: &gpu.create_shader_module(include_bytes!(
-                            "../target/terrain-wireframe.frag.spirv"
-                        ))?,
-                        entry_point: "main",
-                    }),
-                    rasterization_state: Some(wgpu::RasterizationStateDescriptor {
-                        front_face: wgpu::FrontFace::Cw,
-                        cull_mode: wgpu::CullMode::None,
-                        depth_bias: 0,
-                        depth_bias_slope_scale: 0.0,
-                        depth_bias_clamp: 0.0,
-                        clamp_depth: false,
-                    }),
-                    primitive_topology: wgpu::PrimitiveTopology::LineList,
-                    color_states: &[wgpu::ColorStateDescriptor {
-                        format: GPU::texture_format(),
-                        color_blend: wgpu::BlendDescriptor::REPLACE,
-                        alpha_blend: wgpu::BlendDescriptor::REPLACE,
-                        write_mask: wgpu::ColorWrite::ALL,
-                    }],
-                    depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
-                        format: GPU::DEPTH_FORMAT,
-                        depth_write_enabled: false,
-                        depth_compare: wgpu::CompareFunction::Always,
-                        stencil: wgpu::StencilStateDescriptor {
-                            front: wgpu::StencilStateFaceDescriptor::IGNORE,
-                            back: wgpu::StencilStateFaceDescriptor::IGNORE,
-                            read_mask: 0,
-                            write_mask: 0,
-                        },
-                    }),
-                    vertex_state: wgpu::VertexStateDescriptor {
-                        index_format: wgpu::IndexFormat::Uint32,
-                        vertex_buffers: &[TerrainVertex::descriptor()],
-                    },
-                    sample_count: 1,
-                    sample_mask: !0,
-                    alpha_to_coverage_enabled: false,
-                });
 
         let patch_pipeline = gpu
             .device()
@@ -157,11 +104,69 @@ impl TerrainRenderPass {
                 alpha_to_coverage_enabled: false,
             });
 
+        let wireframe_pipeline =
+            gpu.device()
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("terrain-wireframe-pipeline"),
+                    layout: Some(&gpu.device().create_pipeline_layout(
+                        &wgpu::PipelineLayoutDescriptor {
+                            label: Some("terrain-wireframe-pipeline-layout"),
+                            push_constant_ranges: &[],
+                            bind_group_layouts: &[globals_buffer.bind_group_layout()],
+                        },
+                    )),
+                    vertex_stage: wgpu::ProgrammableStageDescriptor {
+                        module: &gpu.create_shader_module(include_bytes!(
+                            "../target/terrain-wireframe.vert.spirv"
+                        ))?,
+                        entry_point: "main",
+                    },
+                    fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
+                        module: &gpu.create_shader_module(include_bytes!(
+                            "../target/terrain-wireframe.frag.spirv"
+                        ))?,
+                        entry_point: "main",
+                    }),
+                    rasterization_state: Some(wgpu::RasterizationStateDescriptor {
+                        front_face: wgpu::FrontFace::Cw,
+                        cull_mode: wgpu::CullMode::None,
+                        depth_bias: 0,
+                        depth_bias_slope_scale: 0.0,
+                        depth_bias_clamp: 0.0,
+                        clamp_depth: false,
+                    }),
+                    primitive_topology: wgpu::PrimitiveTopology::LineList,
+                    color_states: &[wgpu::ColorStateDescriptor {
+                        format: GPU::texture_format(),
+                        color_blend: wgpu::BlendDescriptor::REPLACE,
+                        alpha_blend: wgpu::BlendDescriptor::REPLACE,
+                        write_mask: wgpu::ColorWrite::ALL,
+                    }],
+                    depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
+                        format: GPU::DEPTH_FORMAT,
+                        depth_write_enabled: false,
+                        depth_compare: wgpu::CompareFunction::Always,
+                        stencil: wgpu::StencilStateDescriptor {
+                            front: wgpu::StencilStateFaceDescriptor::IGNORE,
+                            back: wgpu::StencilStateFaceDescriptor::IGNORE,
+                            read_mask: 0,
+                            write_mask: 0,
+                        },
+                    }),
+                    vertex_state: wgpu::VertexStateDescriptor {
+                        index_format: wgpu::IndexFormat::Uint32,
+                        vertex_buffers: &[TerrainVertex::descriptor()],
+                    },
+                    sample_count: 1,
+                    sample_mask: !0,
+                    alpha_to_coverage_enabled: false,
+                });
+
         Ok(Self {
             patch_pipeline,
             wireframe_pipeline,
 
-            show_wireframe: true,
+            show_wireframe: false,
         })
     }
 
@@ -173,10 +178,11 @@ impl TerrainRenderPass {
     pub fn draw<'a>(
         &'a self,
         mut rpass: wgpu::RenderPass<'a>,
-        globals_buffer: &'a GlobalParametersBuffer,
-        atmosphere_buffer: &'a AtmosphereBuffer,
-        terrain_geo_buffer: &'a TerrainGeoBuffer,
+        _globals_buffer: &'a GlobalParametersBuffer,
+        _atmosphere_buffer: &'a AtmosphereBuffer,
+        _terrain_geo_buffer: &'a TerrainGeoBuffer,
     ) -> wgpu::RenderPass<'a> {
+        /*
         rpass.set_pipeline(&self.patch_pipeline);
         rpass.set_bind_group(Group::Globals.index(), &globals_buffer.bind_group(), &[]);
         rpass.set_bind_group(
@@ -216,6 +222,7 @@ impl TerrainRenderPass {
                 );
             }
         }
+         */
 
         rpass
     }

@@ -25,12 +25,12 @@ use absolute_unit::arcseconds;
 use catalog::Catalog;
 use failure::{err_msg, Fallible};
 use geometry::AABB2;
-use gpu::{texture_format_size, UploadTracker, GPU};
+use gpu::{UploadTracker, GPU};
 use image::{ImageBuffer, Rgb};
 use log::trace;
 use std::{
     collections::{BTreeMap, BinaryHeap},
-    fs, mem,
+    mem,
     num::{NonZeroU32, NonZeroU64},
     ops::Range,
     sync::Arc,
@@ -43,6 +43,7 @@ use tokio::{
         RwLock,
     },
 };
+use zerocopy::LayoutVerified;
 
 // FIXME: this should be system dependent and configurable
 const MAX_CONCURRENT_READS: usize = 5;
@@ -705,59 +706,10 @@ impl TileSet {
         async_rt: &mut Runtime,
         gpu: &mut GPU,
     ) -> Fallible<()> {
-        let _ = fs::create_dir("__dump__");
-        let buf_size = u64::from(
-            self.index_texture_extent.width
-                * self.index_texture_extent.height
-                * texture_format_size(self.index_texture_format),
-        );
-        let index_snapshot_download_buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
-            label: Some("index-snapshot-download-buffer"),
-            size: buf_size,
-            usage: wgpu::BufferUsage::all(),
-            mapped_at_creation: false,
-        });
-        let mut encoder = gpu
-            .device()
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("index-snapshot-download-command-encoder"),
-            });
-        encoder.copy_texture_to_buffer(
-            wgpu::TextureCopyView {
-                texture: &self.index_texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-            },
-            wgpu::BufferCopyView {
-                buffer: &index_snapshot_download_buffer,
-                layout: wgpu::TextureDataLayout {
-                    offset: 0,
-                    bytes_per_row: self.index_texture_extent.width
-                        * texture_format_size(self.index_texture_format),
-                    rows_per_image: self.index_texture_extent.height,
-                },
-            },
-            self.index_texture_extent,
-        );
-        gpu.queue_mut().submit(vec![encoder.finish()]);
-        gpu.device().poll(wgpu::Maintain::Wait);
-        let reader = index_snapshot_download_buffer
-            .slice(..)
-            .map_async(wgpu::MapMode::Read);
-        gpu.device().poll(wgpu::Maintain::Wait);
-        let extent = self.index_texture_extent;
-        async_rt.spawn(async move {
-            reader.await.unwrap();
-            let raw = index_snapshot_download_buffer
-                .slice(..)
-                .get_mapped_range()
-                .to_owned();
-            println!("writing to __dump__/terrain_geo_index_texture_raw.bin");
-            fs::write("__dump__/terrain_geo_index_texture_raw.bin", &raw).unwrap();
-
+        fn write_image(extent: wgpu::Extent3d, _: wgpu::TextureFormat, data: Vec<u8>) {
             let pix_cnt = extent.width as usize * extent.height as usize;
             let img_len = pix_cnt * 3;
-            let shorts: &[u16] = unsafe { std::mem::transmute(&raw as &[u8]) };
+            let shorts = LayoutVerified::<&[u8], [u16]>::new_slice(&data).expect("as [u16]");
             let mut data = vec![0u8; img_len];
             for x in 0..extent.width as usize {
                 for y in 0..extent.height as usize {
@@ -769,12 +721,20 @@ impl TileSet {
                     data[dst_offset + 2] = a;
                 }
             }
-            let img =
-                ImageBuffer::<Rgb<u8>, _>::from_raw(extent.width, extent.height, data).unwrap();
+            let img = ImageBuffer::<Rgb<u8>, _>::from_raw(extent.width, extent.height, data)
+                .expect("built image");
             println!("writing to __dump__/terrain_geo_index_texture.png");
             img.save("__dump__/terrain_geo_index_texture.png")
-        });
-        Ok(())
+                .expect("wrote file");
+        }
+        Ok(GPU::dump_texture(
+            &self.index_texture,
+            self.index_texture_extent,
+            self.index_texture_format,
+            async_rt,
+            gpu,
+            Box::new(write_image),
+        )?)
     }
 
     fn allocate_atlas_slot(&mut self, votes: u32, qtid: QuadTreeId) {
