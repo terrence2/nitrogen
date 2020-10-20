@@ -129,18 +129,20 @@ impl GpuDetailLevel {
     }
 }
 
+pub(crate) struct VisiblePatch {
+    g0: Graticule<GeoCenter>,
+    g1: Graticule<GeoCenter>,
+    g2: Graticule<GeoCenter>,
+    edge_length: Length<Meters>,
+}
+
 #[derive(Commandable)]
 pub struct TerrainGeoBuffer {
     patch_manager: PatchManager,
     tile_manager: TileManager,
 
     // Cache allocation for transferring visible allocations from patches to tiles.
-    visible_regions: Vec<(
-        Graticule<GeoCenter>,
-        Graticule<GeoCenter>,
-        Graticule<GeoCenter>,
-        Length<Meters>,
-    )>,
+    visible_regions: Vec<VisiblePatch>,
 }
 
 #[commandable]
@@ -191,8 +193,8 @@ impl TerrainGeoBuffer {
 
         // Dispatch visibility to tiles so that they can manage the actively loaded set.
         self.tile_manager.begin_update();
-        for (g0, g1, g2, edge_length) in &self.visible_regions {
-            self.tile_manager.note_required(g0, g1, g2, *edge_length);
+        for visible_patch in &self.visible_regions {
+            self.tile_manager.note_required(visible_patch);
         }
         self.tile_manager
             .finish_update(catalog, async_rt, gpu, tracker);

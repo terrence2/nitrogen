@@ -15,9 +15,9 @@
 use crate::{
     patch::{PatchIndex, PatchTree, PatchWinding, TerrainVertex},
     tables::{get_index_dependency_lut, get_tri_strip_index_buffer, get_wireframe_index_buffer},
-    GpuDetailLevel,
+    GpuDetailLevel, VisiblePatch,
 };
-use absolute_unit::{meters, Kilometers, Length, Meters};
+use absolute_unit::{meters, Kilometers};
 use camera::Camera;
 use failure::Fallible;
 use geodesy::{Cartesian, GeoCenter, Graticule};
@@ -457,12 +457,7 @@ impl PatchManager {
         camera: &Camera,
         gpu: &mut GPU,
         tracker: &mut UploadTracker,
-        visible_regions: &mut Vec<(
-            Graticule<GeoCenter>,
-            Graticule<GeoCenter>,
-            Graticule<GeoCenter>,
-            Length<Meters>,
-        )>,
+        visible_regions: &mut Vec<VisiblePatch>,
     ) -> Fallible<()> {
         // Select optimal live patches from our coherent patch tree.
         self.live_patches.clear();
@@ -508,7 +503,12 @@ impl PatchManager {
             // solid-angle calculations to avoid having to re-do them for the patch tree as well.
             let segments = 2i32.pow(self.target_patch_subdivision_level());
             let edge_length = meters!((pv0 - pv1).magnitude() / segments as f64);
-            visible_regions.push((g0, g1, g2, edge_length));
+            visible_regions.push(VisiblePatch {
+                g0,
+                g1,
+                g2,
+                edge_length,
+            });
 
             self.live_vertices
                 .push(TerrainVertex::new(&pv0, &nv0.xyz(), &g0));
