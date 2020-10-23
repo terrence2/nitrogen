@@ -74,7 +74,7 @@ impl ScreenTextRenderPass {
                 }),
                 primitive_topology: wgpu::PrimitiveTopology::TriangleList,
                 color_states: &[wgpu::ColorStateDescriptor {
-                    format: GPU::texture_format(),
+                    format: GPU::SCREEN_FORMAT,
                     alpha_blend: wgpu::BlendDescriptor::REPLACE,
                     color_blend: wgpu::BlendDescriptor {
                         src_factor: wgpu::BlendFactor::SrcAlpha,

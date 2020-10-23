@@ -81,7 +81,7 @@ impl SkyboxRenderPass {
                 }),
                 primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
                 color_states: &[wgpu::ColorStateDescriptor {
-                    format: GPU::texture_format(),
+                    format: GPU::SCREEN_FORMAT,
                     color_blend: wgpu::BlendDescriptor::REPLACE,
                     alpha_blend: wgpu::BlendDescriptor::REPLACE,
                     write_mask: wgpu::ColorWrite::ALL,

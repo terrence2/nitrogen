@@ -76,7 +76,7 @@ make_frame_graph!(
             //accumulate_normal_and_color: Compute() { terrain_geo() },
             draw: Render(Screen) {
                 skybox( globals, fullscreen, stars, atmosphere ),
-                terrain( globals, atmosphere, terrain_geo ),
+                terrain( globals, fullscreen, atmosphere, terrain_geo ),
                 screen_text( globals, text_layout )
             }
         ];
@@ -97,8 +97,7 @@ fn main() -> Fallible<()> {
 
     let system_bindings = Bindings::new("map")
         .bind("terrain.toggle_wireframe", "w")?
-        .bind("terrain_geo.snapshot_index", "i")?
-        .bind("terrain_geo.snapshot_deferred_texture_buffer", "t")?
+        .bind("terrain.toggle_debug_mode", "r")?
         .bind("demo.+target_up", "Up")?
         .bind("demo.+target_down", "Down")?
         .bind("demo.exit", "Escape")?

@@ -113,6 +113,13 @@ impl Camera {
         //     0.0f,    f,  0.0f,  0.0f,
         //     0.0f, 0.0f,  0.0f, -1.0f,
         //     0.0f, 0.0f, zNear,  0.0f);
+
+        // Note for inversing on the GPU:
+        // z = -1
+        // w = z*zNear
+        // z' = -1 / (z*zNear)
+        // z = -1 / (z'*zNear)
+
         let mut matrix: Matrix4<f64> = num::Zero::zero();
         let f = 1.0 / (self.fov_y.f64() / 2.0).tan();
         matrix[(0, 0)] = self.aspect_ratio / f; // aspect is h/w, so invert.

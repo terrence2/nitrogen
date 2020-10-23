@@ -14,14 +14,17 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 #version 450
 #include <wgpu-buffer/global_data/include/global_data.glsl>
+#include <wgpu-buffer/terrain_geo/include/terrain_geo.glsl>
 
-layout(location = 0) in vec3 v_position; // eye relative
-layout(location = 1) in vec3 v_normal;
-layout(location = 2) in vec2 v_graticule; // earth centered
-
-layout(location = 0) out vec4 v_color;
+layout(location = 0) in vec2 position;
+layout(location = 1) out vec2 v_tc;
 
 void main() {
-    gl_Position = m4_projection_meters() * vec4(v_position, 1);
-    v_color = vec4(v_graticule, v_normal.x, v_normal.z);
+    gl_Position = vec4(position, 0.0, 1.0);
+
+    // map -1->1 screen coord to 0->1 u/v
+    vec2 tc = position;
+    tc.y = -tc.y;
+    tc = (tc + vec2(1.0, 1.0)) / 2.0;
+    v_tc = tc;
 }

@@ -21,6 +21,5 @@ layout(location = 1) in vec3 normal;
 layout(location = 2) in vec2 graticule;
 
 void main() {
-    // FIXME: no need for a center indicator on the projection matrix, just scale.
-    gl_Position = dbg_geocenter_m_projection() * vec4(position, 1);
+    gl_Position = m4_projection_meters() * vec4(position, 1);
 }

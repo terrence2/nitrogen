@@ -66,10 +66,6 @@ impl GPU {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
     pub const SCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 
-    pub fn texture_format() -> wgpu::TextureFormat {
-        wgpu::TextureFormat::Bgra8Unorm
-    }
-
     pub fn aspect_ratio(&self) -> f64 {
         self.size.height.floor() / self.size.width.floor()
     }
@@ -119,7 +115,7 @@ impl GPU {
             .to_physical(input.window().hidpi_factor());
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
-            format: Self::texture_format(),
+            format: Self::SCREEN_FORMAT,
             width: size.width.floor() as u32,
             height: size.height.floor() as u32,
             present_mode: config.present_mode,
@@ -183,7 +179,7 @@ impl GPU {
             .to_physical(input.window().hidpi_factor());
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
-            format: Self::texture_format(),
+            format: Self::SCREEN_FORMAT,
             width: self.size.width.floor() as u32,
             height: self.size.height.floor() as u32,
             present_mode: self.config.present_mode,
@@ -344,7 +340,8 @@ impl GPU {
         >,
     ) -> Fallible<()> {
         let _ = fs::create_dir("__dump__");
-        let bytes_per_row = Self::stride_for_row_size(extent.width * texture_format_size(format));
+        let sample_size = texture_format_size(format);
+        let bytes_per_row = Self::stride_for_row_size(extent.width * sample_size);
         let buf_size = u64::from(bytes_per_row * extent.height);
         let download_buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
             label: Some("dump-download-buffer"),
@@ -358,10 +355,10 @@ impl GPU {
                 label: Some("dump-download-command-encoder"),
             });
         println!(
-            "TX SIZE: {}, byes_per_row: {}, stride: {}",
-            texture_format_size(format),
-            extent.width * texture_format_size(format),
-            Self::stride_for_row_size(extent.width * texture_format_size(format))
+            "dumping texture: fmt-size: {}, byes-per-row: {}, stride: {}",
+            sample_size,
+            extent.width * sample_size,
+            bytes_per_row
         );
         encoder.copy_texture_to_buffer(
             wgpu::TextureCopyView {

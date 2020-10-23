@@ -19,7 +19,8 @@ layout(set = 0, binding = 0) buffer CameraParameters {
     mat4 globals_camera_view;
     mat4 globals_camera_projection;
     mat4 debug_geocenter_km_view;
-    mat4 debug_geocenter_m_projection;
+    mat4 globals_m4_projection_meters;
+    mat4 globals_m4_inv_projection_meters;
     mat4 local_geocenter_km_inverse_view;
     mat4 local_geocenter_km_inverse_projection;
     mat4 globals_tile_to_earth;
@@ -38,7 +39,8 @@ mat4 camera_projection()           { return globals_camera_projection; }
 vec4 camera_position_in_tile()     { return globals_camera_position_tile; }
 vec4 camera_position_earth_km()    { return globals_camera_position_earth_km; }
 mat4 dbg_geocenter_km_view()       { return debug_geocenter_km_view; }
-mat4 dbg_geocenter_m_projection()  { return debug_geocenter_m_projection; }
+mat4 m4_projection_meters()        { return globals_m4_projection_meters; }
+mat4 m4_inv_projection_meters()    { return globals_m4_inv_projection_meters; }
 mat4 tile_to_earth()               { return globals_tile_to_earth; }
 mat4 tile_to_earth_rotation()      { return globals_tile_to_earth_rotation; }
 mat4 tile_to_earth_scale()         { return globals_tile_to_earth_scale; }

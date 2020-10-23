@@ -12,16 +12,9 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-#version 450
-#include <wgpu-buffer/global_data/include/global_data.glsl>
 
-layout(location = 0) in vec3 v_position; // eye relative
-layout(location = 1) in vec3 v_normal;
-layout(location = 2) in vec2 v_graticule; // earth centered
-
-layout(location = 0) out vec4 v_color;
-
-void main() {
-    gl_Position = m4_projection_meters() * vec4(v_position, 1);
-    v_color = vec4(v_graticule, v_normal.x, v_normal.z);
-}
+layout(set = 2, binding = 0) uniform texture2D deferred_texture;
+layout(set = 2, binding = 1) uniform texture2D deferred_depth;
+layout(set = 2, binding = 2) uniform texture2D color_acc_texture;
+layout(set = 2, binding = 3) uniform texture2D normal_acc_texture;
+layout(set = 2, binding = 4) uniform sampler linear_sampler;

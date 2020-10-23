@@ -16,17 +16,28 @@ use atmosphere::AtmosphereBuffer;
 use command::Command;
 use commandable::{command, commandable, Commandable};
 use failure::Fallible;
+use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::GlobalParametersBuffer;
 use gpu::GPU;
 use log::trace;
 use shader_shared::Group;
 use terrain_geo::{TerrainGeoBuffer, TerrainVertex};
 
+enum DebugMode {
+    None,
+    Deferred,
+    Depth,
+    Color,
+    Normal,
+}
+
 #[derive(Commandable)]
 pub struct TerrainRenderPass {
-    patch_pipeline: wgpu::RenderPipeline,
+    dbg_deferred_pipeline: wgpu::RenderPipeline,
+    dbg_depth_pipeline: wgpu::RenderPipeline,
     wireframe_pipeline: wgpu::RenderPipeline,
     show_wireframe: bool,
+    debug_mode: DebugMode,
 }
 
 // 1) Render tris to an offscreen buffer, collecting (a) grat, (b) norm, (c) depth per pixel
@@ -44,65 +55,34 @@ impl TerrainRenderPass {
     ) -> Fallible<Self> {
         trace!("TerrainRenderPass::new");
 
-        let patch_pipeline = gpu
-            .device()
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("terrain-patch-pipeline"),
-                layout: Some(&gpu.device().create_pipeline_layout(
-                    &wgpu::PipelineLayoutDescriptor {
-                        label: Some("terrain-patch-pipeline-layout"),
-                        push_constant_ranges: &[],
-                        bind_group_layouts: &[
-                            globals_buffer.bind_group_layout(),
-                            atmosphere_buffer.bind_group_layout(),
-                            terrain_geo_buffer.bind_group_layout(),
-                        ],
-                    },
-                )),
-                vertex_stage: wgpu::ProgrammableStageDescriptor {
-                    module: &gpu
-                        .create_shader_module(include_bytes!("../target/terrain.vert.spirv"))?,
-                    entry_point: "main",
-                },
-                fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                    module: &gpu
-                        .create_shader_module(include_bytes!("../target/terrain.frag.spirv"))?,
-                    entry_point: "main",
-                }),
-                rasterization_state: Some(wgpu::RasterizationStateDescriptor {
-                    front_face: wgpu::FrontFace::Cw,
-                    cull_mode: wgpu::CullMode::Back,
-                    depth_bias: 0,
-                    depth_bias_slope_scale: 0.0,
-                    depth_bias_clamp: 0.0,
-                    clamp_depth: false,
-                }),
-                primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
-                color_states: &[wgpu::ColorStateDescriptor {
-                    format: GPU::texture_format(),
-                    color_blend: wgpu::BlendDescriptor::REPLACE,
-                    alpha_blend: wgpu::BlendDescriptor::REPLACE,
-                    write_mask: wgpu::ColorWrite::ALL,
-                }],
-                depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
-                    format: GPU::DEPTH_FORMAT,
-                    depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::Greater,
-                    stencil: wgpu::StencilStateDescriptor {
-                        front: wgpu::StencilStateFaceDescriptor::IGNORE,
-                        back: wgpu::StencilStateFaceDescriptor::IGNORE,
-                        read_mask: 0,
-                        write_mask: 0,
-                    },
-                }),
-                vertex_state: wgpu::VertexStateDescriptor {
-                    index_format: wgpu::IndexFormat::Uint32,
-                    vertex_buffers: &[TerrainVertex::descriptor()],
-                },
-                sample_count: 1,
-                sample_mask: !0,
-                alpha_to_coverage_enabled: false,
-            });
+        let dbg_fullscreen_shared_vert =
+            gpu.create_shader_module(include_bytes!("../target/dbg-fullscreen-shared.vert.spirv"))?;
+        let dbg_fullscreen_layout =
+            gpu.device()
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("terrain-dbg-deferred-pipeline-layout"),
+                    push_constant_ranges: &[],
+                    bind_group_layouts: &[
+                        globals_buffer.bind_group_layout(),
+                        atmosphere_buffer.bind_group_layout(),
+                        terrain_geo_buffer.composite_bind_group_layout(),
+                    ],
+                });
+
+        let dbg_deferred_pipeline = Self::make_fullscreen_pipeline(
+            gpu.device(),
+            &dbg_fullscreen_layout,
+            &dbg_fullscreen_shared_vert,
+            &gpu.create_shader_module(include_bytes!(
+                "../target/terrain-deferred-buffer.frag.spirv"
+            ))?,
+        );
+        let dbg_depth_pipeline = Self::make_fullscreen_pipeline(
+            gpu.device(),
+            &dbg_fullscreen_layout,
+            &dbg_fullscreen_shared_vert,
+            &gpu.create_shader_module(include_bytes!("../target/terrain-depth-buffer.frag.spirv"))?,
+        );
 
         let wireframe_pipeline =
             gpu.device()
@@ -137,7 +117,7 @@ impl TerrainRenderPass {
                     }),
                     primitive_topology: wgpu::PrimitiveTopology::LineList,
                     color_states: &[wgpu::ColorStateDescriptor {
-                        format: GPU::texture_format(),
+                        format: GPU::SCREEN_FORMAT,
                         color_blend: wgpu::BlendDescriptor::REPLACE,
                         alpha_blend: wgpu::BlendDescriptor::REPLACE,
                         write_mask: wgpu::ColorWrite::ALL,
@@ -163,10 +143,65 @@ impl TerrainRenderPass {
                 });
 
         Ok(Self {
-            patch_pipeline,
+            dbg_deferred_pipeline,
+            dbg_depth_pipeline,
             wireframe_pipeline,
 
             show_wireframe: false,
+            debug_mode: DebugMode::Deferred,
+        })
+    }
+
+    pub fn make_fullscreen_pipeline<'a>(
+        device: &wgpu::Device,
+        layout: &wgpu::PipelineLayout,
+        vert_shader: &wgpu::ShaderModule,
+        frag_shader: &wgpu::ShaderModule,
+    ) -> wgpu::RenderPipeline {
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("terrain-dbg-deferred-pipeline"),
+            layout: Some(layout),
+            vertex_stage: wgpu::ProgrammableStageDescriptor {
+                module: &vert_shader,
+                entry_point: "main",
+            },
+            fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
+                module: &frag_shader,
+                entry_point: "main",
+            }),
+            rasterization_state: Some(wgpu::RasterizationStateDescriptor {
+                front_face: wgpu::FrontFace::Cw,
+                cull_mode: wgpu::CullMode::Back,
+                depth_bias: 0,
+                depth_bias_slope_scale: 0.0,
+                depth_bias_clamp: 0.0,
+                clamp_depth: false,
+            }),
+            primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
+            color_states: &[wgpu::ColorStateDescriptor {
+                format: GPU::SCREEN_FORMAT,
+                color_blend: wgpu::BlendDescriptor::REPLACE,
+                alpha_blend: wgpu::BlendDescriptor::REPLACE,
+                write_mask: wgpu::ColorWrite::ALL,
+            }],
+            depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
+                format: GPU::DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Greater,
+                stencil: wgpu::StencilStateDescriptor {
+                    front: wgpu::StencilStateFaceDescriptor::IGNORE,
+                    back: wgpu::StencilStateFaceDescriptor::IGNORE,
+                    read_mask: 0,
+                    write_mask: 0,
+                },
+            }),
+            vertex_state: wgpu::VertexStateDescriptor {
+                index_format: wgpu::IndexFormat::Uint32,
+                vertex_buffers: &[FullscreenVertex::descriptor()],
+            },
+            sample_count: 1,
+            sample_mask: !0,
+            alpha_to_coverage_enabled: false,
         })
     }
 
@@ -175,37 +210,38 @@ impl TerrainRenderPass {
         self.show_wireframe = !self.show_wireframe;
     }
 
+    #[command]
+    pub fn toggle_debug_mode(&mut self, _command: &Command) {
+        self.debug_mode = match self.debug_mode {
+            DebugMode::Deferred => DebugMode::Depth,
+            DebugMode::Depth => DebugMode::Deferred,
+            _ => panic!("unhandled debug mode"),
+        };
+    }
+
     pub fn draw<'a>(
         &'a self,
         mut rpass: wgpu::RenderPass<'a>,
-        _globals_buffer: &'a GlobalParametersBuffer,
-        _atmosphere_buffer: &'a AtmosphereBuffer,
-        _terrain_geo_buffer: &'a TerrainGeoBuffer,
+        globals_buffer: &'a GlobalParametersBuffer,
+        fullscreen_buffer: &'a FullscreenBuffer,
+        atmosphere_buffer: &'a AtmosphereBuffer,
+        terrain_geo_buffer: &'a TerrainGeoBuffer,
     ) -> wgpu::RenderPass<'a> {
-        /*
-        rpass.set_pipeline(&self.patch_pipeline);
+        match self.debug_mode {
+            DebugMode::Deferred => rpass.set_pipeline(&self.dbg_deferred_pipeline),
+            DebugMode::Depth => rpass.set_pipeline(&self.dbg_depth_pipeline),
+            _ => panic!("Unknown debug mode"),
+        }
         rpass.set_bind_group(Group::Globals.index(), &globals_buffer.bind_group(), &[]);
         rpass.set_bind_group(
             Group::Atmosphere.index(),
             &atmosphere_buffer.bind_group(),
             &[],
         );
-        rpass.set_bind_group(
-            Group::Terrain.index(),
-            &terrain_geo_buffer.bind_group(),
-            &[],
-        );
-        rpass.set_vertex_buffer(0, terrain_geo_buffer.vertex_buffer());
-        for i in 0..terrain_geo_buffer.num_patches() {
-            let winding = terrain_geo_buffer.patch_winding(i);
-            let base_vertex = terrain_geo_buffer.patch_vertex_buffer_offset(i);
-            rpass.set_index_buffer(terrain_geo_buffer.tristrip_index_buffer(winding));
-            rpass.draw_indexed(
-                terrain_geo_buffer.tristrip_index_range(winding),
-                base_vertex,
-                0..1,
-            );
-        }
+        rpass.set_bind_group(2, terrain_geo_buffer.composite_bind_group(), &[]);
+        // rpass.set_bind_group(Group::Stars.index(), &stars_buffer.bind_group(), &[]);
+        rpass.set_vertex_buffer(0, fullscreen_buffer.vertex_buffer());
+        rpass.draw(0..4, 0..1);
 
         if self.show_wireframe {
             rpass.set_pipeline(&self.wireframe_pipeline);
@@ -222,7 +258,6 @@ impl TerrainRenderPass {
                 );
             }
         }
-         */
 
         rpass
     }
