@@ -24,7 +24,6 @@ use shader_shared::Group;
 use terrain_geo::{TerrainGeoBuffer, TerrainVertex};
 
 enum DebugMode {
-    None,
     Deferred,
     Depth,
     Color,
@@ -35,6 +34,8 @@ enum DebugMode {
 pub struct TerrainRenderPass {
     dbg_deferred_pipeline: wgpu::RenderPipeline,
     dbg_depth_pipeline: wgpu::RenderPipeline,
+    dbg_color_pipeline: wgpu::RenderPipeline,
+    dbg_normal_pipeline: wgpu::RenderPipeline,
     wireframe_pipeline: wgpu::RenderPipeline,
     show_wireframe: bool,
     debug_mode: DebugMode,
@@ -82,6 +83,22 @@ impl TerrainRenderPass {
             &dbg_fullscreen_layout,
             &dbg_fullscreen_shared_vert,
             &gpu.create_shader_module(include_bytes!("../target/terrain-depth-buffer.frag.spirv"))?,
+        );
+        let dbg_color_pipeline = Self::make_fullscreen_pipeline(
+            gpu.device(),
+            &dbg_fullscreen_layout,
+            &dbg_fullscreen_shared_vert,
+            &gpu.create_shader_module(include_bytes!(
+                "../target/terrain-color_acc-buffer.frag.spirv"
+            ))?,
+        );
+        let dbg_normal_pipeline = Self::make_fullscreen_pipeline(
+            gpu.device(),
+            &dbg_fullscreen_layout,
+            &dbg_fullscreen_shared_vert,
+            &gpu.create_shader_module(include_bytes!(
+                "../target/terrain-normal_acc-buffer.frag.spirv"
+            ))?,
         );
 
         let wireframe_pipeline =
@@ -145,6 +162,8 @@ impl TerrainRenderPass {
         Ok(Self {
             dbg_deferred_pipeline,
             dbg_depth_pipeline,
+            dbg_color_pipeline,
+            dbg_normal_pipeline,
             wireframe_pipeline,
 
             show_wireframe: false,
@@ -214,8 +233,9 @@ impl TerrainRenderPass {
     pub fn toggle_debug_mode(&mut self, _command: &Command) {
         self.debug_mode = match self.debug_mode {
             DebugMode::Deferred => DebugMode::Depth,
-            DebugMode::Depth => DebugMode::Deferred,
-            _ => panic!("unhandled debug mode"),
+            DebugMode::Depth => DebugMode::Color,
+            DebugMode::Color => DebugMode::Normal,
+            DebugMode::Normal => DebugMode::Deferred,
         };
     }
 
@@ -230,7 +250,8 @@ impl TerrainRenderPass {
         match self.debug_mode {
             DebugMode::Deferred => rpass.set_pipeline(&self.dbg_deferred_pipeline),
             DebugMode::Depth => rpass.set_pipeline(&self.dbg_depth_pipeline),
-            _ => panic!("Unknown debug mode"),
+            DebugMode::Color => rpass.set_pipeline(&self.dbg_color_pipeline),
+            DebugMode::Normal => rpass.set_pipeline(&self.dbg_normal_pipeline),
         }
         rpass.set_bind_group(Group::Globals.index(), &globals_buffer.bind_group(), &[]);
         rpass.set_bind_group(

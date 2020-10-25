@@ -72,8 +72,8 @@ terrain_geo_atlas_slot_for_graticule(vec2 graticule_rad, utexture2D index_textur
     return index_texel.r;
 }
 
-int
-terrain_geo_height_in_tile(vec2 graticule_rad, TileInfo tile, itexture2DArray atlas_texture, sampler atlas_sampler) {
+ivec4
+terrain_geo_sample_in_tile(vec2 graticule_rad, TileInfo tile, itexture2DArray atlas_texture, sampler atlas_sampler) {
     // Tile metadata is stored in arcseconds for maximum precision.
     vec2 graticule_deg = degrees(graticule_rad);
     vec2 graticule_as = graticule_deg * 60.0 * 60.0;
@@ -89,6 +89,16 @@ terrain_geo_height_in_tile(vec2 graticule_rad, TileInfo tile, itexture2DArray at
             tile.atlas_slot
         )
     );
-    return atlas_texel.r;
+    return atlas_texel;
+}
+
+int
+terrain_geo_height_in_tile(vec2 graticule_rad, TileInfo tile, itexture2DArray atlas_texture, sampler atlas_sampler) {
+    return terrain_geo_sample_in_tile(graticule_rad, tile, atlas_texture, atlas_sampler).r;
+}
+
+ivec2
+terrain_geo_normal_in_tile(vec2 graticule_rad, TileInfo tile, itexture2DArray atlas_texture, sampler atlas_sampler) {
+    return terrain_geo_sample_in_tile(graticule_rad, tile, atlas_texture, atlas_sampler).xy;
 }
 ///////////////////////////////////////////////////////////////////////////////

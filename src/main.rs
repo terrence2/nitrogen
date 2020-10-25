@@ -73,7 +73,8 @@ make_frame_graph!(
                 terrain_geo( globals )
             },
             // Accumulate normal and color data.
-            //accumulate_normal_and_color: Compute() { terrain_geo() },
+            accumulate_normal_and_color: Compute() { terrain_geo( globals ) },
+
             draw: Render(Screen) {
                 skybox( globals, fullscreen, stars, atmosphere ),
                 terrain( globals, fullscreen, atmosphere, terrain_geo ),

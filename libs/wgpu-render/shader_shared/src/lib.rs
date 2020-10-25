@@ -22,7 +22,8 @@ pub enum Group {
     Atmosphere,
     TextLayout,
     Stars,
-    Terrain,
+    TerrainAcc,
+    TerrainTileSet,
 }
 
 impl Group {
@@ -31,9 +32,10 @@ impl Group {
             Self::Globals => 0,
             Self::Atmosphere => 1,
             Self::GlyphCache => 1,
+            Self::TerrainAcc => 1,
+            Self::TerrainTileSet => 2,
             Self::TextLayout => 2,
             Self::Stars => 2,
-            Self::Terrain => 2,
         }
     }
 }

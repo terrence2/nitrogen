@@ -40,7 +40,7 @@ pub const TILE_SAMPLES: i64 = 510;
 // in arcseconds.
 pub const TILE_EXTENT: i64 = TILE_SAMPLES - 1;
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum DataSetCoordinates {
     Spherical,
     CartesianPolar,
@@ -64,7 +64,7 @@ impl DataSetCoordinates {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum DataSetDataKind {
     Color,
     Normal,
@@ -88,6 +88,15 @@ impl DataSetDataKind {
             "height" => Self::Height,
             _ => bail!("not a valid data set kind"),
         })
+    }
+
+    /// The raw sample kind stored in the atlas texture.
+    pub fn texture_format(&self) -> wgpu::TextureFormat {
+        match self {
+            Self::Color => wgpu::TextureFormat::Rgba8Unorm,
+            Self::Normal => wgpu::TextureFormat::Rg16Sint,
+            Self::Height => wgpu::TextureFormat::R16Sint,
+        }
     }
 }
 

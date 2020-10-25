@@ -30,8 +30,7 @@ use image::{ImageBuffer, Rgb};
 use log::trace;
 use std::{
     collections::{BTreeMap, BinaryHeap},
-    mem,
-    num::{NonZeroU32, NonZeroU64},
+    num::NonZeroU32,
     ops::Range,
     sync::Arc,
     time::Instant,
@@ -109,7 +108,6 @@ pub(crate) struct TileSet {
     atlas_texture_sampler: wgpu::Sampler,
     atlas_tile_info: Arc<Box<wgpu::Buffer>>,
 
-    bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
     displace_height_pipeline: wgpu::ComputePipeline,
 
@@ -154,6 +152,8 @@ pub(crate) struct TileSet {
 
 impl TileSet {
     pub(crate) fn new(
+        atlas_tile_info_buffer_size: wgpu::BufferAddress,
+        tile_set_bind_group_layout: &wgpu::BindGroupLayout,
         displace_height_bind_group_layout: &wgpu::BindGroupLayout,
         catalog: &Catalog,
         index_json: json::JsonValue,
@@ -292,11 +292,11 @@ impl TileSet {
         // pre-sampled at various scaling factors, allowing us to use a single atlas for all
         // resolutions. Management of tile layers is done on the CPU between frames, using the
         // patch tree to figure out what is going to be most useful to have in the cache.
-        let atlas_texture_format = wgpu::TextureFormat::R16Sint;
+        let atlas_texture_format = kind.texture_format();
         let atlas_texture_extent = wgpu::Extent3d {
             width: TILE_SIZE,
             height: TILE_SIZE,
-            depth: gpu_detail.tile_cache_size, // TODO: is texture array size specified here now?
+            depth: gpu_detail.tile_cache_size,
         };
         let atlas_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("terrain-geo-tile-atlas-texture"),
@@ -330,8 +330,6 @@ impl TileSet {
             compare: None,
             anisotropy_clamp: None,
         });
-        let atlas_tile_info_buffer_size =
-            (mem::size_of::<TileInfo>() as u32 * gpu_detail.tile_cache_size) as wgpu::BufferAddress;
         let atlas_tile_info = Arc::new(Box::new(gpu.device().create_buffer(
             &wgpu::BufferDescriptor {
                 label: Some("terrain-geo-tile-info-buffer"),
@@ -341,61 +339,6 @@ impl TileSet {
             },
         )));
 
-        let bind_group_layout =
-            gpu.device()
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("terrain-geo-tile-bind-group-layout"),
-                    entries: &[
-                        // Index Texture
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStage::all(),
-                            ty: wgpu::BindingType::SampledTexture {
-                                dimension: wgpu::TextureViewDimension::D2,
-                                component_type: wgpu::TextureComponentType::Uint,
-                                multisampled: false,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: wgpu::ShaderStage::all(),
-                            ty: wgpu::BindingType::Sampler { comparison: false },
-                            count: None,
-                        },
-                        // Atlas Textures, as referenced by the above index
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 2,
-                            visibility: wgpu::ShaderStage::all(),
-                            ty: wgpu::BindingType::SampledTexture {
-                                dimension: wgpu::TextureViewDimension::D2Array,
-                                component_type: wgpu::TextureComponentType::Sint,
-                                multisampled: false,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 3,
-                            visibility: wgpu::ShaderStage::all(),
-                            ty: wgpu::BindingType::Sampler { comparison: false },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 4,
-                            visibility: wgpu::ShaderStage::all(),
-                            ty: wgpu::BindingType::StorageBuffer {
-                                dynamic: false,
-                                readonly: true,
-                                min_binding_size: NonZeroU64::new(atlas_tile_info_buffer_size),
-                            },
-                            count: None,
-                        },
-                    ],
-                });
-
-        let displace_spherical_height_shader = gpu.create_shader_module(include_bytes!(
-            "../../target/displace_spherical_height.comp.spirv"
-        ))?;
         let displace_height_pipeline =
             gpu.device()
                 .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -406,19 +349,21 @@ impl TileSet {
                             push_constant_ranges: &[],
                             bind_group_layouts: &[
                                 displace_height_bind_group_layout,
-                                &bind_group_layout,
+                                tile_set_bind_group_layout,
                             ],
                         },
                     )),
                     compute_stage: wgpu::ProgrammableStageDescriptor {
-                        module: &displace_spherical_height_shader,
+                        module: &gpu.create_shader_module(include_bytes!(
+                            "../../target/displace_spherical_height.comp.spirv"
+                        ))?,
                         entry_point: "main",
                     },
                 });
 
         let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("terrain-geo-tile-bind-group"),
-            layout: &bind_group_layout,
+            layout: tile_set_bind_group_layout,
             entries: &[
                 // Index
                 wgpu::BindGroupEntry {
@@ -429,7 +374,7 @@ impl TileSet {
                     binding: 1,
                     resource: wgpu::BindingResource::Sampler(&index_texture_sampler),
                 },
-                // Atlas
+                // Tile Atlas
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: wgpu::BindingResource::TextureView(&atlas_texture_view),
@@ -438,6 +383,7 @@ impl TileSet {
                     binding: 3,
                     resource: wgpu::BindingResource::Sampler(&atlas_texture_sampler),
                 },
+                // Tile Metdata
                 wgpu::BindGroupEntry {
                     binding: 4,
                     resource: wgpu::BindingResource::Buffer(atlas_tile_info.slice(..)),
@@ -465,7 +411,6 @@ impl TileSet {
             atlas_texture_sampler,
             atlas_tile_info,
 
-            bind_group_layout,
             bind_group,
             displace_height_pipeline,
 
@@ -793,6 +738,7 @@ impl TileSet {
         mesh_bind_group: &'a wgpu::BindGroup,
         mut cpass: wgpu::ComputePass<'a>,
     ) -> Fallible<wgpu::ComputePass<'a>> {
+        assert_eq!(self.coordinates, DataSetCoordinates::Spherical);
         if self.kind != DataSetDataKind::Height {
             return Ok(cpass);
         }
@@ -801,10 +747,6 @@ impl TileSet {
         cpass.set_bind_group(1, &self.bind_group, &[]);
         cpass.dispatch(vertex_count, 1, 1);
         Ok(cpass)
-    }
-
-    pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
-        &self.bind_group_layout
     }
 
     pub fn bind_group(&self) -> &wgpu::BindGroup {

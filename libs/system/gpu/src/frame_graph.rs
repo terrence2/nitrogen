@@ -21,7 +21,7 @@ macro_rules! make_frame_graph_pass {
     ) => {{
         let _cpass = $encoder.begin_compute_pass();
         $(
-            let _cpass = $pass_item_name.$pass_name(_cpass);
+            let _cpass = $pass_item_name.$pass_name(_cpass, $($pass_item_input_name),*)?;
         )*
     }};
     (Any() {
