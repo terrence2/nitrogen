@@ -81,7 +81,7 @@ impl SkyboxRenderPass {
                 }),
                 primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
                 color_states: &[wgpu::ColorStateDescriptor {
-                    format: GPU::texture_format(),
+                    format: GPU::SCREEN_FORMAT,
                     color_blend: wgpu::BlendDescriptor::REPLACE,
                     alpha_blend: wgpu::BlendDescriptor::REPLACE,
                     write_mask: wgpu::ColorWrite::ALL,
@@ -116,7 +116,7 @@ impl SkyboxRenderPass {
         fullscreen_buffer: &'a FullscreenBuffer,
         stars_buffer: &'a StarsBuffer,
         atmosphere_buffer: &'a AtmosphereBuffer,
-    ) -> wgpu::RenderPass<'a> {
+    ) -> Fallible<wgpu::RenderPass<'a>> {
         rpass.set_pipeline(&self.pipeline);
         rpass.set_bind_group(Group::Globals.index(), &globals_buffer.bind_group(), &[]);
         rpass.set_bind_group(
@@ -127,6 +127,6 @@ impl SkyboxRenderPass {
         rpass.set_bind_group(Group::Stars.index(), &stars_buffer.bind_group(), &[]);
         rpass.set_vertex_buffer(0, fullscreen_buffer.vertex_buffer());
         rpass.draw(0..4, 0..1);
-        rpass
+        Ok(rpass)
     }
 }

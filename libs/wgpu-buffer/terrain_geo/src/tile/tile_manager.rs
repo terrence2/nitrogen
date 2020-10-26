@@ -44,17 +44,23 @@
 //     * We update the index texture with a compute shader that overwrites if the scale is smaller.
 //       * Q: are there optimizations we can make knowing that it is a quadtree?
 
-use crate::{tile::tile_set::TileSet, GpuDetail, VisiblePatch};
+use crate::{
+    tile::{tile_info::TileInfo, tile_set::TileSet, DataSetCoordinates, DataSetDataKind},
+    GpuDetail, VisiblePatch,
+};
 use catalog::{from_utf8_string, Catalog};
 use failure::Fallible;
 use gpu::{UploadTracker, GPU};
-use std::sync::Arc;
+use smallvec::{smallvec, SmallVec};
+use std::{mem, num::NonZeroU64, sync::Arc};
 use tokio::{runtime::Runtime, sync::RwLock};
 
 // A collection of TileSet, potentially more than one per kind.
 pub(crate) struct TileManager {
     // TODO: we will probably need some way of finding the right ones efficiently.
     tile_sets: Vec<TileSet>,
+
+    tile_set_bind_group_layout: wgpu::BindGroupLayout,
 }
 
 impl TileManager {
@@ -66,11 +72,69 @@ impl TileManager {
     ) -> Fallible<Self> {
         let mut tile_sets = Vec::new();
 
+        // This layout is common for all indexed data sets.
+        let atlas_tile_info_buffer_size =
+            (mem::size_of::<TileInfo>() as u32 * gpu_detail.tile_cache_size) as wgpu::BufferAddress;
+        let tile_set_bind_group_layout =
+            gpu.device()
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("terrain-geo-tile-bind-group-layout"),
+                    entries: &[
+                        // Index Texture
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            // FIXME: I think we can make these compute shader only
+                            visibility: wgpu::ShaderStage::all(),
+                            ty: wgpu::BindingType::SampledTexture {
+                                dimension: wgpu::TextureViewDimension::D2,
+                                component_type: wgpu::TextureComponentType::Uint,
+                                multisampled: false,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStage::all(),
+                            ty: wgpu::BindingType::Sampler { comparison: false },
+                            count: None,
+                        },
+                        // Atlas Textures, as referenced by the above index
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 2,
+                            visibility: wgpu::ShaderStage::all(),
+                            ty: wgpu::BindingType::SampledTexture {
+                                dimension: wgpu::TextureViewDimension::D2Array,
+                                component_type: wgpu::TextureComponentType::Sint,
+                                multisampled: false,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 3,
+                            visibility: wgpu::ShaderStage::all(),
+                            ty: wgpu::BindingType::Sampler { comparison: false },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 4,
+                            visibility: wgpu::ShaderStage::all(),
+                            ty: wgpu::BindingType::StorageBuffer {
+                                dynamic: false,
+                                readonly: true,
+                                min_binding_size: NonZeroU64::new(atlas_tile_info_buffer_size),
+                            },
+                            count: None,
+                        },
+                    ],
+                });
+
         // Scan catalog for all tile sets.
         for index_fid in catalog.find_matching("*-index.json", Some("json"))? {
             let index_data = from_utf8_string(catalog.read_sync(index_fid)?)?;
             let index_json = json::parse(&index_data)?;
             tile_sets.push(TileSet::new(
+                atlas_tile_info_buffer_size,
+                &tile_set_bind_group_layout,
                 displace_height_bind_group_layout,
                 catalog,
                 index_json,
@@ -79,7 +143,10 @@ impl TileManager {
             )?);
         }
 
-        Ok(Self { tile_sets })
+        Ok(Self {
+            tile_set_bind_group_layout,
+            tile_sets,
+        })
     }
 
     pub fn begin_update(&mut self) {
@@ -112,11 +179,14 @@ impl TileManager {
         }
     }
 
-    pub fn paint_atlas_indices(&self, mut encoder: wgpu::CommandEncoder) -> wgpu::CommandEncoder {
+    pub fn paint_atlas_indices(
+        &self,
+        mut encoder: wgpu::CommandEncoder,
+    ) -> Fallible<wgpu::CommandEncoder> {
         for ts in self.tile_sets.iter() {
-            ts.paint_atlas_index(&mut encoder)
+            ts.paint_atlas_index(&mut encoder)?
         }
-        encoder
+        Ok(encoder)
     }
 
     pub fn displace_height<'a>(
@@ -131,11 +201,19 @@ impl TileManager {
         Ok(cpass)
     }
 
-    pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
-        self.tile_sets[0].bind_group_layout()
+    pub fn tile_set_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+        &self.tile_set_bind_group_layout
     }
 
-    pub fn bind_group(&self) -> &wgpu::BindGroup {
-        self.tile_sets[0].bind_group()
+    pub fn spherical_normal_bind_groups(&self) -> SmallVec<[&wgpu::BindGroup; 4]> {
+        let mut out = smallvec![];
+        for ts in &self.tile_sets {
+            if ts.kind() == DataSetDataKind::Normal
+                && ts.coordinates() == DataSetCoordinates::Spherical
+            {
+                out.push(ts.bind_group())
+            }
+        }
+        out
     }
 }

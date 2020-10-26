@@ -13,16 +13,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 #version 450
-#include <wgpu-render/shader_shared/include/consts.glsl>
-#include <wgpu-render/shader_shared/include/quaternion.glsl>
 #include <wgpu-buffer/global_data/include/global_data.glsl>
 #include <wgpu-buffer/terrain_geo/include/terrain_geo.glsl>
+#include <wgpu-buffer/terrain_geo/include/layout_accumulate.glsl>
 
-layout(location = 0) in vec3 v_position; // eye relative
-layout(location = 1) in vec3 v_normal;
-layout(location = 2) in vec2 v_graticule; // earth centered
-
-layout(location = 0) out vec4 v_color;
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 layout(set = 2, binding = 0) uniform utexture2D index_texture;
 layout(set = 2, binding = 1) uniform sampler index_sampler;
@@ -30,13 +25,25 @@ layout(set = 2, binding = 2) uniform itexture2DArray atlas_texture;
 layout(set = 2, binding = 3) uniform sampler atlas_sampler;
 layout(set = 2, binding = 4) buffer TileLayout { TileInfo tile_info[]; };
 
+void
+main()
+{
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
 
-void main() {
-    // FIXME: no need for a center indicator on the projection matrix, just scale.
-    gl_Position = dbg_geocenter_m_projection() * vec4(v_position, 1);
+    // Do a depth check to see if we're even looking at terrain.
+    float depth = texelFetch(sampler2D(terrain_deferred_depth, terrain_linear_sampler), coord, 0).x;
+    if (depth > -1) {
+        // Load the relevant normal sample.
+        vec2 grat = texelFetch(sampler2D(terrain_deferred_texture, terrain_linear_sampler), coord, 0).xy;
+        uint atlas_slot = terrain_geo_atlas_slot_for_graticule(grat, index_texture, index_sampler);
+        ivec2 raw_normal = terrain_geo_normal_in_tile(grat, tile_info[atlas_slot], atlas_texture, atlas_sampler);
+        float r = (float(raw_normal.x) + 32767.0) / 65536.0;
+        float g = (float(raw_normal.y) + 32767.0) / 65536.0;
 
-    uint atlas_slot = terrain_geo_atlas_slot_for_graticule(v_graticule, index_texture, index_sampler);
-    int height = terrain_geo_height_in_tile(v_graticule, tile_info[atlas_slot], atlas_texture, atlas_sampler);
-    float clr = float(height) / 8800.0;
-    v_color = vec4(clr, clr, atlas_slot / 1024.0 * 255.0, 1.0);
+        imageStore(
+            terrain_normal_acc,
+            coord,
+            vec4(r, g, 0, 0)
+        );
+    }
 }

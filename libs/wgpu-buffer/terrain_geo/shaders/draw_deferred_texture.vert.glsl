@@ -13,12 +13,15 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 #version 450
+#include <wgpu-buffer/global_data/include/global_data.glsl>
 
-layout(location = 0) in flat uint vert_color;
-layout(location = 0) out uint result_color;
+layout(location = 0) in vec3 v_position; // eye relative
+layout(location = 1) in vec3 v_normal;
+layout(location = 2) in vec2 v_graticule; // earth centered
 
-void
-main()
-{
-    result_color = vert_color;
+layout(location = 0) out vec4 v_color;
+
+void main() {
+    gl_Position = m4_projection_meters() * vec4(v_position, 1);
+    v_color = vec4(v_graticule, v_normal.x, v_normal.z);
 }

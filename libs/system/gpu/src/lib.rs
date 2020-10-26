@@ -24,7 +24,8 @@ use failure::{err_msg, Fallible};
 use futures::executor::block_on;
 use input::InputSystem;
 use log::trace;
-use std::{mem, path::PathBuf, sync::Arc};
+use std::{fs, mem, path::PathBuf, sync::Arc};
+use tokio::runtime::Runtime;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
 use zerocopy::{AsBytes, FromBytes};
@@ -64,10 +65,6 @@ pub struct GPU {
 impl GPU {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
     pub const SCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
-
-    pub fn texture_format() -> wgpu::TextureFormat {
-        wgpu::TextureFormat::Bgra8Unorm
-    }
 
     pub fn aspect_ratio(&self) -> f64 {
         self.size.height.floor() / self.size.width.floor()
@@ -118,7 +115,7 @@ impl GPU {
             .to_physical(input.window().hidpi_factor());
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
-            format: Self::texture_format(),
+            format: Self::SCREEN_FORMAT,
             width: size.width.floor() as u32,
             height: size.height.floor() as u32,
             present_mode: config.present_mode,
@@ -167,6 +164,14 @@ impl GPU {
         })
     }
 
+    pub fn attachment_extent(&self) -> wgpu::Extent3d {
+        wgpu::Extent3d {
+            width: self.size.width.floor() as u32,
+            height: self.size.height.floor() as u32,
+            depth: 1,
+        }
+    }
+
     pub fn note_resize(&mut self, input: &InputSystem) {
         self.size = input
             .window()
@@ -174,7 +179,7 @@ impl GPU {
             .to_physical(input.window().hidpi_factor());
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
-            format: Self::texture_format(),
+            format: Self::SCREEN_FORMAT,
             width: self.size.width.floor() as u32,
             height: self.size.height.floor() as u32,
             present_mode: self.config.present_mode,
@@ -317,6 +322,70 @@ impl GPU {
     pub fn create_shader_module(&self, spirv: &[u8]) -> Fallible<wgpu::ShaderModule> {
         let spirv_words = wgpu::util::make_spirv(spirv);
         Ok(self.device.create_shader_module(spirv_words))
+    }
+
+    pub fn stride_for_row_size(size: u32) -> u32 {
+        (size + wgpu::COPY_BYTES_PER_ROW_ALIGNMENT - 1) / wgpu::COPY_BYTES_PER_ROW_ALIGNMENT
+            * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT
+    }
+
+    pub fn dump_texture(
+        texture: &wgpu::Texture,
+        extent: wgpu::Extent3d,
+        format: wgpu::TextureFormat,
+        async_rt: &mut Runtime,
+        gpu: &mut GPU,
+        callback: Box<
+            dyn FnOnce(wgpu::Extent3d, wgpu::TextureFormat, Vec<u8>) + Send + Sync + 'static,
+        >,
+    ) -> Fallible<()> {
+        let _ = fs::create_dir("__dump__");
+        let sample_size = texture_format_size(format);
+        let bytes_per_row = Self::stride_for_row_size(extent.width * sample_size);
+        let buf_size = u64::from(bytes_per_row * extent.height);
+        let download_buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
+            label: Some("dump-download-buffer"),
+            size: buf_size,
+            usage: wgpu::BufferUsage::all(),
+            mapped_at_creation: false,
+        });
+        let mut encoder = gpu
+            .device()
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("dump-download-command-encoder"),
+            });
+        println!(
+            "dumping texture: fmt-size: {}, byes-per-row: {}, stride: {}",
+            sample_size,
+            extent.width * sample_size,
+            bytes_per_row
+        );
+        encoder.copy_texture_to_buffer(
+            wgpu::TextureCopyView {
+                texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+            },
+            wgpu::BufferCopyView {
+                buffer: &download_buffer,
+                layout: wgpu::TextureDataLayout {
+                    offset: 0,
+                    bytes_per_row,
+                    rows_per_image: extent.height,
+                },
+            },
+            extent,
+        );
+        gpu.queue_mut().submit(vec![encoder.finish()]);
+        gpu.device().poll(wgpu::Maintain::Wait);
+        let reader = download_buffer.slice(..).map_async(wgpu::MapMode::Read);
+        gpu.device().poll(wgpu::Maintain::Wait);
+        async_rt.spawn(async move {
+            reader.await.unwrap();
+            let raw = download_buffer.slice(..).get_mapped_range().to_owned();
+            callback(extent, format, raw);
+        });
+        Ok(())
     }
 
     pub fn device(&self) -> &wgpu::Device {

@@ -149,16 +149,24 @@ mod test {
             f64::from(g1.latitude),
             max_relative = 0.000_000_001
         );
+        assert!(lat_eq);
+        println!(
+            "A: {}, B: {}",
+            f64::from(g0.longitude),
+            f64::from(g1.longitude)
+        );
         let lon_eq = relative_eq!(
             f64::from(g0.longitude),
             f64::from(g1.longitude),
             max_relative = 0.000_000_1
         );
+        assert!(lon_eq);
         let dist_eq = relative_eq!(
             f64::from(g0.distance),
             f64::from(g1.distance),
             max_relative = 0.000_000_001
         );
+        assert!(dist_eq);
         lat_eq && lon_eq && dist_eq
     }
 

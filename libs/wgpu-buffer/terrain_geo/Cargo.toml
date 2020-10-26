@@ -16,6 +16,7 @@ lazy_static = "^ 1"
 log = "^ 0.4"
 memoffset = "^ 0.5"
 nalgebra = "^ 0.20"
+smallvec = "^ 1"
 static_assertions = "^ 1"
 tokio = { version = "^ 0.2", features = ["rt-threaded", "macros", "fs", "sync"] }
 wgpu = "^ 0.6"
@@ -27,9 +28,11 @@ command = { path = "../../system/command" }
 commandable = { path = "../../system/commandable" }
 geodesy = { path = "../../sim/geodesy" }
 geometry = { path = "../../sim/geometry" }
+global_data = { path = "../../wgpu-buffer/global_data" }
 gpu = { path = "../../system/gpu" }
 packed_struct = { path = "../../system/packed_struct" }
 physical_constants = { path = "../../sim/physical_constants" }
+shader_shared = { path = "../../wgpu-render/shader_shared" }
 universe = { path = "../../sim/universe" }
 
 [dev-dependencies]

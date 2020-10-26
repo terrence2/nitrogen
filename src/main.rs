@@ -63,11 +63,21 @@ make_frame_graph!(
             screen_text: ScreenTextRenderPass { globals, text_layout }
         ];
         passes: [
+            // Update the indices so we have correct height data to tessellate with and normal
+            // and color data to accumulate.
             paint_atlas_indices: Any() { terrain_geo() },
+            // Apply heights to the terrain mesh.
             tessellate: Compute() { terrain_geo() },
+            // Render the terrain mesh's texcoords to an offscreen buffer.
+            deferred_texture: Render(terrain_geo, deferred_texture_target) {
+                terrain_geo( globals )
+            },
+            // Accumulate normal and color data.
+            accumulate_normal_and_color: Compute() { terrain_geo( globals ) },
+
             draw: Render(Screen) {
                 skybox( globals, fullscreen, stars, atmosphere ),
-                terrain( globals, atmosphere, terrain_geo ),
+                terrain( globals, fullscreen, atmosphere, terrain_geo ),
                 screen_text( globals, text_layout )
             }
         ];
@@ -88,7 +98,7 @@ fn main() -> Fallible<()> {
 
     let system_bindings = Bindings::new("map")
         .bind("terrain.toggle_wireframe", "w")?
-        .bind("terrain_geo.snapshot_index", "i")?
+        .bind("terrain.toggle_debug_mode", "r")?
         .bind("demo.+target_up", "Up")?
         .bind("demo.+target_down", "Down")?
         .bind("demo.exit", "Escape")?
@@ -111,7 +121,8 @@ fn main() -> Fallible<()> {
     let fullscreen_buffer = FullscreenBuffer::new(&gpu)?;
     let globals_buffer = GlobalParametersBuffer::new(gpu.device())?;
     let stars_buffer = StarsBuffer::new(&gpu)?;
-    let terrain_geo_buffer = TerrainGeoBuffer::new(&catalog, cpu_detail, gpu_detail, &mut gpu)?;
+    let terrain_geo_buffer =
+        TerrainGeoBuffer::new(&catalog, cpu_detail, gpu_detail, &globals_buffer, &mut gpu)?;
     let text_layout_buffer = TextLayoutBuffer::new(&mut gpu)?;
     let catalog = Arc::new(AsyncRwLock::new(catalog));
     let mut frame_graph = FrameGraph::new(
@@ -181,6 +192,7 @@ fn main() -> Fallible<()> {
                 "window-close" | "window-destroy" | "exit" => return Ok(()),
                 "window-resize" => {
                     gpu.note_resize(&input);
+                    frame_graph.terrain_geo.note_resize(&gpu);
                     arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
                 }
                 "window-cursor-move" => {}

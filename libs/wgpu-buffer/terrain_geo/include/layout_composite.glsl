@@ -12,13 +12,9 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-#version 450
 
-layout(location = 0) in flat uint vert_color;
-layout(location = 0) out uint result_color;
-
-void
-main()
-{
-    result_color = vert_color;
-}
+layout(set = 2, binding = 0) uniform texture2D terrain_deferred_texture;
+layout(set = 2, binding = 1) uniform texture2D terrain_deferred_depth;
+layout(set = 2, binding = 2) uniform utexture2D terrain_color_acc_texture;
+layout(set = 2, binding = 3) uniform texture2D terrain_normal_acc_texture;
+layout(set = 2, binding = 4) uniform sampler terrain_linear_sampler;

@@ -10,6 +10,7 @@ futures = "^ 0.3"
 legion = "= 0.2.4"
 log = "^ 0.4"
 raw-window-handle = "0.1"
+tokio = { version = "^ 0.2", features = ["rt-threaded", "macros", "fs", "sync"] }
 zerocopy = "^ 0.3"
 wgpu = "^ 0.6"
 #winit = "0.20.0-alpha3"

@@ -14,11 +14,11 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 #version 450
 
-layout(location = 0) in flat uint vert_color;
-layout(location = 0) out uint result_color;
+layout(location = 0) in vec4 v_color;
+layout(location = 0) out vec4 f_color;
 
 void
 main()
 {
-    result_color = vert_color;
+    f_color = v_color;
 }

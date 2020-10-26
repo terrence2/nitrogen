@@ -52,7 +52,8 @@ struct Globals {
 
     // Camera parameters in geocenter km (mostly for debugging).
     debug_geocenter_km_view: [[f32; 4]; 4],
-    debug_geocenter_m_proj: [[f32; 4]; 4],
+    globals_m4_projection_meters: [[f32; 4]; 4],
+    globals_m4_inv_projection_meters: [[f32; 4]; 4],
 
     // Inverted camera parameters in ecliptic XYZ, 1km per unit.
     geocenter_km_inverse_view: [[f32; 4]; 4],
@@ -133,7 +134,14 @@ impl Globals {
     // Provide geocenter projections for use when we have nothing else to grab onto.
     pub fn with_debug_geocenter_helpers(mut self, camera: &Camera) -> Self {
         self.debug_geocenter_km_view = m2v(&convert(camera.view::<Kilometers>().to_homogeneous()));
-        self.debug_geocenter_m_proj = m2v(&convert(camera.projection::<Meters>().to_homogeneous()));
+        self
+    }
+
+    pub fn with_meter_projection(mut self, camera: &Camera) -> Self {
+        self.globals_m4_projection_meters =
+            m2v(&convert(camera.projection::<Meters>().to_homogeneous()));
+        self.globals_m4_inv_projection_meters =
+            m2v(&convert(camera.projection::<Meters>().inverse()));
         self
     }
 }
@@ -208,6 +216,7 @@ impl GlobalParametersBuffer {
         let globals: Globals = Default::default();
         let globals = globals
             .with_screen_overlay_projection(gpu)
+            .with_meter_projection(camera)
             .with_geocenter_km_raymarching(camera)
             .with_debug_geocenter_helpers(camera);
         let buffer = gpu.push_data(

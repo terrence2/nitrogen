@@ -12,6 +12,7 @@ wgpu = "^ 0.6"
 atmosphere = { path = "../../wgpu-buffer/atmosphere" }
 command = { path = "../../system/command" }
 commandable = { path = "../../system/commandable" }
+fullscreen = { path = "../../wgpu-buffer/fullscreen" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 gpu = { path = "../../system/gpu" }
 shader_shared = { path = "../../wgpu-render/shader_shared" }

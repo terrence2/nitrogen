@@ -74,7 +74,7 @@ impl ScreenTextRenderPass {
                 }),
                 primitive_topology: wgpu::PrimitiveTopology::TriangleList,
                 color_states: &[wgpu::ColorStateDescriptor {
-                    format: GPU::texture_format(),
+                    format: GPU::SCREEN_FORMAT,
                     alpha_blend: wgpu::BlendDescriptor::REPLACE,
                     color_blend: wgpu::BlendDescriptor {
                         src_factor: wgpu::BlendFactor::SrcAlpha,
@@ -111,7 +111,7 @@ impl ScreenTextRenderPass {
         mut rpass: wgpu::RenderPass<'a>,
         global_data: &'a GlobalParametersBuffer,
         layout_buffer: &'a TextLayoutBuffer,
-    ) -> wgpu::RenderPass<'a> {
+    ) -> Fallible<wgpu::RenderPass<'a>> {
         rpass.set_pipeline(&self.pipeline);
         rpass.set_bind_group(Group::Globals.index(), &global_data.bind_group(), &[]);
         for (font_name, layout_handles) in layout_buffer.layouts_by_font() {
@@ -126,6 +126,6 @@ impl ScreenTextRenderPass {
                 rpass.draw_indexed(layout.index_range(), 0, 0..1);
             }
         }
-        rpass
+        Ok(rpass)
     }
 }

@@ -13,12 +13,18 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 #version 450
+#include <wgpu-buffer/global_data/include/global_data.glsl>
+#include <wgpu-buffer/terrain_geo/include/terrain_geo.glsl>
 
-layout(location = 0) in flat uint vert_color;
-layout(location = 0) out uint result_color;
+layout(location = 0) in vec2 position;
+layout(location = 1) out vec2 v_tc;
 
-void
-main()
-{
-    result_color = vert_color;
+void main() {
+    gl_Position = vec4(position, 0.0, 1.0);
+
+    // map -1->1 screen coord to 0->1 u/v
+    vec2 tc = position;
+    tc.y = -tc.y;
+    tc = (tc + vec2(1.0, 1.0)) / 2.0;
+    v_tc = tc;
 }

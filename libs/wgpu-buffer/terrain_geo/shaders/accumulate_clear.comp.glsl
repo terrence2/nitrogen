@@ -13,13 +13,24 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 #version 450
-#include <wgpu-render/shader_shared/include/consts.glsl>
 #include <wgpu-buffer/global_data/include/global_data.glsl>
+#include <wgpu-buffer/terrain_geo/include/terrain_geo.glsl>
+#include <wgpu-buffer/terrain_geo/include/layout_accumulate.glsl>
 
-layout(location = 0) in vec3 position;
-layout(location = 1) in vec3 normal;
-layout(location = 2) in vec2 graticule;
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
-void main() {
-    gl_Position = m4_projection_meters() * vec4(position, 1);
+/*
+layout(set = 1, binding = 0) uniform texture2D terrain_deferred_texture;
+layout(set = 1, binding = 1) uniform texture2D terrain_deferred_depth;
+layout(set = 1, binding = 2) uniform sampler terrain_linear_sampler;
+layout(set = 1, binding = 3, rgba8) uniform image2D color_acc_storage;
+layout(set = 1, binding = 4, rg16i) uniform iimage2D normal_acc_storage;
+*/
+
+void
+main()
+{
+    ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
+    imageStore(terrain_color_acc, coord, ivec4(0));
+    imageStore(terrain_normal_acc, coord, vec4(0));
 }

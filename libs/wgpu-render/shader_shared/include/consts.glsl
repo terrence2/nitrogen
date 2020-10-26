@@ -16,3 +16,5 @@
 #define PI 3.14159265358979323846
 #define PI_2 (PI / 2.0)
 #define TAU (PI * 2.0)
+#define EARTH_RADIUS_KM 6360.0
+#define EARTH_RADIUS_M (EARTH_RADIUS_KM * 1000.0)
