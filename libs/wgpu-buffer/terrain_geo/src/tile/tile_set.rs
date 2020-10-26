@@ -715,7 +715,7 @@ impl TileSet {
         self.atlas_free_list.push(atlas_slot);
     }
 
-    pub fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) {
+    pub fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) -> Fallible<()> {
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                 attachment: &self.index_texture_view,
@@ -730,6 +730,7 @@ impl TileSet {
         rpass.set_pipeline(&self.index_paint_pipeline);
         rpass.set_vertex_buffer(0, self.index_paint_vert_buffer.slice(..));
         rpass.draw(self.index_paint_range.clone(), 0..1);
+        Ok(())
     }
 
     pub fn displace_height<'a>(

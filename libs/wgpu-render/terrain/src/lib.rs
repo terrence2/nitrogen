@@ -171,7 +171,7 @@ impl TerrainRenderPass {
         })
     }
 
-    pub fn make_fullscreen_pipeline<'a>(
+    pub fn make_fullscreen_pipeline(
         device: &wgpu::Device,
         layout: &wgpu::PipelineLayout,
         vert_shader: &wgpu::ShaderModule,
@@ -246,7 +246,7 @@ impl TerrainRenderPass {
         fullscreen_buffer: &'a FullscreenBuffer,
         atmosphere_buffer: &'a AtmosphereBuffer,
         terrain_geo_buffer: &'a TerrainGeoBuffer,
-    ) -> wgpu::RenderPass<'a> {
+    ) -> Fallible<wgpu::RenderPass<'a>> {
         match self.debug_mode {
             DebugMode::Deferred => rpass.set_pipeline(&self.dbg_deferred_pipeline),
             DebugMode::Depth => rpass.set_pipeline(&self.dbg_depth_pipeline),
@@ -280,7 +280,7 @@ impl TerrainRenderPass {
             }
         }
 
-        rpass
+        Ok(rpass)
     }
 }
 

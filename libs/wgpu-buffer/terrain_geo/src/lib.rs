@@ -664,7 +664,10 @@ impl TerrainGeoBuffer {
         Ok(())
     }
 
-    pub fn paint_atlas_indices(&self, encoder: wgpu::CommandEncoder) -> wgpu::CommandEncoder {
+    pub fn paint_atlas_indices(
+        &self,
+        encoder: wgpu::CommandEncoder,
+    ) -> Fallible<wgpu::CommandEncoder> {
         self.tile_manager.paint_atlas_indices(encoder)
     }
 
@@ -715,7 +718,7 @@ impl TerrainGeoBuffer {
         &'a self,
         mut rpass: wgpu::RenderPass<'a>,
         globals_buffer: &'a GlobalParametersBuffer,
-    ) -> wgpu::RenderPass<'a> {
+    ) -> Fallible<wgpu::RenderPass<'a>> {
         rpass.set_pipeline(&self.deferred_texture_pipeline);
         rpass.set_bind_group(Group::Globals.index(), &globals_buffer.bind_group(), &[]);
         rpass.set_vertex_buffer(0, self.patch_manager.vertex_buffer());
@@ -729,8 +732,7 @@ impl TerrainGeoBuffer {
                 0..1,
             );
         }
-
-        rpass
+        Ok(rpass)
     }
 
     pub fn accumulate_normal_and_color<'a>(

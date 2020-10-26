@@ -29,7 +29,7 @@ macro_rules! make_frame_graph_pass {
      }
     ) => {{
         $(
-            $encoder = $pass_item_name.$pass_name($encoder);
+            $encoder = $pass_item_name.$pass_name($encoder)?;
         )*
     }};
     (Render(Screen) {
@@ -50,7 +50,7 @@ macro_rules! make_frame_graph_pass {
                     $(
                         &$pass_item_input_name
                     ),*
-                );
+                )?;
             )*
         }
     };
@@ -70,7 +70,7 @@ macro_rules! make_frame_graph_pass {
                 $(
                     &$pass_item_input_name
                 ),*
-            );
+            )?;
         )*
     }};
 }
@@ -232,13 +232,19 @@ mod test {
         fn update(&mut self, _tracker: &mut UploadTracker) {
             self.update_count += 1;
         }
-        fn example_compute_pass<'a>(&self, cpass: wgpu::ComputePass<'a>) -> wgpu::ComputePass<'a> {
+        fn example_compute_pass<'a>(
+            &self,
+            cpass: wgpu::ComputePass<'a>,
+        ) -> Fallible<wgpu::ComputePass<'a>> {
             *self.compute_count.borrow_mut() += 1;
-            cpass
+            Ok(cpass)
         }
-        fn example_render_pass<'a>(&self, rpass: wgpu::RenderPass<'a>) -> wgpu::RenderPass<'a> {
+        fn example_render_pass<'a>(
+            &self,
+            rpass: wgpu::RenderPass<'a>,
+        ) -> Fallible<wgpu::RenderPass<'a>> {
             *self.render_count.borrow_mut() += 1;
-            rpass
+            Ok(rpass)
         }
         fn example_render_pass_attachments(
             &self,
@@ -258,9 +264,12 @@ mod test {
                 None,
             )
         }
-        fn example_any_pass(&self, encoder: wgpu::CommandEncoder) -> wgpu::CommandEncoder {
+        fn example_any_pass(
+            &self,
+            encoder: wgpu::CommandEncoder,
+        ) -> Fallible<wgpu::CommandEncoder> {
             *self.any_count.borrow_mut() += 1;
-            encoder
+            Ok(encoder)
         }
     }
 
@@ -279,10 +288,10 @@ mod test {
             &self,
             rpass: wgpu::RenderPass<'a>,
             test_buffer: &'a TestBuffer,
-        ) -> wgpu::RenderPass<'a> {
+        ) -> Fallible<wgpu::RenderPass<'a>> {
             *self.render_count.borrow_mut() += 1;
             *test_buffer.screen_count.borrow_mut() += 1;
-            rpass
+            Ok(rpass)
         }
     }
 

@@ -116,7 +116,7 @@ impl SkyboxRenderPass {
         fullscreen_buffer: &'a FullscreenBuffer,
         stars_buffer: &'a StarsBuffer,
         atmosphere_buffer: &'a AtmosphereBuffer,
-    ) -> wgpu::RenderPass<'a> {
+    ) -> Fallible<wgpu::RenderPass<'a>> {
         rpass.set_pipeline(&self.pipeline);
         rpass.set_bind_group(Group::Globals.index(), &globals_buffer.bind_group(), &[]);
         rpass.set_bind_group(
@@ -127,6 +127,6 @@ impl SkyboxRenderPass {
         rpass.set_bind_group(Group::Stars.index(), &stars_buffer.bind_group(), &[]);
         rpass.set_vertex_buffer(0, fullscreen_buffer.vertex_buffer());
         rpass.draw(0..4, 0..1);
-        rpass
+        Ok(rpass)
     }
 }
