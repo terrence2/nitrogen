@@ -13,16 +13,14 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{mip::Region, srtm::tile::Tile};
-use absolute_unit::{arcseconds, degrees, meters, ArcSeconds, Degrees, Meters, Radians};
+use absolute_unit::{arcseconds, degrees, meters, ArcSeconds, Degrees, Meters};
 use approx::assert_relative_eq;
 use failure::Fallible;
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule};
-use nalgebra::{Unit, UnitQuaternion, Vector2, Vector3};
-use once_cell::sync::Lazy;
+use nalgebra::{Vector2, Vector3};
 use parking_lot::RwLock;
 use std::{
     collections::HashMap,
-    f64::consts::PI,
     fs::File,
     io::Read,
     path::{Path, PathBuf},
@@ -234,10 +232,10 @@ impl Index {
     #[allow(unused)]
     fn decode_lambert_normal(enc: [i16; 2], n: Vector3<f64>) -> Vector3<f64> {
         let fenc0 = Vector2::new(
-            enc.x as f64 / (1 << 16) as f64,
-            enc.y as f64 / (1 << 16) as f64,
+            enc[0] as f64 / (1 << 16) as f64,
+            enc[1] as f64 / (1 << 16) as f64,
         );
-        let fenc = fenc * 4f64 - Vector2::new(2f64, 2f64);
+        let fenc = fenc0 * 4f64 - Vector2::new(2f64, 2f64);
         let fp = fenc.dot(&fenc);
         let g = (1f64 - fp / 4f64).sqrt();
         let nn = Vector3::new(fenc.x * g, 1f64 - fp / 2f64, fenc.y * g);

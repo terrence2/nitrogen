@@ -18,7 +18,6 @@ use failure::Fallible;
 use geodesy::{GeoCenter, Graticule};
 use image::{ImageBuffer, Luma, Rgb};
 use memmap::{Mmap, MmapOptions};
-use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use std::{
     fs,
