@@ -13,12 +13,16 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{mip::Region, srtm::tile::Tile};
-use absolute_unit::{arcseconds, degrees, meters, ArcSeconds, Degrees, Meters};
+use absolute_unit::{arcseconds, degrees, meters, ArcSeconds, Degrees, Meters, Radians};
+use approx::assert_relative_eq;
 use failure::Fallible;
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule};
+use nalgebra::{Unit, UnitQuaternion, Vector2, Vector3};
+use once_cell::sync::Lazy;
 use parking_lot::RwLock;
 use std::{
     collections::HashMap,
+    f64::consts::PI,
     fs::File,
     io::Read,
     path::{Path, PathBuf},
@@ -126,6 +130,125 @@ impl Index {
         )
     }
 
+    pub fn compute_local_normal_at(&self, grat: &Graticule<GeoSurface>) -> [i16; 2] {
+        // Compute 9 tap locations for computing our normal.
+        let g_c = *grat;
+        let g_sw = Self::unit_offset(grat, -1, -1);
+        let g_s = Self::unit_offset(grat, -1, 0);
+        let g_se = Self::unit_offset(grat, -1, 1);
+        let g_w = Self::unit_offset(grat, 0, -1);
+        let g_e = Self::unit_offset(grat, 0, 1);
+        let g_nw = Self::unit_offset(grat, 1, -1);
+        let g_n = Self::unit_offset(grat, 1, 0);
+        let g_ne = Self::unit_offset(grat, 1, 1);
+
+        // Sample at 8 surrounding locations plus the center.
+        let h_c = self.sample_nearest(&g_c) as f64;
+        let h_sw = self.sample_nearest(&g_sw) as f64;
+        let h_s = self.sample_nearest(&g_s) as f64;
+        let h_se = self.sample_nearest(&g_se) as f64;
+        let h_w = self.sample_nearest(&g_w) as f64;
+        let h_e = self.sample_nearest(&g_e) as f64;
+        let h_nw = self.sample_nearest(&g_nw) as f64;
+        let h_n = self.sample_nearest(&g_n) as f64;
+        let h_ne = self.sample_nearest(&g_ne) as f64;
+
+        let v_c = Vector3::new(0f64, h_c, 0f64);
+        let mut v_sw = Vector3::new(-30f64, h_sw, -30f64);
+        let mut v_s = Vector3::new(0f64, h_s, -30f64);
+        let mut v_se = Vector3::new(30f64, h_se, -30f64);
+        let mut v_w = Vector3::new(-30f64, h_w, 0f64);
+        let mut v_e = Vector3::new(30f64, h_e, 0f64);
+        let mut v_nw = Vector3::new(-30f64, h_nw, 30f64);
+        let mut v_n = Vector3::new(0f64, h_n, 30f64);
+        let mut v_ne = Vector3::new(30f64, h_ne, 30f64);
+
+        // Center around the displaced center point.
+        v_sw -= v_c;
+        v_s -= v_c;
+        v_se -= v_c;
+        v_w -= v_c;
+        v_e -= v_c;
+        v_nw -= v_c;
+        v_n -= v_c;
+        v_ne -= v_c;
+
+        // Get left handed normal from right handed crosses.
+        let n = -((v_sw.cross(&v_s).normalize()
+            + v_s.cross(&v_se).normalize()
+            + v_se.cross(&v_e).normalize()
+            + v_e.cross(&v_ne).normalize()
+            + v_ne.cross(&v_n).normalize()
+            + v_n.cross(&v_nw).normalize()
+            + v_nw.cross(&v_w).normalize()
+            + v_w.cross(&v_sw).normalize())
+            / 8f64)
+            .normalize();
+
+        debug_assert!(n.y > 0.0);
+        debug_assert!(n.x >= -1.0 && n.x <= 1.0);
+        debug_assert!(n.z >= -1.0 && n.z <= 1.0);
+
+        // Note: this has a much cleaner distribution... on the full sphere.
+        //       But we only care about the half sphere, so naive sphere mappings
+        //       waste tons of space.
+        // let enc = Self::encode_lambert_normal(n);
+        // let nn = Self::decode_lambert_normal(enc, n);
+
+        // Truncation of y favors center coordinates. This works well
+        // since gentle slopes are much more common.
+        let s = (n.x * (1 << 15) as f64).round();
+        let t = (n.z * (1 << 15) as f64).round();
+        debug_assert!(s <= i16::MAX as f64);
+        debug_assert!(s >= i16::MIN as f64);
+        debug_assert!(t <= i16::MAX as f64);
+        debug_assert!(t >= i16::MIN as f64);
+
+        // println!(
+        //     "V: {},{},{} -> [{},{}] -> [{}, {}]",
+        //     h_w, h_c, h_e, n.x, n.z, s, t
+        // );
+        [s as i16, t as i16]
+    }
+
+    #[allow(unused)]
+    fn encode_lambert_normal(n: Vector3<f64>) -> [i16; 2] {
+        let x = n.x;
+        let y = n.y;
+        let z = n.z;
+
+        // Spheremap transform from: http://aras-p.info/texts/CompactNormalStorage.html
+        let f = (8f64 * y + 8f64).sqrt();
+        let enc = nalgebra::Vector2::new(x / f + 0.5f64, z / f + 0.5f64); // [0,1]?
+
+        assert!(enc.x >= 0.0);
+        assert!(enc.x <= 1.0);
+        assert!(enc.y >= 0.0);
+        assert!(enc.y <= 1.0);
+        let s = (enc.x * (1 << 16) as f64).round();
+        let t = (enc.y * (1 << 16) as f64).round();
+
+        [s as i16, t as i16]
+    }
+
+    #[allow(unused)]
+    fn decode_lambert_normal(enc: [i16; 2], n: Vector3<f64>) -> Vector3<f64> {
+        let fenc0 = Vector2::new(
+            enc.x as f64 / (1 << 16) as f64,
+            enc.y as f64 / (1 << 16) as f64,
+        );
+        let fenc = fenc * 4f64 - Vector2::new(2f64, 2f64);
+        let fp = fenc.dot(&fenc);
+        let g = (1f64 - fp / 4f64).sqrt();
+        let nn = Vector3::new(fenc.x * g, 1f64 - fp / 2f64, fenc.y * g);
+
+        assert_relative_eq!(n.x, nn.x, epsilon = 0.00000000000001);
+        assert_relative_eq!(n.y, nn.y, epsilon = 0.00000000000001);
+        assert_relative_eq!(n.z, nn.z, epsilon = 0.00000000000001);
+
+        nn
+    }
+
     // Note that we compute the normal on the tangent plane.
     // TODO: How much "droop" is there over a single arcsecond? Is it enough that it could
     //       be an important factor in some cases? Or does flattening cancel out the potential
@@ -133,7 +256,7 @@ impl Index {
     //       cases as well. Would be nice to prove though.
     // TODO: How much does latitude affect things? Should we just compute real coordinates from
     //       our graticule?
-    pub fn compute_normal_at(&self, grat: &Graticule<GeoSurface>) -> [i16; 2] {
+    pub fn compute_world_space_normal_at(&self, grat: &Graticule<GeoSurface>) -> [i16; 2] {
         // Compute 9 tap locations for computing our normal.
         let g_c = *grat;
         let g_sw = Self::unit_offset(grat, -1, -1);

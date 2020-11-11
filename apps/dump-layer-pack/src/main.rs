@@ -25,6 +25,14 @@ struct Opt {
     #[structopt(long)]
     latitude: Option<i32>,
 
+    /// Longitude to filter
+    #[structopt(long)]
+    longitude: Option<i32>,
+
+    /// Dump detailed tile info for all tiles printed.
+    #[structopt(short, long)]
+    dump_tile: bool,
+
     /// Layer pack file to look at.
     #[structopt(parse(from_os_str))]
     input: PathBuf,
@@ -56,12 +64,25 @@ fn main() -> Fallible<()> {
                 continue;
             }
         }
+        if let Some(longitude) = opt.longitude {
+            if item.base_lon_as() != longitude {
+                continue;
+            }
+        }
         println!(
             "  {:>10}, {:>10}: {:?}",
             item.base_lat_as(),
             item.base_lon_as(),
             ChildIndex::from_index(item.index_in_parent() as usize)
         );
+        if opt.dump_tile {
+            let st = item.tile_start();
+            let ed = item.tile_end();
+            let data = &mmap[st as usize..ed as usize];
+            for b in data {
+                println!("  {:02X}", b);
+            }
+        }
     }
 
     Ok(())

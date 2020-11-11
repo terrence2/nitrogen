@@ -12,7 +12,9 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::tile::{ChildIndex, LayerPack, LayerPackIndexItem, TerrainLevel, TILE_EXTENT};
+use crate::tile::{
+    ChildIndex, LayerPack, LayerPackIndexItem, TerrainLevel, TileCompression, TILE_EXTENT,
+};
 use absolute_unit::{Angle, ArcSeconds};
 use catalog::{Catalog, FileId};
 use failure::{ensure, Fallible};
@@ -214,6 +216,11 @@ impl QuadTree {
             assert_eq!(node.level, child.level - 1);
             self.sanity_check_tree(child);
         }
+    }
+
+    pub(crate) fn tile_compression(&self, id: &QuadTreeId) -> TileCompression {
+        let level = self.nodes[id.offset()].level as usize;
+        self.layer_packs[level].tile_compression()
     }
 
     pub(crate) fn file_id(&self, id: &QuadTreeId) -> FileId {

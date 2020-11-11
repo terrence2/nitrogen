@@ -24,6 +24,7 @@ use shader_shared::Group;
 use terrain_geo::{TerrainGeoBuffer, TerrainVertex};
 
 enum DebugMode {
+    None,
     Deferred,
     Depth,
     Color,
@@ -32,6 +33,7 @@ enum DebugMode {
 
 #[derive(Commandable)]
 pub struct TerrainRenderPass {
+    composite_pipeline: wgpu::RenderPipeline,
     dbg_deferred_pipeline: wgpu::RenderPipeline,
     dbg_depth_pipeline: wgpu::RenderPipeline,
     dbg_color_pipeline: wgpu::RenderPipeline,
@@ -56,9 +58,9 @@ impl TerrainRenderPass {
     ) -> Fallible<Self> {
         trace!("TerrainRenderPass::new");
 
-        let dbg_fullscreen_shared_vert =
+        let fullscreen_shared_vert =
             gpu.create_shader_module(include_bytes!("../target/dbg-fullscreen-shared.vert.spirv"))?;
-        let dbg_fullscreen_layout =
+        let fullscreen_layout =
             gpu.device()
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("terrain-dbg-deferred-pipeline-layout"),
@@ -70,32 +72,40 @@ impl TerrainRenderPass {
                     ],
                 });
 
+        let composite_pipeline = Self::make_fullscreen_pipeline(
+            gpu.device(),
+            &fullscreen_layout,
+            &fullscreen_shared_vert,
+            &gpu.create_shader_module(include_bytes!(
+                "../target/terrain-composite-buffer.frag.spirv"
+            ))?,
+        );
         let dbg_deferred_pipeline = Self::make_fullscreen_pipeline(
             gpu.device(),
-            &dbg_fullscreen_layout,
-            &dbg_fullscreen_shared_vert,
+            &fullscreen_layout,
+            &fullscreen_shared_vert,
             &gpu.create_shader_module(include_bytes!(
                 "../target/terrain-deferred-buffer.frag.spirv"
             ))?,
         );
         let dbg_depth_pipeline = Self::make_fullscreen_pipeline(
             gpu.device(),
-            &dbg_fullscreen_layout,
-            &dbg_fullscreen_shared_vert,
+            &fullscreen_layout,
+            &fullscreen_shared_vert,
             &gpu.create_shader_module(include_bytes!("../target/terrain-depth-buffer.frag.spirv"))?,
         );
         let dbg_color_pipeline = Self::make_fullscreen_pipeline(
             gpu.device(),
-            &dbg_fullscreen_layout,
-            &dbg_fullscreen_shared_vert,
+            &fullscreen_layout,
+            &fullscreen_shared_vert,
             &gpu.create_shader_module(include_bytes!(
                 "../target/terrain-color_acc-buffer.frag.spirv"
             ))?,
         );
         let dbg_normal_pipeline = Self::make_fullscreen_pipeline(
             gpu.device(),
-            &dbg_fullscreen_layout,
-            &dbg_fullscreen_shared_vert,
+            &fullscreen_layout,
+            &fullscreen_shared_vert,
             &gpu.create_shader_module(include_bytes!(
                 "../target/terrain-normal_acc-buffer.frag.spirv"
             ))?,
@@ -160,6 +170,7 @@ impl TerrainRenderPass {
                 });
 
         Ok(Self {
+            composite_pipeline,
             dbg_deferred_pipeline,
             dbg_depth_pipeline,
             dbg_color_pipeline,
@@ -232,10 +243,11 @@ impl TerrainRenderPass {
     #[command]
     pub fn toggle_debug_mode(&mut self, _command: &Command) {
         self.debug_mode = match self.debug_mode {
+            DebugMode::None => DebugMode::Deferred,
             DebugMode::Deferred => DebugMode::Depth,
             DebugMode::Depth => DebugMode::Color,
             DebugMode::Color => DebugMode::Normal,
-            DebugMode::Normal => DebugMode::Deferred,
+            DebugMode::Normal => DebugMode::None,
         };
     }
 
@@ -248,6 +260,7 @@ impl TerrainRenderPass {
         terrain_geo_buffer: &'a TerrainGeoBuffer,
     ) -> Fallible<wgpu::RenderPass<'a>> {
         match self.debug_mode {
+            DebugMode::None => rpass.set_pipeline(&self.composite_pipeline),
             DebugMode::Deferred => rpass.set_pipeline(&self.dbg_deferred_pipeline),
             DebugMode::Depth => rpass.set_pipeline(&self.dbg_depth_pipeline),
             DebugMode::Color => rpass.set_pipeline(&self.dbg_color_pipeline),
