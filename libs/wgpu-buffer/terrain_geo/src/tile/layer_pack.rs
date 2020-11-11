@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::tile::TerrainLevel;
+use crate::tile::{TerrainLevel, TileCompression};
 use catalog::{Catalog, FileId};
 use failure::{ensure, Fallible};
 use packed_struct::packed_struct;
@@ -37,9 +37,10 @@ packed_struct!(LayerPackHeader {
     _1 => version: u8,
     _2 => angular_extent_as: i32,
     _3 => tile_count: u32,
-    _4 => tile_level: u32,
-    _5 => index_start: u32 as usize,
-    _6 => tile_start: u32 as usize
+    _4 => tile_level: u16,
+    _5 => tile_compression: u16,
+    _6 => index_start: u32 as usize,
+    _7 => tile_start: u32 as usize
     // Followed immediately by index data at file[index_start..tile_start]
     // Followed by tile data at files[tile_start..] with offsets determined by
 });
@@ -47,7 +48,6 @@ packed_struct!(LayerPackHeader {
 packed_struct!(LayerPackIndexItem {
     _0 => base_lat_as: i32,
     _1 => base_lon_as: i32,
-    _2 => tile_kind: u32,
     _3 => index_in_parent: u32,
 
     // Relative to file start, no offset needed.
@@ -56,7 +56,7 @@ packed_struct!(LayerPackIndexItem {
 });
 
 const HEADER_MAGIC: [u8; 3] = [b'L', b'P', b'K'];
-const HEADER_VERSION: u8 = 0;
+const HEADER_VERSION: u8 = 1;
 
 pub struct LayerPack {
     // Map from base lat/lon in arcseconds, to start and end offsets in the file.
@@ -65,6 +65,7 @@ pub struct LayerPack {
     angular_extent_as: i32,
     index_extent: Range<usize>,
     tile_count: usize,
+    tile_compression: TileCompression,
 }
 
 impl LayerPack {
@@ -85,11 +86,16 @@ impl LayerPack {
             index_extent: header.index_start()..header.tile_start(),
             tile_count: (header.tile_start() - header.index_start())
                 / mem::size_of::<LayerPackIndexItem>(),
+            tile_compression: TileCompression::from_u16(header.tile_compression()),
         })
     }
 
     pub(crate) fn index_bytes<'a>(&self, catalog: &'a Catalog) -> Fallible<Cow<'a, [u8]>> {
         catalog.read_slice_sync(self.layer_pack_fid, self.index_extent.clone())
+    }
+
+    pub fn tile_compression(&self) -> TileCompression {
+        self.tile_compression
     }
 
     pub fn angular_extent_as(&self) -> i32 {
@@ -125,6 +131,7 @@ impl LayerPackBuilder {
         path: &Path,
         tile_count: usize,
         tile_level: u32,
+        tile_compression: TileCompression,
         angular_extent_as: i32,
     ) -> Fallible<Self> {
         let mut stream = File::create(path)?;
@@ -137,7 +144,8 @@ impl LayerPackBuilder {
             HEADER_VERSION,
             angular_extent_as,
             tile_count as u32,
-            tile_level,
+            tile_level as u16,
+            tile_compression as u16,
             index_start as u32,
             tile_start as u32,
         )?;
@@ -166,7 +174,6 @@ impl LayerPackBuilder {
         let index_item = LayerPackIndexItem::build(
             base.0,
             base.1,
-            0,
             index_in_parent,
             self.tile_cursor,
             self.tile_cursor + data.len() as u64,

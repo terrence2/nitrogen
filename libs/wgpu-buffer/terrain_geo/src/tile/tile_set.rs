@@ -17,19 +17,21 @@ use crate::{
         index_paint_vertex::IndexPaintVertex,
         quad_tree::{QuadTree, QuadTreeId},
         tile_info::TileInfo,
-        DataSetCoordinates, DataSetDataKind, TerrainLevel,
+        DataSetCoordinates, DataSetDataKind, TerrainLevel, TileCompression,
     },
     GpuDetail, VisiblePatch,
 };
 use absolute_unit::arcseconds;
+use bzip2::read::BzDecoder;
 use catalog::Catalog;
 use failure::{err_msg, Fallible};
 use geometry::AABB2;
-use gpu::{UploadTracker, GPU};
+use gpu::{texture_format_size, UploadTracker, GPU};
 use image::{ImageBuffer, Rgb};
 use log::trace;
 use std::{
     collections::{BTreeMap, BinaryHeap},
+    io::Read,
     num::NonZeroU32,
     ops::Range,
     sync::Arc,
@@ -494,6 +496,11 @@ impl TileSet {
             self.allocate_atlas_slot(votes, qtid);
         }
 
+        // FIXME: precompute this
+        let raw_tile_size = self.atlas_texture_extent.width as usize
+            * self.atlas_texture_extent.height as usize
+            * texture_format_size(self.atlas_texture_format) as usize;
+
         // Kick off any loads, if there is space remaining.
         let mut reads_started_count = 0;
         while !self.tile_load_queue.is_empty() && self.tile_read_count < MAX_CONCURRENT_READS {
@@ -515,11 +522,24 @@ impl TileSet {
 
             // Do the read in a disconnected greenthread and send it back on an mpsc queue.
             let fid = self.tile_tree.file_id(&qtid);
+            let compression = self.tile_tree.tile_compression(&qtid);
             let extent = self.tile_tree.file_extent(&qtid);
             let closure_catalog = catalog.clone();
             let closer_sender = self.tile_sender.clone();
             async_rt.spawn(async move {
-                if let Ok(data) = closure_catalog.read().await.read_slice(fid, extent).await {
+                if let Ok(packed_data) = closure_catalog.read().await.read_slice(fid, extent).await
+                {
+                    let data = match compression {
+                        TileCompression::None => packed_data,
+                        TileCompression::Bz2 => {
+                            let mut decompressed = Vec::with_capacity(raw_tile_size);
+                            BzDecoder::new(&packed_data[..])
+                                .read_to_end(&mut decompressed)
+                                .expect("compress buffer");
+                            assert_eq!(decompressed.len(), raw_tile_size);
+                            decompressed
+                        }
+                    };
                     closer_sender.send((qtid, data)).ok();
                 } else {
                     panic!("Read failed in {:?}", fid);
@@ -543,6 +563,7 @@ impl TileSet {
             let atlas_slot = maybe_state.unwrap().atlas_slot();
             self.tile_state.insert(qtid, TileState::Active(atlas_slot));
 
+            assert_eq!(data.len(), raw_tile_size);
             let texture_buffer = gpu.push_slice(
                 "terrain-geo-atlas-tile-texture-upload-buffer",
                 &data,

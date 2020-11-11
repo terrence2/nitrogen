@@ -5,6 +5,8 @@ authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+approx = "^ 0.3"
+bzip2 = "^ 0.4"
 failure = "^ 0.1.2"
 image = "^ 0.23"
 json = "^ 0.12"
@@ -17,3 +19,4 @@ zerocopy = "^ 0.3"
 absolute_unit = { path = "../../libs/sim/absolute_unit" }
 geodesy = { path = "../../libs/sim/geodesy" }
 terrain_geo = { path = "../../libs/wgpu-buffer/terrain_geo" }
+compression = { version = "^ 0.1", features = ["lzhuf"]  }

@@ -29,7 +29,7 @@ use std::{
 use terrain_geo::tile::{ChildIndex, DataSetDataKind, TerrainLevel, TILE_PHYSICAL_SIZE};
 use zerocopy::{AsBytes, LayoutVerified};
 
-enum TileData {
+pub(crate) enum TileData {
     Absent, // Not yet generated or loaded.
     Empty,  // Loaded and no content.
     InlineHeights(Box<[[i16; TILE_PHYSICAL_SIZE]; TILE_PHYSICAL_SIZE]>),
@@ -98,7 +98,7 @@ impl TileData {
         }
     }
 
-    fn is_mapped(&self) -> bool {
+    pub(crate) fn is_mapped(&self) -> bool {
         match self {
             Self::MappedHeights { .. } => true,
             Self::MappedNormals { .. } => true,
@@ -106,7 +106,7 @@ impl TileData {
         }
     }
 
-    fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         matches!(self, Self::Empty)
     }
 
@@ -222,6 +222,10 @@ impl Tile {
             children: [None, None, None, None],
             neighbors: [None, None, None, None, None, None, None, None],
         }
+    }
+
+    pub(crate) fn data(&self) -> &TileData {
+        &self.data
     }
 
     pub fn level(&self) -> TerrainLevel {
@@ -758,18 +762,12 @@ impl Tile {
                 pic.save(path.with_extension("png"))?;
             }
             DataSetDataKind::Normal => {
-                let (lo, hi) = self.find_sampled_normal_extremes();
                 let mut pic: ImageBuffer<Rgb<u8>, Vec<u8>> =
                     ImageBuffer::new(TILE_PHYSICAL_SIZE as u32, TILE_PHYSICAL_SIZE as u32);
                 for (y, row) in self.data.as_inline_normals().iter().enumerate() {
                     for (x, normal) in row.iter().enumerate() {
-                        // scale i16 to u8
-                        let n0 = ((normal[0] as f64 + lo[0] as f64) / (hi[0] - lo[0]) as f64
-                            * u8::MAX as f64)
-                            .round() as u8;
-                        let n1 = ((normal[1] as f64 + lo[1] as f64) / (hi[0] - lo[0]) as f64
-                            * u8::MAX as f64)
-                            .round() as u8;
+                        let n0 = ((normal[0] / 256) + 128) as u8;
+                        let n1 = ((normal[1] / 256) + 128) as u8;
                         pic.put_pixel(
                             x as u32,
                             (TILE_PHYSICAL_SIZE - y - 1) as u32,
@@ -790,9 +788,9 @@ impl Tile {
         self.mip_filename(directory).exists()
     }
 
-    pub fn write(&mut self, directory: &Path, allow_empty: bool) -> Fallible<()> {
+    pub fn write(&mut self, directory: &Path, sum_height: i32) -> Fallible<()> {
         assert!(self.data.is_inline());
-        if !allow_empty && self.is_empty_tile() {
+        if sum_height == 0 {
             self.data = TileData::Empty;
             return Ok(());
         }

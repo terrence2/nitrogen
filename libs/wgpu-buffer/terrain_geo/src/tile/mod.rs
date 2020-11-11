@@ -40,6 +40,23 @@ pub const TILE_SAMPLES: i64 = 510;
 // in arcseconds.
 pub const TILE_EXTENT: i64 = TILE_SAMPLES - 1;
 
+#[repr(u16)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum TileCompression {
+    None = 0,
+    Bz2 = 1,
+}
+
+impl TileCompression {
+    pub fn from_u16(i: u16) -> Self {
+        match i {
+            0 => TileCompression::None,
+            1 => TileCompression::Bz2,
+            _ => panic!("not a valid tile-compression"),
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum DataSetCoordinates {
     Spherical,

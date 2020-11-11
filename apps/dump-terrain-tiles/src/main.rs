@@ -20,13 +20,14 @@ use crate::{
     srtm::SrtmIndex,
 };
 use absolute_unit::{arcseconds, degrees, meters, radians, Angle, Radians};
+use bzip2::{read::BzEncoder, Compression};
 use failure::Fallible;
 use geodesy::{GeoSurface, Graticule};
 use parking_lot::{Mutex, RwLock};
 use rayon::prelude::*;
 use std::{
     fs,
-    io::{stdout, Write},
+    io::{stdout, Read, Write},
     path::{Path, PathBuf},
     sync::Arc,
     time::Instant,
@@ -34,7 +35,7 @@ use std::{
 use structopt::StructOpt;
 use terrain_geo::tile::{
     ChildIndex, DataSetCoordinates, DataSetDataKind, LayerPackBuilder, TerrainLevel,
-    TILE_PHYSICAL_SIZE, TILE_SAMPLES,
+    TileCompression, TILE_PHYSICAL_SIZE, TILE_SAMPLES,
 };
 
 #[derive(Debug, StructOpt)]
@@ -47,13 +48,16 @@ struct Opt {
     #[structopt(short, long)]
     srtm_directory: PathBuf,
 
+    #[structopt(long)]
+    serialize: bool,
+
     /// The directory to save work to.
     #[structopt(short, long)]
     output_directory: PathBuf,
 
     /// Compute and print some aggregate statistics.
     #[structopt(short, long)]
-    analyze_compressibility: bool,
+    compression: Option<String>,
 
     /// Dump equalized PNGs of created tiles.
     #[structopt(short, long)]
@@ -114,6 +118,10 @@ impl InlinePercentProgress {
 
     pub fn poke(&mut self) {
         self.set(self.current + 1);
+    }
+
+    pub fn poke_chunk(&mut self, chunk_size: usize) {
+        self.set(self.current + chunk_size);
     }
 
     pub fn finish(&self) {
@@ -275,8 +283,9 @@ pub fn generate_mip_tile_from_srtm(
     let base = node.read().base_graticule();
     let kind = index.read().kind();
 
+    let mut sum_height = 0;
     let srtm = srtm_index.read();
-    // println!("visit: level {} @ {} - {}", level.offset(), base, offset);
+    // println!("visit: level {} @ {}", level.offset(), base);
     for lat_i in -1..TILE_SAMPLES + 1 {
         // 'actual' unfolds infinitely
         // 'srtm' is clamped or wrapped as appropriate to srtm extents
@@ -310,11 +319,13 @@ pub fn generate_mip_tile_from_srtm(
             match kind {
                 DataSetDataKind::Height => {
                     let height = srtm.sample_nearest(&srtm_grat);
+                    sum_height += height as i32;
                     node.write()
                         .set_height_sample(lat_i as i32 + 1, lon_i as i32 + 1, height);
                 }
                 DataSetDataKind::Normal => {
-                    let normal = srtm.compute_normal_at(&srtm_grat);
+                    sum_height += srtm.sample_nearest(&srtm_grat) as i32;
+                    let normal = srtm.compute_local_normal_at(&srtm_grat);
                     node.write()
                         .set_normal_sample(lat_i as i32 + 1, lon_i as i32 + 1, normal);
                 }
@@ -328,7 +339,7 @@ pub fn generate_mip_tile_from_srtm(
             std::path::Path::new("__dump__/terrain-tiles/"),
         )?;
     }
-    node.write().write(index.read().work_path(), false)?;
+    node.write().write(index.read().work_path(), sum_height)?;
 
     Ok(())
 }
@@ -372,7 +383,8 @@ pub fn generate_mip_tile_from_mip(
             std::path::Path::new("__dump__/terrain-tiles/"),
         )?;
     }
-    node.write().write(index.read().work_path(), true)?;
+    // Note: if we got here, then there are tiles below us and we expect to generate something.
+    node.write().write(index.read().work_path(), 1)?;
 
     // Note that though we have non-none tiles, our mips do not line up with the underlying 1
     // degree slicing so we may have corners that are non-None but still empty. This results in
@@ -412,6 +424,7 @@ fn write_layer_pack(
     dataset: Arc<RwLock<MipIndexDataSet>>,
     target_level: usize,
     force: bool,
+    compression: TileCompression,
 ) -> Fallible<()> {
     let layer_pack_path = dataset.read().base_path().join(&format!(
         "{}-L{:02}.mip",
@@ -425,47 +438,45 @@ fn write_layer_pack(
         );
         return Ok(());
     }
-    let mut layer_pack_builder = LayerPackBuilder::new(
+    let layer_pack_builder = Mutex::new(LayerPackBuilder::new(
         &layer_pack_path,
         tiles.len(),
         target_level as u32,
+        compression,
         TerrainLevel::new(target_level).angular_extent().round() as i32,
-    )?;
-    let mut progress = InlinePercentProgress::new("  Writing Pack File:", tiles.len());
-    for (tile, _) in tiles {
-        let tile = tile.read();
-        layer_pack_builder.push_tile(
-            tile.base(),
-            tile.index_in_parent().to_index() as u32,
-            tile.raw_data(),
-        )?;
-        progress.poke();
-    }
-    progress.finish();
+    )?);
+    let progress = Mutex::new(InlinePercentProgress::new(
+        "  Writing Pack File:",
+        tiles.len(),
+    ));
+    let chunk_size = 128;
+    tiles.par_chunks(chunk_size).for_each(|chunk| {
+        for (tile, _) in chunk {
+            let tile = tile.read();
+            let data = match compression {
+                TileCompression::None => tile.raw_data().to_owned(),
+                TileCompression::Bz2 => {
+                    let mut compressed = Vec::new();
+                    BzEncoder::new(tile.raw_data(), Compression::best())
+                        .read_to_end(&mut compressed)
+                        .expect("compress buffer");
+                    compressed
+                }
+            };
+            layer_pack_builder
+                .lock()
+                .push_tile(tile.base(), tile.index_in_parent().to_index() as u32, &data)
+                .unwrap();
+        }
+        progress.lock().poke_chunk(chunk_size);
+    });
+    progress.lock().finish();
     Ok(())
 }
 
-fn analyze_tile_compressibility(_tile: &MipTile) {
-    // Get symbol dictionary size with delta compression.
-    // let mut symbols = tile.reorder_for_compression();
-    // let base = symbols.next().unwrap();
-    // println!("BASE: {}", base);
-}
-
-fn analyze_compressibility(tiles: &[(Arc<RwLock<MipTile>>, usize)]) {
-    let progress = Mutex::new(InlinePercentProgress::new(
-        "  Analyzing Compressibility:",
-        tiles.len(),
-    ));
-    tiles.par_chunks(4096).for_each(|chunk| {
-        for (tile, _) in chunk {
-            let _result = analyze_tile_compressibility(&tile.read());
-            progress.lock().poke();
-        }
-    });
-    progress.lock().finish();
-}
-
+// Left hand side is the number of srtm-intersecting tiles. Right hand side is the number of
+// non-zero tiles we expect to find on disk after factoring out srtm data that is over water
+// or otherwise empty.
 const EXPECT_LAYER_COUNTS: [(usize, usize); 13] = [
     (1, 1),
     (4, 4),
@@ -484,6 +495,16 @@ const EXPECT_LAYER_COUNTS: [(usize, usize); 13] = [
 
 fn main() -> Fallible<()> {
     let opt = Opt::from_args();
+    let compression = if let Some(comp) = opt.compression {
+        match comp.as_str() {
+            "none" => TileCompression::None,
+            "bz2" => TileCompression::Bz2,
+            _ => panic!("Unknown tile compression format: expected bz2 or none"),
+        }
+    } else {
+        TileCompression::None
+    };
+    let dump_png = opt.dump_png;
 
     fs::create_dir_all(&opt.output_directory)?;
 
@@ -532,7 +553,7 @@ fn main() -> Fallible<()> {
     // Generate each level from the bottom up, mipmapping as we go.
     for target_level in (0..=SrtmIndex::max_resolution_level()).rev() {
         for dataset in mip_index.data_sets(DataSetCoordinates::Spherical) {
-            println!("Level {}:", target_level);
+            println!("{} Level {}:", dataset.read().prefix(), target_level);
             let mut current_tiles = Vec::new();
             let mut offset = 0;
             let root_tile = dataset.write().get_root_tile();
@@ -554,28 +575,37 @@ fn main() -> Fallible<()> {
                     current_tiles.len(),
                 )));
                 if target_level == TerrainLevel::arcsecond_level() {
-                    current_tiles.par_chunks(1024).for_each(|chunk| {
-                        for (tile, _) in chunk {
-                            progress.write().poke();
+                    if opt.serialize {
+                        for (tile, _) in &current_tiles {
                             generate_mip_tile_from_srtm(
                                 srtm.clone(),
                                 dataset.clone(),
                                 tile.to_owned(),
-                                opt.dump_png,
+                                dump_png,
                             )
-                            .expect("generate_mip_tile_from_srtm");
+                            .unwrap();
+                            progress.write().poke();
                         }
-                    });
+                    } else {
+                        current_tiles.par_chunks(1024).for_each(|chunk| {
+                            for (tile, _) in chunk {
+                                generate_mip_tile_from_srtm(
+                                    srtm.clone(),
+                                    dataset.clone(),
+                                    tile.to_owned(),
+                                    dump_png,
+                                )
+                                .expect("generate_mip_tile_from_srtm");
+                                progress.write().poke();
+                            }
+                        });
+                    }
                 } else {
                     current_tiles.par_chunks(1024).for_each(|chunk| {
                         for (tile, _) in chunk {
                             progress.write().poke();
-                            generate_mip_tile_from_mip(
-                                dataset.clone(),
-                                tile.to_owned(),
-                                opt.dump_png,
-                            )
-                            .expect("generate_mip_tile_from_mip");
+                            generate_mip_tile_from_mip(dataset.clone(), tile.to_owned(), dump_png)
+                                .expect("generate_mip_tile_from_mip");
                         }
                     });
                 }
@@ -588,10 +618,31 @@ fn main() -> Fallible<()> {
                     }
                 });
             }
-            write_layer_pack(&current_tiles, dataset.clone(), target_level, opt.force)?;
-            if opt.analyze_compressibility {
-                analyze_compressibility(&current_tiles);
+
+            // Verify that we do not have any absent tiles. All tiles should be empty or have mmapped data.
+            println!("  Verifying tile states");
+            for (tile, _) in &current_tiles {
+                let tile = tile.read();
+                assert!(tile.data().is_empty() || tile.data().is_mapped());
             }
+
+            // Filter down to mapped / non-empty tiles.
+            println!("  Filtering non-data tiles");
+            current_tiles = current_tiles
+                .drain(..)
+                .filter(|(tile, _)| tile.read().data().is_mapped())
+                .collect::<Vec<_>>();
+
+            // FIXME: why are there more normals tiles?
+            //assert_eq!(current_tiles.len(), EXPECT_LAYER_COUNTS[target_level].1);
+
+            write_layer_pack(
+                &current_tiles,
+                dataset.clone(),
+                target_level,
+                opt.force,
+                compression,
+            )?;
         }
     }
 
