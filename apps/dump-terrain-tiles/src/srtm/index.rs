@@ -211,13 +211,9 @@ impl Index {
 
     #[allow(unused)]
     fn encode_lambert_normal(n: Vector3<f64>) -> [i16; 2] {
-        let x = n.x;
-        let y = n.y;
-        let z = n.z;
-
         // Spheremap transform from: http://aras-p.info/texts/CompactNormalStorage.html
-        let f = (8f64 * y + 8f64).sqrt();
-        let enc = nalgebra::Vector2::new(x / f + 0.5f64, z / f + 0.5f64); // [0,1]?
+        let f = (8f64 * n.y + 8f64).sqrt();
+        let enc = nalgebra::Vector2::new(n.x / f + 0.5f64, n.z / f + 0.5f64); // [0,1]?
 
         assert!(enc.x >= 0.0);
         assert!(enc.x <= 1.0);
