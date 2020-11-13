@@ -483,7 +483,7 @@ impl PatchManager {
             let nv1 = view.to_homogeneous() * pw1.coords.normalize().to_homogeneous();
             let nv2 = view.to_homogeneous() * pw2.coords.normalize().to_homogeneous();
 
-            // Move verts from global coordinates into view space, still in KM f64.
+            // Move verts from global coordinates into view space, meters in f64.
             let vv0 = scale * view.to_homogeneous() * pw0.to_homogeneous();
             let vv1 = scale * view.to_homogeneous() * pw1.to_homogeneous();
             let vv2 = scale * view.to_homogeneous() * pw2.to_homogeneous();

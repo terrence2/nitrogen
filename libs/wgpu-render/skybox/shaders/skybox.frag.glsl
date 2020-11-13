@@ -31,7 +31,7 @@ const float EXPOSURE = MAX_LUMINOUS_EFFICACY * 0.0001;
 // whatever passes in the sun direction *does* need to account for that relative tilt.
 void main() {
     vec3 view = normalize(v_ray);
-    vec3 camera = camera_position_earth_km().xyz;
+    vec3 camera = camera_position_km.xyz;
     vec3 sun_direction = sun_direction.xyz;
 
     vec3 ground_radiance;

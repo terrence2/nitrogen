@@ -36,6 +36,10 @@ impl<Unit: LengthUnit> Length<Unit> {
     pub fn f64(self) -> f64 {
         f64::from(self)
     }
+
+    pub fn f32(self) -> f32 {
+        f32::from(self)
+    }
 }
 
 impl<Unit> fmt::Display for Length<Unit>

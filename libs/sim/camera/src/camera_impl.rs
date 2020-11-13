@@ -23,7 +23,6 @@ pub struct Camera {
     fov_y: Angle<Radians>,
     aspect_ratio: f64,
     z_near: Length<Meters>,
-    z_far: Length<Meters>,
 
     // Camera view state.
     position: Cartesian<GeoCenter, Meters>,
@@ -39,13 +38,11 @@ impl Camera {
         fov_y: Angle<Radians>,
         aspect_ratio: f64,
         z_near: Length<Meters>,
-        z_far: Length<Meters>,
     ) -> Self {
         Self {
             fov_y,
             aspect_ratio,
             z_near,
-            z_far,
 
             position: Vector3::new(0f64, 0f64, 0f64).into(),
             forward: Vector3::new(0f64, 0f64, -1f64),
@@ -73,6 +70,10 @@ impl Camera {
 
     pub fn set_fov_y<T: AngleUnit>(&mut self, fov: Angle<T>) {
         self.fov_y = radians!(fov);
+    }
+
+    pub fn z_near(&self) -> Length<Meters> {
+        self.z_near
     }
 
     pub fn aspect_ratio(&self) -> f64 {

@@ -15,37 +15,28 @@
 
 layout(set = 0, binding = 0) buffer CameraParameters {
     mat4 globals_screen_letterbox_projection;
-    vec4 camera_graticule_radians_meters;
-    mat4 globals_camera_view;
-    mat4 globals_camera_projection;
-    mat4 debug_geocenter_km_view;
-    mat4 globals_m4_projection_meters;
-    mat4 globals_m4_inv_projection_meters;
-    mat4 local_geocenter_km_inverse_view;
-    mat4 local_geocenter_km_inverse_projection;
-    mat4 globals_tile_to_earth;
-    mat4 globals_tile_to_earth_rotation;
-    mat4 globals_tile_to_earth_scale;
-    vec4 globals_tile_to_earth_translation;
-    vec4 globals_tile_center_offset;
-    vec4 globals_camera_position_tile;
-    vec4 globals_camera_position_earth_km;
+
+    // Camera
+    float camera_fov_y;
+    float camera_aspect_ratio;
+    float camera_z_near;
+    float pad0;
+    vec4 camera_forward;
+    vec4 camera_up;
+    vec4 camera_right;
+    vec4 camera_position_m;
+    vec4 camera_position_km;
+    mat4 camera_projection_m;
+    mat4 camera_projection_km;
+    mat4 camera_inverse_projection_m;
+    mat4 camera_inverse_projection_km;
+    mat4 camera_view_m;
+    mat4 camera_view_km;
+    mat4 camera_inverse_view_m;
+    mat4 camera_inverse_view_km;
 };
 
 mat4 screen_letterbox_projection() { return globals_screen_letterbox_projection; }
-vec4 camera_graticule_rad_m()      { return camera_graticule_radians_meters; }
-mat4 camera_view()                 { return globals_camera_view; }
-mat4 camera_projection()           { return globals_camera_projection; }
-vec4 camera_position_in_tile()     { return globals_camera_position_tile; }
-vec4 camera_position_earth_km()    { return globals_camera_position_earth_km; }
-mat4 dbg_geocenter_km_view()       { return debug_geocenter_km_view; }
-mat4 m4_projection_meters()        { return globals_m4_projection_meters; }
-mat4 m4_inv_projection_meters()    { return globals_m4_inv_projection_meters; }
-mat4 tile_to_earth()               { return globals_tile_to_earth; }
-mat4 tile_to_earth_rotation()      { return globals_tile_to_earth_rotation; }
-mat4 tile_to_earth_scale()         { return globals_tile_to_earth_scale; }
-vec4 tile_to_earth_translation()   { return globals_tile_to_earth_translation; }
-vec4 tile_center_offset()          { return globals_tile_center_offset; }
 
 vec3
 raymarching_view_ray(vec2 position)
@@ -54,11 +45,11 @@ raymarching_view_ray(vec2 position)
 
     // inverse perspective projection
     reverse_vec = vec4(position, 0.0, 1.0);
-    reverse_vec = local_geocenter_km_inverse_projection * reverse_vec;
+    reverse_vec = camera_inverse_projection_km * reverse_vec;
 
     // inverse modelview, without translation
     reverse_vec.w = 0.0;
-    reverse_vec = local_geocenter_km_inverse_view * reverse_vec;
+    reverse_vec = camera_inverse_view_km * reverse_vec;
 
     return vec3(reverse_vec);
 }

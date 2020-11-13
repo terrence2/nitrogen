@@ -12,14 +12,13 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use absolute_unit::{Kilometers, LengthUnit, Meters};
+use absolute_unit::{Kilometers, Meters};
 use camera::Camera;
 use commandable::{commandable, Commandable};
 use core::num::NonZeroU64;
 use failure::Fallible;
-use geodesy::{Cartesian, GeoCenter};
 use gpu::{UploadTracker, GPU};
-use nalgebra::{convert, Isometry3, Matrix4, Point3, Vector3, Vector4};
+use nalgebra::{convert, Matrix3, Matrix4, Point3, Vector3, Vector4};
 use std::{mem, sync::Arc};
 use zerocopy::{AsBytes, FromBytes};
 
@@ -31,6 +30,14 @@ pub fn m2v(m: &Matrix4<f32>) -> [[f32; 4]; 4] {
     v
 }
 
+pub fn m33_to_v(m: &Matrix3<f64>) -> [[f32; 4]; 4] {
+    m2v(&convert(m.to_homogeneous()))
+}
+
+pub fn m44_to_v(m: &Matrix4<f64>) -> [[f32; 4]; 4] {
+    m2v(&convert::<Matrix4<f64>, Matrix4<f32>>(*m))
+}
+
 pub fn p2v(p: &Point3<f32>) -> [f32; 4] {
     [p.x, p.y, p.z, 0f32]
 }
@@ -39,44 +46,34 @@ pub fn v2v(v: &Vector4<f32>) -> [f32; 4] {
     [v[0], v[1], v[2], v[3]]
 }
 
+pub fn v3_to_v(v: &Vector3<f64>) -> [f32; 4] {
+    v2v(&convert(v.to_homogeneous()))
+}
+
 #[repr(C)]
 #[derive(AsBytes, FromBytes, Copy, Clone, Debug, Default)]
 struct Globals {
     // Overlay screen info
-    screen_projection: [[f32; 4]; 4],
+    screen_letterbox_projection: [[f32; 4]; 4],
 
-    // Camera parameters in tile space XYZ, 1hm per unit.
-    camera_graticule_radians_meters: [f32; 4],
-    view: [[f32; 4]; 4],
-    proj: [[f32; 4]; 4],
-
-    // Camera parameters in geocenter km (mostly for debugging).
-    debug_geocenter_km_view: [[f32; 4]; 4],
-    globals_m4_projection_meters: [[f32; 4]; 4],
-    globals_m4_inv_projection_meters: [[f32; 4]; 4],
-
-    // Inverted camera parameters in ecliptic XYZ, 1km per unit.
-    geocenter_km_inverse_view: [[f32; 4]; 4],
-    geocenter_km_inverse_proj: [[f32; 4]; 4],
-
-    tile_to_earth: [[f32; 4]; 4],
-    tile_to_earth_rotation: [[f32; 4]; 4],
-    tile_to_earth_scale: [[f32; 4]; 4],
-    tile_to_earth_translation: [f32; 4],
-    tile_center_offset: [f32; 4],
-
-    // Camera position in each of the above.
-    camera_position_tile: [f32; 4],
-    geocenter_km_camera_position: [f32; 4],
-}
-
-fn geocenter_cart_to_v<Unit: LengthUnit>(geocart: Cartesian<GeoCenter, Unit>) -> [f32; 4] {
-    [
-        f32::from(geocart.coords[0]),
-        f32::from(geocart.coords[1]),
-        f32::from(geocart.coords[2]),
-        1f32,
-    ]
+    // Camera properties
+    camera_fov_y: f32,
+    camera_aspect_ratio: f32,
+    camera_z_near: f32,
+    pad0: f32,
+    camera_forward: [f32; 4],
+    camera_up: [f32; 4],
+    camera_right: [f32; 4],
+    camera_position_m: [f32; 4],
+    camera_position_km: [f32; 4],
+    camera_projection_m: [[f32; 4]; 4],
+    camera_projection_km: [[f32; 4]; 4],
+    camera_inverse_projection_m: [[f32; 4]; 4],
+    camera_inverse_projection_km: [[f32; 4]; 4],
+    camera_view_m: [[f32; 4]; 4],
+    camera_view_km: [[f32; 4]; 4],
+    camera_inverse_view_m: [[f32; 4]; 4],
+    camera_inverse_view_km: [[f32; 4]; 4],
 }
 
 impl Globals {
@@ -92,56 +89,29 @@ impl Globals {
         } else {
             (1f32, -1f32 / aspect)
         };
-        self.screen_projection = m2v(&Matrix4::new_nonuniform_scaling(&Vector3::new(w, h, 1f32)));
+        self.screen_letterbox_projection =
+            m2v(&Matrix4::new_nonuniform_scaling(&Vector3::new(w, h, 1f32)));
         self
     }
 
-    // Raymarching the skybox uses the following inputs:
-    //   geocenter_km_inverse_view
-    //   geocenter_km_inverse_proj
-    //   geocenter_km_camera_position
-    //   sun direction vector (origin does not matter terribly much at 8 light minutes distance).
-    //
-    // It takes a [-1,1] fullscreen quad and turns it into worldspace vectors starting at the
-    // the camera position and extending to the fullscreen quad corners, in world space.
-    // Interpolation between these vectors automatically fills in one ray for every screen pixel.
-    pub fn with_geocenter_km_raymarching(mut self, camera: &Camera) -> Self {
-        let eye = camera.position::<Kilometers>().vec64();
-        let view = Isometry3::look_at_rh(
-            &Point3::from(eye),
-            &Point3::from(eye + camera.forward()),
-            &-camera.up(),
-        );
-        self.geocenter_km_inverse_view = m2v(&convert(view.inverse().to_homogeneous()));
-        self.geocenter_km_inverse_proj = m2v(&convert(camera.projection::<Kilometers>().inverse()));
-        self.geocenter_km_camera_position = geocenter_cart_to_v(camera.position::<Kilometers>());
-        self
-    }
-
-    /*
-    pub fn with_camera_info(mut self, camera: &Camera) -> Self {
-        // FIXME: we're using the target right now so we can see tessellation in action.
-        self.camera_graticule_radians_meters = [
-            f32::from(camera.get_target().latitude),
-            f32::from(camera.get_target().longitude),
-            f32::from(camera.get_target().distance),
-            1f32,
-        ];
-        self
-    }
-     */
-
-    // Provide geocenter projections for use when we have nothing else to grab onto.
-    pub fn with_debug_geocenter_helpers(mut self, camera: &Camera) -> Self {
-        self.debug_geocenter_km_view = m2v(&convert(camera.view::<Kilometers>().to_homogeneous()));
-        self
-    }
-
-    pub fn with_meter_projection(mut self, camera: &Camera) -> Self {
-        self.globals_m4_projection_meters =
-            m2v(&convert(camera.projection::<Meters>().to_homogeneous()));
-        self.globals_m4_inv_projection_meters =
-            m2v(&convert(camera.projection::<Meters>().inverse()));
+    pub fn with_camera(mut self, camera: &Camera) -> Self {
+        self.camera_fov_y = camera.fov_y().f32();
+        self.camera_aspect_ratio = camera.aspect_ratio() as f32;
+        self.camera_z_near = camera.z_near().f32();
+        self.camera_forward = v3_to_v(camera.forward());
+        self.camera_up = v3_to_v(camera.up());
+        self.camera_right = v3_to_v(camera.right());
+        self.camera_position_m = v3_to_v(&camera.position::<Meters>().vec64());
+        self.camera_position_km = v3_to_v(&camera.position::<Meters>().vec64());
+        self.camera_projection_m = m44_to_v(&camera.projection::<Meters>().to_homogeneous());
+        self.camera_projection_km = m44_to_v(&camera.projection::<Kilometers>().to_homogeneous());
+        self.camera_inverse_projection_m = m44_to_v(&camera.projection::<Meters>().inverse());
+        self.camera_inverse_projection_km = m44_to_v(&camera.projection::<Kilometers>().inverse());
+        self.camera_view_m = m44_to_v(&camera.view::<Meters>().to_homogeneous());
+        self.camera_view_km = m44_to_v(&camera.view::<Kilometers>().to_homogeneous());
+        self.camera_inverse_view_m = m44_to_v(&camera.view::<Meters>().inverse().to_homogeneous());
+        self.camera_inverse_view_km =
+            m44_to_v(&camera.view::<Kilometers>().inverse().to_homogeneous());
         self
     }
 }
@@ -152,8 +122,6 @@ pub struct GlobalParametersBuffer {
     bind_group: wgpu::BindGroup,
     buffer_size: wgpu::BufferAddress,
     parameters_buffer: Arc<Box<wgpu::Buffer>>,
-
-    pub tile_to_earth: Matrix4<f32>,
 }
 
 #[commandable]
@@ -195,7 +163,6 @@ impl GlobalParametersBuffer {
             bind_group,
             buffer_size,
             parameters_buffer,
-            tile_to_earth: Matrix4::identity(),
         })
     }
 
@@ -216,28 +183,13 @@ impl GlobalParametersBuffer {
         let globals: Globals = Default::default();
         let globals = globals
             .with_screen_overlay_projection(gpu)
-            .with_meter_projection(camera)
-            .with_geocenter_km_raymarching(camera)
-            .with_debug_geocenter_helpers(camera);
+            .with_camera(camera);
         let buffer = gpu.push_data(
             "global-upload-buffer",
             &globals,
             wgpu::BufferUsage::MAP_READ | wgpu::BufferUsage::COPY_SRC,
         );
         tracker.upload_ba(buffer, self.parameters_buffer.clone(), self.buffer_size);
-        Ok(())
-    }
-
-    pub fn make_upload_buffer_for_arcball_on_globe(
-        &self,
-        _camera: &Camera,
-        _gpu: &GPU,
-        _tracker: &mut UploadTracker,
-    ) -> Fallible<()> {
-        /*
-        let globals = Self::arcball_camera_to_buffer(100f32, 100f32, 0f32, 0f32, camera, gpu);
-        upload_buffers.push(self.make_gpu_buffer(globals, gpu));
-        */
         Ok(())
     }
 
@@ -347,8 +299,6 @@ impl GlobalParametersBuffer {
             tile_to_earth_scale: m2v(&convert(scale_m)),
             tile_to_earth_translation: v2v(&convert(base_in_km.coords.to_homogeneous())),
             tile_center_offset: v2v(&tile_center_offset.to_homogeneous()),
-            camera_position_tile: p2v(&convert(camera.eye())),
-            camera_position_earth_km: v2v(&convert(earth_eye)),
         }
     }
     */
