@@ -10,6 +10,7 @@ before_script:
   - rustup update
   - rustup target add x86_64-pc-windows-gnu
   - rustup component add rustfmt
+  - nix-shell -p xorg.libX11
 
 check_format:
   tags:
