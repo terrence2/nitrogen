@@ -178,7 +178,7 @@ impl TerrainRenderPass {
             wireframe_pipeline,
 
             show_wireframe: false,
-            debug_mode: DebugMode::Deferred,
+            debug_mode: DebugMode::None,
         })
     }
 

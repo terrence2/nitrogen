@@ -17,8 +17,8 @@
 #include <wgpu-buffer/terrain_geo/include/terrain_geo.glsl>
 
 layout(location = 0) in vec2 position;
-layout(location = 1) out vec2 v_tc;
-layout(location = 2) out vec3 v_ray;
+layout(location = 0) out vec2 v_tc;
+layout(location = 1) out vec3 v_ray;
 
 void main() {
     gl_Position = vec4(position, 0.0, 1.0);

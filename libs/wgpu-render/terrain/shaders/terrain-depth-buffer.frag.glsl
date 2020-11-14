@@ -17,8 +17,9 @@
 #include <wgpu-buffer/global_data/include/global_data.glsl>
 #include <wgpu-buffer/terrain_geo/include/layout_composite.glsl>
 
-layout(location = 1) in vec2 v_tc;
 layout(location = 0) out vec4 f_color;
+layout(location = 0) in vec2 v_tc;
+layout(location = 1) in vec3 v_ray;
 
 void
 main()
