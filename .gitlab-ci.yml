@@ -4,7 +4,6 @@
 #    - libs/**/**/target/
 
 before_script:
-  - source $HOME/.cargo/env
   - rustup update
   - rustup target add x86_64-pc-windows-gnu
   - rustup component add rustfmt
