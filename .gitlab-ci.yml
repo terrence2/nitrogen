@@ -21,7 +21,7 @@ check_clippy:
   tags:
     - rust
   script:
-    - nix-shell -p cmake pkgconfig xorg.libX11 --run "cargo clippy --all --all-targets -- --deny warnings"
+    - nix-shell -p pkgconfig xorg.libX11 --run "cargo clippy --all --all-targets -- --deny warnings"
 
 # Need to figure out how to run graphical tests headless.
 #check_build:
