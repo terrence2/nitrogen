@@ -20,6 +20,7 @@ check_format:
 check_clippy:
   tags:
     - rust
+    - nix
   script:
     - nix-shell -p pkgconfig xorg.libX11 --run "cargo clippy --all --all-targets -- --deny warnings"
 
