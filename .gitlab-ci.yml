@@ -10,7 +10,6 @@ before_script:
   - rustup update
   - rustup target add x86_64-pc-windows-gnu
   - rustup component add rustfmt
-  - rustup component add clippy
 
 check_format:
   tags:
