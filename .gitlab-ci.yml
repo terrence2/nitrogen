@@ -11,11 +11,15 @@ before_script:
   - rustup component add clippy
 
 check_format:
+  tags:
+    - rust
   script:
     - source $HOME/.cargo/env
     - cargo fmt --all -- --check
 
 check_clippy:
+  tags:
+    - rust
   script:
     - source $HOME/.cargo/env
     - cargo clippy --all --all-targets -- --deny warnings
