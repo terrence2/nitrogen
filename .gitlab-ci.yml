@@ -10,7 +10,6 @@ before_script:
   - rustup update
   - rustup target add x86_64-pc-windows-gnu
   - rustup component add rustfmt
-  - nix-shell -p xorg.libX11
 
 check_format:
   tags:
@@ -22,7 +21,7 @@ check_clippy:
   tags:
     - rust
   script:
-    - nix-shell -p xorg.libX11 pkgconfig --run "cargo clippy --all --all-targets -- --deny warnings"
+    - nix-shell -p cmake pkgconfig xorg.libX11 --run "cargo clippy --all --all-targets -- --deny warnings"
 
 # Need to figure out how to run graphical tests headless.
 #check_build:
