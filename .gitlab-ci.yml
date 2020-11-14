@@ -15,23 +15,19 @@ check_format:
   tags:
     - rust
   script:
-    - source $HOME/.cargo/env
     - cargo fmt --all -- --check
 
 check_clippy:
   tags:
     - rust
   script:
-    - source $HOME/.cargo/env
     - cargo clippy --all --all-targets -- --deny warnings
 
 # Need to figure out how to run graphical tests headless.
 #check_build:
 #  script:
-#    - source $HOME/.cargo/env
 #    - cargo check --all --all-targets
 #
 #check_test:
 #  script:
-#    - source $HOME/.cargo/env
 #    - cargo test --all --all-targets
