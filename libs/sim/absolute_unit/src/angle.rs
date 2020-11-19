@@ -66,6 +66,10 @@ impl<Unit: AngleUnit> Angle<Unit> {
         out
     }
 
+    pub fn sign(&self) -> i8 {
+        self.femto_rad.signum() as i8
+    }
+
     pub fn cos(self) -> f64 {
         f64::from(self).cos()
     }

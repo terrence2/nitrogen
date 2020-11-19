@@ -24,6 +24,11 @@ layout(location = 1) in vec3 v_ray;
 void
 main()
 {
-    vec4 texel = texture(sampler2D(terrain_normal_acc_texture, terrain_linear_sampler), v_tc);
-    f_color = vec4(texel.xyz, 1);
+    vec2 raw_normal = texture(sampler2D(terrain_normal_acc_texture, terrain_linear_sampler), v_tc).xy;
+    vec3 local_normal = vec3(
+        raw_normal.x,
+        sqrt(1.0 - (raw_normal.x * raw_normal.x + raw_normal.y * raw_normal.y)),
+        raw_normal.y
+    );
+    f_color = vec4(local_normal, 1);
 }

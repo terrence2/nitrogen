@@ -16,7 +16,7 @@
 #[macro_export]
 macro_rules! make_frame_graph_pass {
     (Compute() {
-        $owner:ident, $gpu:ident, $encoder:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
+        $owner:ident, $gpu:ident, $encoder:ident, $need_rebuild:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
      }
     ) => {{
         let _cpass = $encoder.begin_compute_pass();
@@ -25,7 +25,7 @@ macro_rules! make_frame_graph_pass {
         )*
     }};
     (Any() {
-        $owner:ident, $gpu:ident, $encoder:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
+        $owner:ident, $gpu:ident, $encoder:ident, $need_rebuild:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
      }
     ) => {{
         $(
@@ -33,13 +33,11 @@ macro_rules! make_frame_graph_pass {
         )*
     }};
     (Render(Screen) {
-        $owner:ident, $gpu:ident, $encoder:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
+        $owner:ident, $gpu:ident, $encoder:ident, $need_rebuild:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
      }
     ) => {
-        // FIXME: Check if the color attachment is sub-optimal and needs to be re-created
-        let color_attachment = $gpu.get_next_framebuffer()?;
-
-        {
+        let maybe_color_attachment = $gpu.get_next_framebuffer()?;
+        if let Some(color_attachment) = maybe_color_attachment.as_ref() {
             let _rpass = $encoder.begin_render_pass(&$crate::wgpu::RenderPassDescriptor {
                 color_attachments: &[$crate::GPU::color_attachment(&color_attachment.output.view)],
                 depth_stencil_attachment: Some($gpu.depth_stencil_attachment()),
@@ -52,10 +50,12 @@ macro_rules! make_frame_graph_pass {
                     ),*
                 )?;
             )*
+        } else {
+            $need_rebuild = true;
         }
     };
     (Render($pass_target_buffer:ident, $pass_target_func:ident) {
-        $owner:ident, $gpu:ident, $encoder:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
+        $owner:ident, $gpu:ident, $encoder:ident, $need_rebuild:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
      }
     ) => {{
         let (color_attachments, depth_stencil_attachment) = $pass_target_buffer.$pass_target_func();
@@ -134,7 +134,7 @@ macro_rules! make_frame_graph {
                 }
             )*
 
-            pub fn run(&mut self, gpu: &mut $crate::GPU, tracker: UploadTracker) -> ::failure::Fallible<()> {
+            pub fn run(&mut self, gpu: &mut $crate::GPU, tracker: UploadTracker) -> ::failure::Fallible<bool> {
                 $(
                     let $buffer_name = &self.$buffer_name;
                 )*
@@ -149,13 +149,16 @@ macro_rules! make_frame_graph {
                     });
                 tracker.dispatch_uploads(&mut encoder);
                 $(
+                    let mut _need_rebuild = false;
                     $crate::make_frame_graph_pass!($pass_type($($pass_args),*) {
-                        self, gpu, encoder, $pass_name, $($pass_item_name ( $($pass_item_input_name),* )),*
+                        self, gpu, encoder, _need_rebuild, $pass_name, $($pass_item_name ( $($pass_item_input_name),* )),*
                     });
                 )*
-                gpu.queue_mut().submit(vec![encoder.finish()]);
+                if !_need_rebuild {
+                    gpu.queue_mut().submit(vec![encoder.finish()]);
+                }
 
-                Ok(())
+                Ok(!_need_rebuild)
             }
         }
 

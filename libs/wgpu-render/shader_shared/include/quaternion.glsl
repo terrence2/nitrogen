@@ -39,11 +39,11 @@ vec4 quat_mult(vec4 q1, vec4 q2)
     return qr;
 }
 
-vec4 quat_rotate(vec4 qr, vec4 position)
+vec4 quat_rotate(vec4 qr, vec3 position)
 {
     vec4 qr_conj = quat_conj(qr);
     vec4 q_pos = vec4(position.xyz, 0);
-    vec4 q_tmp = quat_mult(qr, position);
+    vec4 q_tmp = quat_mult(qr, q_pos);
     qr = quat_mult(q_tmp, qr_conj);
     return vec4(qr.xyz, 1);
 }

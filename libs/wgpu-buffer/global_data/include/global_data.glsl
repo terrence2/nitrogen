@@ -19,21 +19,23 @@ layout(set = 0, binding = 0) buffer CameraParameters {
     // Camera
     float camera_fov_y;
     float camera_aspect_ratio;
-    float camera_z_near;
-    float pad0;
+    float camera_z_near_m;
+    float camera_z_near_km;
     vec4 camera_forward;
     vec4 camera_up;
     vec4 camera_right;
     vec4 camera_position_m;
     vec4 camera_position_km;
-    mat4 camera_projection_m;
-    mat4 camera_projection_km;
-    mat4 camera_inverse_projection_m;
-    mat4 camera_inverse_projection_km;
+    mat4 camera_perspective_m;
+    mat4 camera_perspective_km;
+    mat4 camera_inverse_perspective_m;
+    mat4 camera_inverse_perspective_km;
     mat4 camera_view_m;
     mat4 camera_view_km;
     mat4 camera_inverse_view_m;
     mat4 camera_inverse_view_km;
+
+    // Orrery
 };
 
 mat4 screen_letterbox_projection() { return globals_screen_letterbox_projection; }
@@ -41,15 +43,17 @@ mat4 screen_letterbox_projection() { return globals_screen_letterbox_projection;
 vec3
 raymarching_view_ray(vec2 position)
 {
-    vec4 reverse_vec;
+    // https://www.derschmale.com/2014/01/26/reconstructing-positions-from-the-depth-buffer/
 
-    // inverse perspective projection
-    reverse_vec = vec4(position, 0.0, 1.0);
-    reverse_vec = camera_inverse_projection_km * reverse_vec;
+    // Position is a corner of ndc at z=0.
+    vec4 corner = vec4(position, 0, 1);
 
-    // inverse modelview, without translation
-    reverse_vec.w = 0.0;
-    reverse_vec = camera_inverse_view_km * reverse_vec;
+    // Reverse ndc into eye space vector.
+    vec4 eye = camera_inverse_perspective_km * corner;
+    eye.w = 0;
 
-    return vec3(reverse_vec);
+    // Reverse eye space into world space direction.
+    vec4 wrld = camera_inverse_view_km * eye;
+
+    return wrld.xyz;
 }

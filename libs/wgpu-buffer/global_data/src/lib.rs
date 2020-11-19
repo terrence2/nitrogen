@@ -59,17 +59,17 @@ struct Globals {
     // Camera properties
     camera_fov_y: f32,
     camera_aspect_ratio: f32,
-    camera_z_near: f32,
-    pad0: f32,
+    camera_z_near_m: f32,
+    camera_z_near_km: f32,
     camera_forward: [f32; 4],
     camera_up: [f32; 4],
     camera_right: [f32; 4],
     camera_position_m: [f32; 4],
     camera_position_km: [f32; 4],
-    camera_projection_m: [[f32; 4]; 4],
-    camera_projection_km: [[f32; 4]; 4],
-    camera_inverse_projection_m: [[f32; 4]; 4],
-    camera_inverse_projection_km: [[f32; 4]; 4],
+    camera_perspective_m: [[f32; 4]; 4],
+    camera_perspective_km: [[f32; 4]; 4],
+    camera_inverse_perspective_m: [[f32; 4]; 4],
+    camera_inverse_perspective_km: [[f32; 4]; 4],
     camera_view_m: [[f32; 4]; 4],
     camera_view_km: [[f32; 4]; 4],
     camera_inverse_view_m: [[f32; 4]; 4],
@@ -97,16 +97,18 @@ impl Globals {
     pub fn with_camera(mut self, camera: &Camera) -> Self {
         self.camera_fov_y = camera.fov_y().f32();
         self.camera_aspect_ratio = camera.aspect_ratio() as f32;
-        self.camera_z_near = camera.z_near().f32();
+        self.camera_z_near_m = camera.z_near::<Meters>().f32();
+        self.camera_z_near_km = camera.z_near::<Kilometers>().f32();
         self.camera_forward = v3_to_v(camera.forward());
         self.camera_up = v3_to_v(camera.up());
         self.camera_right = v3_to_v(camera.right());
         self.camera_position_m = v3_to_v(&camera.position::<Meters>().vec64());
-        self.camera_position_km = v3_to_v(&camera.position::<Meters>().vec64());
-        self.camera_projection_m = m44_to_v(&camera.projection::<Meters>().to_homogeneous());
-        self.camera_projection_km = m44_to_v(&camera.projection::<Kilometers>().to_homogeneous());
-        self.camera_inverse_projection_m = m44_to_v(&camera.projection::<Meters>().inverse());
-        self.camera_inverse_projection_km = m44_to_v(&camera.projection::<Kilometers>().inverse());
+        self.camera_position_km = v3_to_v(&camera.position::<Kilometers>().vec64());
+        self.camera_perspective_m = m44_to_v(&camera.perspective::<Meters>().to_homogeneous());
+        self.camera_perspective_km = m44_to_v(&camera.perspective::<Kilometers>().to_homogeneous());
+        self.camera_inverse_perspective_m = m44_to_v(&camera.perspective::<Meters>().inverse());
+        self.camera_inverse_perspective_km =
+            m44_to_v(&camera.perspective::<Kilometers>().inverse());
         self.camera_view_m = m44_to_v(&camera.view::<Meters>().to_homogeneous());
         self.camera_view_km = m44_to_v(&camera.view::<Kilometers>().to_homogeneous());
         self.camera_inverse_view_m = m44_to_v(&camera.view::<Meters>().inverse().to_homogeneous());

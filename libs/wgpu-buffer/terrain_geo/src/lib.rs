@@ -152,9 +152,11 @@ pub struct TerrainGeoBuffer {
     deferred_depth: (wgpu::Texture, wgpu::TextureView),
     color_acc: (wgpu::Texture, wgpu::TextureView),
     normal_acc: (wgpu::Texture, wgpu::TextureView),
+    sampler: wgpu::Sampler,
 
     composite_bind_group_layout: wgpu::BindGroupLayout,
     composite_bind_group: wgpu::BindGroup,
+    accumulate_common_bind_group_layout: wgpu::BindGroupLayout,
     accumulate_common_bind_group: wgpu::BindGroup,
 
     accumulate_clear_pipeline: wgpu::ComputePipeline,
@@ -251,11 +253,6 @@ impl TerrainGeoBuffer {
                     alpha_to_coverage_enabled: false,
                 });
 
-        let deferred_texture = Self::_make_deferred_texture_targets(gpu);
-        let deferred_depth = Self::_make_deferred_depth_targets(gpu);
-        let color_acc = Self::_make_color_accumulator_targets(gpu);
-        let normal_acc = Self::_make_normal_accumulator_targets(gpu);
-
         let sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
             label: Some("terrain_geo-dbg-sampler"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -330,38 +327,6 @@ impl TerrainGeoBuffer {
                     ],
                 });
 
-        let composite_bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("terrain_geo-composite-bind-group"),
-            layout: &composite_bind_group_layout,
-            entries: &[
-                // deferred texture
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&deferred_texture.1),
-                },
-                // deferred depth
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&deferred_depth.1),
-                },
-                // color accumulator
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&color_acc.1),
-                },
-                // normal accumulator
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::TextureView(&normal_acc.1),
-                },
-                // Linear sampler
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-            ],
-        });
-
         let accumulate_common_bind_group_layout =
             gpu.device()
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -421,34 +386,6 @@ impl TerrainGeoBuffer {
                     ],
                 });
 
-        let accumulate_common_bind_group =
-            gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("terrain_geo-accumulate-bind-group"),
-                layout: &accumulate_common_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&deferred_texture.1),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&deferred_depth.1),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&sampler),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: wgpu::BindingResource::TextureView(&color_acc.1),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 4,
-                        resource: wgpu::BindingResource::TextureView(&normal_acc.1),
-                    },
-                ],
-            });
-
         let accumulate_clear_pipeline =
             gpu.device()
                 .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -494,6 +431,29 @@ impl TerrainGeoBuffer {
                     },
                 });
 
+        let deferred_texture = Self::_make_deferred_texture_targets(gpu);
+        let deferred_depth = Self::_make_deferred_depth_targets(gpu);
+        let color_acc = Self::_make_color_accumulator_targets(gpu);
+        let normal_acc = Self::_make_normal_accumulator_targets(gpu);
+        let composite_bind_group = Self::_make_composite_bind_group(
+            gpu.device(),
+            &composite_bind_group_layout,
+            &deferred_texture.1,
+            &deferred_depth.1,
+            &color_acc.1,
+            &normal_acc.1,
+            &sampler,
+        );
+        let accumulate_common_bind_group = Self::_make_accumulate_common_bind_group(
+            gpu.device(),
+            &accumulate_common_bind_group_layout,
+            &deferred_texture.1,
+            &deferred_depth.1,
+            &color_acc.1,
+            &normal_acc.1,
+            &sampler,
+        );
+
         Ok(Self {
             patch_manager,
             tile_manager,
@@ -506,7 +466,9 @@ impl TerrainGeoBuffer {
             normal_acc,
             composite_bind_group_layout,
             composite_bind_group,
+            accumulate_common_bind_group_layout,
             accumulate_common_bind_group,
+            sampler,
             accumulate_clear_pipeline,
             accumulate_spherical_normals_pipeline,
         })
@@ -632,12 +594,109 @@ impl TerrainGeoBuffer {
         (normal_acc, normal_view)
     }
 
+    fn _make_composite_bind_group(
+        device: &wgpu::Device,
+        bind_group_layout: &wgpu::BindGroupLayout,
+        deferred_texture: &wgpu::TextureView,
+        deferred_depth: &wgpu::TextureView,
+        color_acc: &wgpu::TextureView,
+        normal_acc: &wgpu::TextureView,
+        sampler: &wgpu::Sampler,
+    ) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("terrain_geo-composite-bind-group"),
+            layout: &bind_group_layout,
+            entries: &[
+                // deferred texture
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(deferred_texture),
+                },
+                // deferred depth
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(deferred_depth),
+                },
+                // color accumulator
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(color_acc),
+                },
+                // normal accumulator
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(normal_acc),
+                },
+                // Linear sampler
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Sampler(sampler),
+                },
+            ],
+        })
+    }
+
+    fn _make_accumulate_common_bind_group(
+        device: &wgpu::Device,
+        bind_group_layout: &wgpu::BindGroupLayout,
+        deferred_texture: &wgpu::TextureView,
+        deferred_depth: &wgpu::TextureView,
+        color_acc: &wgpu::TextureView,
+        normal_acc: &wgpu::TextureView,
+        sampler: &wgpu::Sampler,
+    ) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("terrain_geo-accumulate-bind-group"),
+            layout: &bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(deferred_texture),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(deferred_depth),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::Sampler(sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(color_acc),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::TextureView(normal_acc),
+                },
+            ],
+        })
+    }
+
     pub fn note_resize(&mut self, gpu: &GPU) {
         self.acc_extent = gpu.attachment_extent();
         self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
         self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
         self.color_acc = Self::_make_color_accumulator_targets(gpu);
         self.normal_acc = Self::_make_normal_accumulator_targets(gpu);
+        self.composite_bind_group = Self::_make_composite_bind_group(
+            gpu.device(),
+            &self.composite_bind_group_layout,
+            &self.deferred_texture.1,
+            &self.deferred_depth.1,
+            &self.color_acc.1,
+            &self.normal_acc.1,
+            &self.sampler,
+        );
+        self.accumulate_common_bind_group = Self::_make_accumulate_common_bind_group(
+            gpu.device(),
+            &self.accumulate_common_bind_group_layout,
+            &self.deferred_texture.1,
+            &self.deferred_depth.1,
+            &self.color_acc.1,
+            &self.normal_acc.1,
+            &self.sampler,
+        );
     }
 
     pub fn make_upload_buffer(

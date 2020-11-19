@@ -157,8 +157,8 @@ fn main() -> Fallible<()> {
 
     let mut arcball = ArcBallCamera::new(gpu.aspect_ratio(), meters!(0.5));
     arcball.set_target(Graticule::<GeoSurface>::new(
-        degrees!(0),
-        degrees!(0),
+        degrees!(-15.1618),
+        degrees!(-13.1950),
         meters!(2),
     ));
     arcball.set_eye_relative(Graticule::<Target>::new(
@@ -183,13 +183,14 @@ fn main() -> Fallible<()> {
                 "-target_down" => target_vec = meters!(0),
                 // system bindings
                 "window-close" | "window-destroy" | "exit" => return Ok(()),
-                "window-resize" => {
+                "resize" => {
                     gpu.note_resize(&input);
                     frame_graph.terrain_geo.note_resize(&gpu);
                     arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
                 }
-                "window-cursor-move" => {}
-                _ => trace!("unhandled command: {}", command.full()),
+                "cursor-move" => {}
+                "mouse-move" => {}
+                _ => trace!("unhandled command: {}", command.full(),),
             }
         }
         let mut g = arcball.get_target();
@@ -220,7 +221,11 @@ fn main() -> Fallible<()> {
         frame_graph
             .text_layout()
             .make_upload_buffer(&gpu, &mut tracker)?;
-        frame_graph.run(&mut gpu, tracker)?;
+        if !frame_graph.run(&mut gpu, tracker)? {
+            gpu.note_resize(&input);
+            frame_graph.terrain_geo.note_resize(&gpu);
+            arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
+        }
 
         let frame_time = loop_start.elapsed();
         let ts = format!(

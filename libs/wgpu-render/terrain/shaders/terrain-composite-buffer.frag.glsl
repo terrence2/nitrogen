@@ -14,6 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 #version 450
 #include <wgpu-render/shader_shared/include/consts.glsl>
+#include <wgpu-render/shader_shared/include/quaternion.glsl>
 #include <wgpu-buffer/global_data/include/global_data.glsl>
 #include <wgpu-buffer/terrain_geo/include/layout_composite.glsl>
 #include <wgpu-buffer/atmosphere/include/global.glsl>
@@ -22,41 +23,83 @@
 
 layout(location = 0) out vec4 f_color;
 layout(location = 0) in vec2 v_tc;
-layout(location = 1) in vec3 v_ray;
+layout(location = 1) in vec3 v_ray_world;
+layout(location = 2) in vec2 v_ndc;
 
 const float EXPOSURE = MAX_LUMINOUS_EFFICACY * 0.0001;
+
+vec4
+ndc_to_world_km(vec3 ndc)
+{
+    float w = camera_z_near_km / ndc.z;
+    vec4 eye_km = vec4(
+        ndc.x * w / camera_aspect_ratio,
+        ndc.y * w,
+        -w,
+        1
+    );
+    return camera_inverse_view_km * eye_km;
+}
 
 void
 main()
 {
-    vec3 view_direction = normalize(v_ray);
-    vec3 world_camera_km = camera_position_km.xyz;
+    vec3 world_view_direction = normalize(v_ray_world);
+    vec3 world_position_km = camera_position_km.xyz;
     vec3 sun_direction = sun_direction.xyz;
 
     float depth_sample = texture(sampler2D(terrain_deferred_depth, terrain_linear_sampler), v_tc).x;
     if (depth_sample > -1) {
-        float terrain_depth_m = 1.0 / (depth_sample * 0.5);
-        //camera_projection_km *
-        vec3 eye_intersect_km = (/* camera_inverse_projection_km */ vec4(view_direction, 1)).xyz * (terrain_depth_m / 1000.0);
-        vec3 world_intersect_km = (/* camera_inverse_view_km */ vec4(eye_intersect_km, 0)).xyz;
-        //f_color = vec4(world_intersect_km, 1);
-        // float h = length(normalize(world_intersect_km) * length(world_intersect_km));
-        // float height = length(world_intersect_km);
-        // float v = (height - EARTH_RADIUS_KM) / 8.0;
-        //float v = height - EARTH_RADIUS_KM - 1.0;
-        //f_color = vec4(v, v, v, 1);
-        f_color = vec4((world_intersect_km - EARTH_RADIUS_KM) / 8.0, 1);
-        //        vec3 w = normalize(world_intersect_km) * length(world_intersect_km);
-        //        f_color = vec4((w - EARTH_RADIUS_KM) / 8000.0, 1);
+        /* FULLY WORKING (in meters)
+        float z = -camera_z_near_m / depth_sample;
+        float w = -z;
+        float x = v_ndc.x * w / camera_aspect_ratio;
+        float y = v_ndc.y * w;
+        vec3 eyep_m = vec3(x, y, z);
+        vec3 wrldp_m = (camera_inverse_view_m * vec4(eyep_m, 1)).xyz;
+        float height = length(wrldp_m);
+        float v = (height - EARTH_RADIUS_M) / EVEREST_HEIGHT_M;
+        f_color = vec4(v, v, v, 1);
+        */
 
-        /*
-        vec4 _local_normal = texture(sampler2D(terrain_normal_acc_texture, terrain_linear_sampler), v_tc);
+        /* abstract */
+        vec3 world_intersect_km = ndc_to_world_km(vec3(v_ndc, depth_sample)).xyz;
+
+        /* (in km)
+        float z = -camera_z_near_km / depth_sample;
+        float w = -z;
+        float x = v_ndc.x * w / camera_aspect_ratio;
+        float y = v_ndc.y * w;
+        vec3 eyep_km = vec3(x, y, z);
+        vec3 wrldp_km = (camera_inverse_view_km * vec4(eyep_km, 1)).xyz;
+        float height = length(wrldp_km);
+        float v = (height - EARTH_RADIUS_KM) / EVEREST_HEIGHT_KM;
+        f_color = vec4(v, v, v, 1);
+        */
+
+        vec2 raw_normal = texture(sampler2D(terrain_normal_acc_texture, terrain_linear_sampler), v_tc).xy;
+        vec3 local_normal = vec3(
+            raw_normal.x,
+            sqrt(1.0 - (raw_normal.x * raw_normal.x + raw_normal.y * raw_normal.y)),
+            raw_normal.y
+        );
         //vec4 color = texture(sampler2D(terrain_color_acc_texture, terrain_linear_sampler), v_tc);
 
-        vec3 eye_intersect_km = view_direction * (terrain_depth_m / 1000.0);
-        vec3 world_intersect_km = (m4_geocenter_inverse_view() * vec4(eye_intersect_km, 1)).xyz;
-        //vec3 world_intersect_km = (vec4(eye_intersect_km, 1) * m4_geocenter_inverse_view()).xyz;
-        vec3 normal = normalize(world_intersect_km);
+        vec2 latlon = texture(sampler2D(terrain_deferred_texture, terrain_linear_sampler), v_tc).xy;
+        vec4 r_lon = quat_from_axis_angle(vec3(0, 1, 0), latlon.y);
+        vec3 lat_axis = quat_mult(r_lon, vec4(1, 0, 0, 1)).xyz;
+        vec4 r_lat = quat_from_axis_angle(lat_axis, PI / 2.0 - latlon.x);
+        /*
+        let r_lon = UnitQuaternion::from_axis_angle(
+            &NUnit::new_unchecked(Vector3::new(0f64, 1f64, 0f64)),
+            -f64::from(self.target.longitude),
+        );
+        let r_lat = UnitQuaternion::from_axis_angle(
+            &NUnit::new_normalize(r_lon * Vector3::new(1f64, 0f64, 0f64)),
+            PI / 2.0 - f64::from(self.target.latitude),
+        );
+        */
+        vec3 normal = quat_mult(r_lat, quat_mult(r_lon, vec4(local_normal, 1))).xyz;
 
         // Get sun and sky irradiance at the ground point and modulate
         // by the ground albedo.
@@ -93,7 +136,7 @@ main()
             scattering_sampler,
             single_mie_scattering_texture,
             single_mie_scattering_sampler,
-            world_camera_km,
+            world_position_km,
             world_intersect_km,
             sun_direction,
             transmittance,
@@ -107,12 +150,11 @@ main()
             vec3(1.0 / 2.2)
         );
 
-        f_color = vec4(sky_irradiance, 1);
+        //f_color = vec4(sky_irradiance, 1);
         //f_color = vec4(ground_radiance, 1);
-        //f_color = vec4(color, 1);
+        f_color = vec4(color, 1);
         //f_color = vec4(0, 1, 0, 1);
         //f_color = vec4(local_normal.xyz, 1);
-        */
     } else {
         // Sky and stars
         f_color = vec4(0, 0, 0, 1);

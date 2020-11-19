@@ -124,7 +124,7 @@ fn main() -> Fallible<()> {
 
         let gb_borrow = &globals_buffer;
         let fs_borrow = &fullscreen_buffer;
-        let framebuffer = gpu.get_next_framebuffer()?;
+        let framebuffer = gpu.get_next_framebuffer()?.unwrap();
         let mut encoder = gpu
             .device()
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
