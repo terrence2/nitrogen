@@ -20,10 +20,10 @@ pub use crate::upload_tracker::{texture_format_size, UploadTracker};
 // Note: re-export for use by FrameGraph when it is instantiated in other crates.
 pub use wgpu;
 
-use failure::{err_msg, Fallible};
+use failure::{bail, err_msg, Fallible};
 use futures::executor::block_on;
 use input::InputSystem;
-use log::trace;
+use log::{info, trace};
 use std::{fs, mem, path::PathBuf, sync::Arc};
 use tokio::runtime::Runtime;
 use wgpu::util::DeviceExt;
@@ -188,11 +188,18 @@ impl GPU {
         self.depth_texture = Self::create_depth_texture(&self.device, &sc_desc);
     }
 
-    pub fn get_next_framebuffer(&mut self) -> Fallible<wgpu::SwapChainFrame> {
-        Ok(self
-            .swap_chain
-            .get_current_frame()
-            .map_err(|_| err_msg("failed to get next swap chain image"))?)
+    pub fn get_next_framebuffer(&mut self) -> Fallible<Option<wgpu::SwapChainFrame>> {
+        match self.swap_chain.get_current_frame() {
+            Ok(frame) => Ok(Some(frame)),
+            Err(wgpu::SwapChainError::Timeout) => bail!("Timeout: gpu is locked up"),
+            Err(wgpu::SwapChainError::OutOfMemory) => bail!("OOM: gpu is out of memory"),
+            Err(wgpu::SwapChainError::Lost) => bail!("Lost: our context wondered off"),
+            Err(wgpu::SwapChainError::Outdated) => {
+                info!("GPU: context outdated, recreating");
+                Ok(None)
+            }
+        }
+        //.map_err(|e| err_msg(format!("failed to get next swap chain image: {}", e)))?)
     }
 
     pub fn depth_attachment(&self) -> &wgpu::TextureView {

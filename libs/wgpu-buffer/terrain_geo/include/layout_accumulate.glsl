@@ -23,6 +23,14 @@
 //    accumulate cartesian color
 layout(set = 1, binding = 0) uniform texture2D terrain_deferred_texture;
 layout(set = 1, binding = 1) uniform texture2D terrain_deferred_depth;
-layout(set = 1, binding = 2) uniform sampler terrain_linear_sampler;
-layout(set = 1, binding = 3, rgba8) uniform image2D terrain_color_acc;
-layout(set = 1, binding = 4, rgba32f) uniform image2D terrain_normal_acc;
+layout(set = 1, binding = 2, rgba8) uniform image2D terrain_color_acc;
+layout(set = 1, binding = 3, rg16i) uniform iimage2D terrain_normal_acc;
+layout(set = 1, binding = 4) uniform sampler terrain_linear_sampler;
+
+/*
+layout(set = 2, binding = 0) uniform texture2D terrain_deferred_texture;
+layout(set = 2, binding = 1) uniform texture2D terrain_deferred_depth;
+layout(set = 2, binding = 2) uniform utexture2D terrain_color_acc_texture;
+layout(set = 2, binding = 3) uniform texture2D terrain_normal_acc_texture;
+layout(set = 2, binding = 4) uniform sampler terrain_linear_sampler;
+*/

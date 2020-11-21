@@ -21,4 +21,5 @@ void
 main()
 {
     f_color = v_color;
+    // Note: relying here on automatic depth writes.
 }

@@ -4,29 +4,31 @@
 #    - libs/**/**/target/
 
 before_script:
-  - source $HOME/.cargo/env
+  - whoami
+  - groups
+  - which rustup
   - rustup update
   - rustup target add x86_64-pc-windows-gnu
   - rustup component add rustfmt
-  - rustup component add clippy
 
 check_format:
+  tags:
+    - rust
   script:
-    - source $HOME/.cargo/env
     - cargo fmt --all -- --check
 
 check_clippy:
+  tags:
+    - rust
+    - nix
   script:
-    - source $HOME/.cargo/env
-    - cargo clippy --all --all-targets -- --deny warnings
+    - nix-shell -p pkgconfig xorg.libX11 --run "cargo clippy --all --all-targets -- --deny warnings"
 
 # Need to figure out how to run graphical tests headless.
 #check_build:
 #  script:
-#    - source $HOME/.cargo/env
 #    - cargo check --all --all-targets
 #
 #check_test:
 #  script:
-#    - source $HOME/.cargo/env
 #    - cargo test --all --all-targets

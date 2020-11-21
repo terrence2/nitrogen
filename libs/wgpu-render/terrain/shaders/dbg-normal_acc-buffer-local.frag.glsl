@@ -15,11 +15,26 @@
 #version 450
 #include <wgpu-render/shader_shared/include/consts.glsl>
 #include <wgpu-buffer/global_data/include/global_data.glsl>
+#include <wgpu-buffer/terrain_geo/include/layout_composite.glsl>
 
-layout(location = 0) in vec3 position;
-layout(location = 1) in vec3 normal;
-layout(location = 2) in vec2 graticule;
+layout(location = 0) out vec4 f_color;
+layout(location = 0) in vec2 v_tc;
+layout(location = 1) in vec3 v_ray;
 
-void main() {
-    gl_Position = m4_projection_meters() * vec4(position, 1);
+void
+main()
+{
+    float depth = texture(sampler2D(terrain_deferred_depth, terrain_linear_sampler), v_tc).x;
+    if (depth > -1) {
+        ivec2 raw_normal = texture(isampler2D(terrain_normal_acc_texture, terrain_linear_sampler), v_tc).xy;
+        vec2 flat_normal = raw_normal / 32768.0;
+        vec3 local_normal = vec3(
+            flat_normal.x,
+            sqrt(1.0 - (flat_normal.x * flat_normal.x + flat_normal.y * flat_normal.y)),
+            flat_normal.y
+        );
+        f_color = vec4((local_normal + 1) / 2, 1);
+    } else {
+        f_color = vec4(0, 0, 0, 1);
+    }
 }

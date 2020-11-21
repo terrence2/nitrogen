@@ -17,14 +17,14 @@ use crate::{
     tables::{get_index_dependency_lut, get_tri_strip_index_buffer, get_wireframe_index_buffer},
     GpuDetailLevel, VisiblePatch,
 };
-use absolute_unit::{meters, Kilometers};
+use absolute_unit::{degrees, meters, radians, Angle, Kilometers, Radians};
 use camera::Camera;
 use failure::Fallible;
 use geodesy::{Cartesian, GeoCenter, Graticule};
 use gpu::{UploadTracker, GPU};
 use nalgebra::{Matrix4, Point3};
 use static_assertions::{assert_eq_align, assert_eq_size};
-use std::{mem, num::NonZeroU64, ops::Range, sync::Arc};
+use std::{f64::consts::FRAC_PI_2, mem, num::NonZeroU64, ops::Range, sync::Arc};
 use zerocopy::{AsBytes, FromBytes};
 
 #[repr(C)]
@@ -452,6 +452,30 @@ impl PatchManager {
         })
     }
 
+    // Detect when a patch crosses a seam and re-order the graticules so that it overlaps,
+    // preventing what will become texture coordinates from going backwards.
+    fn relap_for_seam(
+        lon0: &mut Angle<Radians>,
+        lon1: &mut Angle<Radians>,
+        lon2: &mut Angle<Radians>,
+    ) {
+        const LIM: f64 = FRAC_PI_2;
+        if *lon0 > radians!(LIM) && (*lon1 < radians!(-LIM) || *lon2 < radians!(-LIM))
+            || *lon1 > radians!(LIM) && (*lon0 < radians!(-LIM) || *lon2 < radians!(-LIM))
+            || *lon2 > radians!(LIM) && (*lon0 < radians!(-LIM) || *lon1 < radians!(-LIM))
+        {
+            if lon0.sign() < 0 {
+                *lon0 += degrees!(360);
+            }
+            if lon1.sign() < 0 {
+                *lon1 += degrees!(360);
+            }
+            if lon2.sign() < 0 {
+                *lon2 += degrees!(360);
+            }
+        }
+    }
+
     pub fn make_upload_buffer(
         &mut self,
         camera: &Camera,
@@ -483,7 +507,7 @@ impl PatchManager {
             let nv1 = view.to_homogeneous() * pw1.coords.normalize().to_homogeneous();
             let nv2 = view.to_homogeneous() * pw2.coords.normalize().to_homogeneous();
 
-            // Move verts from global coordinates into view space, still in KM f64.
+            // Move verts from global coordinates into view space, meters in f64.
             let vv0 = scale * view.to_homogeneous() * pw0.to_homogeneous();
             let vv1 = scale * view.to_homogeneous() * pw1.to_homogeneous();
             let vv2 = scale * view.to_homogeneous() * pw2.to_homogeneous();
@@ -495,9 +519,10 @@ impl PatchManager {
             let cart0 = Cartesian::<GeoCenter, Kilometers>::from(pw0.coords);
             let cart1 = Cartesian::<GeoCenter, Kilometers>::from(pw1.coords);
             let cart2 = Cartesian::<GeoCenter, Kilometers>::from(pw2.coords);
-            let g0 = Graticule::<GeoCenter>::from(cart0);
-            let g1 = Graticule::<GeoCenter>::from(cart1);
-            let g2 = Graticule::<GeoCenter>::from(cart2);
+            let mut g0 = Graticule::<GeoCenter>::from(cart0);
+            let mut g1 = Graticule::<GeoCenter>::from(cart1);
+            let mut g2 = Graticule::<GeoCenter>::from(cart2);
+            Self::relap_for_seam(&mut g0.longitude, &mut g1.longitude, &mut g2.longitude);
 
             // Use the patch vertices to sample the tile tree, re-using the existing visibility and
             // solid-angle calculations to avoid having to re-do them for the patch tree as well.

@@ -34,10 +34,10 @@ pub struct ArcBallCamera {
 
 impl ArcBallCamera {
     // FIXME: push camera in from outside
-    pub fn new(aspect_ratio: f64, z_near: Length<Meters>, z_far: Length<Meters>) -> Self {
+    pub fn new(aspect_ratio: f64, z_near: Length<Meters>) -> Self {
         let fov_y = radians!(PI / 2f64);
         Self {
-            camera: Camera::from_parameters(fov_y, aspect_ratio, z_near, z_far),
+            camera: Camera::from_parameters(fov_y, aspect_ratio, z_near),
             target: Graticule::<GeoSurface>::new(radians!(0), radians!(0), meters!(0)),
             eye: Graticule::<Target>::new(
                 radians!(PI / 2.0),
@@ -211,7 +211,7 @@ mod tests {
 
     #[test]
     fn it_can_compute_eye_positions_at_origin() -> Fallible<()> {
-        let mut c = ArcBallCamera::new(1f64, meters!(0.1f64), meters!(1000f64));
+        let mut c = ArcBallCamera::new(1f64, meters!(0.1f64));
 
         // Verify base target position.
         let t = c.cartesian_target_position::<Kilometers>();
@@ -269,7 +269,7 @@ mod tests {
 
     #[test]
     fn it_can_compute_eye_positions_with_offset_latitude() -> Fallible<()> {
-        let mut c = ArcBallCamera::new(1f64, meters!(0.1f64), meters!(1000f64));
+        let mut c = ArcBallCamera::new(1f64, meters!(0.1f64));
 
         // Verify base target position.
         let t = c.cartesian_target_position::<Kilometers>();
@@ -311,7 +311,7 @@ mod tests {
 
     #[test]
     fn it_can_compute_eye_positions_with_offset_longitude() -> Fallible<()> {
-        let mut c = ArcBallCamera::new(1f64, meters!(0.1f64), meters!(1000f64));
+        let mut c = ArcBallCamera::new(1f64, meters!(0.1f64));
 
         // Verify base target position.
         let t = c.cartesian_target_position::<Kilometers>();

@@ -18,6 +18,7 @@ use crate::tile::{
 use absolute_unit::{Angle, ArcSeconds};
 use catalog::{Catalog, FileId};
 use failure::{ensure, Fallible};
+use fxhash::FxHashMap;
 use geometry::AABB2;
 use log::trace;
 use std::{collections::HashMap, ops::Range};
@@ -113,7 +114,7 @@ impl QuadTree {
             generation: 0,
         };
 
-        let mut acc = HashMap::new();
+        let mut acc = FxHashMap::default();
         for i in 0..obj.layer_packs.len() {
             obj.link_layer(&mut acc, i, catalog);
         }
@@ -124,7 +125,7 @@ impl QuadTree {
 
     fn link_layer(
         &mut self,
-        acc: &mut HashMap<(i32, i32), QuadTreeId>,
+        acc: &mut FxHashMap<(i32, i32), QuadTreeId>,
         layer_num: usize,
         catalog: &Catalog,
     ) {

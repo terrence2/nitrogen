@@ -22,6 +22,7 @@ layout(location = 2) in vec2 v_graticule; // earth centered
 layout(location = 0) out vec4 v_color;
 
 void main() {
-    gl_Position = m4_projection_meters() * vec4(v_position, 1);
+    // Note: we upload positions in eye space: e.g. pre-multiplied by the view matrix.
+    gl_Position = camera_perspective_m * vec4(v_position, 1);
     v_color = vec4(v_graticule, v_normal.x, v_normal.z);
 }

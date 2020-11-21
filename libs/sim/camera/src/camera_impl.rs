@@ -23,7 +23,6 @@ pub struct Camera {
     fov_y: Angle<Radians>,
     aspect_ratio: f64,
     z_near: Length<Meters>,
-    z_far: Length<Meters>,
 
     // Camera view state.
     position: Cartesian<GeoCenter, Meters>,
@@ -35,17 +34,15 @@ pub struct Camera {
 impl Camera {
     // FIXME: aspect ratio is wrong. Should be 16:9 and not 9:16.
     // aspect ratio is rise over run: h / w
-    pub fn from_parameters(
-        fov_y: Angle<Radians>,
+    pub fn from_parameters<AngUnit: AngleUnit>(
+        fov_y: Angle<AngUnit>,
         aspect_ratio: f64,
         z_near: Length<Meters>,
-        z_far: Length<Meters>,
     ) -> Self {
         Self {
-            fov_y,
+            fov_y: radians!(fov_y),
             aspect_ratio,
             z_near,
-            z_far,
 
             position: Vector3::new(0f64, 0f64, 0f64).into(),
             forward: Vector3::new(0f64, 0f64, -1f64),
@@ -73,6 +70,10 @@ impl Camera {
 
     pub fn set_fov_y<T: AngleUnit>(&mut self, fov: Angle<T>) {
         self.fov_y = radians!(fov);
+    }
+
+    pub fn z_near<Unit: LengthUnit>(&self) -> Length<Unit> {
+        Length::<Unit>::from(&self.z_near)
     }
 
     pub fn aspect_ratio(&self) -> f64 {
@@ -103,7 +104,7 @@ impl Camera {
         &self.right
     }
 
-    pub fn projection<T: LengthUnit>(&self) -> Perspective3<f64> {
+    pub fn perspective<T: LengthUnit>(&self) -> Perspective3<f64> {
         // Source: https://nlguillemot.wordpress.com/2016/12/07/reversed-z-in-opengl/
         // See also: https://outerra.blogspot.com/2012/11/maximizing-depth-buffer-range-and.html
         // Infinite depth perspective with flipped w so that we can use inverted depths.
@@ -117,8 +118,8 @@ impl Camera {
         // Note for inversing on the GPU:
         // z = -1
         // w = z*zNear
-        // z' = -1 / (z*zNear)
-        // z = -1 / (z'*zNear)
+        // z' = -1 / (z / zNear)
+        // z = -1 / (z' / zNear)
 
         let mut matrix: Matrix4<f64> = num::Zero::zero();
         let f = 1.0 / (self.fov_y.f64() / 2.0).tan();
@@ -155,7 +156,7 @@ impl Camera {
             &self.up,
         );
 
-        let m = self.projection::<T>().as_matrix() * view.to_homogeneous();
+        let m = self.perspective::<T>().as_matrix() * view.to_homogeneous();
 
         let lp = (m.row(3) + m.row(0)).transpose();
         let lm = lp.xyz().magnitude();
@@ -178,5 +179,78 @@ impl Camera {
         let near = Plane::from_normal_and_distance(np.xyz() / nm, -np[3] / nm);
 
         [left, right, bottom, top, near]
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::arc_ball_camera::ArcBallCamera;
+    use absolute_unit::{degrees, meters};
+    use approx::assert_relative_eq;
+    use failure::Fallible;
+    use geodesy::{GeoSurface, Graticule, Target};
+    use nalgebra::Vector4;
+
+    #[test]
+    fn test_perspective() {
+        let camera = Camera::from_parameters(degrees!(90), 9.0 / 11.0, meters!(0.3));
+        let p = camera.perspective::<Meters>().to_homogeneous();
+        let wrld = Vector4::new(0000.0, 0.0, -10000.0, 1.0);
+        let eye = camera.view::<Meters>().to_homogeneous() * wrld;
+        let clip = p * eye;
+        let ndc = (clip / clip[3]).xyz();
+        let w = camera.z_near::<Meters>().f64() / ndc.z;
+        let eyep = Vector3::new(ndc.x * w / camera.aspect_ratio(), ndc.y * w, -w);
+        let wrldp = camera.view::<Meters>().inverse().to_homogeneous() * eyep.to_homogeneous();
+
+        println!(
+            "wrld: {}eye: {}clip: {}ndc: {}, w: {}\neyep: {}, wrldp: {}",
+            wrld, eye, clip, ndc, w, eyep, wrldp
+        );
+
+        assert_relative_eq!(wrld.x, wrldp.x, epsilon = 0.000000001);
+        assert_relative_eq!(wrld.y, wrldp.y, epsilon = 0.000000001);
+        assert_relative_eq!(wrld.z, wrldp.z, epsilon = 0.000000001);
+    }
+
+    #[test]
+    fn test_depth_restore() -> Fallible<()> {
+        let aspect_ratio = 0.9488875526157546;
+        let mut arcball = ArcBallCamera::new(aspect_ratio, meters!(0.5));
+        arcball.set_target(Graticule::<GeoSurface>::new(
+            degrees!(0),
+            degrees!(0),
+            meters!(2),
+        ));
+        arcball.set_eye_relative(Graticule::<Target>::new(
+            degrees!(89),
+            degrees!(0),
+            meters!(4_000_000),
+            // meters!(1_400_000),
+        ))?;
+        arcball.think();
+
+        let _camera_position_km = arcball.camera().position::<Kilometers>().vec64();
+        let camera_inverse_perspective_km: Matrix4<f64> =
+            arcball.camera().perspective::<Kilometers>().inverse();
+        let camera_inverse_view_km = arcball
+            .camera()
+            .view::<Kilometers>()
+            .inverse()
+            .to_homogeneous();
+
+        // Given corner positions in ndc of -1,-1 and 1,1... what does a mostly forward vector
+        // in ndc map to, given the above camera?
+        let corner = Vector4::new(0.1, 0.1, 0.0, 1.0);
+
+        let eye = (camera_inverse_perspective_km * corner).normalize();
+        let _wrld = (camera_inverse_view_km * eye).normalize();
+        // println!("pos: {}", camera_position_km);
+        // println!("eye : {}", eye);
+        // println!("wrld: {}", wrld);
+        // println!("pos: {}", camera_position_km.xyz() + wrld.xyz() * 8000.0);
+
+        Ok(())
     }
 }

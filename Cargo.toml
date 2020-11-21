@@ -65,7 +65,6 @@ global_data = { path = "libs/wgpu-buffer/global_data" }
 gpu = { path = "libs/system/gpu" }
 input = { path = "libs/system/input" }
 orrery = { path = "libs/sim/orrery" }
-physical_constants = { path = "libs/sim/physical_constants" }
 screen_text = { path = "libs/wgpu-render/screen_text" }
 skybox = { path = "libs/wgpu-render/skybox" }
 stars = { path = "libs/wgpu-buffer/stars" }

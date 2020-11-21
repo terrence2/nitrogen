@@ -21,6 +21,7 @@ use global_data::GlobalParametersBuffer;
 use gpu::GPU;
 use log::trace;
 use shader_shared::Group;
+use stars::StarsBuffer;
 use terrain_geo::{TerrainGeoBuffer, TerrainVertex};
 
 enum DebugMode {
@@ -28,7 +29,8 @@ enum DebugMode {
     Deferred,
     Depth,
     Color,
-    Normal,
+    NormalLocal,
+    NormalGlobal,
 }
 
 #[derive(Commandable)]
@@ -37,7 +39,8 @@ pub struct TerrainRenderPass {
     dbg_deferred_pipeline: wgpu::RenderPipeline,
     dbg_depth_pipeline: wgpu::RenderPipeline,
     dbg_color_pipeline: wgpu::RenderPipeline,
-    dbg_normal_pipeline: wgpu::RenderPipeline,
+    dbg_normal_local_pipeline: wgpu::RenderPipeline,
+    dbg_normal_global_pipeline: wgpu::RenderPipeline,
     wireframe_pipeline: wgpu::RenderPipeline,
     show_wireframe: bool,
     debug_mode: DebugMode,
@@ -54,6 +57,7 @@ impl TerrainRenderPass {
         gpu: &mut GPU,
         globals_buffer: &GlobalParametersBuffer,
         atmosphere_buffer: &AtmosphereBuffer,
+        stars_buffer: &StarsBuffer,
         terrain_geo_buffer: &TerrainGeoBuffer,
     ) -> Fallible<Self> {
         trace!("TerrainRenderPass::new");
@@ -68,6 +72,7 @@ impl TerrainRenderPass {
                     bind_group_layouts: &[
                         globals_buffer.bind_group_layout(),
                         atmosphere_buffer.bind_group_layout(),
+                        stars_buffer.bind_group_layout(),
                         terrain_geo_buffer.composite_bind_group_layout(),
                     ],
                 });
@@ -84,30 +89,34 @@ impl TerrainRenderPass {
             gpu.device(),
             &fullscreen_layout,
             &fullscreen_shared_vert,
-            &gpu.create_shader_module(include_bytes!(
-                "../target/terrain-deferred-buffer.frag.spirv"
-            ))?,
+            &gpu.create_shader_module(include_bytes!("../target/dbg-deferred-buffer.frag.spirv"))?,
         );
         let dbg_depth_pipeline = Self::make_fullscreen_pipeline(
             gpu.device(),
             &fullscreen_layout,
             &fullscreen_shared_vert,
-            &gpu.create_shader_module(include_bytes!("../target/terrain-depth-buffer.frag.spirv"))?,
+            &gpu.create_shader_module(include_bytes!("../target/dbg-depth-buffer.frag.spirv"))?,
         );
         let dbg_color_pipeline = Self::make_fullscreen_pipeline(
             gpu.device(),
             &fullscreen_layout,
             &fullscreen_shared_vert,
-            &gpu.create_shader_module(include_bytes!(
-                "../target/terrain-color_acc-buffer.frag.spirv"
-            ))?,
+            &gpu.create_shader_module(include_bytes!("../target/dbg-color_acc-buffer.frag.spirv"))?,
         );
-        let dbg_normal_pipeline = Self::make_fullscreen_pipeline(
+        let dbg_normal_local_pipeline = Self::make_fullscreen_pipeline(
             gpu.device(),
             &fullscreen_layout,
             &fullscreen_shared_vert,
             &gpu.create_shader_module(include_bytes!(
-                "../target/terrain-normal_acc-buffer.frag.spirv"
+                "../target/dbg-normal_acc-buffer-local.frag.spirv"
+            ))?,
+        );
+        let dbg_normal_global_pipeline = Self::make_fullscreen_pipeline(
+            gpu.device(),
+            &fullscreen_layout,
+            &fullscreen_shared_vert,
+            &gpu.create_shader_module(include_bytes!(
+                "../target/dbg-normal_acc-buffer-global.frag.spirv"
             ))?,
         );
 
@@ -124,13 +133,13 @@ impl TerrainRenderPass {
                     )),
                     vertex_stage: wgpu::ProgrammableStageDescriptor {
                         module: &gpu.create_shader_module(include_bytes!(
-                            "../target/terrain-wireframe.vert.spirv"
+                            "../target/dbg-wireframe.vert.spirv"
                         ))?,
                         entry_point: "main",
                     },
                     fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
                         module: &gpu.create_shader_module(include_bytes!(
-                            "../target/terrain-wireframe.frag.spirv"
+                            "../target/dbg-wireframe.frag.spirv"
                         ))?,
                         entry_point: "main",
                     }),
@@ -174,11 +183,12 @@ impl TerrainRenderPass {
             dbg_deferred_pipeline,
             dbg_depth_pipeline,
             dbg_color_pipeline,
-            dbg_normal_pipeline,
+            dbg_normal_local_pipeline,
+            dbg_normal_global_pipeline,
             wireframe_pipeline,
 
             show_wireframe: false,
-            debug_mode: DebugMode::Deferred,
+            debug_mode: DebugMode::None,
         })
     }
 
@@ -246,8 +256,9 @@ impl TerrainRenderPass {
             DebugMode::None => DebugMode::Deferred,
             DebugMode::Deferred => DebugMode::Depth,
             DebugMode::Depth => DebugMode::Color,
-            DebugMode::Color => DebugMode::Normal,
-            DebugMode::Normal => DebugMode::None,
+            DebugMode::Color => DebugMode::NormalLocal,
+            DebugMode::NormalLocal => DebugMode::NormalGlobal,
+            DebugMode::NormalGlobal => DebugMode::None,
         };
     }
 
@@ -257,6 +268,7 @@ impl TerrainRenderPass {
         globals_buffer: &'a GlobalParametersBuffer,
         fullscreen_buffer: &'a FullscreenBuffer,
         atmosphere_buffer: &'a AtmosphereBuffer,
+        stars_buffer: &'a StarsBuffer,
         terrain_geo_buffer: &'a TerrainGeoBuffer,
     ) -> Fallible<wgpu::RenderPass<'a>> {
         match self.debug_mode {
@@ -264,7 +276,8 @@ impl TerrainRenderPass {
             DebugMode::Deferred => rpass.set_pipeline(&self.dbg_deferred_pipeline),
             DebugMode::Depth => rpass.set_pipeline(&self.dbg_depth_pipeline),
             DebugMode::Color => rpass.set_pipeline(&self.dbg_color_pipeline),
-            DebugMode::Normal => rpass.set_pipeline(&self.dbg_normal_pipeline),
+            DebugMode::NormalLocal => rpass.set_pipeline(&self.dbg_normal_local_pipeline),
+            DebugMode::NormalGlobal => rpass.set_pipeline(&self.dbg_normal_global_pipeline),
         }
         rpass.set_bind_group(Group::Globals.index(), &globals_buffer.bind_group(), &[]);
         rpass.set_bind_group(
@@ -272,8 +285,12 @@ impl TerrainRenderPass {
             &atmosphere_buffer.bind_group(),
             &[],
         );
-        rpass.set_bind_group(2, terrain_geo_buffer.composite_bind_group(), &[]);
-        // rpass.set_bind_group(Group::Stars.index(), &stars_buffer.bind_group(), &[]);
+        rpass.set_bind_group(
+            Group::TerrainComposite.index(),
+            terrain_geo_buffer.composite_bind_group(),
+            &[],
+        );
+        rpass.set_bind_group(Group::Stars.index(), &stars_buffer.bind_group(), &[]);
         rpass.set_vertex_buffer(0, fullscreen_buffer.vertex_buffer());
         rpass.draw(0..4, 0..1);
 

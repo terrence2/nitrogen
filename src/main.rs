@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use absolute_unit::{degrees, kilometers, meters};
+use absolute_unit::{degrees, meters};
 use atmosphere::AtmosphereBuffer;
 use camera::ArcBallCamera;
 use catalog::{Catalog, DirectoryDrawer};
@@ -28,7 +28,6 @@ use legion::prelude::*;
 use log::trace;
 use nalgebra::convert;
 use orrery::Orrery;
-use physical_constants::EARTH_RADIUS_KM;
 use screen_text::ScreenTextRenderPass;
 use skybox::SkyboxRenderPass;
 use stars::StarsBuffer;
@@ -59,7 +58,7 @@ make_frame_graph!(
         };
         renderers: [
             skybox: SkyboxRenderPass { globals, fullscreen, stars, atmosphere },
-            terrain: TerrainRenderPass { globals, atmosphere, terrain_geo },
+            terrain: TerrainRenderPass { globals, atmosphere, stars, terrain_geo },
             screen_text: ScreenTextRenderPass { globals, text_layout }
         ];
         passes: [
@@ -76,8 +75,8 @@ make_frame_graph!(
             accumulate_normal_and_color: Compute() { terrain_geo( globals ) },
 
             draw: Render(Screen) {
-                skybox( globals, fullscreen, stars, atmosphere ),
-                terrain( globals, fullscreen, atmosphere, terrain_geo ),
+                //skybox( globals, fullscreen, stars, atmosphere ),
+                terrain( globals, fullscreen, atmosphere, stars, terrain_geo ),
                 screen_text( globals, text_layout )
             }
         ];
@@ -156,16 +155,10 @@ fn main() -> Fallible<()> {
     camera.apply_rotation(&Vector3::new(0.0, 1.0, 0.0), PI);
     */
 
-    let mut arcball = ArcBallCamera::new(
-        gpu.aspect_ratio(),
-        meters!(0.5),
-        // FIXME: return our near precision
-        meters!(kilometers!(EARTH_RADIUS_KM * 2.0 * 4.0)),
-        //meters!(kilometers!(EARTH_RADIUS_KM * 2.0 * 1.3)),
-    );
+    let mut arcball = ArcBallCamera::new(gpu.aspect_ratio(), meters!(0.5));
     arcball.set_target(Graticule::<GeoSurface>::new(
-        degrees!(0),
-        degrees!(0),
+        degrees!(-15.1618),
+        degrees!(-13.1950),
         meters!(2),
     ));
     arcball.set_eye_relative(Graticule::<Target>::new(
@@ -190,13 +183,14 @@ fn main() -> Fallible<()> {
                 "-target_down" => target_vec = meters!(0),
                 // system bindings
                 "window-close" | "window-destroy" | "exit" => return Ok(()),
-                "window-resize" => {
+                "resize" => {
                     gpu.note_resize(&input);
                     frame_graph.terrain_geo.note_resize(&gpu);
                     arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
                 }
-                "window-cursor-move" => {}
-                _ => trace!("unhandled command: {}", command.full()),
+                "cursor-move" => {}
+                "mouse-move" => {}
+                _ => trace!("unhandled command: {}", command.full(),),
             }
         }
         let mut g = arcball.get_target();
@@ -227,7 +221,11 @@ fn main() -> Fallible<()> {
         frame_graph
             .text_layout()
             .make_upload_buffer(&gpu, &mut tracker)?;
-        frame_graph.run(&mut gpu, tracker)?;
+        if !frame_graph.run(&mut gpu, tracker)? {
+            gpu.note_resize(&input);
+            frame_graph.terrain_geo.note_resize(&gpu);
+            arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
+        }
 
         let frame_time = loop_start.elapsed();
         let ts = format!(

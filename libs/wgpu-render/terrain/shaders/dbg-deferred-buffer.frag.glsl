@@ -17,12 +17,18 @@
 #include <wgpu-buffer/global_data/include/global_data.glsl>
 #include <wgpu-buffer/terrain_geo/include/layout_composite.glsl>
 
-layout(location = 1) in vec2 v_tc;
 layout(location = 0) out vec4 f_color;
+layout(location = 0) in vec2 v_tc;
+layout(location = 1) in vec3 v_ray;
 
 void
 main()
 {
-    vec4 texel = texture(sampler2D(terrain_normal_acc_texture, terrain_linear_sampler), v_tc);
-    f_color = vec4(texel.xyz, 1);
+    vec4 texel = texture(sampler2D(terrain_deferred_texture, terrain_linear_sampler), v_tc);
+    float depth = texture(sampler2D(terrain_deferred_depth, terrain_linear_sampler), v_tc).x;
+    if (depth > -1) {
+        f_color = vec4(texel.xy, 0, 1);
+    } else {
+        f_color = vec4(0, 0, 0, 1);
+    }
 }

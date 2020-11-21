@@ -1115,7 +1115,7 @@ mod test {
     fn test_pathological() -> Fallible<()> {
         let mut tree = PatchTree::new(15, 150.0, 300);
         let mut live_patches = Vec::new();
-        let mut arcball = ArcBallCamera::new(16.0 / 9.0, meters!(0.1), meters!(10_000));
+        let mut arcball = ArcBallCamera::new(16.0 / 9.0, meters!(0.1));
         arcball.set_eye_relative(Graticule::<Target>::new(
             degrees!(89),
             degrees!(0),
@@ -1152,7 +1152,7 @@ mod test {
     fn test_zoom_in() -> Fallible<()> {
         let mut tree = PatchTree::new(15, 150.0, 300);
         let mut live_patches = Vec::new();
-        let mut arcball = ArcBallCamera::new(16.0 / 9.0, meters!(0.1), meters!(10_000));
+        let mut arcball = ArcBallCamera::new(16.0 / 9.0, meters!(0.1));
         arcball.set_target(Graticule::<GeoSurface>::new(
             degrees!(0),
             degrees!(0),
@@ -1177,7 +1177,7 @@ mod test {
     fn test_fly_forward() -> Fallible<()> {
         let mut tree = PatchTree::new(15, 150.0, 300);
         let mut live_patches = Vec::new();
-        let mut arcball = ArcBallCamera::new(16.0 / 9.0, meters!(0.1), meters!(10_000));
+        let mut arcball = ArcBallCamera::new(16.0 / 9.0, meters!(0.1));
         arcball.set_target(Graticule::<GeoSurface>::new(
             degrees!(0),
             degrees!(0),

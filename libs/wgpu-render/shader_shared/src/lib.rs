@@ -24,6 +24,7 @@ pub enum Group {
     Stars,
     TerrainAcc,
     TerrainTileSet,
+    TerrainComposite,
 }
 
 impl Group {
@@ -36,6 +37,7 @@ impl Group {
             Self::TerrainTileSet => 2,
             Self::TextLayout => 2,
             Self::Stars => 2,
+            Self::TerrainComposite => 3,
         }
     }
 }

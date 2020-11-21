@@ -21,10 +21,11 @@
  *     DUMP_SPIRV=1   Dump disassembled code next to bytecode.
  *     DEBUG=1        Compile with debug settings.
  */
-use failure::Fallible;
+use failure::{bail, Fallible};
 use log::trace;
 use shaderc::{
-    CompileOptions, Compiler, Error, IncludeType, OptimizationLevel, ResolvedInclude, ShaderKind,
+    CompilationArtifact, CompileOptions, Compiler, Error, IncludeType, OptimizationLevel,
+    ResolvedInclude, ShaderKind,
 };
 use std::{
     env, fs,
@@ -134,32 +135,11 @@ pub fn build() -> Fallible<()> {
     for entry in fs::read_dir(shader_dir)? {
         let entry = entry?;
         let pathbuf = entry.path();
-        let path = pathbuf.to_str().expect("a filename");
         if !pathbuf.is_file() {
             continue;
         }
-
-        let shader_content = fs::read_to_string(&pathbuf)?;
-        let shader_type = type_for_filename(&path);
-
-        let mut options = CompileOptions::new().expect("some options");
-        options.set_warnings_as_errors();
-        let opt_level = if env::var("DEBUG").unwrap_or_else(|_| "0".to_owned()) == "1" {
-            options.set_generate_debug_info();
-            OptimizationLevel::Zero
-        } else {
-            OptimizationLevel::Performance
-        };
-        options.set_optimization_level(opt_level);
-        options.set_include_callback(find_included_file);
-
-        let mut compiler = Compiler::new().expect("a compiler");
-        let result =
-            compiler.compile_into_spirv(&shader_content, shader_type, path, "main", Some(&options));
-        if let Err(Error::CompilationError(_, ref msg)) = result {
-            println!("{}", decorate_error(msg));
-        }
-        let spirv = result?;
+        let dump_spirv = env::var("DUMP_SPIRV").unwrap_or_else(|_| "0".to_owned()) == "1";
+        let (spirv, assembly) = build_shader_from_path(&pathbuf, dump_spirv)?;
         let target_path = output_for_name(
             pathbuf
                 .file_name()
@@ -169,17 +149,56 @@ pub fn build() -> Fallible<()> {
         );
         fs::write(&target_path, spirv.as_binary_u8())?;
 
-        if env::var("DUMP_SPIRV").unwrap_or_else(|_| "0".to_owned()) == "1" {
-            let spirv_assembly = compiler.compile_into_spirv_assembly(
-                &shader_content,
-                shader_type,
-                path,
-                "main",
-                Some(&options),
-            )?;
+        if let Some(spirv_assembly) = assembly {
             fs::write(&format!("{}.s", target_path), spirv_assembly.as_text())?;
         }
     }
 
     Ok(())
+}
+
+pub fn build_shader_from_path(
+    path: &Path,
+    dump_spirv: bool,
+) -> Fallible<(CompilationArtifact, Option<CompilationArtifact>)> {
+    let path_str = path.to_str().expect("a filename");
+
+    let shader_content = fs::read_to_string(path)?;
+    let shader_type = type_for_filename(&path_str);
+
+    let mut options = CompileOptions::new().expect("some options");
+    options.set_warnings_as_errors();
+    let opt_level = if env::var("DEBUG").unwrap_or_else(|_| "0".to_owned()) == "1" {
+        options.set_generate_debug_info();
+        OptimizationLevel::Zero
+    } else {
+        OptimizationLevel::Performance
+    };
+    options.set_optimization_level(opt_level);
+    options.set_include_callback(find_included_file);
+
+    let mut compiler = Compiler::new().expect("a compiler");
+    let result = compiler.compile_into_spirv(
+        &shader_content,
+        shader_type,
+        path_str,
+        "main",
+        Some(&options),
+    );
+    if let Err(Error::CompilationError(_, ref msg)) = result {
+        println!("{}", decorate_error(msg));
+        bail!("failed to compile");
+    }
+    let spirv_assembly = if dump_spirv {
+        Some(compiler.compile_into_spirv_assembly(
+            &shader_content,
+            shader_type,
+            path_str,
+            "main",
+            Some(&options),
+        )?)
+    } else {
+        None
+    };
+    Ok((result?, spirv_assembly))
 }

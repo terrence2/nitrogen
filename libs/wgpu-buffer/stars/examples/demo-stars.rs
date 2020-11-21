@@ -108,7 +108,7 @@ fn main() -> Fallible<()> {
             alpha_to_coverage_enabled: false,
         });
 
-    let mut arcball = ArcBallCamera::new(gpu.aspect_ratio(), meters!(0.1), meters!(3.4e+38));
+    let mut arcball = ArcBallCamera::new(gpu.aspect_ratio(), meters!(0.1));
     arcball.set_eye_relative(Graticule::<Target>::new(
         degrees!(0),
         degrees!(0),
@@ -143,7 +143,7 @@ fn main() -> Fallible<()> {
         let gb_borrow = &globals_buffer;
         let fs_borrow = &fullscreen_buffer;
         let sb_borrow = &stars_buffers;
-        let framebuffer = gpu.get_next_framebuffer()?;
+        let framebuffer = gpu.get_next_framebuffer()?.unwrap();
         let mut encoder = gpu
             .device()
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
