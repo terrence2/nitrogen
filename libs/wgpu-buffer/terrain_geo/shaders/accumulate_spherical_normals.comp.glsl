@@ -37,13 +37,14 @@ main()
         vec2 grat = texelFetch(sampler2D(terrain_deferred_texture, terrain_linear_sampler), coord, 0).xy;
         uint atlas_slot = terrain_geo_atlas_slot_for_graticule(grat, index_texture, index_sampler);
         ivec2 raw_normal = terrain_geo_normal_in_tile(grat, tile_info[atlas_slot], atlas_texture, atlas_sampler);
-        float r = (float(raw_normal.x) + 32767.0) / 65536.0;
-        float g = (float(raw_normal.y) + 32767.0) / 65536.0;
 
+        // FIXME: blend normal with existing buffer.
+
+        // Write back blended normal.
         imageStore(
             terrain_normal_acc,
             coord,
-            vec4(r, g, 0, 0)
+            ivec4(raw_normal, 0, 0)
         );
     }
 }

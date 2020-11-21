@@ -21,6 +21,7 @@ use global_data::GlobalParametersBuffer;
 use gpu::GPU;
 use log::trace;
 use shader_shared::Group;
+use stars::StarsBuffer;
 use terrain_geo::{TerrainGeoBuffer, TerrainVertex};
 
 enum DebugMode {
@@ -56,6 +57,7 @@ impl TerrainRenderPass {
         gpu: &mut GPU,
         globals_buffer: &GlobalParametersBuffer,
         atmosphere_buffer: &AtmosphereBuffer,
+        stars_buffer: &StarsBuffer,
         terrain_geo_buffer: &TerrainGeoBuffer,
     ) -> Fallible<Self> {
         trace!("TerrainRenderPass::new");
@@ -70,6 +72,7 @@ impl TerrainRenderPass {
                     bind_group_layouts: &[
                         globals_buffer.bind_group_layout(),
                         atmosphere_buffer.bind_group_layout(),
+                        stars_buffer.bind_group_layout(),
                         terrain_geo_buffer.composite_bind_group_layout(),
                     ],
                 });
@@ -265,6 +268,7 @@ impl TerrainRenderPass {
         globals_buffer: &'a GlobalParametersBuffer,
         fullscreen_buffer: &'a FullscreenBuffer,
         atmosphere_buffer: &'a AtmosphereBuffer,
+        stars_buffer: &'a StarsBuffer,
         terrain_geo_buffer: &'a TerrainGeoBuffer,
     ) -> Fallible<wgpu::RenderPass<'a>> {
         match self.debug_mode {
@@ -281,8 +285,12 @@ impl TerrainRenderPass {
             &atmosphere_buffer.bind_group(),
             &[],
         );
-        rpass.set_bind_group(2, terrain_geo_buffer.composite_bind_group(), &[]);
-        // rpass.set_bind_group(Group::Stars.index(), &stars_buffer.bind_group(), &[]);
+        rpass.set_bind_group(
+            Group::TerrainComposite.index(),
+            terrain_geo_buffer.composite_bind_group(),
+            &[],
+        );
+        rpass.set_bind_group(Group::Stars.index(), &stars_buffer.bind_group(), &[]);
         rpass.set_vertex_buffer(0, fullscreen_buffer.vertex_buffer());
         rpass.draw(0..4, 0..1);
 

@@ -19,18 +19,10 @@
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
-/*
-layout(set = 1, binding = 0) uniform texture2D terrain_deferred_texture;
-layout(set = 1, binding = 1) uniform texture2D terrain_deferred_depth;
-layout(set = 1, binding = 2) uniform sampler terrain_linear_sampler;
-layout(set = 1, binding = 3, rgba8) uniform image2D color_acc_storage;
-layout(set = 1, binding = 4, rg16i) uniform iimage2D normal_acc_storage;
-*/
-
 void
 main()
 {
     ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
-    imageStore(terrain_color_acc, coord, ivec4(0));
-    imageStore(terrain_normal_acc, coord, vec4(0));
+    imageStore(terrain_color_acc, coord, vec4(0));
+    imageStore(terrain_normal_acc, coord, ivec4(0));
 }

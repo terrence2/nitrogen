@@ -454,7 +454,7 @@ impl PatchManager {
 
     // Detect when a patch crosses a seam and re-order the graticules so that it overlaps,
     // preventing what will become texture coordinates from going backwards.
-    fn reorder_seam(
+    fn relap_for_seam(
         lon0: &mut Angle<Radians>,
         lon1: &mut Angle<Radians>,
         lon2: &mut Angle<Radians>,
@@ -522,10 +522,7 @@ impl PatchManager {
             let mut g0 = Graticule::<GeoCenter>::from(cart0);
             let mut g1 = Graticule::<GeoCenter>::from(cart1);
             let mut g2 = Graticule::<GeoCenter>::from(cart2);
-
-            // FIXME: fix seam between -180 and 180 by adjusting coordinates such that each patch
-            //        lives fully on one side or the other.
-            Self::reorder_seam(&mut g0.longitude, &mut g1.longitude, &mut g2.longitude);
+            Self::relap_for_seam(&mut g0.longitude, &mut g1.longitude, &mut g2.longitude);
 
             // Use the patch vertices to sample the tile tree, re-using the existing visibility and
             // solid-angle calculations to avoid having to re-do them for the patch tree as well.

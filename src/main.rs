@@ -58,7 +58,7 @@ make_frame_graph!(
         };
         renderers: [
             skybox: SkyboxRenderPass { globals, fullscreen, stars, atmosphere },
-            terrain: TerrainRenderPass { globals, atmosphere, terrain_geo },
+            terrain: TerrainRenderPass { globals, atmosphere, stars, terrain_geo },
             screen_text: ScreenTextRenderPass { globals, text_layout }
         ];
         passes: [
@@ -76,7 +76,7 @@ make_frame_graph!(
 
             draw: Render(Screen) {
                 //skybox( globals, fullscreen, stars, atmosphere ),
-                terrain( globals, fullscreen, atmosphere, terrain_geo ),
+                terrain( globals, fullscreen, atmosphere, stars, terrain_geo ),
                 screen_text( globals, text_layout )
             }
         ];

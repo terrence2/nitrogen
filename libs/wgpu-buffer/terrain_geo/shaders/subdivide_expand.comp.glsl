@@ -67,9 +67,6 @@ main()
     // θi = θj + atan2(by, cos(φj) + bx)
     float theta_t = theta_a + atan(beta_y, cos(phi_a) + beta_x);
 
-    // FIXME: if theta crosses from 180 to -180, the graticules we render later will span 180->-180 instead of doing something sane.
-    //        Can we detect this and make coordinates go from 180 -> 180+ in this case instead of wrapping?
-
     // Use the clever tan method from figure 35.
     vec3 pa = vec3(target_vertices[dep_a].position[0], target_vertices[dep_a].position[1], target_vertices[dep_a].position[2]);
     vec3 pb = vec3(target_vertices[dep_b].position[0], target_vertices[dep_b].position[1], target_vertices[dep_b].position[2]);

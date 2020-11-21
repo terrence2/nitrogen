@@ -24,11 +24,17 @@ layout(location = 1) in vec3 v_ray;
 void
 main()
 {
-    vec2 raw_normal = texture(sampler2D(terrain_normal_acc_texture, terrain_linear_sampler), v_tc).xy;
-    vec3 local_normal = vec3(
-        raw_normal.x,
-        sqrt(1.0 - (raw_normal.x * raw_normal.x + raw_normal.y * raw_normal.y)),
-        raw_normal.y
-    );
-    f_color = vec4(local_normal, 1);
+    float depth = texture(sampler2D(terrain_deferred_depth, terrain_linear_sampler), v_tc).x;
+    if (depth > -1) {
+        ivec2 raw_normal = texture(isampler2D(terrain_normal_acc_texture, terrain_linear_sampler), v_tc).xy;
+        vec2 flat_normal = raw_normal / 32768.0;
+        vec3 local_normal = vec3(
+            flat_normal.x,
+            sqrt(1.0 - (flat_normal.x * flat_normal.x + flat_normal.y * flat_normal.y)),
+            flat_normal.y
+        );
+        f_color = vec4((local_normal + 1) / 2, 1);
+    } else {
+        f_color = vec4(0, 0, 0, 1);
+    }
 }

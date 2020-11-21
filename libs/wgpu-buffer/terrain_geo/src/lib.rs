@@ -167,7 +167,7 @@ pub struct TerrainGeoBuffer {
 impl TerrainGeoBuffer {
     const DEFERRED_TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
     const DEFERRED_TEXTURE_DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
-    const NORMAL_ACCUMULATION_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
+    const NORMAL_ACCUMULATION_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Sint;
     const COLOR_ACCUMULATION_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
     pub fn new(
@@ -354,16 +354,9 @@ impl TerrainGeoBuffer {
                             },
                             count: None,
                         },
-                        // linear sampler
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 2,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::Sampler { comparison: false },
-                            count: None,
-                        },
                         // Color acc as storage
                         wgpu::BindGroupLayoutEntry {
-                            binding: 3,
+                            binding: 2,
                             visibility: wgpu::ShaderStage::COMPUTE,
                             ty: wgpu::BindingType::StorageTexture {
                                 dimension: wgpu::TextureViewDimension::D2,
@@ -374,13 +367,20 @@ impl TerrainGeoBuffer {
                         },
                         // Normal acc as storage
                         wgpu::BindGroupLayoutEntry {
-                            binding: 4,
+                            binding: 3,
                             visibility: wgpu::ShaderStage::COMPUTE,
                             ty: wgpu::BindingType::StorageTexture {
                                 dimension: wgpu::TextureViewDimension::D2,
                                 format: Self::NORMAL_ACCUMULATION_FORMAT,
                                 readonly: false,
                             },
+                            count: None,
+                        },
+                        // linear sampler
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 4,
+                            visibility: wgpu::ShaderStage::COMPUTE,
+                            ty: wgpu::BindingType::Sampler { comparison: false },
                             count: None,
                         },
                     ],
@@ -659,15 +659,15 @@ impl TerrainGeoBuffer {
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: wgpu::BindingResource::Sampler(sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
                     resource: wgpu::BindingResource::TextureView(color_acc),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 4,
+                    binding: 3,
                     resource: wgpu::BindingResource::TextureView(normal_acc),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::Sampler(sampler),
                 },
             ],
         })
