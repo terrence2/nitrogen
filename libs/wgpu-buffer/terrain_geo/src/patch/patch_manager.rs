@@ -549,7 +549,6 @@ impl PatchManager {
             "terrain-geo-patch-vertex-upload-buffer",
             &self.live_vertices,
             self.patch_upload_buffer.clone(),
-            wgpu::BufferUsage::all(),
             tracker,
         );
 
