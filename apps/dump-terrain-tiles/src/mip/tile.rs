@@ -16,7 +16,7 @@ use crate::mip::Region;
 use absolute_unit::{arcseconds, meters, Angle, ArcSeconds};
 use failure::Fallible;
 use geodesy::{GeoCenter, Graticule};
-use image::{ImageBuffer, Luma, Rgb};
+use image::{ImageBuffer, Luma, Rgb, RgbImage};
 use memmap::{Mmap, MmapOptions};
 use parking_lot::RwLock;
 use std::{
@@ -28,15 +28,6 @@ use std::{
 };
 use terrain_geo::tile::{ChildIndex, DataSetDataKind, TerrainLevel, TILE_PHYSICAL_SIZE};
 use zerocopy::{AsBytes, LayoutVerified};
-
-pub(crate) enum TileData {
-    Absent, // Not yet generated or loaded.
-    Empty,  // Loaded and no content.
-    InlineHeights(Box<[[i16; TILE_PHYSICAL_SIZE]; TILE_PHYSICAL_SIZE]>),
-    InlineNormals(Box<[[[i16; 2]; TILE_PHYSICAL_SIZE]; TILE_PHYSICAL_SIZE]>),
-    MappedHeights(Mmap),
-    MappedNormals(Mmap),
-}
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 #[repr(u8)]
@@ -85,6 +76,17 @@ impl NeighborIndex {
     }
 }
 
+pub(crate) enum TileData {
+    Absent, // Not yet generated or loaded.
+    Empty,  // Loaded and no content.
+    InlineHeights(Box<[[i16; TILE_PHYSICAL_SIZE]; TILE_PHYSICAL_SIZE]>),
+    InlineNormals(Box<[[[i16; 2]; TILE_PHYSICAL_SIZE]; TILE_PHYSICAL_SIZE]>),
+    InlineColors(RgbImage),
+    MappedHeights(Mmap),
+    MappedNormals(Mmap),
+    MappedColors(ImageBuffer<Rgb<u8>, Mmap>),
+}
+
 impl TileData {
     fn is_absent(&self) -> bool {
         matches!(self, Self::Absent)
@@ -94,6 +96,7 @@ impl TileData {
         match self {
             Self::InlineHeights { .. } => true,
             Self::InlineNormals { .. } => true,
+            Self::InlineColors { .. } => true,
             _ => false,
         }
     }
@@ -102,6 +105,7 @@ impl TileData {
         match self {
             Self::MappedHeights { .. } => true,
             Self::MappedNormals { .. } => true,
+            Self::MappedColors { .. } => true,
             _ => false,
         }
     }
@@ -116,8 +120,10 @@ impl TileData {
             Self::Empty => "empty",
             Self::InlineHeights { .. } => "inline_heights",
             Self::InlineNormals { .. } => "inline_normals",
+            Self::InlineColors { .. } => "inline_colors",
             Self::MappedHeights { .. } => "mapped_heights",
             Self::MappedNormals { .. } => "mapped_normals",
+            Self::MappedColors { .. } => "mapped_colors",
         }
     }
 
@@ -127,8 +133,10 @@ impl TileData {
             Self::Empty => &[],
             Self::InlineHeights(ba) => ba.as_bytes(),
             Self::InlineNormals(ba) => ba.as_bytes(),
+            Self::InlineColors(img) => img.as_bytes(),
             Self::MappedHeights(mm) => mm.as_bytes(),
             Self::MappedNormals(mm) => mm.as_bytes(),
+            Self::MappedColors(img) => img.as_bytes(),
         }
     }
 
@@ -162,6 +170,20 @@ impl TileData {
         }
     }
 
+    fn as_inline_colors(&self) -> &RgbImage {
+        match self {
+            Self::InlineColors(img) => img,
+            _ => panic!("not an inline normals data"),
+        }
+    }
+
+    fn as_inline_colors_mut(&mut self) -> &mut RgbImage {
+        match self {
+            Self::InlineColors(img) => img,
+            _ => panic!("not an inline normals data"),
+        }
+    }
+
     fn as_mmap_heights(&self) -> &Mmap {
         match self {
             Self::MappedHeights(ba) => ba,
@@ -173,6 +195,13 @@ impl TileData {
         match self {
             Self::MappedNormals(ba) => ba,
             _ => panic!("not an inline normals data"),
+        }
+    }
+
+    fn as_mmap_colors(&self) -> &ImageBuffer<Rgb<u8>, Mmap> {
+        match self {
+            Self::MappedColors(img) => img,
+            _ => panic!("not an inline colors data"),
         }
     }
 }
@@ -419,6 +448,19 @@ impl Tile {
         total
     }
 
+    fn sum_region_colors(&self, lat: i32, lon: i32) -> [i16; 3] {
+        let mut total = [0i16; 3];
+        for a in -1..=1 {
+            for b in -1..=1 {
+                let c = self.get_color_sample(lat + a, lon + b);
+                total[0] += c[0] as i16;
+                total[1] += c[1] as i16;
+                total[2] += c[2] as i16;
+            }
+        }
+        total
+    }
+
     // Fill in a sample by linearly interpolating the data from our child's samples.
     pub fn pull_height_sample(&mut self, lat_offset: i32, lon_offset: i32) -> i16 {
         assert!(self.data.is_inline());
@@ -426,13 +468,6 @@ impl Tile {
         assert!(lon_offset >= 0);
         assert!(lat_offset < TILE_PHYSICAL_SIZE as i32);
         assert!(lon_offset < TILE_PHYSICAL_SIZE as i32);
-
-        //    .  .  .  .  .  .
-        //    x  .  x  .  x  .
-        //    .  .  .  .  .  .
-        //    x  .  x  .  x  .
-        // We can reach right and up in our children without issue. Left and/or down is problematic.
-        // If we are at the top or left, we need to reach to our siblings.
 
         let total_height = if lat_offset < 256 && lon_offset < 256 {
             self.children[ChildIndex::SouthWest.to_index()]
@@ -481,13 +516,6 @@ impl Tile {
         assert!(lat_offset < TILE_PHYSICAL_SIZE as i32);
         assert!(lon_offset < TILE_PHYSICAL_SIZE as i32);
 
-        //    .  .  .  .  .  .
-        //    x  .  x  .  x  .
-        //    .  .  .  .  .  .
-        //    x  .  x  .  x  .
-        // We can reach right and up in our children without issue. Left and/or down is problematic.
-        // If we are at the top or left, we need to reach to our siblings.
-
         let total_normal = if lat_offset < 256 && lon_offset < 256 {
             self.children[ChildIndex::SouthWest.to_index()]
                 .as_ref()
@@ -532,6 +560,59 @@ impl Tile {
             .unwrap_or([0; 2])
     }
 
+    // Fill in a sample by linearly interpolating the data from our child's samples.
+    pub fn pull_color_sample(&mut self, lat_offset: i32, lon_offset: i32) -> Rgb<u8> {
+        assert!(self.data.is_inline());
+        assert!(lat_offset >= 0);
+        assert!(lon_offset >= 0);
+        assert!(lat_offset < TILE_PHYSICAL_SIZE as i32);
+        assert!(lon_offset < TILE_PHYSICAL_SIZE as i32);
+
+        let sum_color = if lat_offset < 256 && lon_offset < 256 {
+            self.children[ChildIndex::SouthWest.to_index()]
+                .as_ref()
+                .map(|child| {
+                    let lat = lat_offset * 2;
+                    let lon = lon_offset * 2;
+                    child.read().sum_region_colors(lat, lon)
+                })
+        } else if lat_offset < 256 {
+            self.children[ChildIndex::SouthEast.to_index()]
+                .as_ref()
+                .map(|child| {
+                    let lat = lat_offset * 2;
+                    let lon = (lon_offset - 256) * 2;
+                    child.read().sum_region_colors(lat, lon)
+                })
+        } else if lon_offset < 256 {
+            self.children[ChildIndex::NorthWest.to_index()]
+                .as_ref()
+                .map(|child| {
+                    let lat = (lat_offset - 256) * 2;
+                    let lon = lon_offset * 2;
+                    child.read().sum_region_colors(lat, lon)
+                })
+        } else {
+            self.children[ChildIndex::NorthEast.to_index()]
+                .as_ref()
+                .map(|child| {
+                    let lat = (lat_offset - 256) * 2;
+                    let lon = (lon_offset - 256) * 2;
+                    child.read().sum_region_colors(lat, lon)
+                })
+        };
+
+        sum_color
+            .map(|c| {
+                Rgb([
+                    (c[0] as f64 / 9f64).round() as u8,
+                    (c[1] as f64 / 9f64).round() as u8,
+                    (c[2] as f64 / 9f64).round() as u8,
+                ])
+            })
+            .unwrap_or_else(|| Rgb([0u8; 3]))
+    }
+
     pub fn is_empty_tile(&self) -> bool {
         match &self.data {
             TileData::InlineHeights(ba) => {
@@ -552,6 +633,7 @@ impl Tile {
                     }
                 }
             }
+            TileData::InlineColors(_) => return false,
             _ => panic!("cannot check if a non-inline tile is empty"),
         }
         true
@@ -566,7 +648,10 @@ impl Tile {
             DataSetDataKind::Normal => TileData::InlineNormals(Box::new(
                 [[[0i16; 2]; TILE_PHYSICAL_SIZE]; TILE_PHYSICAL_SIZE],
             )),
-            DataSetDataKind::Color => panic!("unsupported kind: Color"),
+            DataSetDataKind::Color => TileData::InlineColors(RgbImage::new(
+                TILE_PHYSICAL_SIZE as u32,
+                TILE_PHYSICAL_SIZE as u32,
+            )),
         };
     }
 
@@ -579,7 +664,15 @@ impl Tile {
             self.data = match kind {
                 DataSetDataKind::Height => TileData::MappedHeights(mip_mmap),
                 DataSetDataKind::Normal => TileData::MappedNormals(mip_mmap),
-                DataSetDataKind::Color => panic!("unsupported kind: color"),
+                DataSetDataKind::Color => {
+                    let buf = ImageBuffer::from_raw(
+                        TILE_PHYSICAL_SIZE as u32,
+                        TILE_PHYSICAL_SIZE as u32,
+                        mip_mmap,
+                    )
+                    .unwrap();
+                    TileData::MappedColors(buf)
+                }
             };
             return Ok(true);
         }
@@ -600,14 +693,14 @@ impl Tile {
         self.data.raw_data()
     }
 
+    // FIXME: abstract the shared logic between normals, heights, and colors
     pub fn get_height_sample(&self, lat_offset: i32, lon_offset: i32) -> i16 {
-        // FIXME: debug asserts once we've validated our indexing
         const END: i32 = TILE_PHYSICAL_SIZE as i32;
         const LAST: i32 = END - 1;
-        assert!(lat_offset >= -1);
-        assert!(lat_offset <= END);
-        assert!(lon_offset >= -1);
-        assert!(lon_offset <= END);
+        debug_assert!(lat_offset >= -1);
+        debug_assert!(lat_offset <= END);
+        debug_assert!(lon_offset >= -1);
+        debug_assert!(lon_offset <= END);
         // Note: first with matching pattern matches, so we have to put the exact matches (corners)
         //       at the top and only put the edges (with placeholder match) later.
         match (lat_offset, lon_offset) {
@@ -663,13 +756,12 @@ impl Tile {
     }
 
     pub fn get_normal_sample(&self, lat_offset: i32, lon_offset: i32) -> [i16; 2] {
-        // FIXME: debug asserts once we've validated our indexing
         const END: i32 = TILE_PHYSICAL_SIZE as i32;
         const LAST: i32 = END - 1;
-        assert!(lat_offset >= -1);
-        assert!(lat_offset <= END);
-        assert!(lon_offset >= -1);
-        assert!(lon_offset <= END);
+        debug_assert!(lat_offset >= -1);
+        debug_assert!(lat_offset <= END);
+        debug_assert!(lon_offset >= -1);
+        debug_assert!(lon_offset <= END);
         // Note: first with matching pattern matches, so we have to put the exact matches (corners)
         //       at the top and only put the edges (with placeholder match) later.
         match (lat_offset, lon_offset) {
@@ -724,6 +816,66 @@ impl Tile {
         [0; 2]
     }
 
+    pub fn get_color_sample(&self, lat_offset: i32, lon_offset: i32) -> Rgb<u8> {
+        const END: i32 = TILE_PHYSICAL_SIZE as i32;
+        const LAST: i32 = END - 1;
+        debug_assert!(lat_offset >= -1);
+        debug_assert!(lat_offset <= END);
+        debug_assert!(lon_offset >= -1);
+        debug_assert!(lon_offset <= END);
+        // Note: first with matching pattern matches, so we have to put the exact matches (corners)
+        //       at the top and only put the edges (with placeholder match) later.
+        match (lat_offset, lon_offset) {
+            (-1, -1) => self.neighbors[NeighborIndex::SouthWest.index()]
+                .clone()
+                .map(|t| t.read().get_own_color_sample(LAST, LAST))
+                .unwrap_or(Rgb([0u8; 3])),
+            (-1, END) => self.neighbors[NeighborIndex::SouthEast.index()]
+                .clone()
+                .map(|t| t.read().get_own_color_sample(LAST, 0))
+                .unwrap_or(Rgb([0u8; 3])),
+            (END, -1) => self.neighbors[NeighborIndex::NorthWest.index()]
+                .clone()
+                .map(|t| t.read().get_own_color_sample(0, LAST))
+                .unwrap_or(Rgb([0u8; 3])),
+            (END, END) => self.neighbors[NeighborIndex::NorthEast.index()]
+                .clone()
+                .map(|t| t.read().get_own_color_sample(0, 0))
+                .unwrap_or(Rgb([0u8; 3])),
+            (-1, lon) => self.neighbors[NeighborIndex::South.index()]
+                .clone()
+                .map(|t| t.read().get_own_color_sample(LAST, lon))
+                .unwrap_or(Rgb([0u8; 3])),
+            (END, lon) => self.neighbors[NeighborIndex::North.index()]
+                .clone()
+                .map(|t| t.read().get_own_color_sample(0, lon))
+                .unwrap_or(Rgb([0u8; 3])),
+            (lat, -1) => self.neighbors[NeighborIndex::West.index()]
+                .clone()
+                .map(|t| t.read().get_own_color_sample(lat, LAST))
+                .unwrap_or(Rgb([0u8; 3])),
+            (lat, END) => self.neighbors[NeighborIndex::East.index()]
+                .clone()
+                .map(|t| t.read().get_own_color_sample(lat, 0))
+                .unwrap_or(Rgb([0u8; 3])),
+            _ => self.get_own_color_sample(lat_offset, lon_offset),
+        }
+    }
+
+    pub fn get_own_color_sample(&self, lat_offset: i32, lon_offset: i32) -> Rgb<u8> {
+        // FIXME: debug asserts once we've validated our indexing
+        assert!(lat_offset > -1);
+        assert!(lat_offset < 512);
+        assert!(lon_offset > -1);
+        assert!(lon_offset < 512);
+        if self.data.is_mapped() {
+            let img = self.data.as_mmap_colors();
+            return *img.get_pixel(lon_offset as u32, lat_offset as u32);
+        }
+        assert!(self.data.is_empty());
+        Rgb([0u8; 3])
+    }
+
     pub fn set_height_sample(&mut self, lat_offset: i32, lon_offset: i32, height: i16) {
         debug_assert!(self.data.is_inline());
         self.data.as_inline_heights_mut()[lat_offset as usize][lon_offset as usize] = height;
@@ -732,6 +884,12 @@ impl Tile {
     pub fn set_normal_sample(&mut self, lat_offset: i32, lon_offset: i32, normal: [i16; 2]) {
         debug_assert!(self.data.is_inline());
         self.data.as_inline_normals_mut()[lat_offset as usize][lon_offset as usize] = normal;
+    }
+
+    pub fn set_color_sample(&mut self, lat_offset: i32, lon_offset: i32, color: Rgb<u8>) {
+        self.data
+            .as_inline_colors_mut()
+            .put_pixel(lon_offset as u32, lat_offset as u32, color);
     }
 
     pub fn save_equalized_png(&self, kind: DataSetDataKind, directory: &Path) -> Fallible<()> {
@@ -778,7 +936,11 @@ impl Tile {
                 println!("saving: {:?}", path.with_extension("png"));
                 pic.save(path.with_extension("png"))?;
             }
-            _ => panic!("unsupported png output type"),
+            DataSetDataKind::Color => {
+                self.data
+                    .as_inline_colors()
+                    .save(path.with_extension("png"))?;
+            }
         }
 
         Ok(())
@@ -806,9 +968,13 @@ impl Tile {
         }
         let mip_fp = File::open(&mip_path)?;
         let mip_mmap = unsafe { MmapOptions::new().map(&mip_fp)? };
-        self.data = match self.data {
+        self.data = match &self.data {
             TileData::InlineHeights(_) => TileData::MappedHeights(mip_mmap),
             TileData::InlineNormals(_) => TileData::MappedNormals(mip_mmap),
+            TileData::InlineColors(img) => {
+                let buf = ImageBuffer::from_raw(img.width(), img.height(), mip_mmap).unwrap();
+                TileData::MappedColors(buf)
+            }
             _ => panic!("unsupported inlien type"),
         };
         Ok(())
