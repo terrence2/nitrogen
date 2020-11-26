@@ -28,6 +28,7 @@ use geodesy::{GeoSurface, Graticule};
 use parking_lot::{Mutex, RwLock};
 use rayon::prelude::*;
 use std::{
+    cmp::Ordering,
     fs,
     io::{stdout, Read, Write},
     path::{Path, PathBuf},
@@ -524,7 +525,7 @@ fn main() -> Fallible<()> {
             "bmng",
             DataSetDataKind::Color,
             DataSetCoordinates::Spherical,
-            bmng.clone(),
+            bmng,
         )?;
     }
 
@@ -540,7 +541,7 @@ fn main() -> Fallible<()> {
             "srtmn",
             DataSetDataKind::Normal,
             DataSetCoordinates::Spherical,
-            srtm.clone(),
+            srtm,
         )?;
     }
 
@@ -609,8 +610,12 @@ fn main() -> Fallible<()> {
                     "  Building tiles:",
                     current_tiles.len(),
                 )));
-                if target_level == dataset.read().source().read().root_level().offset() {
-                    if opt.serialize {
+
+                match (
+                    opt.serialize,
+                    target_level.cmp(&dataset.read().source().read().root_level().offset()),
+                ) {
+                    (true, Ordering::Equal) => {
                         for (tile, _) in &current_tiles {
                             generate_mip_tile_from_source(
                                 dataset.read().source(),
@@ -621,7 +626,15 @@ fn main() -> Fallible<()> {
                             .unwrap();
                             progress.write().poke();
                         }
-                    } else {
+                    }
+                    (true, Ordering::Less) => {
+                        for (tile, _) in &current_tiles {
+                            generate_mip_tile_from_mip(dataset.clone(), tile.to_owned(), dump_png)
+                                .expect("generate_mip_tile_from_mip");
+                            progress.write().poke();
+                        }
+                    }
+                    (false, Ordering::Equal) => {
                         current_tiles.par_chunks(1024).for_each(|chunk| {
                             for (tile, _) in chunk {
                                 generate_mip_tile_from_source(
@@ -635,14 +648,7 @@ fn main() -> Fallible<()> {
                             }
                         });
                     }
-                } else if target_level < dataset.read().source().read().root_level().offset() {
-                    if opt.serialize {
-                        for (tile, _) in &current_tiles {
-                            generate_mip_tile_from_mip(dataset.clone(), tile.to_owned(), dump_png)
-                                .expect("generate_mip_tile_from_mip");
-                            progress.write().poke();
-                        }
-                    } else {
+                    (false, Ordering::Less) => {
                         current_tiles.par_chunks(1024).for_each(|chunk| {
                             for (tile, _) in chunk {
                                 generate_mip_tile_from_mip(
@@ -655,6 +661,7 @@ fn main() -> Fallible<()> {
                             }
                         });
                     }
+                    (_, Ordering::Greater) => panic!("root level larger than current target level"),
                 }
                 progress.write().finish();
             } else {

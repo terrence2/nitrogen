@@ -97,7 +97,7 @@ impl DataSource for Index {
         self.compute_local_normal_at(grat)
     }
 
-    fn sample_color(&self, grat: &Graticule<GeoSurface>) -> Rgb<u8> {
+    fn sample_color(&self, _grat: &Graticule<GeoSurface>) -> Rgb<u8> {
         Rgb([0; 3])
     }
 }
@@ -299,6 +299,7 @@ impl Index {
     //       cases as well. Would be nice to prove though.
     // TODO: How much does latitude affect things? Should we just compute real coordinates from
     //       our graticule?
+    #[allow(unused)]
     pub fn compute_world_space_normal_at(&self, grat: &Graticule<GeoSurface>) -> [i16; 2] {
         // Compute 9 tap locations for computing our normal.
         let g_c = *grat;

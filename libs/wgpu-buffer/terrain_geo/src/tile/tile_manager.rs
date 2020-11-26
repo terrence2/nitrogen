@@ -185,8 +185,10 @@ impl TileManager {
             let index_json = json::parse(&index_data)?;
             tile_sets.push(TileSet::new(
                 atlas_tile_info_buffer_size,
-                &tile_set_bind_group_layout_sint,
-                &tile_set_bind_group_layout_float,
+                [
+                    &tile_set_bind_group_layout_sint,
+                    &tile_set_bind_group_layout_float,
+                ],
                 displace_height_bind_group_layout,
                 catalog,
                 index_json,

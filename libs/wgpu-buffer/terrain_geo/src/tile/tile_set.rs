@@ -156,8 +156,7 @@ pub(crate) struct TileSet {
 impl TileSet {
     pub(crate) fn new(
         atlas_tile_info_buffer_size: wgpu::BufferAddress,
-        tile_set_bind_group_layout_sint: &wgpu::BindGroupLayout,
-        tile_set_bind_group_layout_float: &wgpu::BindGroupLayout,
+        tile_set_bind_group_layouts: [&wgpu::BindGroupLayout; 2],
         displace_height_bind_group_layout: &wgpu::BindGroupLayout,
         catalog: &Catalog,
         index_json: json::JsonValue,
@@ -353,7 +352,7 @@ impl TileSet {
                             push_constant_ranges: &[],
                             bind_group_layouts: &[
                                 displace_height_bind_group_layout,
-                                tile_set_bind_group_layout_sint,
+                                tile_set_bind_group_layouts[0],
                             ],
                         },
                     )),
@@ -366,9 +365,9 @@ impl TileSet {
                 });
 
         let layout = if kind == DataSetDataKind::Color {
-            tile_set_bind_group_layout_float
+            tile_set_bind_group_layouts[1]
         } else {
-            tile_set_bind_group_layout_sint
+            tile_set_bind_group_layouts[0]
         };
         let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("terrain-geo-tile-bind-group"),
