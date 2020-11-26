@@ -66,7 +66,7 @@ main()
             flat_normal.y
         );
 
-        //vec4 color = texture(sampler2D(terrain_color_acc_texture, terrain_linear_sampler), v_tc);
+        vec3 ground_albedo = texture(sampler2D(terrain_color_acc_texture, terrain_linear_sampler), v_tc).xyz;
 
         vec2 latlon = texture(sampler2D(terrain_deferred_texture, terrain_linear_sampler), v_tc).xy;
         vec4 r_lon = quat_from_axis_angle(vec3(0, 1, 0), latlon.y);
@@ -90,7 +90,7 @@ main()
             sun_irradiance,
             sky_irradiance
         );
-        ground_radiance = vec3(atmosphere.ground_albedo) * (1.0 / PI) * (
+        ground_radiance = ground_albedo * (1.0 / PI) * (
             // Todo: properer shadow maps so we can get sun visibility
             sun_irradiance * get_sun_visibility(world_intersect_km, sun_direction) +
             sky_irradiance * get_sky_visibility(world_intersect_km)
