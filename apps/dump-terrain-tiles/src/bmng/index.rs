@@ -19,7 +19,7 @@ use geodesy::{GeoSurface, Graticule};
 use image::{open, EncodableLayout, ImageBuffer, Rgb};
 use memmap::{Mmap, MmapOptions};
 use parking_lot::RwLock;
-use std::{fs::File, io::Write, ops::Range, path::Path, sync::Arc};
+use std::{fs::File, io::Write, ops::RangeInclusive, path::Path, sync::Arc};
 use terrain_geo::tile::TerrainLevel;
 
 type MmapRgbImage = ImageBuffer<Rgb<u8>, Mmap>;
@@ -35,7 +35,7 @@ impl Index {
         let mut raw = Vec::new();
         for (_lon, lon_name) in "ABCD".chars().enumerate() {
             let mut inner = Vec::new();
-            for (_lat, lat_name) in "12".chars().enumerate() {
+            for (_lat, lat_name) in "21".chars().enumerate() {
                 let raw_filename = format!(
                     "world.topo.200405.3x21600x21600.{}{}.raw",
                     lon_name, lat_name
@@ -59,7 +59,7 @@ impl Index {
                     ImageBuffer::from_raw(Self::TILE_SIZE, Self::TILE_SIZE, raw_mmap).unwrap();
                 inner.push(buf);
             }
-            raw.push(inner.into());
+            raw.push(inner);
         }
         Ok(Arc::new(RwLock::new(Self { raw })))
     }
@@ -99,9 +99,9 @@ impl DataSource for Index {
         EXPECT_LAYER_COUNTS[layer]
     }
 
-    fn expect_present_tiles(&self, layer: usize) -> Range<usize> {
+    fn expect_present_tiles(&self, layer: usize) -> RangeInclusive<usize> {
         let a = self.expect_intersecting_tiles(layer);
-        a..a
+        a..=a
     }
 
     fn sample_nearest_height(&self, _grat: &Graticule<GeoSurface>) -> i16 {
@@ -122,12 +122,12 @@ impl DataSource for Index {
         let lon_px = ((grat.lon::<ArcSeconds>().f64() + 648_000f64) / 15f64).round();
         let lon_img = ((lon_px / 21_600f64).floor() as i64) % 4;
         let lat_img = ((lat_px / 21_600f64).floor() as i64) % 2;
-        // assert!(lon_img >= 0);
-        // assert!(lon_img <= 3);
-        // assert!(lat_img >= 0);
-        // assert!(lat_img <= 1);
-        let lon_off = lon_px as i64 % 21_600;
-        let lat_off = lat_px as i64 % 21_600;
+        debug_assert!(lon_img >= 0);
+        debug_assert!(lon_img <= 3);
+        debug_assert!(lat_img >= 0);
+        debug_assert!(lat_img <= 1);
+        let lon_off = lon_px as u32 % Self::TILE_SIZE;
+        let lat_off = Self::TILE_SIZE - (lat_px as u32 % Self::TILE_SIZE) - 1;
         *self.raw[lon_img as usize][lat_img as usize].get_pixel(lon_off as u32, lat_off as u32)
     }
 }

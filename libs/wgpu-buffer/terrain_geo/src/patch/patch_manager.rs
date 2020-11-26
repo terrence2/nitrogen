@@ -522,6 +522,10 @@ impl PatchManager {
             let mut g0 = Graticule::<GeoCenter>::from(cart0);
             let mut g1 = Graticule::<GeoCenter>::from(cart1);
             let mut g2 = Graticule::<GeoCenter>::from(cart2);
+            // FIXME: we're using a different coordinate system somewhere, but not sure where.
+            g0.longitude = -g0.longitude;
+            g1.longitude = -g1.longitude;
+            g2.longitude = -g2.longitude;
             Self::relap_for_seam(&mut g0.longitude, &mut g1.longitude, &mut g2.longitude);
 
             // Use the patch vertices to sample the tile tree, re-using the existing visibility and

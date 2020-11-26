@@ -27,7 +27,7 @@ use std::{
     collections::HashMap,
     fs::File,
     io::Read,
-    ops::Range,
+    ops::RangeInclusive,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -70,11 +70,23 @@ impl DataSource for Index {
         EXPECT_LAYER_COUNTS[layer]
     }
 
-    fn expect_present_tiles(&self, layer: usize) -> Range<usize> {
-        const EXPECT_LAYER_COUNTS: [usize; 13] = [
-            1, 4, 8, 12, 39, 124, 342, 1_048, 3_350, 11_607, 41_859, 157_455, 608_337,
+    fn expect_present_tiles(&self, layer: usize) -> RangeInclusive<usize> {
+        const EXPECT_LAYER_COUNTS: [RangeInclusive<usize>; 13] = [
+            1..=1,
+            4..=4,
+            8..=8,
+            12..=12,
+            39..=39,
+            124..=131,
+            342..=362,
+            1_048..=1_144,
+            3_350..=3_718,
+            11_607..=13_258,
+            41_859..=48_817,
+            157_455..=186_811,
+            608_337..=608_409,
         ];
-        EXPECT_LAYER_COUNTS[layer]..EXPECT_LAYER_COUNTS[layer]
+        EXPECT_LAYER_COUNTS[layer].clone()
     }
 
     fn sample_nearest_height(&self, grat: &Graticule<GeoSurface>) -> i16 {

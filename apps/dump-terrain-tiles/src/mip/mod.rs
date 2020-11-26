@@ -21,7 +21,7 @@ pub use tile::{NeighborIndex, Tile as MipTile};
 use absolute_unit::{Angle, ArcSeconds};
 use geodesy::{GeoCenter, GeoSurface, Graticule};
 use image::Rgb;
-use std::ops::Range;
+use std::ops::RangeInclusive;
 use terrain_geo::tile::TerrainLevel;
 
 #[derive(Copy, Clone, Debug)]
@@ -46,7 +46,7 @@ pub trait DataSource: Send + Sync {
 
     // Range of mip tiles that we expect to be present in this dataset after filtering out
     // empty tiles.
-    fn expect_present_tiles(&self, layer: usize) -> Range<usize>;
+    fn expect_present_tiles(&self, layer: usize) -> RangeInclusive<usize>;
 
     // Perform the relevant sampling operation. Datasets not supporting a particular operation
     // are expected to panic! if an inappropriate method is called on that dataset.

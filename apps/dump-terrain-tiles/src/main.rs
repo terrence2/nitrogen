@@ -270,7 +270,7 @@ fn collect_tiles_at_level(
     Ok(())
 }
 
-pub fn generate_mip_tile_from_srtm(
+pub fn generate_mip_tile_from_source(
     source: Arc<RwLock<dyn DataSource>>,
     index: Arc<RwLock<MipIndexDataSet>>,
     node: Arc<RwLock<MipTile>>,
@@ -603,7 +603,7 @@ fn main() -> Fallible<()> {
                 opt.serialize,
             )?;
             assert!(mmap_count <= expect_intersecting);
-            assert!(mmap_count <= expect_present.start);
+            assert!(mmap_count <= *expect_present.end());
             if !expect_present.contains(&mmap_count) {
                 let progress = Arc::new(RwLock::new(InlinePercentProgress::new(
                     "  Building tiles:",
@@ -612,7 +612,7 @@ fn main() -> Fallible<()> {
                 if target_level == dataset.read().source().read().root_level().offset() {
                     if opt.serialize {
                         for (tile, _) in &current_tiles {
-                            generate_mip_tile_from_srtm(
+                            generate_mip_tile_from_source(
                                 dataset.read().source(),
                                 dataset.clone(),
                                 tile.to_owned(),
@@ -624,7 +624,7 @@ fn main() -> Fallible<()> {
                     } else {
                         current_tiles.par_chunks(1024).for_each(|chunk| {
                             for (tile, _) in chunk {
-                                generate_mip_tile_from_srtm(
+                                generate_mip_tile_from_source(
                                     dataset.read().source(),
                                     dataset.clone(),
                                     tile.to_owned(),
