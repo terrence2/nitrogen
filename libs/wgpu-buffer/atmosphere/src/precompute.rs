@@ -17,13 +17,13 @@ use crate::{
     colorspace::{wavelength_to_srgb, MAX_LAMBDA, MIN_LAMBDA},
     earth_consts::{EarthParameters, RGB_LAMBDAS},
 };
-use failure::Fallible;
+use failure::{bail, Fallible};
 use futures::executor::block_on;
 use gpu::GPU;
 use image::{ImageBuffer, Luma, Rgb};
 use log::trace;
 use memmap::MmapOptions;
-use std::{fs, mem, num::NonZeroU64, slice, time::Instant};
+use std::{env, fs, mem, num::NonZeroU64, slice, time::Instant};
 
 const DUMP_TRANSMITTANCE: bool = false;
 const DUMP_DIRECT_IRRADIANCE: bool = false;
@@ -1751,25 +1751,26 @@ impl Precompute {
     }
 
     fn load_cache(&self, gpu: &mut GPU) -> Fallible<()> {
-        // let transmittance_buf_size =
-        //     u64::from(self.transmittance_extent.width * self.transmittance_extent.height * 16);
-        // let irradiance_buf_size =
-        //     u64::from(self.irradiance_extent.width * self.irradiance_extent.height * 16);
-        // let scattering_buf_size = u64::from(
-        //     self.scattering_extent.width
-        //         * self.scattering_extent.height
-        //         * self.scattering_extent.depth
-        //         * 16,
-        // );
+        let transmittance_path = format!("{}/solar_transmittance.wgpu.bin", CACHE_DIR);
+        let irradiance_path = format!("{}/solar_irradiance.wgpu.bin", CACHE_DIR);
+        let scattering_path = format!("{}/solar_scattering.wgpu.bin", CACHE_DIR);
+        let mie_scattering_path = format!("{}/solar_single_mie_scattering.wgpu.bin", CACHE_DIR);
 
-        let transmittance_fp =
-            fs::File::open(&format!("{}/solar_transmittance.wgpu.bin", CACHE_DIR))?;
-        let irradiance_fp = fs::File::open(&format!("{}/solar_irradiance.wgpu.bin", CACHE_DIR))?;
-        let scattering_fp = fs::File::open(&format!("{}/solar_scattering.wgpu.bin", CACHE_DIR))?;
-        let single_mie_scattering_fp = fs::File::open(format!(
-            "{}/solar_single_mie_scattering.wgpu.bin",
-            CACHE_DIR
-        ))?;
+        if let Ok(var) = env::var("NITROGEN_DROP_CACHE") {
+            if var == "1" {
+                println!("Dropping atmosphere cache...");
+                fs::remove_file(transmittance_path).ok();
+                fs::remove_file(irradiance_path).ok();
+                fs::remove_file(scattering_path).ok();
+                fs::remove_file(mie_scattering_path).ok();
+                bail!("dropped cache");
+            }
+        }
+
+        let transmittance_fp = fs::File::open(&transmittance_path)?;
+        let irradiance_fp = fs::File::open(&irradiance_path)?;
+        let scattering_fp = fs::File::open(&scattering_path)?;
+        let single_mie_scattering_fp = fs::File::open(&mie_scattering_path)?;
 
         let transmittance_map = unsafe { MmapOptions::new().map(&transmittance_fp) }?;
         let transmittance_buffer = gpu.push_buffer(
