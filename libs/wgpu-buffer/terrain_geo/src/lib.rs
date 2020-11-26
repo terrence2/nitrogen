@@ -161,6 +161,7 @@ pub struct TerrainGeoBuffer {
 
     accumulate_clear_pipeline: wgpu::ComputePipeline,
     accumulate_spherical_normals_pipeline: wgpu::ComputePipeline,
+    accumulate_spherical_colors_pipeline: wgpu::ComputePipeline,
 }
 
 #[commandable]
@@ -411,7 +412,7 @@ impl TerrainGeoBuffer {
         let accumulate_spherical_normals_pipeline =
             gpu.device()
                 .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                    label: Some("terrain_geo-accumulate-pipeline"),
+                    label: Some("terrain_geo-accumulate-spherical-normals-pipeline"),
                     layout: Some(&gpu.device().create_pipeline_layout(
                         &wgpu::PipelineLayoutDescriptor {
                             label: Some("terrain_geo-accumulate-pipeline-layout"),
@@ -419,13 +420,36 @@ impl TerrainGeoBuffer {
                             bind_group_layouts: &[
                                 globals_buffer.bind_group_layout(),
                                 &accumulate_common_bind_group_layout,
-                                tile_manager.tile_set_bind_group_layout(),
+                                tile_manager.tile_set_bind_group_layout_sint(),
                             ],
                         },
                     )),
                     compute_stage: wgpu::ProgrammableStageDescriptor {
                         module: &gpu.create_shader_module(include_bytes!(
                             "../target/accumulate_spherical_normals.comp.spirv"
+                        ))?,
+                        entry_point: "main",
+                    },
+                });
+
+        let accumulate_spherical_colors_pipeline =
+            gpu.device()
+                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some("terrain_geo-accumulate-spherical-colors-pipeline"),
+                    layout: Some(&gpu.device().create_pipeline_layout(
+                        &wgpu::PipelineLayoutDescriptor {
+                            label: Some("terrain_geo-accumulate-pipeline-layout"),
+                            push_constant_ranges: &[],
+                            bind_group_layouts: &[
+                                globals_buffer.bind_group_layout(),
+                                &accumulate_common_bind_group_layout,
+                                tile_manager.tile_set_bind_group_layout_float(),
+                            ],
+                        },
+                    )),
+                    compute_stage: wgpu::ProgrammableStageDescriptor {
+                        module: &gpu.create_shader_module(include_bytes!(
+                            "../target/accumulate_spherical_colors.comp.spirv"
                         ))?,
                         entry_point: "main",
                     },
@@ -471,6 +495,7 @@ impl TerrainGeoBuffer {
             sampler,
             accumulate_clear_pipeline,
             accumulate_spherical_normals_pipeline,
+            accumulate_spherical_colors_pipeline,
         })
     }
 
@@ -799,7 +824,6 @@ impl TerrainGeoBuffer {
         mut cpass: wgpu::ComputePass<'a>,
         globals_buffer: &'a GlobalParametersBuffer,
     ) -> Fallible<wgpu::ComputePass<'a>> {
-        // FIXME: clear accumulator buffers
         cpass.set_pipeline(&self.accumulate_clear_pipeline);
         cpass.set_bind_group(Group::Globals.index(), globals_buffer.bind_group(), &[]);
         cpass.set_bind_group(
@@ -820,6 +844,19 @@ impl TerrainGeoBuffer {
             cpass.set_bind_group(Group::TerrainTileSet.index(), bind_group, &[]);
             cpass.dispatch(self.acc_extent.width / 8, self.acc_extent.height / 8, 1);
         }
+
+        cpass.set_pipeline(&self.accumulate_spherical_colors_pipeline);
+        cpass.set_bind_group(Group::Globals.index(), globals_buffer.bind_group(), &[]);
+        for bind_group in self.tile_manager.spherical_color_bind_groups() {
+            cpass.set_bind_group(
+                Group::TerrainAcc.index(),
+                &self.accumulate_common_bind_group,
+                &[],
+            );
+            cpass.set_bind_group(Group::TerrainTileSet.index(), bind_group, &[]);
+            cpass.dispatch(self.acc_extent.width / 8, self.acc_extent.height / 8, 1);
+        }
+
         Ok(cpass)
     }
 

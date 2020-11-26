@@ -318,10 +318,9 @@ impl GPU {
         label: &'static str,
         data: &[T],
         target: Arc<Box<wgpu::Buffer>>,
-        usage: wgpu::BufferUsage,
         tracker: &mut UploadTracker,
     ) {
-        if let Some(source) = self.maybe_push_slice(label, data, usage) {
+        if let Some(source) = self.maybe_push_slice(label, data, wgpu::BufferUsage::COPY_SRC) {
             tracker.upload(source, target, mem::size_of::<T>() * data.len());
         }
     }

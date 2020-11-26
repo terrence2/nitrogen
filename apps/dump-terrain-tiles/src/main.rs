@@ -12,11 +12,13 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+mod bmng;
 mod mip;
 mod srtm;
 
 use crate::{
-    mip::{MipIndex, MipIndexDataSet, MipTile, NeighborIndex},
+    bmng::BmngIndex,
+    mip::{DataSource, MipIndex, MipIndexDataSet, MipTile, NeighborIndex},
     srtm::SrtmIndex,
 };
 use absolute_unit::{arcseconds, degrees, meters, radians, Angle, Radians};
@@ -26,6 +28,7 @@ use geodesy::{GeoSurface, Graticule};
 use parking_lot::{Mutex, RwLock};
 use rayon::prelude::*;
 use std::{
+    cmp::Ordering,
     fs,
     io::{stdout, Read, Write},
     path::{Path, PathBuf},
@@ -46,7 +49,11 @@ use terrain_geo::tile::{
 struct Opt {
     /// Slice srtm into tiles
     #[structopt(short, long)]
-    srtm_directory: PathBuf,
+    srtm_directory: Option<PathBuf>,
+
+    /// Slice bmng into tiles
+    #[structopt(short, long)]
+    bmng_directory: Option<PathBuf>,
 
     #[structopt(long)]
     serialize: bool,
@@ -198,20 +205,20 @@ fn nc(
 
 fn build_tree(
     current_level: usize,
-    srtm_index: Arc<RwLock<SrtmIndex>>,
+    source: Arc<RwLock<dyn DataSource>>,
     data_set: Arc<RwLock<MipIndexDataSet>>,
     tile_ref: Arc<RwLock<MipTile>>,
     node_count: &mut usize,
     leaf_count: &mut usize,
 ) -> Fallible<()> {
-    if current_level < SrtmIndex::max_resolution_level() {
+    if current_level < source.read().root_level().offset() {
         {
-            let srtm = srtm_index.read();
+            let src = source.read();
             let mut tile = tile_ref.write();
             let next_level = TerrainLevel::new(current_level + 1);
             for &child_index in &ChildIndex::all() {
                 if !tile.has_child(child_index)
-                    && srtm.contains_region(tile.child_region(child_index))
+                    && src.contains_region(&tile.child_region(child_index))
                 {
                     *node_count += 1;
                     tile.add_child(next_level, child_index);
@@ -222,7 +229,7 @@ fn build_tree(
             if let Some(child) = maybe_child {
                 build_tree(
                     current_level + 1,
-                    srtm_index.clone(),
+                    source.clone(),
                     data_set.clone(),
                     child.to_owned(),
                     node_count,
@@ -232,7 +239,7 @@ fn build_tree(
         }
         return Ok(());
     }
-    assert_eq!(current_level, TerrainLevel::arcsecond_level());
+    debug_assert_eq!(current_level, source.read().root_level().offset());
     *leaf_count += 1;
     Ok(())
 }
@@ -264,8 +271,8 @@ fn collect_tiles_at_level(
     Ok(())
 }
 
-pub fn generate_mip_tile_from_srtm(
-    srtm_index: Arc<RwLock<SrtmIndex>>,
+pub fn generate_mip_tile_from_source(
+    source: Arc<RwLock<dyn DataSource>>,
     index: Arc<RwLock<MipIndexDataSet>>,
     node: Arc<RwLock<MipTile>>,
     dump_png: bool,
@@ -284,7 +291,7 @@ pub fn generate_mip_tile_from_srtm(
     let kind = index.read().kind();
 
     let mut sum_height = 0;
-    let srtm = srtm_index.read();
+    let source = source.read();
     // println!("visit: level {} @ {}", level.offset(), base);
     for lat_i in -1..TILE_SAMPLES + 1 {
         // 'actual' unfolds infinitely
@@ -318,18 +325,23 @@ pub fn generate_mip_tile_from_srtm(
             // FIXME: compute base normals
             match kind {
                 DataSetDataKind::Height => {
-                    let height = srtm.sample_nearest(&srtm_grat);
+                    let height = source.sample_nearest_height(&srtm_grat);
                     sum_height += height as i32;
                     node.write()
                         .set_height_sample(lat_i as i32 + 1, lon_i as i32 + 1, height);
                 }
                 DataSetDataKind::Normal => {
-                    sum_height += srtm.sample_nearest(&srtm_grat) as i32;
-                    let normal = srtm.compute_local_normal_at(&srtm_grat);
+                    sum_height += source.sample_nearest_height(&srtm_grat) as i32;
+                    let normal = source.compute_local_normal(&srtm_grat);
                     node.write()
                         .set_normal_sample(lat_i as i32 + 1, lon_i as i32 + 1, normal);
                 }
-                _ => panic!("unsupported"),
+                DataSetDataKind::Color => {
+                    sum_height += 1;
+                    let color = source.sample_color(&srtm_grat);
+                    node.write()
+                        .set_color_sample(lat_i as i32 + 1, lon_i as i32 + 1, color);
+                }
             }
         }
     }
@@ -359,21 +371,24 @@ pub fn generate_mip_tile_from_mip(
 
     let kind = index.read().kind();
 
-    for lat_off in 0..TILE_PHYSICAL_SIZE {
+    for lat_off in 0i32..TILE_PHYSICAL_SIZE as i32 {
         // 'actual' unfolds infinitely
         // 'srtm' is clamped or wrapped as appropriate to srtm extents
-        for lon_off in 0..TILE_PHYSICAL_SIZE {
+        for lon_off in 0i32..TILE_PHYSICAL_SIZE as i32 {
             let mut tile = node.write();
             match kind {
                 DataSetDataKind::Height => {
-                    let height = tile.pull_height_sample(lat_off as i32, lon_off as i32);
+                    let height = tile.pull_height_sample(lat_off, lon_off);
                     tile.set_height_sample(lat_off as i32, lon_off as i32, height);
                 }
                 DataSetDataKind::Normal => {
-                    let normal = tile.pull_normal_sample(lat_off as i32, lon_off as i32);
-                    tile.set_normal_sample(lat_off as i32, lon_off as i32, normal);
+                    let normal = tile.pull_normal_sample(lat_off, lon_off);
+                    tile.set_normal_sample(lat_off, lon_off, normal);
                 }
-                _ => panic!("unsupported kind"),
+                DataSetDataKind::Color => {
+                    let color = tile.pull_color_sample(lat_off, lon_off);
+                    tile.set_color_sample(lat_off, lon_off, color);
+                }
             }
         }
     }
@@ -398,18 +413,27 @@ fn map_all_available_tile(
     kind: DataSetDataKind,
     tiles: &mut Vec<(Arc<RwLock<MipTile>>, usize)>,
     path: &Path,
+    serialize: bool,
 ) -> Fallible<usize> {
     let mmap_count = Arc::new(RwLock::new(0usize));
-    tiles
-        .par_chunks_mut(256)
-        .try_for_each::<_, Fallible<()>>(|chunk| {
-            for (tile, _offset) in chunk {
-                if tile.write().maybe_map_data(kind, path).expect("mmap file") {
-                    *mmap_count.write() += 1;
-                }
+    if serialize {
+        for (tile, _offset) in tiles {
+            if tile.write().maybe_map_data(kind, path).expect("mmap file") {
+                *mmap_count.write() += 1;
             }
-            Ok(())
-        })?;
+        }
+    } else {
+        tiles
+            .par_chunks_mut(256)
+            .try_for_each::<_, Fallible<()>>(|chunk| {
+                for (tile, _offset) in chunk {
+                    if tile.write().maybe_map_data(kind, path).expect("mmap file") {
+                        *mmap_count.write() += 1;
+                    }
+                }
+                Ok(())
+            })?;
+    }
     println!(
         "  Mmapped {} existing tiles in {:?}",
         mmap_count.read(),
@@ -426,6 +450,10 @@ fn write_layer_pack(
     force: bool,
     compression: TileCompression,
 ) -> Fallible<()> {
+    if tiles.is_empty() {
+        println!("  skipping write because pack is empty");
+        return Ok(());
+    }
     let layer_pack_path = dataset.read().base_path().join(&format!(
         "{}-L{:02}.mip",
         dataset.read().prefix(),
@@ -474,25 +502,6 @@ fn write_layer_pack(
     Ok(())
 }
 
-// Left hand side is the number of srtm-intersecting tiles. Right hand side is the number of
-// non-zero tiles we expect to find on disk after factoring out srtm data that is over water
-// or otherwise empty.
-const EXPECT_LAYER_COUNTS: [(usize, usize); 13] = [
-    (1, 1),
-    (4, 4),
-    (8, 8),
-    (12, 12),
-    (39, 39),
-    (131, 124),
-    (362, 342),
-    (1_144, 1_048),
-    (3_718, 3_350),
-    (13_258, 11_607),
-    (48_817, 41_859),
-    (186_811, 157_455),
-    (730_452, 608_337),
-];
-
 fn main() -> Fallible<()> {
     let opt = Opt::from_args();
     let compression = if let Some(comp) = opt.compression {
@@ -508,20 +517,33 @@ fn main() -> Fallible<()> {
 
     fs::create_dir_all(&opt.output_directory)?;
 
-    let srtm = SrtmIndex::from_directory(&opt.srtm_directory)?;
-    assert_eq!((-1..TILE_SAMPLES + 1).count(), TILE_PHYSICAL_SIZE);
-
     let mut mip_index = MipIndex::empty(&opt.output_directory);
-    mip_index.add_data_set(
-        "srtmh",
-        DataSetDataKind::Height,
-        DataSetCoordinates::Spherical,
-    )?;
-    mip_index.add_data_set(
-        "srtmn",
-        DataSetDataKind::Normal,
-        DataSetCoordinates::Spherical,
-    )?;
+
+    if let Some(directory) = opt.bmng_directory.as_ref() {
+        let bmng = BmngIndex::from_directory(directory)?;
+        mip_index.add_data_set(
+            "bmng",
+            DataSetDataKind::Color,
+            DataSetCoordinates::Spherical,
+            bmng,
+        )?;
+    }
+
+    if let Some(directory) = opt.srtm_directory.as_ref() {
+        let srtm = SrtmIndex::from_directory(directory)?;
+        mip_index.add_data_set(
+            "srtmh",
+            DataSetDataKind::Height,
+            DataSetCoordinates::Spherical,
+            srtm.clone(),
+        )?;
+        mip_index.add_data_set(
+            "srtmn",
+            DataSetDataKind::Normal,
+            DataSetCoordinates::Spherical,
+            srtm,
+        )?;
+    }
 
     for dataset in mip_index.data_sets(DataSetCoordinates::Spherical) {
         let start = Instant::now();
@@ -530,7 +552,7 @@ fn main() -> Fallible<()> {
         let mut leaf_count = 0usize;
         build_tree(
             0,
-            srtm.clone(),
+            dataset.read().source(),
             dataset.clone(),
             root.clone(),
             &mut node_count,
@@ -540,8 +562,8 @@ fn main() -> Fallible<()> {
         // Subdividing the 1 degree tiles results in 730,452 509" tiles. Some of these on the edges
         // are over water and thus have no height values. This reduces the count to 608,337 tiles
         // that will be mmapped as part of the base layer.
-        assert_eq!(node_count, 984_756);
-        assert_eq!(leaf_count, 730_452);
+        // assert_eq!(node_count, 984_756);
+        // assert_eq!(leaf_count, 730_452);
         println!(
             "Built {} tile tree with {} nodes in {:?}",
             dataset.read().prefix(),
@@ -554,31 +576,49 @@ fn main() -> Fallible<()> {
     for target_level in (0..=SrtmIndex::max_resolution_level()).rev() {
         for dataset in mip_index.data_sets(DataSetCoordinates::Spherical) {
             println!("{} Level {}:", dataset.read().prefix(), target_level);
+            let expect_intersecting = dataset
+                .read()
+                .source()
+                .read()
+                .expect_intersecting_tiles(target_level);
+            let expect_present = dataset
+                .read()
+                .source()
+                .read()
+                .expect_present_tiles(target_level);
             let mut current_tiles = Vec::new();
             let mut offset = 0;
             let root_tile = dataset.write().get_root_tile();
             collect_tiles_at_level(target_level, 0, root_tile, &mut offset, &mut current_tiles)?;
             println!(
-                "  Collected {} tiles to build at level {}",
+                "  Collected {} tiles to build at level {} [expect: {}]",
                 current_tiles.len(),
-                target_level
+                target_level,
+                expect_intersecting
             );
-            assert_eq!(current_tiles.len(), EXPECT_LAYER_COUNTS[target_level].0);
+            assert_eq!(current_tiles.len(), expect_intersecting);
             let mmap_count = map_all_available_tile(
                 dataset.read().kind(),
                 &mut current_tiles,
                 dataset.read().work_path(),
+                opt.serialize,
             )?;
-            if mmap_count < EXPECT_LAYER_COUNTS[target_level].1 {
+            assert!(mmap_count <= expect_intersecting);
+            assert!(mmap_count <= *expect_present.end());
+            if !expect_present.contains(&mmap_count) {
                 let progress = Arc::new(RwLock::new(InlinePercentProgress::new(
                     "  Building tiles:",
                     current_tiles.len(),
                 )));
-                if target_level == TerrainLevel::arcsecond_level() {
-                    if opt.serialize {
+
+                match (
+                    opt.serialize,
+                    target_level.cmp(&dataset.read().source().read().root_level().offset()),
+                ) {
+                    (true, Ordering::Equal) => {
                         for (tile, _) in &current_tiles {
-                            generate_mip_tile_from_srtm(
-                                srtm.clone(),
+                            generate_mip_tile_from_source(
+                                dataset.read().source(),
                                 dataset.clone(),
                                 tile.to_owned(),
                                 dump_png,
@@ -586,11 +626,19 @@ fn main() -> Fallible<()> {
                             .unwrap();
                             progress.write().poke();
                         }
-                    } else {
+                    }
+                    (true, Ordering::Less) => {
+                        for (tile, _) in &current_tiles {
+                            generate_mip_tile_from_mip(dataset.clone(), tile.to_owned(), dump_png)
+                                .expect("generate_mip_tile_from_mip");
+                            progress.write().poke();
+                        }
+                    }
+                    (false, Ordering::Equal) => {
                         current_tiles.par_chunks(1024).for_each(|chunk| {
                             for (tile, _) in chunk {
-                                generate_mip_tile_from_srtm(
-                                    srtm.clone(),
+                                generate_mip_tile_from_source(
+                                    dataset.read().source(),
                                     dataset.clone(),
                                     tile.to_owned(),
                                     dump_png,
@@ -600,14 +648,20 @@ fn main() -> Fallible<()> {
                             }
                         });
                     }
-                } else {
-                    current_tiles.par_chunks(1024).for_each(|chunk| {
-                        for (tile, _) in chunk {
-                            progress.write().poke();
-                            generate_mip_tile_from_mip(dataset.clone(), tile.to_owned(), dump_png)
+                    (false, Ordering::Less) => {
+                        current_tiles.par_chunks(1024).for_each(|chunk| {
+                            for (tile, _) in chunk {
+                                generate_mip_tile_from_mip(
+                                    dataset.clone(),
+                                    tile.to_owned(),
+                                    dump_png,
+                                )
                                 .expect("generate_mip_tile_from_mip");
-                        }
-                    });
+                                progress.write().poke();
+                            }
+                        });
+                    }
+                    (_, Ordering::Greater) => panic!("root level larger than current target level"),
                 }
                 progress.write().finish();
             } else {

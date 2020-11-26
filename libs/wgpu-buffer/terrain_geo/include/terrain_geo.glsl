@@ -78,7 +78,7 @@ terrain_geo_sample_in_tile(vec2 graticule_rad, TileInfo tile, itexture2DArray at
     vec2 graticule_deg = degrees(graticule_rad);
     vec2 graticule_as = graticule_deg * 60.0 * 60.0;
 
-    // Look up the height information in the tile.
+    // Look up the information in the tile.
     float tile_t = (graticule_as.x - tile.base_as[0]) / tile.angular_extent_as;
     float tile_s = (graticule_as.y - tile.base_as[1]) / tile.angular_extent_as;
     ivec4 atlas_texel = texture(
@@ -100,5 +100,25 @@ terrain_geo_height_in_tile(vec2 graticule_rad, TileInfo tile, itexture2DArray at
 ivec2
 terrain_geo_normal_in_tile(vec2 graticule_rad, TileInfo tile, itexture2DArray atlas_texture, sampler atlas_sampler) {
     return terrain_geo_sample_in_tile(graticule_rad, tile, atlas_texture, atlas_sampler).xy;
+}
+
+vec4
+terrain_geo_color_in_tile(vec2 graticule_rad, TileInfo tile, texture2DArray atlas_texture, sampler atlas_sampler) {
+    // Tile metadata is stored in arcseconds for maximum precision.
+    vec2 graticule_deg = degrees(graticule_rad);
+    vec2 graticule_as = graticule_deg * 60.0 * 60.0;
+
+    // Look up the information in the tile.
+    float tile_t = (graticule_as.x - tile.base_as[0]) / tile.angular_extent_as;
+    float tile_s = (graticule_as.y - tile.base_as[1]) / tile.angular_extent_as;
+    vec4 atlas_texel = texture(
+        sampler2DArray(atlas_texture, atlas_sampler),
+        vec3(
+            tile_s,
+            tile_t,
+            tile.atlas_slot
+        )
+    );
+    return atlas_texel;
 }
 ///////////////////////////////////////////////////////////////////////////////

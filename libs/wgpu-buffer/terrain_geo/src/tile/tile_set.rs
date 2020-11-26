@@ -12,6 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use crate::tile::TILE_PHYSICAL_SIZE;
 use crate::{
     tile::{
         index_paint_vertex::IndexPaintVertex,
@@ -155,7 +156,7 @@ pub(crate) struct TileSet {
 impl TileSet {
     pub(crate) fn new(
         atlas_tile_info_buffer_size: wgpu::BufferAddress,
-        tile_set_bind_group_layout: &wgpu::BindGroupLayout,
+        tile_set_bind_group_layouts: [&wgpu::BindGroupLayout; 2],
         displace_height_bind_group_layout: &wgpu::BindGroupLayout,
         catalog: &Catalog,
         index_json: json::JsonValue,
@@ -351,7 +352,7 @@ impl TileSet {
                             push_constant_ranges: &[],
                             bind_group_layouts: &[
                                 displace_height_bind_group_layout,
-                                tile_set_bind_group_layout,
+                                tile_set_bind_group_layouts[0],
                             ],
                         },
                     )),
@@ -363,9 +364,14 @@ impl TileSet {
                     },
                 });
 
+        let layout = if kind == DataSetDataKind::Color {
+            tile_set_bind_group_layouts[1]
+        } else {
+            tile_set_bind_group_layouts[0]
+        };
         let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("terrain-geo-tile-bind-group"),
-            layout: tile_set_bind_group_layout,
+            layout,
             entries: &[
                 // Index
                 wgpu::BindGroupEntry {
@@ -524,6 +530,7 @@ impl TileSet {
             let fid = self.tile_tree.file_id(&qtid);
             let compression = self.tile_tree.tile_compression(&qtid);
             let extent = self.tile_tree.file_extent(&qtid);
+            let closure_kind = self.kind;
             let closure_catalog = catalog.clone();
             let closer_sender = self.tile_sender.clone();
             async_rt.spawn(async move {
@@ -539,6 +546,19 @@ impl TileSet {
                             assert_eq!(decompressed.len(), raw_tile_size);
                             decompressed
                         }
+                    };
+                    // FIXME: encode this in the header
+                    let data = if closure_kind == DataSetDataKind::Color {
+                        // Re-encode from rgb to rgba
+                        let mut data2 = vec![255u8; TILE_PHYSICAL_SIZE * TILE_PHYSICAL_SIZE * 4];
+                        for (i, c) in data.chunks(3).enumerate() {
+                            for j in 0..3 {
+                                data2[i * 4 + j] = c[j];
+                            }
+                        }
+                        data2
+                    } else {
+                        data
                     };
                     closer_sender.send((qtid, data)).ok();
                 } else {
@@ -602,7 +622,6 @@ impl TileSet {
         let mut active_atlas_slots = 0;
         let mut max_active_level = 0;
         let mut tris = Vec::new();
-        // println!("START");
         for (qtid, tile_state) in self.tile_state.iter() {
             if let TileState::Active(slot) = tile_state {
                 active_atlas_slots += 1;
@@ -651,7 +670,8 @@ impl TileSet {
         );
 
         trace!(
-            "+:{} -:{} st:{} ed:{} out:{}, act:{}, d:{}",
+            "{:?} +:{} -:{} st:{} ed:{} out:{}, act:{}, d:{}",
+            self.kind,
             additions.len(),
             removals.len(),
             reads_started_count,

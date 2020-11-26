@@ -289,7 +289,6 @@ impl AtmosphereBuffer {
             "atmosphere-sun-upload-buffer",
             &buffer,
             self.sun_direction_buffer.clone(),
-            wgpu::BufferUsage::MAP_READ | wgpu::BufferUsage::COPY_SRC,
             tracker,
         );
         Ok(())

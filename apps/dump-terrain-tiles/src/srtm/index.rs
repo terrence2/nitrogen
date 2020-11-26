@@ -12,17 +12,22 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{mip::Region, srtm::tile::Tile};
+use crate::{
+    mip::{DataSource, Region},
+    srtm::tile::Tile,
+};
 use absolute_unit::{arcseconds, degrees, meters, ArcSeconds, Degrees, Meters};
 use approx::assert_relative_eq;
 use failure::Fallible;
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule};
+use image::Rgb;
 use nalgebra::{Vector2, Vector3};
 use parking_lot::RwLock;
 use std::{
     collections::HashMap,
     fs::File,
     io::Read,
+    ops::RangeInclusive,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -32,6 +37,69 @@ pub struct Index {
     tiles: Vec<Tile>,
     // by latitude, then longitude
     by_graticule: HashMap<i16, HashMap<i16, usize>>,
+}
+
+impl DataSource for Index {
+    /// Check if this tile-set has any tiles that overlap with the given region.
+    fn contains_region(&self, region: &Region) -> bool {
+        // Figure out what integer latitudes lie on or in the region.
+        let lo_lat = region.base.lat::<Degrees>().floor() as i16;
+        let hi_lat = degrees!(region.base.latitude + region.extent).floor() as i16;
+        let lo_lon = region.base.lon::<Degrees>().floor() as i16;
+        let hi_lon = degrees!(region.base.longitude + region.extent).floor() as i16;
+        for lat in lo_lat..=hi_lat {
+            if let Some(by_lon) = self.by_graticule.get(&lat) {
+                for lon in lo_lon..=hi_lon {
+                    if by_lon.get(&lon).is_some() {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    fn root_level(&self) -> TerrainLevel {
+        TerrainLevel::new(TerrainLevel::arcsecond_level())
+    }
+
+    fn expect_intersecting_tiles(&self, layer: usize) -> usize {
+        const EXPECT_LAYER_COUNTS: [usize; 13] = [
+            1, 4, 8, 12, 39, 131, 362, 1_144, 3_718, 13_258, 48_817, 186_811, 730_452,
+        ];
+        EXPECT_LAYER_COUNTS[layer]
+    }
+
+    fn expect_present_tiles(&self, layer: usize) -> RangeInclusive<usize> {
+        const EXPECT_LAYER_COUNTS: [RangeInclusive<usize>; 13] = [
+            1..=1,
+            4..=4,
+            8..=8,
+            12..=12,
+            39..=39,
+            124..=131,
+            342..=362,
+            1_048..=1_144,
+            3_350..=3_718,
+            11_607..=13_258,
+            41_859..=48_817,
+            157_455..=186_811,
+            608_337..=608_409,
+        ];
+        EXPECT_LAYER_COUNTS[layer].clone()
+    }
+
+    fn sample_nearest_height(&self, grat: &Graticule<GeoSurface>) -> i16 {
+        self.sample_nearest(grat)
+    }
+
+    fn compute_local_normal(&self, grat: &Graticule<GeoSurface>) -> [i16; 2] {
+        self.compute_local_normal_at(grat)
+    }
+
+    fn sample_color(&self, _grat: &Graticule<GeoSurface>) -> Rgb<u8> {
+        Rgb([0; 3])
+    }
 }
 
 impl Index {
@@ -72,25 +140,6 @@ impl Index {
         })))
     }
 
-    /// Check if this tile-set has any tiles that overlap with the given region.
-    pub fn contains_region(&self, region: Region) -> bool {
-        // Figure out what integer latitudes lie on or in the region.
-        let lo_lat = region.base.lat::<Degrees>().floor() as i16;
-        let hi_lat = degrees!(region.base.latitude + region.extent).floor() as i16;
-        let lo_lon = region.base.lon::<Degrees>().floor() as i16;
-        let hi_lon = degrees!(region.base.longitude + region.extent).floor() as i16;
-        for lat in lo_lat..=hi_lat {
-            if let Some(by_lon) = self.by_graticule.get(&lat) {
-                for lon in lo_lon..=hi_lon {
-                    if by_lon.get(&lon).is_some() {
-                        return true;
-                    }
-                }
-            }
-        }
-        false
-    }
-
     #[allow(unused)]
     pub fn sample_linear(&self, grat: &Graticule<GeoSurface>) -> f32 {
         let lat = Tile::index(grat.lat());
@@ -101,17 +150,6 @@ impl Index {
             }
         }
         0f32
-    }
-
-    pub fn sample_nearest(&self, grat: &Graticule<GeoSurface>) -> i16 {
-        let lat = Tile::index(grat.lat());
-        let lon = Tile::index(grat.lon());
-        if let Some(row) = self.by_graticule.get(&lat) {
-            if let Some(&tile_id) = row.get(&lon) {
-                return self.tiles[tile_id].sample_nearest(grat);
-            }
-        }
-        0
     }
 
     fn unit_offset(
@@ -243,6 +281,17 @@ impl Index {
         nn
     }
 
+    fn sample_nearest(&self, grat: &Graticule<GeoSurface>) -> i16 {
+        let lat = Tile::index(grat.lat());
+        let lon = Tile::index(grat.lon());
+        if let Some(row) = self.by_graticule.get(&lat) {
+            if let Some(&tile_id) = row.get(&lon) {
+                return self.tiles[tile_id].sample_nearest(grat);
+            }
+        }
+        0
+    }
+
     // Note that we compute the normal on the tangent plane.
     // TODO: How much "droop" is there over a single arcsecond? Is it enough that it could
     //       be an important factor in some cases? Or does flattening cancel out the potential
@@ -250,6 +299,7 @@ impl Index {
     //       cases as well. Would be nice to prove though.
     // TODO: How much does latitude affect things? Should we just compute real coordinates from
     //       our graticule?
+    #[allow(unused)]
     pub fn compute_world_space_normal_at(&self, grat: &Graticule<GeoSurface>) -> [i16; 2] {
         // Compute 9 tap locations for computing our normal.
         let g_c = *grat;

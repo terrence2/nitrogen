@@ -202,9 +202,10 @@ mod test {
     // X to the right
     // Y to the top
     // Z to the front
+    // Note: right-handed
     #[test]
     fn test_longitude() {
-        // Locked at latutude 0, does longitude vary correctly?
+        // Locked at latitude 0, does longitude vary correctly?
         // Longitude 0 -> point away from screen
         let g = Graticule::<GeoSurface>::new(degrees!(0), degrees!(0), meters!(0));
         let c = Cartesian::<GeoCenter, Kilometers>::from(Graticule::<GeoCenter>::from(g));
@@ -220,6 +221,22 @@ mod test {
         assert_abs_diff_eq!(c.coords[1], kilometers!(0));
         assert_abs_diff_eq!(c.coords[2], kilometers!(0));
 
+        // Longitude +45 (east); since up is north and forward is 0, we expect +45
+        // to map to a negative x position and positive z.
+        let g = Graticule::<GeoSurface>::new(degrees!(0), degrees!(45), meters!(0));
+        let c = Cartesian::<GeoCenter, Kilometers>::from(Graticule::<GeoCenter>::from(g));
+        assert!(c.coords[0] < kilometers!(0) && c.coords[0] > kilometers!(-EARTH_RADIUS_KM));
+        assert_abs_diff_eq!(c.coords[1], kilometers!(0));
+        assert!(c.coords[2] > kilometers!(0) && c.coords[2] < kilometers!(EARTH_RADIUS_KM));
+
+        // Longitude +135 (east); since up is north and forward is 0, we expect +45
+        // to map to a negative x position and positive z.
+        let g = Graticule::<GeoSurface>::new(degrees!(0), degrees!(135), meters!(0));
+        let c = Cartesian::<GeoCenter, Kilometers>::from(Graticule::<GeoCenter>::from(g));
+        assert!(c.coords[0] < kilometers!(0) && c.coords[0] > kilometers!(-EARTH_RADIUS_KM));
+        assert_abs_diff_eq!(c.coords[1], kilometers!(0));
+        assert!(c.coords[2] < kilometers!(0) && c.coords[2] > kilometers!(-EARTH_RADIUS_KM));
+
         // Longitude -90 (west); since up is north and forward is 0, we expect -90
         // to map to a positive x position.
         let g = Graticule::<GeoSurface>::new(degrees!(0), degrees!(-90), meters!(0));
@@ -227,6 +244,22 @@ mod test {
         assert_abs_diff_eq!(c.coords[0], kilometers!(EARTH_RADIUS_KM));
         assert_abs_diff_eq!(c.coords[1], kilometers!(0));
         assert_abs_diff_eq!(c.coords[2], kilometers!(0));
+
+        // Longitude -45 (west); since up is north and forward is 0, we expect -45
+        // to map to a positive x position and positive z.
+        let g = Graticule::<GeoSurface>::new(degrees!(0), degrees!(-45), meters!(0));
+        let c = Cartesian::<GeoCenter, Kilometers>::from(Graticule::<GeoCenter>::from(g));
+        assert!(c.coords[0] > kilometers!(0) && c.coords[0] < kilometers!(EARTH_RADIUS_KM));
+        assert_abs_diff_eq!(c.coords[1], kilometers!(0));
+        assert!(c.coords[2] > kilometers!(0) && c.coords[2] < kilometers!(EARTH_RADIUS_KM));
+
+        // Longitude -135 (west); since up is north and forward is 0, we expect -45
+        // to map to a positive x position and positive z.
+        let g = Graticule::<GeoSurface>::new(degrees!(0), degrees!(-135), meters!(0));
+        let c = Cartesian::<GeoCenter, Kilometers>::from(Graticule::<GeoCenter>::from(g));
+        assert!(c.coords[0] > kilometers!(0) && c.coords[0] < kilometers!(EARTH_RADIUS_KM));
+        assert_abs_diff_eq!(c.coords[1], kilometers!(0));
+        assert!(c.coords[2] < kilometers!(0) && c.coords[2] > kilometers!(-EARTH_RADIUS_KM));
 
         // Longitude -180 (west): opposite of 0
         let g = Graticule::<GeoSurface>::new(degrees!(0), degrees!(-180), meters!(0));

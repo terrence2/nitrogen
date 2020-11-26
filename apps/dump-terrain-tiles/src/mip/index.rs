@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::mip::tile::Tile;
+use crate::mip::{tile::Tile, DataSource};
 use absolute_unit::ArcSeconds;
 use failure::Fallible;
 use json::JsonValue;
@@ -53,6 +53,7 @@ impl Index {
         prefix: &'static str,
         kind: DataSetDataKind,
         coordinates: DataSetCoordinates,
+        source: Arc<RwLock<dyn DataSource>>,
     ) -> Fallible<Arc<RwLock<IndexDataSet>>> {
         let mut path = self.path.clone();
         path.push(prefix);
@@ -62,6 +63,7 @@ impl Index {
             &path,
             kind,
             coordinates,
+            source,
         )?));
         self.data_sets.insert(prefix.to_owned(), ds.clone());
         Ok(ds)
@@ -86,6 +88,7 @@ pub struct IndexDataSet {
     kind: DataSetDataKind,
     coordinates: DataSetCoordinates,
     root: Arc<RwLock<Tile>>,
+    source: Arc<RwLock<dyn DataSource>>,
 }
 
 impl IndexDataSet {
@@ -94,6 +97,7 @@ impl IndexDataSet {
         path: &Path,
         kind: DataSetDataKind,
         coordinates: DataSetCoordinates,
+        source: Arc<RwLock<dyn DataSource>>,
     ) -> Fallible<Self> {
         let mut work_dir = path.to_owned();
         work_dir.push("work");
@@ -116,6 +120,7 @@ impl IndexDataSet {
                 ),
                 TerrainLevel::base_angular_extent().round() as i32,
             ))),
+            source,
         })
     }
 
@@ -125,6 +130,10 @@ impl IndexDataSet {
 
     pub fn kind(&self) -> DataSetDataKind {
         self.kind
+    }
+
+    pub fn source(&self) -> Arc<RwLock<dyn DataSource>> {
+        self.source.clone()
     }
 
     pub fn prefix(&self) -> &str {
