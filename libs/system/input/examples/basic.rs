@@ -21,10 +21,10 @@ fn main() -> Fallible<()> {
     let system_bindings = Bindings::new("map")
         .bind("demo.exit", "Escape")?
         .bind("demo.exit", "q")?;
-    InputSystem::run_forever(vec![system_bindings], game_main)
+    InputSystem::run_forever(vec![system_bindings], window_main)
 }
 
-fn game_main(_window: Window, input_controller: &InputController) -> Fallible<()> {
+fn window_main(_window: Window, input_controller: &InputController) -> Fallible<()> {
     loop {
         for command in input_controller.poll()? {
             if command.command() == "exit" {

@@ -1871,11 +1871,15 @@ impl Precompute {
 mod test {
     use super::*;
     use std::time::Instant;
+    use winit::{event_loop::EventLoop, window::Window};
 
+    #[cfg(unix)]
     #[test]
     fn test_create() -> Fallible<()> {
-        let input = input::InputSystem::new(vec![])?;
-        let mut gpu = gpu::GPU::new(&input, Default::default())?;
+        use winit::platform::unix::EventLoopExtUnix;
+        let event_loop = EventLoop::<()>::new_any_thread();
+        let window = Window::new(&event_loop)?;
+        let mut gpu = gpu::GPU::new(&window, Default::default())?;
         let precompute_start = Instant::now();
         let (
             _atmosphere_params_buffer,

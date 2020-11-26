@@ -12,4 +12,3 @@ lazy_static = "^ 1"
 smallvec = "^ 0.6"
 unicase = "^ 2.4"
 winit = "^ 0.23"
-# winit = { git = "https://github.com/rust-windowing/winit", rev = "6f5e7e170cd7bd9be1bb302dd91ebd906d29cfe1" }

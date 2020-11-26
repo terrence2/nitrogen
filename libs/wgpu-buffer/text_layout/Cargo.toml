@@ -18,4 +18,4 @@ font_ttf = { path = "../../wgpu-buffer/font_ttf" }
 gpu = { path = "../../system/gpu" }
 
 [dev-dependencies]
-input = { path = "../../system/input" }
+winit = { version = "^ 0.23", features = ["web-sys"] }

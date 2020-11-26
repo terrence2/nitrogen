@@ -80,12 +80,15 @@ impl FullscreenBuffer {
 mod tests {
     use super::*;
     use gpu::GPU;
-    use input::InputSystem;
+    use winit::{event_loop::EventLoop, window::Window};
 
+    #[cfg(unix)]
     #[test]
     fn it_can_create_a_buffer() -> Fallible<()> {
-        let input = InputSystem::new(vec![])?;
-        let gpu = GPU::new(&input, Default::default())?;
+        use winit::platform::unix::EventLoopExtUnix;
+        let event_loop = EventLoop::<()>::new_any_thread();
+        let window = Window::new(&event_loop)?;
+        let gpu = GPU::new(&window, Default::default())?;
         let _fullscreen_buffer = FullscreenBuffer::new(&gpu)?;
         Ok(())
     }

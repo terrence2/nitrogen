@@ -70,7 +70,7 @@ impl InputController {
 pub struct InputSystem {}
 
 impl InputSystem {
-    pub fn run_forever<F>(bindings: Vec<Bindings>, mut game_loop: F) -> Fallible<()>
+    pub fn run_forever<F>(bindings: Vec<Bindings>, mut window_main: F) -> Fallible<()>
     where
         F: 'static + Send + FnMut(Window, &InputController) -> Fallible<()>,
     {
@@ -81,7 +81,7 @@ impl InputSystem {
 
         // Spawn the game thread.
         let _game_thread = thread::spawn(move || {
-            if let Err(e) = game_loop(window, &input_controller) {
+            if let Err(e) = window_main(window, &input_controller) {
                 println!("Error: {}", e);
             }
             input_controller.quit().ok();

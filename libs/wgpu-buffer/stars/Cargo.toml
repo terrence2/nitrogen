@@ -27,6 +27,7 @@ fullscreen = { path = "../../wgpu-buffer/fullscreen" }
 geodesy = { path = "../../sim/geodesy" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 input = { path = "../../system/input" }
+winit = { version = "^ 0.23", features = ["web-sys"] }
 
 [build-dependencies]
 build-shaders = { path = "../../wgpu-render/build-shaders" }

@@ -18,7 +18,7 @@ commandable = { path = "../../system/commandable" }
 gpu = { path = "../../system/gpu" }
 
 [dev-dependencies]
-input = { path = "../../system/input" }
+winit = { version = "^ 0.23", features = ["web-sys"] }
 
 [build-dependencies]
 build-shaders = { path = "../../wgpu-render/build-shaders" }
