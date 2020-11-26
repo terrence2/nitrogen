@@ -22,7 +22,6 @@ use futures::executor::block_on;
 use gpu::GPU;
 use image::{ImageBuffer, Luma, Rgb};
 use log::trace;
-use memmap::MmapOptions;
 use std::{env, fs, mem, num::NonZeroU64, slice, time::Instant};
 
 const DUMP_TRANSMITTANCE: bool = false;
@@ -1750,7 +1749,15 @@ impl Precompute {
         Ok(())
     }
 
+    #[cfg(target_arch = "wasm32")]
     fn load_cache(&self, gpu: &mut GPU) -> Fallible<()> {
+        bail!("TODO: no atmosphere cache on wasm32");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn load_cache(&self, gpu: &mut GPU) -> Fallible<()> {
+        use memmap::MmapOptions;
+
         let transmittance_path = format!("{}/solar_transmittance.wgpu.bin", CACHE_DIR);
         let irradiance_path = format!("{}/solar_irradiance.wgpu.bin", CACHE_DIR);
         let scattering_path = format!("{}/solar_scattering.wgpu.bin", CACHE_DIR);
