@@ -9,6 +9,7 @@ members = [
     "apps/dump-layer-pack",
     "apps/dump-terrain-tables",
     "apps/dump-terrain-tiles",
+    "apps/web-demo",
 
     "libs/sim/absolute_unit",
     "libs/sim/animate",

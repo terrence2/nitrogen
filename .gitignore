@@ -3,3 +3,5 @@ Cargo.lock
 /.idea
 .__nitrogen_cache__/
 __dump__/
+package-lock.json
+node_modules/
