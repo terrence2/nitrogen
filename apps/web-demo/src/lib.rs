@@ -16,20 +16,19 @@ use absolute_unit::{degrees, meters};
 use camera::ArcBallCamera;
 use command::Bindings;
 use failure::{bail, Fallible};
-use fullscreen::{FullscreenBuffer, FullscreenVertex};
+use fullscreen::FullscreenBuffer;
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
 use gpu::GPU;
 use input::{InputController, InputSystem};
 use legion::prelude::*;
-use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
+// use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::console;
-use winit::{
-    platform::web::WindowExtWebSys,
-    window::{Window, WindowBuilder},
-};
+#[cfg(target_arch = "wasm32")]
+use winit::platform::web::WindowExtWebSys;
+use winit::window::{Window, WindowBuilder};
 
 #[wasm_bindgen]
 pub fn wasm_main() {
@@ -44,6 +43,7 @@ async fn async_trampoline() {
     }
 }
 
+#[allow(unused)]
 struct AppContext {
     gpu: GPU,
     //async_rt: Runtime,
@@ -59,15 +59,19 @@ async fn async_main() -> Fallible<()> {
     let window = WindowBuilder::new()
         .with_title("Nitrogen")
         .build(&event_loop)?;
-    let canvas = window.canvas();
-    let js_window = web_sys::window().expect("the browser window");
-    let js_document = js_window.document().unwrap();
-    let js_body = js_document.body().unwrap();
-    js_body.append_child(&canvas).unwrap();
+
+    #[cfg(target_arch = "wasm32")]
+    {
+        let canvas = window.canvas();
+        let js_window = web_sys::window().expect("the browser window");
+        let js_document = js_window.document().unwrap();
+        let js_body = js_document.body().unwrap();
+        js_body.append_child(&canvas).unwrap();
+    }
 
     let gpu = GPU::new_async(&window, Default::default()).await?;
     //let mut async_rt = Runtime::new()?;
-    let mut legion = World::default();
+    let legion = World::default();
 
     let globals_buffer = GlobalParametersBuffer::new(gpu.device())?;
     let fullscreen_buffer = FullscreenBuffer::new(&gpu)?;
@@ -85,7 +89,7 @@ async fn async_main() -> Fallible<()> {
     ));
     arcball.set_distance(meters!(40.0));
 
-    let ctx = AppContext {
+    let _ctx = AppContext {
         gpu,
         //async_rt,
         legion,
@@ -94,13 +98,23 @@ async fn async_main() -> Fallible<()> {
         fullscreen_buffer,
     };
 
-    let system_bindings = Bindings::new("map")
+    let _system_bindings = Bindings::new("map")
         .bind("demo.bail", "b")?
         .bind("demo.panic", "p")?;
-    InputSystem::run_forever(vec![system_bindings], event_loop, window, window_loop, ctx).await?;
+
+    #[cfg(target_arch = "wasm32")]
+    InputSystem::run_forever(
+        vec![_system_bindings],
+        event_loop,
+        window,
+        window_loop,
+        _ctx,
+    )
+    .await?;
     Ok(())
 }
 
+#[allow(unused)]
 fn window_loop(
     window: &Window,
     input_controller: &InputController,
