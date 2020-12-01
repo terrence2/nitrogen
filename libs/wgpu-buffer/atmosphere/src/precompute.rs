@@ -22,7 +22,6 @@ use futures::executor::block_on;
 use gpu::GPU;
 use image::{ImageBuffer, Luma, Rgb};
 use log::trace;
-use memmap::MmapOptions;
 use std::{env, fs, mem, num::NonZeroU64, slice, time::Instant};
 
 const DUMP_TRANSMITTANCE: bool = false;
@@ -1750,7 +1749,15 @@ impl Precompute {
         Ok(())
     }
 
+    #[cfg(target_arch = "wasm32")]
     fn load_cache(&self, gpu: &mut GPU) -> Fallible<()> {
+        bail!("TODO: no atmosphere cache on wasm32");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn load_cache(&self, gpu: &mut GPU) -> Fallible<()> {
+        use memmap::MmapOptions;
+
         let transmittance_path = format!("{}/solar_transmittance.wgpu.bin", CACHE_DIR);
         let irradiance_path = format!("{}/solar_irradiance.wgpu.bin", CACHE_DIR);
         let scattering_path = format!("{}/solar_scattering.wgpu.bin", CACHE_DIR);
@@ -1864,11 +1871,15 @@ impl Precompute {
 mod test {
     use super::*;
     use std::time::Instant;
+    use winit::{event_loop::EventLoop, window::Window};
 
+    #[cfg(unix)]
     #[test]
     fn test_create() -> Fallible<()> {
-        let input = input::InputSystem::new(vec![])?;
-        let mut gpu = gpu::GPU::new(&input, Default::default())?;
+        use winit::platform::unix::EventLoopExtUnix;
+        let event_loop = EventLoop::<()>::new_any_thread();
+        let window = Window::new(&event_loop)?;
+        let mut gpu = gpu::GPU::new(&window, Default::default())?;
         let precompute_start = Instant::now();
         let (
             _atmosphere_params_buffer,

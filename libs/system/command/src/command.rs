@@ -16,7 +16,7 @@ use failure::{bail, ensure, Fallible};
 use smallvec::{smallvec, SmallVec};
 use std::{ops::Range, path::PathBuf};
 use winit::{
-    dpi::{LogicalPosition, LogicalSize},
+    dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize},
     event::DeviceId,
 };
 
@@ -58,15 +58,33 @@ impl From<f64> for CommandArg {
     }
 }
 
-impl From<LogicalSize> for CommandArg {
-    fn from(v: LogicalSize) -> Self {
+impl From<LogicalSize<f64>> for CommandArg {
+    fn from(v: LogicalSize<f64>) -> Self {
         CommandArg::Displacement((v.width, v.height))
     }
 }
 
-impl From<LogicalPosition> for CommandArg {
-    fn from(v: LogicalPosition) -> Self {
+impl From<PhysicalSize<u32>> for CommandArg {
+    fn from(v: PhysicalSize<u32>) -> Self {
+        CommandArg::Displacement((v.width as f64, v.height as f64))
+    }
+}
+
+impl From<LogicalPosition<f64>> for CommandArg {
+    fn from(v: LogicalPosition<f64>) -> Self {
         CommandArg::Displacement((v.x, v.y))
+    }
+}
+
+impl From<PhysicalPosition<f64>> for CommandArg {
+    fn from(v: PhysicalPosition<f64>) -> Self {
+        CommandArg::Displacement((v.x, v.y))
+    }
+}
+
+impl From<PhysicalPosition<i32>> for CommandArg {
+    fn from(v: PhysicalPosition<i32>) -> Self {
+        CommandArg::Displacement((v.x as f64, v.y as f64))
     }
 }
 

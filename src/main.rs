@@ -23,7 +23,7 @@ use fullscreen::FullscreenBuffer;
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
 use gpu::{make_frame_graph, UploadTracker, GPU};
-use input::InputSystem;
+use input::{InputController, InputSystem};
 use legion::prelude::*;
 use log::trace;
 use nalgebra::convert;
@@ -37,6 +37,7 @@ use terrain::TerrainRenderPass;
 use terrain_geo::{CpuDetailLevel, GpuDetailLevel, TerrainGeoBuffer};
 use text_layout::{TextAnchorH, TextAnchorV, TextLayoutBuffer, TextPositionH, TextPositionV};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
+use winit::window::Window;
 
 /// Show the contents of an MM file
 #[derive(Debug, StructOpt)]
@@ -84,6 +85,24 @@ make_frame_graph!(
 );
 
 fn main() -> Fallible<()> {
+    let system_bindings = Bindings::new("map")
+        .bind("terrain.toggle_wireframe", "w")?
+        .bind("terrain.toggle_debug_mode", "r")?
+        .bind("demo.+target_up", "Up")?
+        .bind("demo.+target_down", "Down")?
+        .bind("demo.exit", "Escape")?
+        .bind("demo.exit", "q")?;
+    InputSystem::run_forever(
+        vec![
+            Orrery::debug_bindings()?,
+            ArcBallCamera::default_bindings()?,
+            system_bindings,
+        ],
+        window_main,
+    )
+}
+
+fn window_main(window: Window, input_controller: &InputController) -> Fallible<()> {
     env_logger::init();
     let opt = Opt::from_args();
 
@@ -95,19 +114,7 @@ fn main() -> Fallible<()> {
         catalog.add_drawer(DirectoryDrawer::from_directory(100 + i as i64, d)?)?;
     }
 
-    let system_bindings = Bindings::new("map")
-        .bind("terrain.toggle_wireframe", "w")?
-        .bind("terrain.toggle_debug_mode", "r")?
-        .bind("demo.+target_up", "Up")?
-        .bind("demo.+target_down", "Down")?
-        .bind("demo.exit", "Escape")?
-        .bind("demo.exit", "q")?;
-    let mut input = InputSystem::new(vec![
-        Orrery::debug_bindings()?,
-        ArcBallCamera::default_bindings()?,
-        system_bindings,
-    ])?;
-    let mut gpu = GPU::new(&input, Default::default())?;
+    let mut gpu = GPU::new(&window, Default::default())?;
 
     let (cpu_detail, gpu_detail) = if cfg!(debug_assertions) {
         (CpuDetailLevel::Low, GpuDetailLevel::Low)
@@ -165,14 +172,13 @@ fn main() -> Fallible<()> {
         degrees!(89),
         degrees!(0),
         meters!(4_000_000),
-        // meters!(1_400_000),
     ))?;
 
     let mut target_vec = meters!(0f64);
     loop {
         let loop_start = Instant::now();
 
-        for command in input.poll()? {
+        for command in input_controller.poll()? {
             frame_graph.handle_command(&command);
             arcball.handle_command(&command)?;
             orrery.handle_command(&command)?;
@@ -184,7 +190,7 @@ fn main() -> Fallible<()> {
                 // system bindings
                 "window-close" | "window-destroy" | "exit" => return Ok(()),
                 "resize" => {
-                    gpu.note_resize(&input);
+                    gpu.note_resize(&window);
                     frame_graph.terrain_geo.note_resize(&gpu);
                     arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
                 }
@@ -222,7 +228,7 @@ fn main() -> Fallible<()> {
             .text_layout()
             .make_upload_buffer(&gpu, &mut tracker)?;
         if !frame_graph.run(&mut gpu, tracker)? {
-            gpu.note_resize(&input);
+            gpu.note_resize(&window);
             frame_graph.terrain_geo.note_resize(&gpu);
             arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
         }

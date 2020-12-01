@@ -184,9 +184,9 @@ mod test {
     use crate::{UploadTracker, GPU};
     use commandable::{commandable, Commandable};
     use failure::Fallible;
-    use input::InputSystem;
     use legion::prelude::*;
     use std::cell::RefCell;
+    use winit::{event_loop::EventLoop, window::Window};
 
     #[derive(Commandable)]
     pub struct TestBuffer {
@@ -325,9 +325,11 @@ mod test {
 
     #[test]
     fn test_basic() -> Fallible<()> {
+        use winit::platform::unix::EventLoopExtUnix;
+        let event_loop = EventLoop::<()>::new_any_thread();
+        let window = Window::new(&event_loop)?;
         let mut legion = World::default();
-        let input = InputSystem::new(vec![])?;
-        let mut gpu = GPU::new(&input, Default::default())?;
+        let mut gpu = GPU::new(&window, Default::default())?;
         let test_buffer = TestBuffer::new(&gpu);
         let mut frame_graph = FrameGraph::new(&mut legion, &mut gpu, test_buffer)?;
 

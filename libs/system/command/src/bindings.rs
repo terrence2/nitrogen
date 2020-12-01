@@ -19,6 +19,7 @@ use std::collections::{HashMap, HashSet};
 use winit::event::ElementState;
 
 // Map from key, buttons, and axes to commands.
+#[derive(Debug)]
 pub struct Bindings {
     pub name: String,
     press_chords: HashMap<Key, Vec<(KeySet, String)>>,

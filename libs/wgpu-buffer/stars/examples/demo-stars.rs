@@ -20,15 +20,22 @@ use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
 use gpu::GPU;
-use input::InputSystem;
+use input::{InputController, InputSystem};
 use stars::StarsBuffer;
+use winit::window::Window;
 
 fn main() -> Fallible<()> {
     let system_bindings = Bindings::new("system")
         .bind("demo.exit", "Escape")?
         .bind("demo.exit", "q")?;
-    let mut input = InputSystem::new(vec![ArcBallCamera::default_bindings()?, system_bindings])?;
-    let mut gpu = GPU::new(&input, Default::default())?;
+    InputSystem::run_forever(
+        vec![ArcBallCamera::default_bindings()?, system_bindings],
+        window_main,
+    )
+}
+
+fn window_main(window: Window, input_controller: &InputController) -> Fallible<()> {
+    let mut gpu = GPU::new(&window, Default::default())?;
 
     let globals_buffer = GlobalParametersBuffer::new(gpu.device())?;
     let fullscreen_buffer = FullscreenBuffer::new(&gpu)?;
@@ -122,12 +129,12 @@ fn main() -> Fallible<()> {
     arcball.set_distance(meters!(40.0));
 
     loop {
-        for command in input.poll()? {
+        for command in input_controller.poll()? {
             arcball.handle_command(&command)?;
             match command.command() {
                 "window-close" | "window-destroy" | "exit" => return Ok(()),
                 "window-resize" => {
-                    gpu.note_resize(&input);
+                    gpu.note_resize(&window);
                     arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
                 }
                 "window-cursor-move" => {}

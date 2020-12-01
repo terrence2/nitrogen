@@ -22,12 +22,14 @@ pub use wgpu;
 
 use failure::{bail, err_msg, Fallible};
 use futures::executor::block_on;
-use input::InputSystem;
 use log::{info, trace};
 use std::{fs, mem, path::PathBuf, sync::Arc};
 use tokio::runtime::Runtime;
 use wgpu::util::DeviceExt;
-use winit::dpi::PhysicalSize;
+use winit::{
+    dpi::{LogicalSize, PhysicalSize},
+    window::Window,
+};
 use zerocopy::{AsBytes, FromBytes};
 
 #[repr(C)]
@@ -59,7 +61,8 @@ pub struct GPU {
     depth_texture: wgpu::TextureView,
 
     config: GPUConfig,
-    size: PhysicalSize,
+    physical_size: PhysicalSize<u32>,
+    logical_size: LogicalSize<f64>,
 }
 
 impl GPU {
@@ -67,23 +70,27 @@ impl GPU {
     pub const SCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 
     pub fn aspect_ratio(&self) -> f64 {
-        self.size.height.floor() / self.size.width.floor()
+        self.logical_size.height.floor() / self.logical_size.width.floor()
     }
 
     pub fn aspect_ratio_f32(&self) -> f32 {
-        (self.size.height.floor() / self.size.width.floor()) as f32
+        (self.logical_size.height.floor() / self.logical_size.width.floor()) as f32
     }
 
-    pub fn physical_size(&self) -> PhysicalSize {
-        self.size
+    pub fn logical_size(&self) -> LogicalSize<f64> {
+        self.logical_size
     }
 
-    pub fn new(input: &InputSystem, config: GPUConfig) -> Fallible<Self> {
-        block_on(Self::new_async(input, config))
+    pub fn physical_size(&self) -> PhysicalSize<u32> {
+        self.physical_size
     }
 
-    pub async fn new_async(input: &InputSystem, config: GPUConfig) -> Fallible<Self> {
-        input.window().set_title("Nitrogen");
+    pub fn new(window: &Window, config: GPUConfig) -> Fallible<Self> {
+        block_on(Self::new_async(window, config))
+    }
+
+    pub async fn new_async(window: &Window, config: GPUConfig) -> Fallible<Self> {
+        window.set_title("Nitrogen");
         let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
 
         let adapter = instance
@@ -94,7 +101,7 @@ impl GPU {
             .await
             .ok_or_else(|| err_msg("no suitable graphics adapter"))?;
 
-        let surface = unsafe { instance.create_surface(input.window()) };
+        let surface = unsafe { instance.create_surface(window) };
 
         let trace_path = PathBuf::from("api_tracing.txt");
         let (device, queue) = adapter
@@ -109,15 +116,13 @@ impl GPU {
             )
             .await?;
 
-        let size = input
-            .window()
-            .inner_size()
-            .to_physical(input.window().hidpi_factor());
+        let physical_size = window.inner_size();
+        let logical_size = physical_size.to_logical::<f64>(window.scale_factor());
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
             format: Self::SCREEN_FORMAT,
-            width: size.width.floor() as u32,
-            height: size.height.floor() as u32,
+            width: physical_size.width,
+            height: physical_size.height,
             present_mode: config.present_mode,
         };
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
@@ -131,7 +136,8 @@ impl GPU {
             swap_chain,
             depth_texture,
             config,
-            size,
+            physical_size,
+            logical_size,
         })
     }
 
@@ -166,22 +172,20 @@ impl GPU {
 
     pub fn attachment_extent(&self) -> wgpu::Extent3d {
         wgpu::Extent3d {
-            width: self.size.width.floor() as u32,
-            height: self.size.height.floor() as u32,
+            width: self.physical_size.width,
+            height: self.physical_size.height,
             depth: 1,
         }
     }
 
-    pub fn note_resize(&mut self, input: &InputSystem) {
-        self.size = input
-            .window()
-            .inner_size()
-            .to_physical(input.window().hidpi_factor());
+    pub fn note_resize(&mut self, window: &Window) {
+        self.physical_size = window.inner_size();
+        self.logical_size = self.physical_size.to_logical(window.scale_factor());
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
             format: Self::SCREEN_FORMAT,
-            width: self.size.width.floor() as u32,
-            height: self.size.height.floor() as u32,
+            width: self.logical_size.width.floor() as u32,
+            height: self.logical_size.height.floor() as u32,
             present_mode: self.config.present_mode,
         };
         self.swap_chain = self.device.create_swap_chain(&self.surface, &sc_desc);
@@ -414,11 +418,15 @@ impl GPU {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use winit::event_loop::EventLoop;
 
+    #[cfg(unix)]
     #[test]
     fn test_create() -> Fallible<()> {
-        let input = InputSystem::new(vec![])?;
-        let _gpu = GPU::new(&input, Default::default())?;
+        use winit::platform::unix::EventLoopExtUnix;
+        let event_loop = EventLoop::<()>::new_any_thread();
+        let window = Window::new(&event_loop)?;
+        let _gpu = GPU::new(&window, Default::default())?;
         Ok(())
     }
 }

@@ -258,12 +258,15 @@ impl TextLayoutBuffer {
 #[cfg(test)]
 mod test {
     use super::*;
-    use input::InputSystem;
+    use winit::{event_loop::EventLoop, window::Window};
 
+    #[cfg(unix)]
     #[test]
     fn it_can_manage_text_layouts() -> Fallible<()> {
-        let input = InputSystem::new(vec![])?;
-        let mut gpu = GPU::new(&input, Default::default())?;
+        use winit::platform::unix::EventLoopExtUnix;
+        let event_loop = EventLoop::<()>::new_any_thread();
+        let window = Window::new(&event_loop)?;
+        let mut gpu = GPU::new(&window, Default::default())?;
 
         let mut layout_buffer = TextLayoutBuffer::new(&mut gpu)?;
 
