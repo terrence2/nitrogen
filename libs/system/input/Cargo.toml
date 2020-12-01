@@ -11,5 +11,11 @@ smallvec = "^ 0.6"
 winit = { version = "^ 0.23", features = ["web-sys"] }
 command = { path = "../../system/command" }
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# Note: need to match wgpu exactly
+wasm-bindgen = "^ 0.2"
+web-sys = "=0.3.39"
+futures = "^ 0.3"
+
 [dev-dependencies]
 approx = "^ 0.3"

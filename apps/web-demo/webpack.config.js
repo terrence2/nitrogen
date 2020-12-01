@@ -13,6 +13,7 @@ module.exports = {
         new HtmlWebpackPlugin(),
         new WasmPackPlugin({
             crateDirectory: path.resolve(__dirname, "."),
+            args: "--cfg=web_sys_unstable_apis"
         }),
         // Have this example work in Edge which doesn't ship `TextEncoder` or
         // `TextDecoder` at this time.

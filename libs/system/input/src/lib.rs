@@ -14,12 +14,10 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use command::{Bindings, Command, Key};
 use failure::{bail, Fallible};
-use log::warn;
 use smallvec::{smallvec, SmallVec};
 use std::{
     collections::HashMap,
     sync::mpsc::{channel, Receiver, TryRecvError},
-    thread,
 };
 use winit::{
     event::{
@@ -27,7 +25,7 @@ use winit::{
         WindowEvent,
     },
     event_loop::{ControlFlow, EventLoop, EventLoopProxy},
-    window::Window,
+    window::{Window, WindowBuilder},
 };
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -67,20 +65,85 @@ impl InputController {
     }
 }
 
-pub struct InputSystem {}
+#[derive(Debug)]
+pub struct InputSystem;
 
 impl InputSystem {
-    pub fn run_forever<F>(bindings: Vec<Bindings>, mut window_main: F) -> Fallible<()>
+    pub fn make_event_loop() -> EventLoop<MetaEvent> {
+        EventLoop::<MetaEvent>::with_user_event()
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub async fn run_forever<M, T>(
+        bindings: Vec<Bindings>,
+        event_loop: EventLoop<MetaEvent>,
+        window: Window,
+        mut window_loop: M,
+        mut ctx: T,
+    ) -> Fallible<()>
     where
-        F: 'static + Send + FnMut(Window, &InputController) -> Fallible<()>,
+        T: 'static + Send + Sync,
+        M: 'static + Send + FnMut(&Window, &InputController, &mut T) -> Fallible<()>,
+    {
+        use web_sys::console;
+
+        let (tx_command, rx_command) = channel();
+        let input_controller = InputController::new(event_loop.create_proxy(), rx_command);
+
+        // Hijack the main thread.
+        let mut button_state = HashMap::new();
+        event_loop.run(move |event, _target, control_flow| {
+            *control_flow = ControlFlow::Wait;
+            if event == Event::UserEvent(MetaEvent::Stop) {
+                *control_flow = ControlFlow::Exit;
+                return;
+            }
+            let commands = match event {
+                Event::WindowEvent { event, .. } => {
+                    console::log_1(&format!("window event: {:?}", event).into());
+                    Self::handle_window_event(event, &bindings, &mut button_state).unwrap()
+                }
+                Event::DeviceEvent { device_id, event } => {
+                    console::log_1(&format!("device event: {:?}", event).into());
+                    Self::handle_device_event(device_id, event, &bindings, &mut button_state)
+                        .unwrap()
+                }
+                Event::MainEventsCleared => {
+                    window_loop(&window, &input_controller, &mut ctx).unwrap();
+                    smallvec![]
+                }
+                Event::RedrawRequested(_window_id) => smallvec![],
+                Event::RedrawEventsCleared => smallvec![],
+                Event::NewEvents(StartCause::WaitCancelled { .. }) => smallvec![],
+                unhandled => {
+                    console::log_1(&format!("don't know how to handle: {:?}", unhandled).into());
+                    smallvec![]
+                }
+            };
+            for command in &commands {
+                if let Err(e) = tx_command.send(command.to_owned()) {
+                    console::log_1(&format!("Game loop hung up ({}), exiting...", e).into());
+                    *control_flow = ControlFlow::Exit;
+                    return;
+                }
+            }
+        });
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn run_forever<M>(bindings: Vec<Bindings>, mut window_main: M) -> Fallible<()>
+    where
+        M: 'static + Send + FnMut(Window, &InputController) -> Fallible<()>,
     {
         let event_loop = EventLoop::<MetaEvent>::with_user_event();
-        let window = Window::new(&event_loop).expect("unable to create window");
+        let window = WindowBuilder::new()
+            .with_title("Nitrogen")
+            .build(&event_loop)?;
         let (tx_command, rx_command) = channel();
         let input_controller = InputController::new(event_loop.create_proxy(), rx_command);
 
         // Spawn the game thread.
-        let _game_thread = thread::spawn(move || {
+        std::thread::spawn(move || {
             if let Err(e) = window_main(window, &input_controller) {
                 println!("Error: {}", e);
             }
@@ -97,7 +160,11 @@ impl InputSystem {
             }
             let commands = Self::handle_event(event, &bindings, &mut button_state).unwrap();
             for command in &commands {
-                tx_command.send(command.to_owned()).expect("send okay");
+                if let Err(e) = tx_command.send(command.to_owned()) {
+                    println!("Game loop hung up ({}), exiting...", e);
+                    *control_flow = ControlFlow::Exit;
+                    return;
+                }
             }
         });
     }
@@ -112,28 +179,35 @@ impl InputSystem {
     }
      */
 
+    #[cfg(not(target_arch = "wasm32"))]
     fn handle_event(
         e: Event<MetaEvent>,
-        binding_list: &[Bindings],
+        bindings: &[Bindings],
         button_state: &mut HashMap<Key, ElementState>,
     ) -> Fallible<SmallVec<[Command; 8]>> {
         Ok(match e {
-            Event::WindowEvent { event, .. } => Self::handle_window_event(event)?,
+            Event::WindowEvent { event, .. } => {
+                Self::handle_window_event(event, bindings, button_state)?
+            }
             Event::DeviceEvent { device_id, event } => {
-                Self::handle_device_event(device_id, event, binding_list, button_state)?
+                Self::handle_device_event(device_id, event, bindings, button_state)?
             }
             Event::MainEventsCleared => smallvec![],
             Event::RedrawRequested(_window_id) => smallvec![],
             Event::RedrawEventsCleared => smallvec![],
             Event::NewEvents(StartCause::WaitCancelled { .. }) => smallvec![],
             unhandled => {
-                warn!("don't know how to handle: {:?}", unhandled);
+                log::warn!("don't know how to handle: {:?}", unhandled);
                 smallvec![]
             }
         })
     }
 
-    fn handle_window_event(event: WindowEvent) -> Fallible<SmallVec<[Command; 8]>> {
+    fn handle_window_event(
+        event: WindowEvent,
+        _bindings: &[Bindings],
+        _button_state: &mut HashMap<Key, ElementState>,
+    ) -> Fallible<SmallVec<[Command; 8]>> {
         Ok(match event {
             // System Stuff
             WindowEvent::Resized(s) => {
@@ -171,9 +245,48 @@ impl InputSystem {
                 smallvec![Command::parse("window.cursor-move")?.with_arg(position.into())]
             }
 
-            // Ignore events duplicated by device capture.
+            // We need to capture keyboard input both here and below because of web.
+            WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        virtual_keycode: Some(_code),
+                        scancode: _scancode,
+                        state: _state,
+                        ..
+                    },
+                ..
+            } => {
+                // Web backends deliver only KeyboardInput events
+                #[cfg(target_arch = "wasm32")]
+                {
+                    _button_state.insert(Key::Physical(_scancode), _state);
+                    _button_state.insert(Key::Virtual(_code), _state);
+                    Self::match_key(Key::Virtual(_code), _state, _button_state, _bindings)?
+                }
+                #[cfg(not(target_arch = "wasm32"))]
+                smallvec![]
+            }
+
+            WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        virtual_keycode: None,
+                        scancode: _scancode,
+                        state: _state,
+                        ..
+                    },
+                ..
+            } => {
+                // Web backends deliver only KeyboardInput events
+                #[cfg(target_arch = "wasm32")]
+                {
+                    _button_state.insert(Key::Physical(_scancode), _state);
+                }
+                smallvec![]
+            }
+
+            // Ignore events duplicated by other capture methods.
             WindowEvent::ReceivedCharacter { .. } => smallvec![],
-            WindowEvent::KeyboardInput { .. } => smallvec![],
             WindowEvent::MouseInput { .. } => smallvec![],
             WindowEvent::MouseWheel { .. } => smallvec![],
 
@@ -191,7 +304,7 @@ impl InputSystem {
     fn handle_device_event(
         device_id: DeviceId,
         event: DeviceEvent,
-        binding_list: &[Bindings],
+        bindings: &[Bindings],
         button_state: &mut HashMap<Key, ElementState>,
     ) -> Fallible<SmallVec<[Command; 8]>> {
         Ok(match event {
@@ -219,7 +332,7 @@ impl InputSystem {
             // Mouse Button
             DeviceEvent::Button { button, state } => {
                 button_state.insert(Key::MouseButton(button), state);
-                Self::match_key(Key::MouseButton(button), state, button_state, binding_list)?
+                Self::match_key(Key::MouseButton(button), state, button_state, bindings)?
             }
 
             // Match virtual keycodes.
@@ -231,7 +344,7 @@ impl InputSystem {
             }) => {
                 button_state.insert(Key::Physical(scancode), state);
                 button_state.insert(Key::Virtual(code), state);
-                Self::match_key(Key::Virtual(code), state, button_state, binding_list)?
+                Self::match_key(Key::Virtual(code), state, button_state, bindings)?
             }
 
             // Match scancodes.
