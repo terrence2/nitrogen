@@ -586,12 +586,7 @@ fn make_triangle_strip(
         }
 
         // Top row
-        for (i, tri) in binned[&bin_a]
-            .iter()
-            .enumerate()
-            .skip(1)
-            .take(binned[&bin_a].len() - 2)
-        {
+        for tri in binned[&bin_a].iter().skip(1).take(binned[&bin_a].len() - 2) {
             indices.push(tri.rightmost_index());
         }
 
@@ -603,12 +598,7 @@ fn make_triangle_strip(
         indices.push(tri_b.i[2]);
 
         // Bottom row
-        for (i, tri) in binned[&bin_b]
-            .iter()
-            .enumerate()
-            .skip(1)
-            .take(binned[&bin_b].len() - 3)
-        {
+        for tri in binned[&bin_b].iter().skip(1).take(binned[&bin_b].len() - 3) {
             indices.push(tri.rightmost_index());
         }
 
