@@ -184,8 +184,8 @@ impl GPU {
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
             format: Self::SCREEN_FORMAT,
-            width: self.logical_size.width.floor() as u32,
-            height: self.logical_size.height.floor() as u32,
+            width: self.physical_size.width,
+            height: self.physical_size.height,
             present_mode: self.config.present_mode,
         };
         self.swap_chain = self.device.create_swap_chain(&self.surface, &sc_desc);

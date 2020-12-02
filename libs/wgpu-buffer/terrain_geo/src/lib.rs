@@ -220,7 +220,7 @@ impl TerrainGeoBuffer {
                         entry_point: "main",
                     }),
                     rasterization_state: Some(wgpu::RasterizationStateDescriptor {
-                        front_face: wgpu::FrontFace::Cw,
+                        front_face: wgpu::FrontFace::Ccw,
                         cull_mode: wgpu::CullMode::Back,
                         depth_bias: 0,
                         depth_bias_slope_scale: 0.0,
