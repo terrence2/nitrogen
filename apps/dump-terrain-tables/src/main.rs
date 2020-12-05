@@ -483,7 +483,7 @@ fn make_line_list(
 fn make_triangle_strip(
     bins: &[(i64, i64)],
     binned: &HashMap<(i64, i64), Vec<Triangle>>,
-    _winding: PatchWinding,
+    winding: PatchWinding,
 ) -> Vec<u32> {
     let mut indices = Vec::new();
 
@@ -508,87 +508,123 @@ fn make_triangle_strip(
         let tri2 = binned[&bins[1]].last().unwrap();
 
         // Full top.
-        if true {
-            // winding.has_side0() && winding.has_side2() {
+        if winding.has_side0() && winding.has_side2() {
             // t0
             indices.push(tri0.i[0]);
             indices.push(tri0.i[1]);
             indices.push(tri0.i[2]);
-            // degenerate transition to row 1
-            indices.push(tri0.i[2]);
-            indices.push(tri0.i[2]);
-            indices.push(tri0.i[1]);
-            indices.push(tri0.i[1]);
-            // Tri1-3
-            indices.push(tri1.i[1]);
+            // Tri2
             indices.push(tri1.i[2]);
+            // Tri3
+            indices.push(tri2.i[2]);
+            // Degenerate to Tri1
+            indices.push(tri2.i[2]);
             indices.push(tri1.i[0]);
-            indices.push(tri2.i[0]);
-            indices.push(tri2.i[2]);
-            // Start of degenerate tri for next row.
-            indices.push(tri2.i[2]);
-            indices.push(tri2.i[2]);
-        }
-    }
-
-    /*
-    // Handle the top point.
-    {
-        let tri0 = binned[&bins[0]].first().unwrap();
-        let tri1 = binned[&bins[1]].first().unwrap();
-        let tri2 = binned[&bins[1]].last().unwrap();
-        if winding.has_side0() && winding.has_side2() {
-            put_line_list_tri(tri0, &mut indices);
-            put_line_list_tri(tri1, &mut indices);
-            put_line_list_tri(tri2, &mut indices);
+            // Tri 1
+            indices.push(tri1.i[0]);
+            indices.push(tri1.i[2]);
+            indices.push(tri1.i[1]);
+            // Degenerate in prep for next row
+            indices.push(tri1.i[1]);
         } else if winding.has_side0() && !winding.has_side2() {
-            indices.push(tri0.i[0]);
             indices.push(tri2.i[2]);
-            indices.push(tri2.i[2]);
-            indices.push(tri2.i[1]);
-            indices.push(tri2.i[1]);
             indices.push(tri0.i[0]);
-            put_line_list_tri(tri1, &mut indices);
-            indices.push(tri0.i[0]);
+            indices.push(tri1.i[2]);
             indices.push(tri1.i[0]);
+            indices.push(tri1.i[1]);
         } else if !winding.has_side0() && winding.has_side2() {
-            indices.push(tri0.i[0]);
-            indices.push(tri1.i[1]);
-            indices.push(tri1.i[1]);
-            indices.push(tri1.i[2]);
-            indices.push(tri1.i[2]);
-            indices.push(tri0.i[0]);
-            put_line_list_tri(tri2, &mut indices);
-            indices.push(tri0.i[0]);
+            indices.push(tri2.i[2]);
             indices.push(tri2.i[0]);
+            indices.push(tri2.i[1]);
+            indices.push(tri0.i[0]);
+            indices.push(tri1.i[1]);
         } else {
-            indices.push(tri0.i[0]);
-            indices.push(tri1.i[1]);
-            indices.push(tri1.i[1]);
             indices.push(tri2.i[2]);
-            indices.push(tri2.i[2]);
-            indices.push(tri0.i[0]);
             indices.push(tri0.i[0]);
             indices.push(tri1.i[2]);
+            indices.push(tri1.i[1]);
+            // Degenerate in prep for next row
+            indices.push(tri1.i[1]);
         }
     }
-     */
 
-    // FIXME: account for winding
-    for (i, bin) in bins.iter().enumerate() {
-        // Start off each row with the left two verts after resetting.
-        let fst = binned[bin].first().unwrap();
-        let last = binned[bin].last().unwrap();
-        indices.push(fst.i[1]);
-        if i != 0 {
-            indices.push(fst.i[1]);
+    for pairs in bins.chunks(2).skip(1) {
+        let bin_a = pairs[0];
+        let bin_b = pairs[1];
+
+        let tri_a = binned[&bin_a].first().unwrap();
+        let tri_b = binned[&bin_b].first().unwrap();
+        let tri_c = binned[&bin_a].last().unwrap();
+        let tri_d = binned[&bin_b].last().unwrap();
+
+        if winding.has_side0() {
+            // Degenerate into place.
+            indices.push(tri_a.i[0]);
+            indices.push(tri_b.i[1]);
+            indices.push(tri_b.i[1]);
+            // Bottom up winding
+            indices.push(tri_b.i[1]);
+            indices.push(tri_b.i[2]);
+            indices.push(tri_a.i[1]);
+            indices.push(tri_a.i[2]);
+            indices.push(tri_a.i[0]);
+            // degenerate
+            indices.push(tri_a.i[2]);
+        } else {
+            // Degenerate into place.
+            indices.push(tri_a.i[0]);
+            indices.push(tri_b.i[2]);
+            indices.push(tri_b.i[2]);
+            // Bottom up merging
+            indices.push(tri_b.i[2]);
+            indices.push(tri_a.i[2]);
+            indices.push(tri_b.i[1]);
+            indices.push(tri_a.i[0]);
+            // degenerate
+            indices.push(tri_a.i[0]);
+            indices.push(tri_a.i[2]);
         }
-        indices.push(fst.i[0]);
-        for tri in &binned[bin] {
+
+        // Top row
+        for tri in binned[&bin_a].iter().skip(1).take(binned[&bin_a].len() - 2) {
             indices.push(tri.rightmost_index());
         }
-        indices.push(last.i[2]);
-        indices.push(last.i[2]);
+
+        // Degenerate to start of next row
+        indices.push(tri_c.i[1]);
+        indices.push(tri_c.i[1]);
+        indices.push(tri_b.i[0]);
+        indices.push(tri_b.i[0]);
+        indices.push(tri_b.i[2]);
+
+        // Bottom row
+        for tri in binned[&bin_b].iter().skip(1).take(binned[&bin_b].len() - 3) {
+            indices.push(tri.rightmost_index());
+        }
+
+        // Right hand side
+        if winding.has_side2() {
+            // finish bottom row
+            indices.push(tri_c.i[2]);
+            indices.push(tri_d.i[2]);
+            // degenerate to top row
+            indices.push(tri_d.i[2]);
+            // Finish top row
+            indices.push(tri_c.i[2]);
+            indices.push(tri_c.i[1]);
+            indices.push(tri_c.i[0]);
+            // Degenerate dangling end
+            indices.push(tri_c.i[0]);
+        } else {
+            indices.push(tri_c.i[0]);
+            indices.push(tri_d.i[2]);
+            // Degenerate dangling end
+            indices.push(tri_d.i[2]);
+        }
+
+        // Degenerate to start of next row
+        indices.push(tri_b.i[1]);
+        indices.push(tri_b.i[1]);
     }
 
     indices

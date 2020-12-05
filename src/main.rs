@@ -90,6 +90,7 @@ fn main() -> Fallible<()> {
         .bind("terrain.toggle_debug_mode", "r")?
         .bind("demo.+target_up", "Up")?
         .bind("demo.+target_down", "Down")?
+        .bind("demo.pin_view", "p")?
         .bind("demo.exit", "Escape")?
         .bind("demo.exit", "q")?;
     InputSystem::run_forever(
@@ -163,17 +164,21 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     */
 
     let mut arcball = ArcBallCamera::new(gpu.aspect_ratio(), meters!(0.5));
+
+    // everest: 27.9880704,86.9245623
     arcball.set_target(Graticule::<GeoSurface>::new(
-        degrees!(-15.1618),
-        degrees!(-13.1950),
-        meters!(2),
+        degrees!(27.9880704),
+        degrees!(-86.9245623), // FIXME: wat?
+        meters!(8000.),
     ));
     arcball.set_eye_relative(Graticule::<Target>::new(
-        degrees!(89),
-        degrees!(0),
-        meters!(4_000_000),
+        degrees!(58),
+        degrees!(668.0),
+        meters!(1308.7262),
     ))?;
 
+    let mut is_camera_pinned = false;
+    let mut camera_double = arcball.camera().to_owned();
     let mut target_vec = meters!(0f64);
     loop {
         let loop_start = Instant::now();
@@ -187,6 +192,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                 "-target_up" => target_vec = meters!(0),
                 "+target_down" => target_vec = meters!(-1),
                 "-target_down" => target_vec = meters!(0),
+                "pin_view" => is_camera_pinned = !is_camera_pinned,
                 // system bindings
                 "window-close" | "window-destroy" | "exit" => return Ok(()),
                 "resize" => {
@@ -207,6 +213,9 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         arcball.set_target(g);
 
         arcball.think();
+        if !is_camera_pinned {
+            camera_double = arcball.camera().to_owned();
+        }
 
         let mut tracker = Default::default();
         frame_graph
@@ -219,6 +228,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         )?;
         frame_graph.terrain_geo().make_upload_buffer(
             arcball.camera(),
+            &camera_double,
             catalog.clone(),
             &mut async_rt,
             &mut gpu,
@@ -235,8 +245,9 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
 
         let frame_time = loop_start.elapsed();
         let ts = format!(
-            "eye_rel: {} | asl: {}, fov: {} || Date: {:?} || frame: {}.{}ms",
+            "eye_rel: {} | tgt: {} | asl: {}, fov: {} || Date: {:?} || frame: {}.{}ms",
             arcball.get_eye_relative(),
+            arcball.get_target(),
             g.distance,
             degrees!(arcball.camera().fov_y()),
             orrery.get_time(),

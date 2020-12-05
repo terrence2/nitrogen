@@ -479,6 +479,7 @@ impl PatchManager {
     pub fn make_upload_buffer(
         &mut self,
         camera: &Camera,
+        optimize_camera: &Camera,
         gpu: &mut GPU,
         tracker: &mut UploadTracker,
         visible_regions: &mut Vec<VisiblePatch>,
@@ -486,7 +487,7 @@ impl PatchManager {
         // Select optimal live patches from our coherent patch tree.
         self.live_patches.clear();
         self.patch_tree
-            .optimize_for_view(camera, &mut self.live_patches);
+            .optimize_for_view(optimize_camera, &mut self.live_patches);
         assert!(self.live_patches.len() <= self.desired_patch_count);
 
         // Build CPU vertices for upload. Make sure to track visibility for our tile loader.
@@ -501,6 +502,7 @@ impl PatchManager {
 
             // Points in geocenter KM f64 for precision reasons.
             let [pw0, pw1, pw2] = patch.points();
+            //let foo = self.patch_tree.
 
             // Move normals into view space, still in KM f64.
             let nv0 = view.to_homogeneous() * pw0.coords.normalize().to_homogeneous();

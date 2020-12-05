@@ -220,7 +220,7 @@ impl TerrainGeoBuffer {
                         entry_point: "main",
                     }),
                     rasterization_state: Some(wgpu::RasterizationStateDescriptor {
-                        front_face: wgpu::FrontFace::Cw,
+                        front_face: wgpu::FrontFace::Ccw,
                         cull_mode: wgpu::CullMode::Back,
                         depth_bias: 0,
                         depth_bias_slope_scale: 0.0,
@@ -727,6 +727,7 @@ impl TerrainGeoBuffer {
     pub fn make_upload_buffer(
         &mut self,
         camera: &Camera,
+        optimize_camera: &Camera,
         catalog: Arc<AsyncRwLock<Catalog>>,
         async_rt: &mut Runtime,
         gpu: &mut GPU,
@@ -734,8 +735,13 @@ impl TerrainGeoBuffer {
     ) -> Fallible<()> {
         // Upload patches and capture visibility regions.
         self.visible_regions.clear();
-        self.patch_manager
-            .make_upload_buffer(camera, gpu, tracker, &mut self.visible_regions)?;
+        self.patch_manager.make_upload_buffer(
+            camera,
+            optimize_camera,
+            gpu,
+            tracker,
+            &mut self.visible_regions,
+        )?;
 
         // Dispatch visibility to tiles so that they can manage the actively loaded set.
         self.tile_manager.begin_update();
