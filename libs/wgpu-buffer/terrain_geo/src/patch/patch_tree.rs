@@ -921,9 +921,10 @@ impl PatchTree {
         edge: &Option<Peer>,
     ) {
         fn assert_points_relative_eq(p0: Point3<f64>, p1: Point3<f64>) {
-            assert_relative_eq!(p0.coords[0], p1.coords[0], max_relative = 0.000_001);
-            assert_relative_eq!(p0.coords[1], p1.coords[1], max_relative = 0.000_001);
-            assert_relative_eq!(p0.coords[2], p1.coords[2], max_relative = 0.000_001);
+            let epsilon = 0.000_000_000_001;
+            assert_relative_eq!(p0.coords[0], p1.coords[0], max_relative = epsilon);
+            assert_relative_eq!(p0.coords[1], p1.coords[1], max_relative = epsilon);
+            assert_relative_eq!(p0.coords[2], p1.coords[2], max_relative = epsilon);
         }
 
         let own_node = self.tree_node(tree_index);
@@ -956,7 +957,7 @@ impl PatchTree {
     }
 
     fn check_tree(&self, split_context: Option<TreeIndex>) {
-        //self.print_tree();
+        // self.print_tree();
 
         for (i, maybe_node) in self.tree.iter().enumerate() {
             if let Some(node) = maybe_node {

@@ -14,6 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 #version 450
 #include <wgpu-buffer/terrain_geo/include/terrain_geo.glsl>
+#include <wgpu-render/shader_shared/include/buffer_helpers.glsl>
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 layout(binding = 0) uniform SubdivisionCtx { SubdivisionContext context; };
@@ -40,9 +41,25 @@ main()
     uint dep_a = patch_base + index_dependency_lut[patch_offset * 2 + 0];
     uint dep_b = patch_base + index_dependency_lut[patch_offset * 2 + 1];
 
+    // Load vertices.
+    TerrainVertex tva = target_vertices[dep_a];
+    TerrainVertex tvb = target_vertices[dep_b];
+
+    // Note: patch edges that show up as A->B->C on one patch may be wound as C->B->A on an adjacent patch. There is no
+    // way to fix this at the patch level (for the same reason we need to note the adjacent patch's edge in our peers).
+    // While it should not actually matter if we process these as A-B vs B-A, in practice numerical precision issues
+    // crop up in tall and steep slopes, leading to obvious gaps between patches, even with correctly wound strips.
+    // HACK: process all pairs in the same order by sorting on x; edges lying exactly in the y-z
+    //       plane are unlikely enough in combination that we can get away with a single compare.
+    if (tva.position[0] > tvb.position[0]) {
+        TerrainVertex tmp = tva;
+        tva = tvb;
+        tvb = tmp;
+    }
+
     // Do normal interpolation the normal way.
-    vec3 na = vec3(target_vertices[dep_a].normal[0], target_vertices[dep_a].normal[1], target_vertices[dep_a].normal[2]);
-    vec3 nb = vec3(target_vertices[dep_b].normal[0], target_vertices[dep_b].normal[1], target_vertices[dep_b].normal[2]);
+    vec3 na = arr_to_vec3(tva.normal);
+    vec3 nb = arr_to_vec3(tvb.normal);
     vec3 tmp = na + nb;
     vec3 nt = tmp / length(tmp);
     // Note clamp to 1 to avoid NaN from acos.
@@ -50,10 +67,10 @@ main()
 
     // Use the haversine geodesic midpoint method to compute graticule.
     // j/k => a/b
-    float phi_a = target_vertices[dep_a].graticule[0];
-    float theta_a = target_vertices[dep_a].graticule[1];
-    float phi_b = target_vertices[dep_b].graticule[0];
-    float theta_b = target_vertices[dep_b].graticule[1];
+    float phi_a = tva.graticule[0];
+    float theta_a = tva.graticule[1];
+    float phi_b = tvb.graticule[0];
+    float theta_b = tvb.graticule[1];
     // bx = cos(φk) · cos(θk−θj)
     float beta_x = cos(phi_b) * cos(theta_b - theta_a);
     // by = cos(φk) · sin(θk−θj)
@@ -68,8 +85,8 @@ main()
     float theta_t = theta_a + atan(beta_y, cos(phi_a) + beta_x);
 
     // Use the clever tan method from figure 35.
-    vec3 pa = vec3(target_vertices[dep_a].position[0], target_vertices[dep_a].position[1], target_vertices[dep_a].position[2]);
-    vec3 pb = vec3(target_vertices[dep_b].position[0], target_vertices[dep_b].position[1], target_vertices[dep_b].position[2]);
+    vec3 pa = arr_to_vec3(tva.position);
+    vec3 pb = arr_to_vec3(tvb.position);
     float x = length(pb - pa) / 2.0;
     // Note that the angle we get is not the same as the opposite-over-adjacent angle we want.
     // It seems to be related to that angle though, by being 2x that angle; thus, divide by 2.
