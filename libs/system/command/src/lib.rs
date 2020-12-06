@@ -18,7 +18,7 @@ pub(crate) mod command;
 pub(crate) mod keyset;
 
 pub use crate::{
-    bindings::Bindings,
+    bindings::{BindingState, Bindings},
     command::{Command, CommandHandler},
     keyset::{Key, KeySet},
 };

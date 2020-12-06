@@ -85,9 +85,13 @@ make_frame_graph!(
 );
 
 fn main() -> Fallible<()> {
+    env_logger::init();
+
     let system_bindings = Bindings::new("map")
         .bind("terrain.toggle_wireframe", "w")?
         .bind("terrain.toggle_debug_mode", "r")?
+        .bind("demo.+target_up_fast", "Shift+Up")?
+        .bind("demo.+target_down_fast", "Shift+Down")?
         .bind("demo.+target_up", "Up")?
         .bind("demo.+target_down", "Down")?
         .bind("demo.pin_view", "p")?
@@ -104,7 +108,6 @@ fn main() -> Fallible<()> {
 }
 
 fn window_main(window: Window, input_controller: &InputController) -> Fallible<()> {
-    env_logger::init();
     let opt = Opt::from_args();
 
     let mut async_rt = Runtime::new()?;
@@ -192,6 +195,10 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                 "-target_up" => target_vec = meters!(0),
                 "+target_down" => target_vec = meters!(-1),
                 "-target_down" => target_vec = meters!(0),
+                "+target_up_fast" => target_vec = meters!(100),
+                "-target_up_fast" => target_vec = meters!(0),
+                "+target_down_fast" => target_vec = meters!(-100),
+                "-target_down_fast" => target_vec = meters!(0),
                 "pin_view" => is_camera_pinned = !is_camera_pinned,
                 // system bindings
                 "window-close" | "window-destroy" | "exit" => return Ok(()),

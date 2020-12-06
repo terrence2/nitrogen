@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use failure::{bail, ensure, Fallible};
 use smallvec::{smallvec, SmallVec};
-use std::{ops::Range, path::PathBuf};
+use std::{fmt, ops::Range, path::PathBuf};
 use winit::{
     dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize},
     event::DeviceId,
@@ -152,6 +152,14 @@ impl Command {
         format!("{}.-{}", self.target(), &self.command()[1..])
     }
 
+    pub fn release_command(&self) -> Fallible<Option<Command>> {
+        if self.is_held_command {
+            Ok(Some(Command::parse(&self.full_release_command())?))
+        } else {
+            Ok(None)
+        }
+    }
+
     pub fn boolean(&self, index: usize) -> Fallible<bool> {
         match self.args.get(index) {
             Some(CommandArg::Boolean(v)) => Ok(*v),
@@ -185,5 +193,11 @@ impl Command {
             Some(CommandArg::Device(v)) => Ok(*v),
             _ => bail!("not a device argument"),
         }
+    }
+}
+
+impl fmt::Display for Command {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.content)
     }
 }

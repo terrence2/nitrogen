@@ -14,16 +14,23 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{Command, Key, KeySet};
 use failure::Fallible;
+use log::trace;
 use smallvec::{smallvec, SmallVec};
 use std::collections::{HashMap, HashSet};
 use winit::event::ElementState;
+
+#[derive(Debug, Default)]
+pub struct BindingState {
+    pub key_states: HashMap<Key, ElementState>,
+    active_chords: HashSet<KeySet>,
+}
 
 // Map from key, buttons, and axes to commands.
 #[derive(Debug)]
 pub struct Bindings {
     pub name: String,
-    press_chords: HashMap<Key, Vec<(KeySet, String)>>,
-    release_keys: HashMap<Key, HashSet<String>>,
+    press_chords: HashMap<Key, Vec<KeySet>>,
+    command_map: HashMap<KeySet, Command>,
 }
 
 impl Bindings {
@@ -31,27 +38,22 @@ impl Bindings {
         Self {
             name: name.to_owned(),
             press_chords: HashMap::new(),
-            release_keys: HashMap::new(),
+            command_map: HashMap::new(),
         }
     }
 
     pub fn bind(mut self, command_raw: &str, keyset: &str) -> Fallible<Self> {
         let command = Command::parse(command_raw)?;
         for ks in KeySet::from_virtual(keyset)?.drain(..) {
-            let sets = self
-                .press_chords
-                .entry(ks.activating())
-                .or_insert_with(Vec::new);
+            self.command_map.insert(ks.clone(), command.clone());
+            trace!("binding {} => {}", ks, command);
 
-            if command.is_held_command() {
-                for key in &ks.keys {
-                    let keys = self.release_keys.entry(*key).or_insert_with(HashSet::new);
-                    keys.insert(command.full_release_command());
-                }
+            for key in &ks.keys {
+                let sets = self.press_chords.entry(*key).or_insert_with(Vec::new);
+
+                sets.push(ks.to_owned());
+                sets.sort_by_key(|ks| usize::max_value() - ks.keys.len());
             }
-
-            sets.push((ks, command.full().to_owned()));
-            sets.sort_by_key(|(set, _)| usize::max_value() - set.keys.len());
         }
         Ok(self)
     }
@@ -59,24 +61,78 @@ impl Bindings {
     pub fn match_key(
         &self,
         key: Key,
-        state: ElementState,
-        key_states: &HashMap<Key, ElementState>,
+        key_state: ElementState,
+        state: &mut BindingState,
     ) -> Fallible<SmallVec<[Command; 4]>> {
-        let mut out = smallvec![];
-        if state == ElementState::Pressed {
-            if let Some(chords) = self.press_chords.get(&key) {
-                for (chord, activate) in chords {
-                    if Self::chord_is_pressed(&chord.keys, key_states) {
-                        out.push(Command::parse(activate)?);
-                    }
+        match key_state {
+            ElementState::Pressed => self.handle_press(key, state),
+            ElementState::Released => self.handle_release(key, state),
+        }
+    }
+
+    fn handle_press(&self, key: Key, state: &mut BindingState) -> Fallible<SmallVec<[Command; 4]>> {
+        let mut commands = smallvec![];
+
+        // The press chords gives us a quick map from a key press to all chords which could become
+        // active in the case that it is pressed so that we don't have to look at everything.
+        if let Some(possible_chord_list) = self.press_chords.get(&key) {
+            for chord in possible_chord_list {
+                if Self::chord_is_pressed(&chord.keys, &state.key_states) {
+                    self.maybe_activate_chord(chord, state, &mut commands)?;
                 }
             }
-        } else if let Some(commands) = self.release_keys.get(&key) {
-            for v in commands {
-                out.push(Command::parse(v)?);
+        }
+
+        Ok(commands)
+    }
+
+    fn chord_is_masked(chord: &KeySet, state: &BindingState) -> bool {
+        for active_chord in &state.active_chords {
+            if chord.is_subset_of(active_chord) {
+                return true;
             }
         }
-        Ok(out)
+        false
+    }
+
+    fn maybe_activate_chord(
+        &self,
+        chord: &KeySet,
+        state: &mut BindingState,
+        commands: &mut SmallVec<[Command; 4]>,
+    ) -> Fallible<()> {
+        // We just got the press which could have activated a chord. If it's in the active chords
+        // list already, then something has gone badly wrong. Note that we may already have a
+        // major of this chord if it got added first, which is what we're checking below.
+        assert!(!state.active_chords.contains(&chord));
+
+        // The press_chords list implicitly filters out keys not in this bindings.
+        assert!(self.command_map.contains_key(chord));
+
+        // If the chord is masked, do not activate.
+        if Self::chord_is_masked(chord, state) {
+            return Ok(());
+        }
+
+        // If any chord will become masked, deactivate it.
+        let mut masked_chords: SmallVec<[KeySet; 4]> = smallvec![];
+        for active_chord in &state.active_chords {
+            if active_chord.is_subset_of(chord) {
+                masked_chords.push(active_chord.to_owned());
+            }
+        }
+        for masked in &masked_chords {
+            state.active_chords.remove(masked);
+            if let Some(command) = self.command_map[masked].release_command()? {
+                commands.push(command);
+            }
+        }
+
+        // Activate the chord and run the command.
+        state.active_chords.insert(chord.to_owned());
+        commands.push(self.command_map[chord].to_owned());
+
+        Ok(())
     }
 
     fn chord_is_pressed(binding_keys: &[Key], key_states: &HashMap<Key, ElementState>) -> bool {
@@ -90,5 +146,97 @@ impl Bindings {
             }
         }
         true
+    }
+
+    fn handle_release(
+        &self,
+        key: Key,
+        state: &mut BindingState,
+    ) -> Fallible<SmallVec<[Command; 4]>> {
+        let mut commands = smallvec![];
+
+        // Remove any chords that have been released.
+        let mut released_chords: SmallVec<[KeySet; 4]> = smallvec![];
+        for active_chord in &state.active_chords {
+            if active_chord.contains_key(&key) {
+                // Note: unlike with press, we do not implicitly filter out keys we don't care about.
+                if let Some(pressed_command) = self.command_map.get(active_chord) {
+                    released_chords.push(active_chord.to_owned());
+                    if let Some(command) = pressed_command.release_command()? {
+                        commands.push(command);
+                    }
+                }
+            }
+        }
+        for chord in &released_chords {
+            state.active_chords.remove(chord);
+        }
+
+        // If we removed a chord, then it may have been masking an active command. Re-enable any
+        // masked commands that were unmasked by this change.
+        for released_chord in &released_chords {
+            for (chord, command) in &self.command_map {
+                if chord.is_subset_of(released_chord)
+                    && Self::chord_is_pressed(&chord.keys, &state.key_states)
+                {
+                    state.active_chords.insert(chord.to_owned());
+                    commands.push(command.to_owned());
+                }
+            }
+        }
+
+        Ok(commands)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use winit::event::VirtualKeyCode;
+
+    #[test]
+    fn test_masking() -> Fallible<()> {
+        let w_key = Key::Virtual(VirtualKeyCode::W);
+        let shift_key = Key::Virtual(VirtualKeyCode::LShift);
+
+        let mut state: BindingState = Default::default();
+        let bindings = Bindings::new("test")
+            .bind("player.+walk", "w")?
+            .bind("player.+run", "shift+w")?;
+
+        state.key_states.insert(w_key, ElementState::Pressed);
+        let cmds = bindings.match_key(w_key, ElementState::Pressed, &mut state)?;
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].full(), "player.+walk");
+
+        state.key_states.insert(shift_key, ElementState::Pressed);
+        let cmds = bindings.match_key(shift_key, ElementState::Pressed, &mut state)?;
+        assert_eq!(cmds.len(), 2);
+        assert_eq!(cmds[0].full(), "player.-walk");
+        assert_eq!(cmds[1].full(), "player.+run");
+
+        state.key_states.insert(shift_key, ElementState::Released);
+        let cmds = bindings.match_key(shift_key, ElementState::Released, &mut state)?;
+        assert_eq!(cmds.len(), 2);
+        assert_eq!(cmds[0].full(), "player.-run");
+        assert_eq!(cmds[1].full(), "player.+walk");
+
+        state.key_states.insert(shift_key, ElementState::Pressed);
+        let cmds = bindings.match_key(shift_key, ElementState::Pressed, &mut state)?;
+        assert_eq!(cmds.len(), 2);
+        assert_eq!(cmds[0].full(), "player.-walk");
+        assert_eq!(cmds[1].full(), "player.+run");
+
+        state.key_states.insert(w_key, ElementState::Released);
+        let cmds = bindings.match_key(w_key, ElementState::Released, &mut state)?;
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].full(), "player.-run");
+
+        state.key_states.insert(w_key, ElementState::Pressed);
+        let cmds = bindings.match_key(w_key, ElementState::Pressed, &mut state)?;
+        assert_eq!(cmds.len(), 1);
+        assert_eq!(cmds[0].full(), "player.+run");
+
+        Ok(())
     }
 }
