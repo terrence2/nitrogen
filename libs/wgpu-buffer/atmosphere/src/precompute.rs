@@ -1893,7 +1893,7 @@ mod test {
             _irradiance_texture,
             _scattering_texture,
             _single_mie_scattering_texture,
-        ) = Precompute::precompute(40, 4, &mut gpu)?;
+        ) = Precompute::precompute(40, 4, true, &mut gpu)?;
         let precompute_time = precompute_start.elapsed();
         println!(
             "AtmosphereBuffers::precompute timing: {}.{}ms",
