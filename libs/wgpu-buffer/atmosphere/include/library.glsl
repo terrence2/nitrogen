@@ -133,7 +133,7 @@ void get_sky_radiance_to_point(
     vec3 point,
     vec3 sun_direction,
     out vec3 transmittance,
-    out vec3 radiance
+    out vec3 in_scattering
 ) {
     // Compute the distance to the top atmosphere boundary along the view ray,
     // assuming the viewer is in space (or NaN if the view ray does not intersect
@@ -215,7 +215,7 @@ void get_sky_radiance_to_point(
     // Hack to avoid rendering artifacts when the sun is below the horizon.
     single_mie_scattering = single_mie_scattering * smoothstep(0.0, 0.01, mu_s);
 
-    radiance = scattering * rayleigh_phase_function(nu) +
+    in_scattering = scattering * rayleigh_phase_function(nu) +
         single_mie_scattering * mie_phase_function(atmosphere.mie_phase_function_g, nu);
 }
 
