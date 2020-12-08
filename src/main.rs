@@ -174,6 +174,12 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         degrees!(-86.9245623), // FIXME: wat?
         meters!(8000.),
     ));
+    // ISS: 408km up
+    // arcball.set_target(Graticule::<GeoSurface>::new(
+    //     degrees!(27.9880704),
+    //     degrees!(-86.9245623), // FIXME: wat?
+    //     meters!(408_000.),
+    // ));
     arcball.set_eye_relative(Graticule::<Target>::new(
         degrees!(58),
         degrees!(668.0),
