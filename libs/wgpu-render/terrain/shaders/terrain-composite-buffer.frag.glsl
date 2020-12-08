@@ -27,6 +27,7 @@ layout(location = 0) in vec2 v_tc;
 layout(location = 1) in vec3 v_ray_world;
 layout(location = 2) in vec2 v_ndc;
 
+// FIXME: upload exposure on globals and let us tweak it under a brightness setting.
 const float EXPOSURE = MAX_LUMINOUS_EFFICACY * 0.0001;
 
 vec4
@@ -90,6 +91,7 @@ main()
             sun_irradiance,
             sky_irradiance
         );
+        // FIXME: this ground albedo scaling factor is arbitrary and dependent on our source material
         ground_radiance = ground_albedo * (1.0 / PI) * (
             // Todo: properer shadow maps so we can get sun visibility
             sun_irradiance * get_sun_visibility(world_intersect_km, sun_direction) +

@@ -12,13 +12,10 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use command::{Bindings, Command, Key};
+use command::{BindingState, Bindings, Command, Key};
 use failure::{bail, Fallible};
 use smallvec::{smallvec, SmallVec};
-use std::{
-    collections::HashMap,
-    sync::mpsc::{channel, Receiver, TryRecvError},
-};
+use std::sync::mpsc::{channel, Receiver, TryRecvError};
 use winit::{
     event::{
         DeviceEvent, DeviceId, ElementState, Event, KeyboardInput, MouseScrollDelta, StartCause,
@@ -151,15 +148,17 @@ impl InputSystem {
         });
 
         // Hijack the main thread.
-        let mut button_state = HashMap::new();
+        let mut state: BindingState = Default::default();
         event_loop.run(move |event, _target, control_flow| {
             *control_flow = ControlFlow::Wait;
             if event == Event::UserEvent(MetaEvent::Stop) {
                 *control_flow = ControlFlow::Exit;
                 return;
             }
-            let commands = Self::handle_event(event, &bindings, &mut button_state).unwrap();
+            // TODO: poll receive queue for bindings changes
+            let commands = Self::handle_event(event, &bindings, &mut state).unwrap();
             for command in &commands {
+                log::trace!("send command: {}", command);
                 if let Err(e) = tx_command.send(command.to_owned()) {
                     println!("Game loop hung up ({}), exiting...", e);
                     *control_flow = ControlFlow::Exit;
@@ -169,28 +168,16 @@ impl InputSystem {
         });
     }
 
-    /*
-    pub fn push_bindings(&mut self, bindings: Bindings) {
-        self.bindings.push(bindings);
-    }
-
-    pub fn pop_bindings(&mut self) -> Option<Bindings> {
-        self.bindings.pop()
-    }
-     */
-
     #[cfg(not(target_arch = "wasm32"))]
     fn handle_event(
         e: Event<MetaEvent>,
         bindings: &[Bindings],
-        button_state: &mut HashMap<Key, ElementState>,
+        state: &mut BindingState,
     ) -> Fallible<SmallVec<[Command; 8]>> {
         Ok(match e {
-            Event::WindowEvent { event, .. } => {
-                Self::handle_window_event(event, bindings, button_state)?
-            }
+            Event::WindowEvent { event, .. } => Self::handle_window_event(event, bindings, state)?,
             Event::DeviceEvent { device_id, event } => {
-                Self::handle_device_event(device_id, event, bindings, button_state)?
+                Self::handle_device_event(device_id, event, bindings, state)?
             }
             Event::MainEventsCleared => smallvec![],
             Event::RedrawRequested(_window_id) => smallvec![],
@@ -206,7 +193,7 @@ impl InputSystem {
     fn handle_window_event(
         event: WindowEvent,
         _bindings: &[Bindings],
-        _button_state: &mut HashMap<Key, ElementState>,
+        _state: &mut BindingState,
     ) -> Fallible<SmallVec<[Command; 8]>> {
         Ok(match event {
             // System Stuff
@@ -251,7 +238,7 @@ impl InputSystem {
                     KeyboardInput {
                         virtual_keycode: Some(_code),
                         scancode: _scancode,
-                        state: _state,
+                        state: _key_state,
                         ..
                     },
                 ..
@@ -259,9 +246,11 @@ impl InputSystem {
                 // Web backends deliver only KeyboardInput events
                 #[cfg(target_arch = "wasm32")]
                 {
-                    _button_state.insert(Key::Physical(_scancode), _state);
-                    _button_state.insert(Key::Virtual(_code), _state);
-                    Self::match_key(Key::Virtual(_code), _state, _button_state, _bindings)?
+                    _state
+                        .key_states
+                        .insert(Key::Physical(_scancode), _key_state);
+                    _state.key_states.insert(Key::Virtual(_code), _key_state);
+                    Self::match_key(Key::Virtual(_code), _key_state, _bindings, _state)?
                 }
                 #[cfg(not(target_arch = "wasm32"))]
                 smallvec![]
@@ -305,7 +294,7 @@ impl InputSystem {
         device_id: DeviceId,
         event: DeviceEvent,
         bindings: &[Bindings],
-        button_state: &mut HashMap<Key, ElementState>,
+        state: &mut BindingState,
     ) -> Fallible<SmallVec<[Command; 8]>> {
         Ok(match event {
             // Device change events
@@ -330,31 +319,34 @@ impl InputSystem {
             } => smallvec![Command::parse("device.mouse-wheel")?.with_arg(s.into())],
 
             // Mouse Button
-            DeviceEvent::Button { button, state } => {
-                button_state.insert(Key::MouseButton(button), state);
-                Self::match_key(Key::MouseButton(button), state, button_state, bindings)?
+            DeviceEvent::Button {
+                button,
+                state: key_state,
+            } => {
+                state.key_states.insert(Key::MouseButton(button), key_state);
+                Self::match_key(Key::MouseButton(button), key_state, bindings, state)?
             }
 
             // Match virtual keycodes.
             DeviceEvent::Key(KeyboardInput {
                 virtual_keycode: Some(code),
                 scancode,
-                state,
+                state: key_state,
                 ..
             }) => {
-                button_state.insert(Key::Physical(scancode), state);
-                button_state.insert(Key::Virtual(code), state);
-                Self::match_key(Key::Virtual(code), state, button_state, bindings)?
+                state.key_states.insert(Key::Physical(scancode), key_state);
+                state.key_states.insert(Key::Virtual(code), key_state);
+                Self::match_key(Key::Virtual(code), key_state, bindings, state)?
             }
 
             // Match scancodes.
             DeviceEvent::Key(KeyboardInput {
                 virtual_keycode: None,
                 scancode,
-                state,
+                state: key_state,
                 ..
             }) => {
-                button_state.insert(Key::Physical(scancode), state);
+                state.key_states.insert(Key::Physical(scancode), key_state);
                 smallvec![]
             }
 
@@ -368,13 +360,13 @@ impl InputSystem {
 
     fn match_key(
         key: Key,
-        state: ElementState,
-        button_state: &HashMap<Key, ElementState>,
-        binding_list: &[Bindings],
+        key_state: ElementState,
+        bindings: &[Bindings],
+        state: &mut BindingState,
     ) -> Fallible<SmallVec<[Command; 8]>> {
         let mut out = SmallVec::new();
-        for bindings in binding_list.iter().rev() {
-            out.extend(bindings.match_key(key, state, button_state)?);
+        for bindings in bindings.iter().rev() {
+            out.extend(bindings.match_key(key, key_state, state)?);
         }
         Ok(out)
     }
@@ -436,12 +428,12 @@ mod test {
     #[test]
     fn test_handle_system_events() -> Fallible<()> {
         let binding_list = vec![];
-        let mut button_state = HashMap::new();
+        let mut state = Default::default();
 
         let cmd = InputSystem::handle_event(
             win_evt(WindowEvent::Resized(physical_size())),
             &binding_list,
-            &mut button_state,
+            &mut state,
         )?
         .first()
         .unwrap()
@@ -450,20 +442,17 @@ mod test {
         assert_relative_eq!(cmd.displacement(0)?.0, 8f64);
         assert_relative_eq!(cmd.displacement(0)?.1, 9f64);
 
-        let cmd = InputSystem::handle_event(
-            win_evt(WindowEvent::Destroyed),
-            &binding_list,
-            &mut button_state,
-        )?
-        .first()
-        .unwrap()
-        .to_owned();
+        let cmd =
+            InputSystem::handle_event(win_evt(WindowEvent::Destroyed), &binding_list, &mut state)?
+                .first()
+                .unwrap()
+                .to_owned();
         assert_eq!(cmd.command(), "destroy");
 
         let cmd = InputSystem::handle_event(
             win_evt(WindowEvent::CloseRequested),
             &binding_list,
-            &mut button_state,
+            &mut state,
         )?
         .first()
         .unwrap()
@@ -473,7 +462,7 @@ mod test {
         let cmd = InputSystem::handle_event(
             win_evt(WindowEvent::DroppedFile(path())),
             &binding_list,
-            &mut button_state,
+            &mut state,
         )?
         .first()
         .unwrap()
@@ -484,7 +473,7 @@ mod test {
         let cmd = InputSystem::handle_event(
             win_evt(WindowEvent::Focused(true)),
             &binding_list,
-            &mut button_state,
+            &mut state,
         )?
         .first()
         .unwrap()
@@ -492,29 +481,23 @@ mod test {
         assert_eq!(cmd.command(), "focus");
         assert!(cmd.boolean(0)?);
 
-        let cmd = InputSystem::handle_event(
-            dev_evt(DeviceEvent::Added),
-            &binding_list,
-            &mut button_state,
-        )?
-        .first()
-        .unwrap()
-        .to_owned();
+        let cmd =
+            InputSystem::handle_event(dev_evt(DeviceEvent::Added), &binding_list, &mut state)?
+                .first()
+                .unwrap()
+                .to_owned();
         assert_eq!(cmd.command(), "added");
-        let cmd = InputSystem::handle_event(
-            dev_evt(DeviceEvent::Removed),
-            &binding_list,
-            &mut button_state,
-        )?
-        .first()
-        .unwrap()
-        .to_owned();
+        let cmd =
+            InputSystem::handle_event(dev_evt(DeviceEvent::Removed), &binding_list, &mut state)?
+                .first()
+                .unwrap()
+                .to_owned();
         assert_eq!(cmd.command(), "removed");
 
         let cmd = InputSystem::handle_event(
             dev_evt(DeviceEvent::MouseMotion { delta: (8., 9.) }),
             &binding_list,
-            &mut button_state,
+            &mut state,
         )?
         .first()
         .unwrap()
@@ -528,7 +511,7 @@ mod test {
                 delta: MouseScrollDelta::LineDelta(8., 9.),
             }),
             &binding_list,
-            &mut button_state,
+            &mut state,
         )?
         .first()
         .unwrap()
@@ -552,13 +535,13 @@ mod test {
             .bind("player.fire", "mouse0")?;
 
         let mut binding_list = vec![menu, fps];
-        let mut button_state = HashMap::new();
+        let mut state = Default::default();
 
         // FPS forward.
         let cmd = InputSystem::handle_event(
             dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::W, true))),
             &binding_list,
-            &mut button_state,
+            &mut state,
         )?
         .first()
         .unwrap()
@@ -567,7 +550,7 @@ mod test {
         let cmd = InputSystem::handle_event(
             dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::W, false))),
             &binding_list,
-            &mut button_state,
+            &mut state,
         )?
         .first()
         .unwrap()
@@ -581,7 +564,7 @@ mod test {
                 state: ElementState::Pressed,
             }),
             &binding_list,
-            &mut button_state,
+            &mut state,
         )?
         .first()
         .unwrap()
@@ -593,7 +576,7 @@ mod test {
                 state: ElementState::Released,
             }),
             &binding_list,
-            &mut button_state,
+            &mut state,
         )?;
         assert!(cmd.is_empty());
 
@@ -601,13 +584,13 @@ mod test {
         let cmd = InputSystem::handle_event(
             dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::LShift, true))),
             &binding_list,
-            &mut button_state,
+            &mut state,
         )?;
         assert!(cmd.is_empty());
         let cmd = InputSystem::handle_event(
             dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::E, true))),
             &binding_list,
-            &mut button_state,
+            &mut state,
         )?
         .first()
         .unwrap()
@@ -618,14 +601,14 @@ mod test {
         let cmd = InputSystem::handle_event(
             dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::E, false))),
             &binding_list,
-            &mut button_state,
+            &mut state,
         )?;
         assert!(cmd.is_empty());
         binding_list.pop();
         let cmd = InputSystem::handle_event(
             dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::E, true))),
             &binding_list,
-            &mut button_state,
+            &mut state,
         )?
         .first()
         .unwrap()
@@ -634,7 +617,7 @@ mod test {
         let cmd = InputSystem::handle_event(
             dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::LShift, false))),
             &binding_list,
-            &mut button_state,
+            &mut state,
         )?;
         assert!(cmd.is_empty());
 
@@ -648,7 +631,7 @@ mod test {
                 state: ElementState::Pressed,
             }),
             &binding_list,
-            &mut button_state,
+            &mut state,
         )?
         .first()
         .unwrap()
@@ -660,7 +643,7 @@ mod test {
                 state: ElementState::Released,
             }),
             &binding_list,
-            &mut button_state,
+            &mut state,
         )?
         .first()
         .unwrap()

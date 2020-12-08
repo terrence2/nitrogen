@@ -103,6 +103,7 @@ impl Precompute {
     pub fn precompute(
         num_precomputed_wavelengths: usize,
         num_scattering_passes: usize,
+        skip_cache: bool,
         gpu: &mut GPU,
     ) -> Fallible<(
         wgpu::Buffer,
@@ -113,8 +114,12 @@ impl Precompute {
     )> {
         let pc = Self::new(gpu)?;
 
-        let srgb_atmosphere_buffer =
-            pc.build_textures(num_precomputed_wavelengths, num_scattering_passes, gpu)?;
+        let srgb_atmosphere_buffer = pc.build_textures(
+            num_precomputed_wavelengths,
+            num_scattering_passes,
+            skip_cache,
+            gpu,
+        )?;
 
         Ok((
             srgb_atmosphere_buffer,
@@ -660,6 +665,7 @@ impl Precompute {
         &self,
         num_precomputed_wavelengths: usize,
         num_scattering_passes: usize,
+        skip_cache: bool,
         gpu: &mut GPU,
     ) -> Fallible<wgpu::Buffer> /* AtmosphereParameters */ {
         let mut srgb_atmosphere = self.params.sample(RGB_LAMBDAS);
@@ -670,7 +676,7 @@ impl Precompute {
             wgpu::BufferUsage::UNIFORM,
         );
 
-        if self.load_cache(gpu).is_ok() {
+        if !skip_cache && self.load_cache(gpu).is_ok() {
             trace!("Using from cached atmosphere parameters");
             return Ok(srgb_atmosphere_buffer);
         }
@@ -1887,7 +1893,7 @@ mod test {
             _irradiance_texture,
             _scattering_texture,
             _single_mie_scattering_texture,
-        ) = Precompute::precompute(40, 4, &mut gpu)?;
+        ) = Precompute::precompute(40, 4, true, &mut gpu)?;
         let precompute_time = precompute_start.elapsed();
         println!(
             "AtmosphereBuffers::precompute timing: {}.{}ms",

@@ -45,6 +45,10 @@ struct Opt {
     /// Extra directories to treat as libraries
     #[structopt(short, long)]
     libdir: Vec<PathBuf>,
+
+    /// Regenerate instead of loading cached items on startup
+    #[structopt(long = "no-cache")]
+    no_cache: bool,
 }
 
 make_frame_graph!(
@@ -85,9 +89,13 @@ make_frame_graph!(
 );
 
 fn main() -> Fallible<()> {
+    env_logger::init();
+
     let system_bindings = Bindings::new("map")
         .bind("terrain.toggle_wireframe", "w")?
         .bind("terrain.toggle_debug_mode", "r")?
+        .bind("demo.+target_up_fast", "Shift+Up")?
+        .bind("demo.+target_down_fast", "Shift+Down")?
         .bind("demo.+target_up", "Up")?
         .bind("demo.+target_down", "Down")?
         .bind("demo.pin_view", "p")?
@@ -104,7 +112,6 @@ fn main() -> Fallible<()> {
 }
 
 fn window_main(window: Window, input_controller: &InputController) -> Fallible<()> {
-    env_logger::init();
     let opt = Opt::from_args();
 
     let mut async_rt = Runtime::new()?;
@@ -124,7 +131,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     };
 
     ///////////////////////////////////////////////////////////
-    let atmosphere_buffer = AtmosphereBuffer::new(&mut gpu)?;
+    let atmosphere_buffer = AtmosphereBuffer::new(opt.no_cache, &mut gpu)?;
     let fullscreen_buffer = FullscreenBuffer::new(&gpu)?;
     let globals_buffer = GlobalParametersBuffer::new(gpu.device())?;
     let stars_buffer = StarsBuffer::new(&gpu)?;
@@ -171,6 +178,12 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         degrees!(-86.9245623), // FIXME: wat?
         meters!(8000.),
     ));
+    // ISS: 408km up
+    // arcball.set_target(Graticule::<GeoSurface>::new(
+    //     degrees!(27.9880704),
+    //     degrees!(-86.9245623), // FIXME: wat?
+    //     meters!(408_000.),
+    // ));
     arcball.set_eye_relative(Graticule::<Target>::new(
         degrees!(58),
         degrees!(668.0),
@@ -192,6 +205,10 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                 "-target_up" => target_vec = meters!(0),
                 "+target_down" => target_vec = meters!(-1),
                 "-target_down" => target_vec = meters!(0),
+                "+target_up_fast" => target_vec = meters!(100),
+                "-target_up_fast" => target_vec = meters!(0),
+                "+target_down_fast" => target_vec = meters!(-100),
+                "-target_down_fast" => target_vec = meters!(0),
                 "pin_view" => is_camera_pinned = !is_camera_pinned,
                 // system bindings
                 "window-close" | "window-destroy" | "exit" => return Ok(()),

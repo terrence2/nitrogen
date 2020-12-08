@@ -16,7 +16,10 @@ use failure::{bail, ensure, Fallible};
 use lazy_static::lazy_static;
 use log::warn;
 use smallvec::SmallVec;
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt,
+};
 use unicase::{eq_ascii, Ascii};
 use winit::event::{ButtonId, ScanCode, VirtualKeyCode};
 
@@ -259,10 +262,38 @@ impl KeySet {
         Ok(out.drain(..).map(|v| Self { keys: v }).collect::<Vec<_>>())
     }
 
-    // Get the activating key in the keyset.
-    pub fn activating(&self) -> Key {
-        assert!(!self.keys.is_empty());
-        *self.keys.last().unwrap()
+    pub fn contains_key(&self, key: &Key) -> bool {
+        for own_key in &self.keys {
+            if key == own_key {
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn is_subset_of(&self, other: &KeySet) -> bool {
+        if self.keys.len() >= other.keys.len() {
+            return false;
+        }
+        for key in &other.keys {
+            if !other.keys.contains(key) {
+                return false;
+            }
+        }
+        true
+    }
+}
+
+impl fmt::Display for KeySet {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{{")?;
+        for (i, key) in self.keys.iter().enumerate() {
+            if i != 0 {
+                write!(f, ",")?;
+            }
+            write!(f, "{:?}", key)?;
+        }
+        write!(f, "}}")
     }
 }
 
