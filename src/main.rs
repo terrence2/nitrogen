@@ -45,6 +45,10 @@ struct Opt {
     /// Extra directories to treat as libraries
     #[structopt(short, long)]
     libdir: Vec<PathBuf>,
+
+    /// Regenerate instead of loading cached items on startup
+    #[structopt(long = "no-cache")]
+    no_cache: bool,
 }
 
 make_frame_graph!(
@@ -127,7 +131,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     };
 
     ///////////////////////////////////////////////////////////
-    let atmosphere_buffer = AtmosphereBuffer::new(&mut gpu)?;
+    let atmosphere_buffer = AtmosphereBuffer::new(opt.no_cache, &mut gpu)?;
     let fullscreen_buffer = FullscreenBuffer::new(&gpu)?;
     let globals_buffer = GlobalParametersBuffer::new(gpu.device())?;
     let stars_buffer = StarsBuffer::new(&gpu)?;

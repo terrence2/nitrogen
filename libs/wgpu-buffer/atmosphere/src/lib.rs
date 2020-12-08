@@ -46,7 +46,7 @@ pub struct AtmosphereBuffer {
 
 #[commandable]
 impl AtmosphereBuffer {
-    pub fn new(gpu: &mut GPU) -> Fallible<Self> {
+    pub fn new(skip_cache: bool, gpu: &mut GPU) -> Fallible<Self> {
         trace!("AtmosphereBuffer::new");
 
         let precompute_start = Instant::now();
@@ -56,7 +56,12 @@ impl AtmosphereBuffer {
             irradiance_texture,
             scattering_texture,
             single_mie_scattering_texture,
-        ) = Precompute::precompute(NUM_PRECOMPUTED_WAVELENGTHS, NUM_SCATTERING_ORDER, gpu)?;
+        ) = Precompute::precompute(
+            NUM_PRECOMPUTED_WAVELENGTHS,
+            NUM_SCATTERING_ORDER,
+            skip_cache,
+            gpu,
+        )?;
         let precompute_time = precompute_start.elapsed();
         println!(
             "AtmosphereBuffer::precompute timing: {}.{}ms",
