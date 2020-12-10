@@ -154,7 +154,7 @@ main()
     radiance = mix(radiance, ground_radiance, ground_alpha);
 
     vec3 color = pow(
-        vec3(1.0) - exp(-radiance / vec3(atmosphere.whitepoint) * MAX_LUMINOUS_EFFICACY * tone_exposure),
+        vec3(1.0) - exp(-radiance / vec3(atmosphere.whitepoint) * MAX_LUMINOUS_EFFICACY * camera_exposure),
         vec3(1.0 / tone_gamma)
     );
 

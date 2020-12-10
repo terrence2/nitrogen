@@ -200,7 +200,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     // ))?;
 
     let mut tone_gamma = 2.2f32;
-    let mut tone_exposure = 10e-5f32;
     let mut is_camera_pinned = false;
     let mut camera_double = arcball.camera().to_owned();
     let mut target_vec = meters!(0f64);
@@ -222,8 +221,14 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                 "-target_down_fast" => target_vec = meters!(0),
                 "decrease_gamma" => tone_gamma /= 1.1,
                 "increase_gamma" => tone_gamma *= 1.1,
-                "decrease_exposure" => tone_exposure /= 1.1,
-                "increase_exposure" => tone_exposure *= 1.1,
+                "decrease_exposure" => {
+                    let next_exposure = arcball.camera().exposure() / 1.1;
+                    arcball.camera_mut().set_exposure(next_exposure);
+                }
+                "increase_exposure" => {
+                    let next_exposure = arcball.camera().exposure() * 1.1;
+                    arcball.camera_mut().set_exposure(next_exposure);
+                }
                 "pin_view" => {
                     println!("eye_rel: {}", arcball.get_eye_relative());
                     println!("target:  {}", arcball.get_target());
@@ -257,7 +262,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         frame_graph.globals().make_upload_buffer(
             arcball.camera(),
             tone_gamma,
-            tone_exposure,
             &gpu,
             &mut tracker,
         )?;

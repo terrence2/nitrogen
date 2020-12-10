@@ -145,7 +145,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
 
         // Prepare new camera parameters.
         let mut tracker = Default::default();
-        globals_buffer.make_upload_buffer(arcball.camera(), &gpu, &mut tracker)?;
+        globals_buffer.make_upload_buffer(arcball.camera(), 2.2, &gpu, &mut tracker)?;
 
         let gb_borrow = &globals_buffer;
         let fs_borrow = &fullscreen_buffer;
