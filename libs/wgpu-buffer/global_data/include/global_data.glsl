@@ -35,6 +35,14 @@ layout(set = 0, binding = 0) buffer CameraParameters {
     mat4 camera_inverse_view_m;
     mat4 camera_inverse_view_km;
 
+    // Tone mapping
+    float tone_exposure;
+    float tone_gamma;
+
+    // Padding
+    float pad0;
+    float pad1;
+
     // Orrery
 };
 

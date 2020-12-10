@@ -74,6 +74,13 @@ struct Globals {
     camera_view_km: [[f32; 4]; 4],
     camera_inverse_view_m: [[f32; 4]; 4],
     camera_inverse_view_km: [[f32; 4]; 4],
+
+    // Tone mapping
+    tone_exposure: f32,
+    tone_gamma: f32,
+
+    // Pad out to [f32;4] alignment
+    pad: [f32; 2],
 }
 
 impl Globals {
@@ -114,6 +121,12 @@ impl Globals {
         self.camera_inverse_view_m = m44_to_v(&camera.view::<Meters>().inverse().to_homogeneous());
         self.camera_inverse_view_km =
             m44_to_v(&camera.view::<Kilometers>().inverse().to_homogeneous());
+        self
+    }
+
+    pub fn with_tone(mut self, tone_gamma: f32, tone_exposure: f32) -> Self {
+        self.tone_exposure = tone_exposure;
+        self.tone_gamma = tone_gamma;
         self
     }
 }
@@ -179,13 +192,16 @@ impl GlobalParametersBuffer {
     pub fn make_upload_buffer(
         &self,
         camera: &Camera,
+        tone_gamma: f32,
+        tone_exposure: f32,
         gpu: &GPU,
         tracker: &mut UploadTracker,
     ) -> Fallible<()> {
         let globals: Globals = Default::default();
         let globals = globals
             .with_screen_overlay_projection(gpu)
-            .with_camera(camera);
+            .with_camera(camera)
+            .with_tone(tone_gamma, tone_exposure);
         let buffer = gpu.push_data(
             "global-upload-buffer",
             &globals,

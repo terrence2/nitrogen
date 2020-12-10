@@ -28,7 +28,7 @@ layout(location = 1) in vec3 v_ray_world;
 layout(location = 2) in vec2 v_ndc;
 
 // FIXME: upload exposure on globals and let us tweak it under a brightness setting.
-const float EXPOSURE = MAX_LUMINOUS_EFFICACY * 0.0001;
+//const float EXPOSURE = MAX_LUMINOUS_EFFICACY * 0.0001;
 
 vec4
 ndc_to_world_km(vec3 ndc)
@@ -92,7 +92,7 @@ main()
             sky_irradiance
         );
         // FIXME: this ground albedo scaling factor is arbitrary and dependent on our source material
-        ground_radiance = ground_albedo * (1.0 / PI) * (
+        ground_radiance = ground_albedo * 2 * (
             // Todo: properer shadow maps so we can get sun visibility
             sun_irradiance * get_sun_visibility(world_intersect_km, sun_direction) +
             sky_irradiance * get_sky_visibility(world_intersect_km)
@@ -154,8 +154,8 @@ main()
     radiance = mix(radiance, ground_radiance, ground_alpha);
 
     vec3 color = pow(
-        vec3(1.0) - exp(-radiance / vec3(atmosphere.whitepoint) * EXPOSURE),
-        vec3(1.0 / 2.2)
+        vec3(1.0) - exp(-radiance / vec3(atmosphere.whitepoint) * MAX_LUMINOUS_EFFICACY * tone_exposure),
+        vec3(1.0 / tone_gamma)
     );
 
     f_color = vec4(color, 1);
