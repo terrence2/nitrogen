@@ -21,4 +21,4 @@ gpu = { path = "../../system/gpu" }
 winit = { version = "^ 0.23", features = ["web-sys"] }
 
 [build-dependencies]
-build-shaders = { path = "../../wgpu-render/build-shaders" }
+build_shaders = { path = "../../system/build_shaders" }

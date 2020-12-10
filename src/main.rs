@@ -29,7 +29,6 @@ use log::trace;
 use nalgebra::convert;
 use orrery::Orrery;
 use screen_text::ScreenTextRenderPass;
-use skybox::SkyboxRenderPass;
 use stars::StarsBuffer;
 use std::{path::PathBuf, sync::Arc, time::Instant};
 use structopt::StructOpt;
@@ -62,7 +61,6 @@ make_frame_graph!(
             text_layout: TextLayoutBuffer
         };
         renderers: [
-            skybox: SkyboxRenderPass { globals, fullscreen, stars, atmosphere },
             terrain: TerrainRenderPass { globals, atmosphere, stars, terrain_geo },
             screen_text: ScreenTextRenderPass { globals, text_layout }
         ];
@@ -80,7 +78,6 @@ make_frame_graph!(
             accumulate_normal_and_color: Compute() { terrain_geo( globals ) },
 
             draw: Render(Screen) {
-                //skybox( globals, fullscreen, stars, atmosphere ),
                 terrain( globals, fullscreen, atmosphere, stars, terrain_geo ),
                 screen_text( globals, text_layout )
             }

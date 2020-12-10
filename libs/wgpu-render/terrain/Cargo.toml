@@ -20,4 +20,4 @@ stars = { path = "../../wgpu-buffer/stars" }
 terrain_geo = { path = "../../wgpu-buffer/terrain_geo" }
 
 [build-dependencies]
-build-shaders = { path = "../../wgpu-render/build-shaders" }
+build_shaders = { path = "../../system/build_shaders" }
