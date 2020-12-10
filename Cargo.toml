@@ -41,7 +41,6 @@ members = [
     "libs/wgpu-render/build-shaders",
     "libs/wgpu-render/shader_shared",
     "libs/wgpu-render/screen_text",
-    "libs/wgpu-render/skybox",
     "libs/wgpu-render/terrain",
 ]
 
@@ -68,7 +67,6 @@ gpu = { path = "libs/system/gpu" }
 input = { path = "libs/system/input" }
 orrery = { path = "libs/sim/orrery" }
 screen_text = { path = "libs/wgpu-render/screen_text" }
-skybox = { path = "libs/wgpu-render/skybox" }
 stars = { path = "libs/wgpu-buffer/stars" }
 terrain = { path = "libs/wgpu-render/terrain" }
 terrain_geo = { path = "libs/wgpu-buffer/terrain_geo" }
