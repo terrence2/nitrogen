@@ -22,6 +22,7 @@ members = [
     "libs/sim/universe",
 
     "libs/system/ansi",
+    "libs/system/build_shaders",
     "libs/system/catalog",
     "libs/system/command",
     "libs/system/commandable",
@@ -38,7 +39,6 @@ members = [
     "libs/wgpu-buffer/terrain_geo",
     "libs/wgpu-buffer/text_layout",
 
-    "libs/wgpu-render/build-shaders",
     "libs/wgpu-render/shader_shared",
     "libs/wgpu-render/screen_text",
     "libs/wgpu-render/terrain",

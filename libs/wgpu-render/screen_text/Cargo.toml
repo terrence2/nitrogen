@@ -16,4 +16,4 @@ shader_shared = { path = "../../wgpu-render/shader_shared" }
 text_layout = { path = "../../wgpu-buffer/text_layout" }
 
 [build-dependencies]
-build-shaders = { path = "../../wgpu-render/build-shaders" }
+build_shaders = { path = "../../system/build_shaders" }

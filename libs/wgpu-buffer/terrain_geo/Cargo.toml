@@ -41,4 +41,4 @@ universe = { path = "../../sim/universe" }
 input = { path = "../../system/input" }
 
 [build-dependencies]
-build-shaders = { path = "../../wgpu-render/build-shaders" }
+build_shaders = { path = "../../system/build_shaders" }
