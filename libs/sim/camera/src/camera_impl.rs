@@ -23,6 +23,7 @@ pub struct Camera {
     fov_y: Angle<Radians>,
     aspect_ratio: f64,
     z_near: Length<Meters>,
+    exposure: f32,
 
     // Camera view state.
     position: Cartesian<GeoCenter, Meters>,
@@ -32,6 +33,8 @@ pub struct Camera {
 }
 
 impl Camera {
+    const INITIAL_EXPOSURE: f32 = 10e-5;
+
     // FIXME: aspect ratio is wrong. Should be 16:9 and not 9:16.
     // aspect ratio is rise over run: h / w
     pub fn from_parameters<AngUnit: AngleUnit>(
@@ -43,6 +46,7 @@ impl Camera {
             fov_y: radians!(fov_y),
             aspect_ratio,
             z_near,
+            exposure: Self::INITIAL_EXPOSURE,
 
             position: Vector3::new(0f64, 0f64, 0f64).into(),
             forward: Vector3::new(0f64, 0f64, -1f64),
@@ -62,6 +66,14 @@ impl Camera {
         self.forward = forward;
         self.up = up;
         self.right = right;
+    }
+
+    pub fn exposure(&self) -> f32 {
+        self.exposure
+    }
+
+    pub fn set_exposure(&mut self, exposure: f32) {
+        self.exposure = exposure;
     }
 
     pub fn fov_y(&self) -> Angle<Radians> {

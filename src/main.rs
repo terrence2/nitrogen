@@ -98,6 +98,10 @@ fn main() -> Fallible<()> {
         .bind("demo.+target_down_fast", "Shift+Down")?
         .bind("demo.+target_up", "Up")?
         .bind("demo.+target_down", "Down")?
+        .bind("demo.decrease_gamma", "LBracket")?
+        .bind("demo.increase_gamma", "RBracket")?
+        .bind("demo.decrease_exposure", "Shift+LBracket")?
+        .bind("demo.increase_exposure", "Shift+RBracket")?
         .bind("demo.pin_view", "p")?
         .bind("demo.exit", "Escape")?
         .bind("demo.exit", "q")?;
@@ -178,18 +182,24 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         degrees!(-86.9245623), // FIXME: wat?
         meters!(8000.),
     ));
+    arcball.set_eye_relative(Graticule::<Target>::new(
+        degrees!(11.5),
+        degrees!(869.5),
+        meters!(67668.5053),
+    ))?;
     // ISS: 408km up
     // arcball.set_target(Graticule::<GeoSurface>::new(
     //     degrees!(27.9880704),
     //     degrees!(-86.9245623), // FIXME: wat?
     //     meters!(408_000.),
     // ));
-    arcball.set_eye_relative(Graticule::<Target>::new(
-        degrees!(58),
-        degrees!(668.0),
-        meters!(1308.7262),
-    ))?;
+    // arcball.set_eye_relative(Graticule::<Target>::new(
+    //     degrees!(58),
+    //     degrees!(668.0),
+    //     meters!(1308.7262),
+    // ))?;
 
+    let mut tone_gamma = 2.2f32;
     let mut is_camera_pinned = false;
     let mut camera_double = arcball.camera().to_owned();
     let mut target_vec = meters!(0f64);
@@ -209,7 +219,21 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                 "-target_up_fast" => target_vec = meters!(0),
                 "+target_down_fast" => target_vec = meters!(-100),
                 "-target_down_fast" => target_vec = meters!(0),
-                "pin_view" => is_camera_pinned = !is_camera_pinned,
+                "decrease_gamma" => tone_gamma /= 1.1,
+                "increase_gamma" => tone_gamma *= 1.1,
+                "decrease_exposure" => {
+                    let next_exposure = arcball.camera().exposure() / 1.1;
+                    arcball.camera_mut().set_exposure(next_exposure);
+                }
+                "increase_exposure" => {
+                    let next_exposure = arcball.camera().exposure() * 1.1;
+                    arcball.camera_mut().set_exposure(next_exposure);
+                }
+                "pin_view" => {
+                    println!("eye_rel: {}", arcball.get_eye_relative());
+                    println!("target:  {}", arcball.get_target());
+                    is_camera_pinned = !is_camera_pinned
+                }
                 // system bindings
                 "window-close" | "window-destroy" | "exit" => return Ok(()),
                 "resize" => {
@@ -235,9 +259,12 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         }
 
         let mut tracker = Default::default();
-        frame_graph
-            .globals()
-            .make_upload_buffer(arcball.camera(), &gpu, &mut tracker)?;
+        frame_graph.globals().make_upload_buffer(
+            arcball.camera(),
+            tone_gamma,
+            &gpu,
+            &mut tracker,
+        )?;
         frame_graph.atmosphere().make_upload_buffer(
             convert(orrery.sun_direction()),
             &gpu,

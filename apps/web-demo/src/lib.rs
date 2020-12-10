@@ -134,7 +134,7 @@ fn window_loop(
     // Sim
     let mut tracker = Default::default();
     app.globals_buffer
-        .make_upload_buffer(app.arcball.camera(), &app.gpu, &mut tracker)?;
+        .make_upload_buffer(app.arcball.camera(), 2.2, &app.gpu, &mut tracker)?;
 
     // Render
     let framebuffer = app.gpu.get_next_framebuffer()?.unwrap();
