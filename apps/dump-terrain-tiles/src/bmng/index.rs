@@ -31,14 +31,14 @@ pub struct Index {
 impl Index {
     pub const TILE_SIZE: u32 = 21_600;
 
-    pub fn from_directory(directory: &Path) -> Fallible<Arc<RwLock<Self>>> {
+    pub fn from_directory(month: i32, directory: &Path) -> Fallible<Arc<RwLock<Self>>> {
         let mut raw = Vec::new();
         for (_lon, lon_name) in "ABCD".chars().enumerate() {
             let mut inner = Vec::new();
             for (_lat, lat_name) in "21".chars().enumerate() {
                 let raw_filename = format!(
-                    "world.topo.200405.3x21600x21600.{}{}.raw",
-                    lon_name, lat_name
+                    "world.2004{:02}.3x21600x21600.{}{}.raw",
+                    month, lon_name, lat_name
                 );
                 let mut raw_path = directory.to_owned();
                 raw_path.push(raw_filename);
