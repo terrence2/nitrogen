@@ -56,7 +56,7 @@ impl Index {
         source: Arc<RwLock<dyn DataSource>>,
     ) -> Fallible<Arc<RwLock<IndexDataSet>>> {
         let mut path = self.path.clone();
-        path.push(prefix);
+        path.push(&prefix);
 
         let ds = Arc::new(RwLock::new(IndexDataSet::new(
             prefix,

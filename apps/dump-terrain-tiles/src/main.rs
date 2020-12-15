@@ -520,13 +520,17 @@ fn main() -> Fallible<()> {
     let mut mip_index = MipIndex::empty(&opt.output_directory);
 
     if let Some(directory) = opt.bmng_directory.as_ref() {
-        let bmng = BmngIndex::from_directory(directory)?;
-        mip_index.add_data_set(
-            "bmng",
-            DataSetDataKind::Color,
-            DataSetCoordinates::Spherical,
-            bmng,
-        )?;
+        for month in 1..=12 {
+            let mut month_dir = directory.to_owned();
+            month_dir.push(format!("month{:02}", month));
+            let bmng = BmngIndex::from_directory(month, &month_dir)?;
+            mip_index.add_data_set(
+                Box::leak(format!("bmng-{:02}", month).into_boxed_str()),
+                DataSetDataKind::Color,
+                DataSetCoordinates::Spherical,
+                bmng,
+            )?;
+        }
     }
 
     if let Some(directory) = opt.srtm_directory.as_ref() {
