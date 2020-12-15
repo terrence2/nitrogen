@@ -55,7 +55,6 @@ impl Index {
         coordinates: DataSetCoordinates,
         source: Arc<RwLock<dyn DataSource>>,
     ) -> Fallible<Arc<RwLock<IndexDataSet>>> {
-        let prefix = prefix.into();
         let mut path = self.path.clone();
         path.push(&prefix);
 
