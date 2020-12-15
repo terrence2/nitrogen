@@ -22,7 +22,7 @@ use failure::Fallible;
 use fullscreen::FullscreenBuffer;
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
-use gpu::{make_frame_graph, UploadTracker, GPU};
+use gpu::{make_frame_graph, GPU};
 use input::{InputController, InputSystem};
 use legion::prelude::*;
 use log::trace;
