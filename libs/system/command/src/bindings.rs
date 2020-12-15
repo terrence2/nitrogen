@@ -101,10 +101,11 @@ impl Bindings {
         state: &mut BindingState,
         commands: &mut SmallVec<[Command; 4]>,
     ) -> Fallible<()> {
-        // We just got the press which could have activated a chord. If it's in the active chords
-        // list already, then something has gone badly wrong. Note that we may already have a
-        // major of this chord if it got added first, which is what we're checking below.
-        assert!(!state.active_chords.contains(&chord));
+        // We may have multiple binding sets active for the same KeySet, in which case the first
+        // binding in the set wins and checks for subsequent activations should exit early.
+        if state.active_chords.contains(&chord) {
+            return Ok(());
+        }
 
         // The press_chords list implicitly filters out keys not in this bindings.
         assert!(self.command_map.contains_key(chord));

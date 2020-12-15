@@ -125,12 +125,22 @@ struct LayoutTextRenderContext {
 
 pub type FontName = String;
 
+// struct Label {
+//     spans: Vec<Layout>,
+// }
+
 #[derive(Commandable)]
 pub struct TextLayoutBuffer {
+    // Map from fonts to the glyph cache needed to create and render layouts.
     glyph_cache_map: HashMap<FontName, GlyphCacheIndex>,
     glyph_caches: Vec<GlyphCache>,
+
+    // FIXME: How do we want to manage our draw state? Seems like pre-mature optimization at this point.
     layout_map: HashMap<FontName, Vec<LayoutHandle>>,
+
+    // Individual spans, rather than a label that may contain marked-up text.
     layouts: Vec<Layout>,
+
     glyph_bind_group_layout: wgpu::BindGroupLayout,
     layout_bind_group_layout: wgpu::BindGroupLayout,
 }

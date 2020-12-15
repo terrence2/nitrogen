@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use codepage_437::{FromCp437, CP437_CONTROL};
 use failure::Fallible;
-use font_common::{upload_texture_luma, FontInterface, GlyphFrame, ROW_ALIGNMENT};
+use font_common::{upload_texture_luma, FontInterface, GlyphFrame};
 use gpu::GPU;
 use image::{GrayImage, Luma};
 use lazy_static::lazy_static;
@@ -97,9 +97,7 @@ impl TtfFont {
                 pixel_width += (bb.max.x - bb.min.x) as u32 + 1;
             }
         }
-        if pixel_width % ROW_ALIGNMENT != 0 {
-            pixel_width += ROW_ALIGNMENT - (pixel_width % ROW_ALIGNMENT);
-        }
+        pixel_width = GPU::stride_for_row_size(pixel_width);
 
         // Extract all necessary glyphs to a texture and upload to GPU.
         let mut buf = GrayImage::new(pixel_width, pixel_height);
