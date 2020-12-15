@@ -21,8 +21,6 @@ use failure::Fallible;
 use gpu::GPU;
 use image::{ImageBuffer, Luma};
 
-pub const ROW_ALIGNMENT: u32 = 256;
-
 pub fn upload_texture_luma(
     name: &str,
     image_buf: ImageBuffer<Luma<u8>, Vec<u8>>,
@@ -34,7 +32,7 @@ pub fn upload_texture_luma(
         height: image_dim.1,
         depth: 1,
     };
-    assert_eq!(extent.width % 256, 0);
+    assert_eq!(extent.width % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT, 0);
     let image_data = image_buf.into_raw();
 
     let transfer_buffer = gpu.push_buffer(

@@ -28,6 +28,7 @@ impl GlyphCacheIndex {
     }
 }
 
+// A glyph cache stores the context required to produce and draw a text layout.
 pub struct GlyphCache {
     index: GlyphCacheIndex,
     bind_group: wgpu::BindGroup,

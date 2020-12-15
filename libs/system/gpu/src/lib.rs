@@ -334,7 +334,7 @@ impl GPU {
         Ok(self.device.create_shader_module(spirv_words))
     }
 
-    pub fn stride_for_row_size(size: u32) -> u32 {
+    pub const fn stride_for_row_size(size: u32) -> u32 {
         (size + wgpu::COPY_BYTES_PER_ROW_ALIGNMENT - 1) / wgpu::COPY_BYTES_PER_ROW_ALIGNMENT
             * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT
     }
