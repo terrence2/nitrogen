@@ -134,7 +134,7 @@ macro_rules! make_frame_graph {
                 }
             )*
 
-            pub fn run(&mut self, gpu: &mut $crate::GPU, tracker: UploadTracker) -> ::failure::Fallible<bool> {
+            pub fn run(&mut self, gpu: &mut $crate::GPU, tracker: $crate::UploadTracker) -> ::failure::Fallible<bool> {
                 $(
                     let $buffer_name = &self.$buffer_name;
                 )*
