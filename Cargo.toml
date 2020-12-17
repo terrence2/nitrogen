@@ -30,6 +30,7 @@ members = [
     "libs/system/input",
     "libs/system/packed_struct",
 
+    "libs/wgpu-buffer/atlas",
     "libs/wgpu-buffer/atmosphere",
     "libs/wgpu-buffer/font_common",
     "libs/wgpu-buffer/font_ttf",
@@ -40,8 +41,8 @@ members = [
     "libs/wgpu-buffer/text_layout",
 
     "libs/wgpu-render/shader_shared",
-    "libs/wgpu-render/screen_text",
     "libs/wgpu-render/terrain",
+    "libs/wgpu-render/ui",
 ]
 
 [dependencies]
@@ -66,7 +67,7 @@ global_data = { path = "libs/wgpu-buffer/global_data" }
 gpu = { path = "libs/system/gpu" }
 input = { path = "libs/system/input" }
 orrery = { path = "libs/sim/orrery" }
-screen_text = { path = "libs/wgpu-render/screen_text" }
+ui = { path = "libs/wgpu-render/ui" }
 stars = { path = "libs/wgpu-buffer/stars" }
 terrain = { path = "libs/wgpu-render/terrain" }
 terrain_geo = { path = "libs/wgpu-buffer/terrain_geo" }

@@ -15,11 +15,13 @@
 mod glyph_cache;
 mod layout;
 mod layout_vertex;
+mod widget_vertex;
+mod widgets;
 
-pub use crate::layout_vertex::LayoutVertex;
-use crate::{
-    glyph_cache::{GlyphCache, GlyphCacheIndex},
-    layout::Layout,
+use crate::{glyph_cache::GlyphCache, layout::Layout};
+pub use crate::{
+    layout_vertex::LayoutVertex,
+    widgets::{float_box::FloatBox, label::Label, PaintContext, Widget},
 };
 
 use commandable::{commandable, Commandable};
@@ -28,7 +30,22 @@ use font_common::FontInterface;
 use font_ttf::TtfFont;
 use gpu::{UploadTracker, GPU};
 use log::trace;
+use parking_lot::RwLock;
 use std::{collections::HashMap, sync::Arc};
+
+// Drawing UI efficiently:
+//
+// We have one pipeline for each of the following.
+// 1) Draw all widget backgrounds / borders in one pipeline, with depth.
+// 2) Draw all text
+// 3) Draw all images
+//
+// Widget upload recurses through the tree of widgets. Each layer gets a 1.0 wide depth slot to
+// render into. They may upload vertices to 3 vertex pools, one for each of the above concerns.
+// Rendering is done from leaf up, making use of the depth test to avoid overpaint. Vertices
+// contain x, y, and z coordinates in screen space, s and t texture coordinates, and an index
+// into the widget info buffer. There is one slot in the info buffer per widget where the majority
+// of the widget data lives, so save space in vertices.
 
 // Fallback for when we have no libs loaded.
 // https://fonts.google.com/specimen/Quantico?selection.family=Quantico
@@ -125,21 +142,19 @@ struct LayoutTextRenderContext {
 
 pub type FontName = String;
 
-// struct Label {
-//     spans: Vec<Layout>,
-// }
-
 #[derive(Commandable)]
 pub struct TextLayoutBuffer {
     // Map from fonts to the glyph cache needed to create and render layouts.
-    glyph_cache_map: HashMap<FontName, GlyphCacheIndex>,
-    glyph_caches: Vec<GlyphCache>,
+    glyph_cache: HashMap<FontName, Arc<RwLock<GlyphCache>>>,
 
     // FIXME: How do we want to manage our draw state? Seems like pre-mature optimization at this point.
     layout_map: HashMap<FontName, Vec<LayoutHandle>>,
 
     // Individual spans, rather than a label that may contain marked-up text.
     layouts: Vec<Layout>,
+
+    root: Arc<RwLock<FloatBox>>,
+    paint_context: PaintContext,
 
     glyph_bind_group_layout: wgpu::BindGroupLayout,
     layout_bind_group_layout: wgpu::BindGroupLayout,
@@ -151,8 +166,7 @@ impl TextLayoutBuffer {
         trace!("LayoutBuffer::new");
 
         let glyph_bind_group_layout = GlyphCache::create_bind_group_layout(gpu.device());
-        let mut glyph_caches = Vec::new();
-        let mut glyph_cache_map = HashMap::new();
+        let mut glyph_cache = HashMap::new();
 
         let layout_bind_group_layout =
             gpu.device()
@@ -171,18 +185,19 @@ impl TextLayoutBuffer {
                 });
 
         // Add fallback font.
-        let index = GlyphCacheIndex::new(glyph_caches.len());
-        glyph_cache_map.insert(FALLBACK_FONT_NAME.to_owned(), index);
-        glyph_caches.push(GlyphCache::new(
-            index,
-            TtfFont::from_bytes("quantico", &QUANTICO_TTF_DATA, gpu)?,
-            &glyph_bind_group_layout,
-            gpu,
-        ));
+        glyph_cache.insert(
+            FALLBACK_FONT_NAME.to_owned(),
+            Arc::new(RwLock::new(GlyphCache::new(
+                TtfFont::from_bytes("quantico", &QUANTICO_TTF_DATA, gpu)?,
+                &glyph_bind_group_layout,
+                gpu,
+            ))),
+        );
 
         Ok(Self {
-            glyph_cache_map,
-            glyph_caches,
+            root: Arc::new(RwLock::new(FloatBox::new())),
+            paint_context: Default::default(),
+            glyph_cache,
             layout_map: HashMap::new(),
             layouts: Vec::new(),
             glyph_bind_group_layout,
@@ -190,11 +205,23 @@ impl TextLayoutBuffer {
         })
     }
 
+    pub fn root(&self) -> Arc<RwLock<FloatBox>> {
+        self.root.clone()
+    }
+
     pub fn add_font(&mut self, font_name: FontName, font: Box<dyn FontInterface>, gpu: &GPU) {
-        let index = GlyphCacheIndex::new(self.glyph_caches.len());
-        self.glyph_cache_map.insert(font_name, index);
-        let glyphs = GlyphCache::new(index, font, &self.glyph_bind_group_layout, gpu);
-        self.glyph_caches.push(glyphs);
+        assert!(
+            !self.glyph_cache.contains_key(&font_name),
+            "font already loaded"
+        );
+        self.glyph_cache.insert(
+            font_name,
+            Arc::new(RwLock::new(GlyphCache::new(
+                font,
+                &self.glyph_bind_group_layout,
+                gpu,
+            ))),
+        );
     }
 
     pub fn glyph_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
@@ -221,11 +248,11 @@ impl TextLayoutBuffer {
         &mut self.layouts[handle.0]
     }
 
-    pub fn glyph_cache(&self, font_name: &str) -> &GlyphCache {
-        if let Some(id) = self.glyph_cache_map.get(font_name) {
-            return &self.glyph_caches[id.index()];
+    pub fn glyph_cache(&self, font_name: &str) -> Arc<RwLock<GlyphCache>> {
+        if let Some(cache) = self.glyph_cache.get(font_name) {
+            return cache.to_owned();
         }
-        &self.glyph_caches[self.glyph_cache_map[FALLBACK_FONT_NAME].index()]
+        self.glyph_cache[FALLBACK_FONT_NAME].to_owned()
     }
 
     // pub fn layout_mut(&mut self, handle: LayoutHandle) -> &mut Layout {}
@@ -254,12 +281,9 @@ impl TextLayoutBuffer {
     }
 
     pub fn make_upload_buffer(&mut self, gpu: &GPU, tracker: &mut UploadTracker) -> Fallible<()> {
+        self.root.read().upload(&mut self.paint_context);
         for layout in self.layouts.iter_mut() {
-            layout.make_upload_buffer(
-                &self.glyph_caches[layout.glyph_cache_index()],
-                gpu,
-                tracker,
-            )?;
+            layout.make_upload_buffer(&layout.glyph_cache().read(), gpu, tracker)?;
         }
         Ok(())
     }

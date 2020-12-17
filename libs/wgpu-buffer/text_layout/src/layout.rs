@@ -13,12 +13,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    glyph_cache::{GlyphCache, GlyphCacheIndex},
-    layout_vertex::LayoutVertex,
+    glyph_cache::GlyphCache, layout_vertex::LayoutVertex, widget_vertex::WidgetVertex,
     LayoutHandle, LayoutTextRenderContext, TextAnchorH, TextAnchorV, TextPositionH, TextPositionV,
 };
 use failure::Fallible;
 use gpu::{UploadTracker, GPU};
+use parking_lot::RwLock;
 use std::{mem, ops::Range, sync::Arc};
 use zerocopy::{AsBytes, FromBytes};
 
@@ -41,7 +41,7 @@ pub struct Layout {
     layout_handle: LayoutHandle,
 
     // The font used for rendering this layout.
-    glyph_cache_index: GlyphCacheIndex,
+    glyph_cache: Arc<RwLock<GlyphCache>>,
 
     // Cached per-frame render state.
     content: String,
@@ -61,7 +61,7 @@ impl Layout {
     pub(crate) fn new(
         layout_handle: LayoutHandle,
         text: &str,
-        glyph_cache: &GlyphCache,
+        glyph_cache: Arc<RwLock<GlyphCache>>,
         bind_group_layout: &wgpu::BindGroupLayout,
         gpu: &GPU,
     ) -> Fallible<Self> {
@@ -84,10 +84,10 @@ impl Layout {
             }],
         });
 
-        let text_render_context = Self::build_text_span(text, &glyph_cache, gpu)?;
+        let text_render_context = Self::build_text_span(text, &glyph_cache.read(), gpu)?;
         Ok(Self {
             layout_handle,
-            glyph_cache_index: glyph_cache.index(),
+            glyph_cache,
 
             content: text.to_owned(),
             position_x: TextPositionH::Center,
@@ -159,6 +159,71 @@ impl Layout {
 
     pub fn handle(&self) -> LayoutHandle {
         self.layout_handle
+    }
+
+    fn span_to_triangles(
+        text: &str,
+        glyph_cache: &GlyphCache,
+        depth: f32,
+        widget_info_index: u32,
+        verts: &mut Vec<WidgetVertex>,
+    ) {
+        let mut offset = 0f32;
+        let mut prior = None;
+        for mut c in text.chars() {
+            if c == ' ' {
+                offset += SPACE_WIDTH;
+                continue;
+            }
+
+            if !glyph_cache.can_render_char(c) {
+                c = '?';
+            }
+
+            let frame = glyph_cache.frame_for(c);
+            let kerning = if let Some(p) = prior {
+                glyph_cache.pair_kerning(p, c)
+            } else {
+                0f32
+            };
+            prior = Some(c);
+
+            // Layout from 0-> and let our transform put us in the right spot.
+            let x0 = offset + frame.left_side_bearing + kerning;
+            let x1 = offset + frame.advance_width;
+            let y0 = 0f32; // Note, 0 is not the font baseline.
+            let y1 = glyph_cache.render_height();
+
+            // Build 4 corner vertices.
+            let v00 = WidgetVertex {
+                position: [x0, y0, depth],
+                tex_coord: [frame.s0, 0f32],
+                widget_info_index,
+            };
+            let v01 = WidgetVertex {
+                position: [x0, y1, depth],
+                tex_coord: [frame.s0, 1f32],
+                widget_info_index,
+            };
+            let v10 = WidgetVertex {
+                position: [x1, y0, depth],
+                tex_coord: [frame.s1, 0f32],
+                widget_info_index,
+            };
+            let v11 = WidgetVertex {
+                position: [x1, y1, depth],
+                tex_coord: [frame.s1, 1f32],
+                widget_info_index,
+            };
+
+            // Push 2 triangles
+            verts.push(v00);
+            verts.push(v10);
+            verts.push(v01);
+            verts.push(v01);
+            verts.push(v10);
+            verts.push(v11);
+        }
     }
 
     fn build_text_span(
@@ -297,8 +362,8 @@ impl Layout {
         Ok(())
     }
 
-    pub(crate) fn glyph_cache_index(&self) -> usize {
-        self.glyph_cache_index.index()
+    pub(crate) fn glyph_cache(&self) -> Arc<RwLock<GlyphCache>> {
+        self.glyph_cache.clone()
     }
 
     pub fn vertex_buffer(&self) -> wgpu::BufferSlice {

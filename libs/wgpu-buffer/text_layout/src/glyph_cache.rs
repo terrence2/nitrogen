@@ -15,29 +15,14 @@
 use font_common::{FontInterface, GlyphFrame};
 use gpu::GPU;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub struct GlyphCacheIndex(usize);
-
-impl GlyphCacheIndex {
-    pub fn new(index: usize) -> Self {
-        Self(index)
-    }
-
-    pub fn index(self) -> usize {
-        self.0
-    }
-}
-
 // A glyph cache stores the context required to produce and draw a text layout.
 pub struct GlyphCache {
-    index: GlyphCacheIndex,
     bind_group: wgpu::BindGroup,
     font: Box<dyn FontInterface>,
 }
 
 impl GlyphCache {
     pub fn new(
-        index: GlyphCacheIndex,
         font: Box<dyn FontInterface>,
         bind_group_layout: &wgpu::BindGroupLayout,
         gpu: &GPU,
@@ -59,11 +44,7 @@ impl GlyphCache {
             ],
         });
 
-        Self {
-            index,
-            bind_group,
-            font,
-        }
+        Self { bind_group, font }
     }
 
     pub fn render_height(&self) -> f32 {
@@ -92,10 +73,6 @@ impl GlyphCache {
                 },
             ],
         })
-    }
-
-    pub fn index(&self) -> GlyphCacheIndex {
-        self.index
     }
 
     pub fn bind_group(&self) -> &wgpu::BindGroup {

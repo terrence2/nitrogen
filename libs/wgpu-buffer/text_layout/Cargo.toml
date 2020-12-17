@@ -6,9 +6,11 @@ edition = "2018"
 
 [dependencies]
 failure = "^ 0.1.2"
-log = "^ 0.4"
 image = "^ 0.21"
+log = "^ 0.4"
 memoffset = "^ 0.5"
+parking_lot = "^ 0.11"
+shader_shared = { path = "../../wgpu-render/shader_shared" }
 wgpu = "^ 0.6"
 zerocopy = "^ 0.3"
 command = { path = "../../system/command" }

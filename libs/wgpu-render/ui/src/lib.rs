@@ -18,26 +18,24 @@ use global_data::GlobalParametersBuffer;
 use gpu::GPU;
 use log::trace;
 use shader_shared::Group;
-use text_layout::{LayoutVertex, TextLayoutBuffer};
+use text_layout::{LayoutVertex, TextLayoutBuffer, Widget};
 
 #[derive(Commandable)]
-pub struct ScreenTextRenderPass {
+pub struct UiRenderPass {
     pipeline: wgpu::RenderPipeline,
 }
 
 #[commandable]
-impl ScreenTextRenderPass {
+impl UiRenderPass {
     pub fn new(
         gpu: &mut GPU,
         global_data: &GlobalParametersBuffer,
         layout_buffer: &TextLayoutBuffer,
     ) -> Fallible<Self> {
-        trace!("ScreenTextRenderPass::new");
+        trace!("UiRenderPass::new");
 
-        let vert_shader =
-            gpu.create_shader_module(include_bytes!("../target/screen_text.vert.spirv"))?;
-        let frag_shader =
-            gpu.create_shader_module(include_bytes!("../target/screen_text.frag.spirv"))?;
+        let vert_shader = gpu.create_shader_module(include_bytes!("../target/ui.vert.spirv"))?;
+        let frag_shader = gpu.create_shader_module(include_bytes!("../target/ui.frag.spirv"))?;
 
         let pipeline_layout =
             gpu.device()
@@ -114,8 +112,12 @@ impl ScreenTextRenderPass {
     ) -> Fallible<wgpu::RenderPass<'a>> {
         rpass.set_pipeline(&self.pipeline);
         rpass.set_bind_group(Group::Globals.index(), &global_data.bind_group(), &[]);
+
+        // FIXME: should be able to remove this
+        /*
         for (font_name, layout_handles) in layout_buffer.layouts_by_font() {
-            let glyph_cache = layout_buffer.glyph_cache(font_name);
+            let glyph_cache_handle = layout_buffer.glyph_cache(font_name);
+            let glyph_cache = glyph_cache_handle.read();
             rpass.set_bind_group(Group::GlyphCache.index(), &glyph_cache.bind_group(), &[]);
             for &layout_handle in layout_handles {
                 let layout = layout_buffer.layout(layout_handle);
@@ -126,6 +128,8 @@ impl ScreenTextRenderPass {
                 rpass.draw_indexed(layout.index_range(), 0, 0..1);
             }
         }
+         */
+
         Ok(rpass)
     }
 }
