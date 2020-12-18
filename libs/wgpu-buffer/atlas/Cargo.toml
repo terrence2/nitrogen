@@ -1,0 +1,14 @@
+[package]
+name = "atlas"
+version = "0.1.0"
+authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+image = "^ 0.21"
+wgpu = "^ 0.6"
+gpu = { path = "../../system/gpu" }
+
+[dev-dependencies]
+rand = "^ 0.7"
+winit = "^ 0.23"
