@@ -15,7 +15,6 @@
 use gpu::{texture_format_size, GPU};
 use image::{GenericImage, ImageBuffer, Pixel};
 use std::{mem, num::NonZeroU32};
-use wgpu::Extent3d;
 
 // Each column indicates the filled height up to the given offset.
 #[derive(Debug)]
@@ -162,7 +161,7 @@ where
 
         if let Some((x, y)) = position {
             self.blit(image, x + self.padding, y + self.padding);
-            return Frame::new(
+            Frame::new(
                 x + self.padding,
                 y + self.padding,
                 image.width(),
@@ -170,11 +169,11 @@ where
                 self.buffer_offset,
                 self.width,
                 self.height,
-            );
+            )
         } else {
             // Did not find room in this image, try the next one.
             self.add_plane();
-            return self.push_image(image);
+            self.push_image(image)
         }
     }
 
@@ -332,7 +331,11 @@ mod test {
     #[test]
     fn test_upload() {
         let mut packer = AtlasPacker::<Rgba<u8>>::new(256, 256, *Rgba::from_slice(&[0; 4]));
-        let img = RgbaImage::from_pixel(254, 254, *Rgba::from_slice(&[255, 0, 0, 1]));
+        let _ = packer.push_image(&RgbaImage::from_pixel(
+            254,
+            254,
+            *Rgba::from_slice(&[255, 0, 0, 1]),
+        ));
 
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
