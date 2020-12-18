@@ -30,6 +30,7 @@ members = [
     "libs/system/input",
     "libs/system/packed_struct",
 
+    "libs/wgpu-buffer/atlas",
     "libs/wgpu-buffer/atmosphere",
     "libs/wgpu-buffer/font_common",
     "libs/wgpu-buffer/font_ttf",
