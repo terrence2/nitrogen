@@ -21,18 +21,18 @@ use shader_shared::Group;
 use widget::{LayoutVertex, TextLayoutBuffer};
 
 #[derive(Commandable)]
-pub struct ScreenTextRenderPass {
+pub struct UiRenderPass {
     pipeline: wgpu::RenderPipeline,
 }
 
 #[commandable]
-impl ScreenTextRenderPass {
+impl UiRenderPass {
     pub fn new(
         gpu: &mut GPU,
         global_data: &GlobalParametersBuffer,
         layout_buffer: &TextLayoutBuffer,
     ) -> Fallible<Self> {
-        trace!("ScreenTextRenderPass::new");
+        trace!("UiRenderPass::new");
 
         let vert_shader =
             gpu.create_shader_module(include_bytes!("../target/screen_text.vert.spirv"))?;
