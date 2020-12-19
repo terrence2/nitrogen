@@ -11,6 +11,7 @@ image = "^ 0.21"
 memoffset = "^ 0.5"
 wgpu = "^ 0.6"
 zerocopy = "^ 0.3"
+atlas = { path = "../../wgpu-buffer/atlas" }
 command = { path = "../../system/command" }
 commandable = { path = "../../system/commandable" }
 font_common = { path = "../../wgpu-buffer/font_common" }
