@@ -18,7 +18,7 @@ use global_data::GlobalParametersBuffer;
 use gpu::GPU;
 use log::trace;
 use shader_shared::Group;
-use text_layout::{LayoutVertex, TextLayoutBuffer, Widget};
+use widget::{LayoutVertex, TextLayoutBuffer, Widget};
 
 #[derive(Commandable)]
 pub struct UiRenderPass {

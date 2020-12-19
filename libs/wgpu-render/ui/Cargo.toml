@@ -13,7 +13,7 @@ commandable = { path = "../../system/commandable" }
 gpu = { path = "../../system/gpu" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 shader_shared = { path = "../../wgpu-render/shader_shared" }
-text_layout = { path = "../../wgpu-buffer/text_layout" }
+widget = { path = "../../wgpu-buffer/widget" }
 
 [build-dependencies]
 build_shaders = { path = "../../system/build_shaders" }

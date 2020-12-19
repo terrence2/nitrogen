@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 #version 450
-#include <wgpu-buffer/text_layout/include/text_layout.glsl>
+#include <wgpu-buffer/widget/include/widget.glsl>
 
 layout(location = 0) in vec2 v_tex_coord;
 layout(location = 1) in vec4 v_color;
