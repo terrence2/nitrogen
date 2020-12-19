@@ -38,11 +38,11 @@ members = [
     "libs/wgpu-buffer/global_data",
     "libs/wgpu-buffer/stars",
     "libs/wgpu-buffer/terrain_geo",
-    "libs/wgpu-buffer/text_layout",
+    "libs/wgpu-buffer/widget",
 
     "libs/wgpu-render/shader_shared",
-    "libs/wgpu-render/screen_text",
     "libs/wgpu-render/terrain",
+    "libs/wgpu-render/ui",
 ]
 
 [dependencies]
@@ -67,9 +67,9 @@ global_data = { path = "libs/wgpu-buffer/global_data" }
 gpu = { path = "libs/system/gpu" }
 input = { path = "libs/system/input" }
 orrery = { path = "libs/sim/orrery" }
-screen_text = { path = "libs/wgpu-render/screen_text" }
 stars = { path = "libs/wgpu-buffer/stars" }
 terrain = { path = "libs/wgpu-render/terrain" }
 terrain_geo = { path = "libs/wgpu-buffer/terrain_geo" }
-text_layout = { path = "libs/wgpu-buffer/text_layout" }
+ui = { path = "libs/wgpu-render/ui" }
 universe = { path = "libs/sim/universe" }
+widget = { path = "libs/wgpu-buffer/widget" }

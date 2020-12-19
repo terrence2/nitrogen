@@ -1,5 +1,5 @@
 [package]
-name = "text_layout"
+name = "ui"
 version = "0.1.0"
 authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 edition = "2018"
@@ -7,15 +7,13 @@ edition = "2018"
 [dependencies]
 failure = "^ 0.1.2"
 log = "^ 0.4"
-image = "^ 0.21"
-memoffset = "^ 0.5"
 wgpu = "^ 0.6"
-zerocopy = "^ 0.3"
 command = { path = "../../system/command" }
 commandable = { path = "../../system/commandable" }
-font_common = { path = "../../wgpu-buffer/font_common" }
-font_ttf = { path = "../../wgpu-buffer/font_ttf" }
 gpu = { path = "../../system/gpu" }
+global_data = { path = "../../wgpu-buffer/global_data" }
+shader_shared = { path = "../../wgpu-render/shader_shared" }
+widget = { path = "../../wgpu-buffer/widget" }
 
-[dev-dependencies]
-winit = { version = "^ 0.23", features = ["web-sys"] }
+[build-dependencies]
+build_shaders = { path = "../../system/build_shaders" }

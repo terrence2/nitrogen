@@ -28,14 +28,14 @@ use legion::prelude::*;
 use log::trace;
 use nalgebra::convert;
 use orrery::Orrery;
-use screen_text::ScreenTextRenderPass;
 use stars::StarsBuffer;
 use std::{path::PathBuf, sync::Arc, time::Instant};
 use structopt::StructOpt;
 use terrain::TerrainRenderPass;
 use terrain_geo::{CpuDetailLevel, GpuDetailLevel, TerrainGeoBuffer};
-use text_layout::{TextAnchorH, TextAnchorV, TextLayoutBuffer, TextPositionH, TextPositionV};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
+use ui::UiRenderPass;
+use widget::{TextAnchorH, TextAnchorV, TextLayoutBuffer, TextPositionH, TextPositionV};
 use winit::window::Window;
 
 /// Show the contents of an MM file
@@ -62,7 +62,7 @@ make_frame_graph!(
         };
         renderers: [
             terrain: TerrainRenderPass { globals, atmosphere, stars, terrain_geo },
-            screen_text: ScreenTextRenderPass { globals, text_layout }
+            ui: UiRenderPass { globals, text_layout }
         ];
         passes: [
             // Update the indices so we have correct height data to tessellate with and normal
@@ -79,7 +79,7 @@ make_frame_graph!(
 
             draw: Render(Screen) {
                 terrain( globals, fullscreen, atmosphere, stars, terrain_geo ),
-                screen_text( globals, text_layout )
+                ui( globals, text_layout )
             }
         ];
     }
