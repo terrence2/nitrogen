@@ -87,7 +87,7 @@ impl GlyphCache {
         self.font.frame_for(c)
     }
 
-    pub fn pair_kerning(&self, a: char, b: char) -> f32 {
-        self.font.pair_kerning(a, b)
+    pub fn pair_kerning(&self, a: char, b: char, scale: f32) -> f32 {
+        self.font.pair_kerning(a, b, scale)
     }
 }

@@ -248,7 +248,7 @@ impl Layout {
 
             let frame = glyph_cache.frame_for(c);
             let kerning = if let Some(p) = prior {
-                glyph_cache.pair_kerning(p, c)
+                glyph_cache.pair_kerning(p, c, 64.0)
             } else {
                 0f32
             };

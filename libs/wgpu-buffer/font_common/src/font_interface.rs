@@ -13,11 +13,24 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::glyph_frame::GlyphFrame;
+use image::GrayImage;
 
 pub trait FontInterface {
+    // vertical metrics
+    fn ascent(&self, scale: f32) -> f32;
+    fn descent(&self, scale: f32) -> f32;
+    fn line_gap(&self, scale: f32) -> f32;
+
+    // horizontal metrics
+    fn advance_width(&self, c: char, scale: f32) -> f32;
+    fn left_side_bearing(&self, c: char, scale: f32) -> f32;
+    fn pair_kerning(&self, a: char, b: char, scale: f32) -> f32;
+
+    // rendering
+    fn render_glyph(&self, c: char, scale: f32) -> GrayImage;
+
     fn gpu_resources(&self) -> (&wgpu::TextureView, &wgpu::Sampler);
     fn render_height(&self) -> f32;
     fn can_render_char(&self, c: char) -> bool;
     fn frame_for(&self, c: char) -> &GlyphFrame;
-    fn pair_kerning(&self, a: char, b: char) -> f32;
 }
