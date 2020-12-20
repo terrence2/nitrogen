@@ -42,13 +42,63 @@ pub struct TtfFont {
     // The actual font data.
     font: Font<'static>,
 
-    // The rendered scale of the font.
-    scale: Scale,
-
     render_height: f32,
 }
 
 impl FontInterface for TtfFont {
+    fn ascent(&self, scale: f32) -> f32 {
+        self.font.v_metrics(Scale::uniform(scale)).ascent
+    }
+
+    fn descent(&self, scale: f32) -> f32 {
+        self.font.v_metrics(Scale::uniform(scale)).descent
+    }
+
+    fn line_gap(&self, scale: f32) -> f32 {
+        self.font.v_metrics(Scale::uniform(scale)).line_gap
+    }
+
+    fn advance_width(&self, c: char, scale: f32) -> f32 {
+        self.font
+            .glyph(c)
+            .scaled(Scale::uniform(scale))
+            .h_metrics()
+            .advance_width
+    }
+
+    fn left_side_bearing(&self, c: char, scale: f32) -> f32 {
+        self.font
+            .glyph(c)
+            .scaled(Scale::uniform(scale))
+            .h_metrics()
+            .left_side_bearing
+    }
+
+    fn render_glyph(&self, c: char, scale: f32) -> GrayImage {
+        const ORIGIN: Point<f32> = Point { x: 0.0, y: 0.0 };
+        let glyph = self
+            .font
+            .glyph(c)
+            .scaled(Scale::uniform(scale))
+            .positioned(ORIGIN);
+        if let Some(bb) = glyph.pixel_bounding_box() {
+            let v_metrics = self.font.v_metrics(Scale::uniform(scale));
+            let w = (bb.max.x - bb.min.x) as u32;
+            let h = (bb.max.y - bb.min.y) as u32;
+            let mut image = GrayImage::from_pixel(w, h, Luma([0]));
+            glyph.draw(|x, y, v| {
+                image.put_pixel(
+                    x,
+                    (v_metrics.ascent + bb.min.y as f32 + y as f32).floor() as u32,
+                    Luma([(v * 255.0) as u8]),
+                )
+            });
+            image
+        } else {
+            GrayImage::from_pixel(1, 1, Luma([0]))
+        }
+    }
+
     fn gpu_resources(&self) -> (&wgpu::TextureView, &wgpu::Sampler) {
         (&self.texture_view, &self.sampler)
     }
@@ -65,8 +115,8 @@ impl FontInterface for TtfFont {
         &self.glyph_frames[&c]
     }
 
-    fn pair_kerning(&self, a: char, b: char) -> f32 {
-        self.font.pair_kerning(self.scale, a, b)
+    fn pair_kerning(&self, a: char, b: char, scale: f32) -> f32 {
+        self.font.pair_kerning(Scale::uniform(scale), a, b)
     }
 }
 
@@ -152,7 +202,6 @@ impl TtfFont {
             sampler,
             glyph_frames,
             font,
-            scale,
             render_height: scale.y / (SCREEN_SCALE[1] * additional_scale),
         }) as Box<dyn FontInterface>)
     }
