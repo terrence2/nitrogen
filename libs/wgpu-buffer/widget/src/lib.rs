@@ -22,13 +22,11 @@ use crate::{
     layout::Layout,
 };
 
-use atlas::{AtlasPacker, Frame};
 use commandable::{commandable, Commandable};
 use failure::Fallible;
 use font_common::FontInterface;
 use font_ttf::TtfFont;
 use gpu::{UploadTracker, GPU};
-use image::{Pixel, Rgba};
 use log::trace;
 use std::{collections::HashMap, sync::Arc};
 
@@ -131,17 +129,8 @@ pub type FontName = String;
 //     spans: Vec<Layout>,
 // }
 
-pub struct FontTracker {
-    font: Box<dyn FontInterface>,
-    loaded_glyphs: HashMap<char, Frame>,
-}
-
 #[derive(Commandable)]
 pub struct TextLayoutBuffer {
-    // The Glyph sheet stores every glyph we have demanded.
-    glyph_sheet: AtlasPacker<Rgba<u8>>,
-    font_tracker: HashMap<FontName, FontTracker>,
-
     // Map from fonts to the glyph cache needed to create and render layouts.
     glyph_cache_map: HashMap<FontName, GlyphCacheIndex>,
     glyph_caches: Vec<GlyphCache>,
@@ -192,14 +181,6 @@ impl TextLayoutBuffer {
         ));
 
         Ok(Self {
-            glyph_sheet: AtlasPacker::new(
-                512,
-                512,
-                *Rgba::from_slice(&[0; 4]),
-                wgpu::TextureFormat::Rgba8Unorm,
-                wgpu::TextureUsage::SAMPLED,
-            ),
-            font_tracker: HashMap::new(),
             glyph_cache_map,
             glyph_caches,
             layout_map: HashMap::new(),

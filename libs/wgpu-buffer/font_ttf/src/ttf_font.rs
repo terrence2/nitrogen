@@ -42,9 +42,6 @@ pub struct TtfFont {
     // The actual font data.
     font: Font<'static>,
 
-    // The rendered scale of the font.
-    scale: Scale,
-
     render_height: f32,
 }
 
@@ -205,7 +202,6 @@ impl TtfFont {
             sampler,
             glyph_frames,
             font,
-            scale,
             render_height: scale.y / (SCREEN_SCALE[1] * additional_scale),
         }) as Box<dyn FontInterface>)
     }
