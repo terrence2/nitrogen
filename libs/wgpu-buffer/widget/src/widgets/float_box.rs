@@ -14,9 +14,16 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::widgets::{PaintContext, Widget};
 use failure::Fallible;
+use parking_lot::RwLock;
+use std::sync::Arc;
+
+pub struct FloatPackInfo {
+    child: Arc<RwLock<dyn Widget>>,
+    position: [f32; 2],
+}
 
 pub struct FloatBox {
-    children: Vec<Box<dyn Widget>>,
+    children: Vec<FloatPackInfo>,
 }
 
 impl FloatBox {
@@ -25,12 +32,19 @@ impl FloatBox {
             children: Vec::new(),
         }
     }
+
+    pub fn pin_child(&mut self, child: Arc<RwLock<dyn Widget>>, x: f32, y: f32) {
+        self.children.push(FloatPackInfo {
+            child,
+            position: [x, y],
+        });
+    }
 }
 
 impl Widget for FloatBox {
     fn upload(&self, context: &mut PaintContext) {
-        for child in &self.children {
-            child.upload(context);
+        for pack in &self.children {
+            pack.child.read().upload(context);
         }
     }
     // fn draw<'a>(&self, rpass: wgpu::RenderPass<'a>) -> Fallible<wgpu::RenderPass<'a>> {

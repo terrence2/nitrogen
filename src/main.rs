@@ -152,7 +152,13 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     )?;
     ///////////////////////////////////////////////////////////
 
-    let fps_label = text_layout::Label::new("hello world");
+    //let fps_label = widget::Label::new("hello world");
+    let fps_label = frame_graph.text_layout.create_label("hello", 2.0);
+    frame_graph
+        .text_layout
+        .root()
+        .write()
+        .pin_child(fps_label, 50.0, 50.0);
     //frame_graph.text_layout.root()
 
     let fps_handle = frame_graph

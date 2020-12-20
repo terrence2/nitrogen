@@ -16,12 +16,15 @@ use crate::{
     layout::Layout,
     widget_vertex::WidgetVertex,
     widgets::{PaintContext, Widget},
+    FontName,
 };
 use failure::Fallible;
 use shader_shared::Group;
 
 pub struct Label {
     content: String,
+    size_em: f32,
+    font: FontName,
 }
 
 impl Label {
@@ -30,13 +33,22 @@ impl Label {
         //Layout::span_to_triangles(&markup, glyph_cache, &mut cache);
         Self {
             content: markup.into(),
+            size_em: 1.0,
+            font: crate::FALLBACK_FONT_NAME.to_owned(),
         }
     }
 }
 
 impl Widget for Label {
     fn upload(&self, context: &mut PaintContext) {
-        // for span in &self.spans {}
+        // FIXME: make a layout engine to share.
+        for c in self.content.chars() {
+            let frame = context
+                .font_info
+                .get_mut(&self.font)
+                .unwrap()
+                .load_glyph(c, self.size_em);
+        }
     }
 
     // fn draw<'a>(&self, rpass: wgpu::RenderPass<'a>) -> Fallible<wgpu::RenderPass<'a>> {

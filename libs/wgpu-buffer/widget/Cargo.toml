@@ -13,6 +13,7 @@ parking_lot = "^ 0.11"
 shader_shared = { path = "../../wgpu-render/shader_shared" }
 wgpu = "^ 0.6"
 zerocopy = "^ 0.3"
+atlas = { path = "../../wgpu-buffer/atlas" }
 command = { path = "../../system/command" }
 commandable = { path = "../../system/commandable" }
 font_common = { path = "../../wgpu-buffer/font_common" }

@@ -24,11 +24,13 @@ pub use crate::{
     widgets::{float_box::FloatBox, label::Label, PaintContext, Widget},
 };
 
+use atlas::{AtlasPacker, Frame};
 use commandable::{commandable, Commandable};
 use failure::Fallible;
 use font_common::FontInterface;
 use font_ttf::TtfFont;
 use gpu::{UploadTracker, GPU};
+use image::Rgba;
 use log::trace;
 use parking_lot::RwLock;
 use std::{collections::HashMap, sync::Arc};
@@ -196,7 +198,7 @@ impl TextLayoutBuffer {
 
         Ok(Self {
             root: Arc::new(RwLock::new(FloatBox::new())),
-            paint_context: Default::default(),
+            paint_context: PaintContext::new(),
             glyph_cache,
             layout_map: HashMap::new(),
             layouts: Vec::new(),
@@ -210,18 +212,7 @@ impl TextLayoutBuffer {
     }
 
     pub fn add_font(&mut self, font_name: FontName, font: Box<dyn FontInterface>, gpu: &GPU) {
-        assert!(
-            !self.glyph_cache.contains_key(&font_name),
-            "font already loaded"
-        );
-        self.glyph_cache.insert(
-            font_name,
-            Arc::new(RwLock::new(GlyphCache::new(
-                font,
-                &self.glyph_bind_group_layout,
-                gpu,
-            ))),
-        );
+        self.paint_context.add_font(font_name, font);
     }
 
     pub fn glyph_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
@@ -280,11 +271,17 @@ impl TextLayoutBuffer {
         Ok(self.layout_mut(handle))
     }
 
+    pub fn create_label<S: Into<String>>(&self, markup: S, _size_em: f32) -> Arc<RwLock<Label>> {
+        Arc::new(RwLock::new(Label::new(markup)))
+    }
+
     pub fn make_upload_buffer(&mut self, gpu: &GPU, tracker: &mut UploadTracker) -> Fallible<()> {
         self.root.read().upload(&mut self.paint_context);
-        for layout in self.layouts.iter_mut() {
-            layout.make_upload_buffer(&layout.glyph_cache().read(), gpu, tracker)?;
-        }
+
+        // for layout in self.layouts.iter_mut() {
+        //     layout.make_upload_buffer(&layout.glyph_cache().read(), gpu, tracker)?;
+        // }
+
         Ok(())
     }
 }
@@ -293,6 +290,20 @@ impl TextLayoutBuffer {
 mod test {
     use super::*;
     use winit::{event_loop::EventLoop, window::Window};
+
+    #[test]
+    fn test_label_widget() -> Fallible<()> {
+        use winit::platform::unix::EventLoopExtUnix;
+        let event_loop = EventLoop::<()>::new_any_thread();
+        let window = Window::new(&event_loop)?;
+        let mut gpu = GPU::new(&window, Default::default())?;
+
+        let mut widgets = TextLayoutBuffer::new(&mut gpu)?;
+        let mut label = widgets.create_label("hello", 2.0);
+        widgets.root().write().pin_child(label, 0.0, 0.0);
+
+        Ok(())
+    }
 
     #[cfg(unix)]
     #[test]
