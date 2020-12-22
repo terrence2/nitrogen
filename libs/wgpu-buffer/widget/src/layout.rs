@@ -14,9 +14,12 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     glyph_cache::GlyphCache, layout_vertex::LayoutVertex, widget_vertex::WidgetVertex,
-    LayoutHandle, LayoutTextRenderContext, TextAnchorH, TextAnchorV, TextPositionH, TextPositionV,
+    widgets::FontContext, LayoutHandle, LayoutTextRenderContext, TextAnchorH, TextAnchorV,
+    TextPositionH, TextPositionV,
 };
+use atlas::Frame;
 use failure::Fallible;
+use font_common::FontInterface;
 use gpu::{UploadTracker, GPU};
 use parking_lot::RwLock;
 use std::{mem, ops::Range, sync::Arc};
@@ -30,6 +33,80 @@ const SPACE_WIDTH: f32 = 5f32 / 640f32;
 struct LayoutData {
     text_layout_position: [f32; 4],
     text_layout_color: [f32; 4],
+}
+
+pub struct LayoutEngine;
+
+impl LayoutEngine {
+    pub fn span_to_triangles(
+        span: &str,
+        font_context: &mut FontContext,
+        font_name: &str,
+        size_em: f32,
+        depth: f32,
+        widget_info_index: u32,
+        verts: &mut Vec<WidgetVertex>,
+    ) {
+        // FIXME: figure out how these are related!
+        let scale = size_em * 64.0;
+
+        let mut offset = 0f32;
+        let mut prior = None;
+        for mut c in span.chars() {
+            if c == ' ' {
+                offset += SPACE_WIDTH;
+                continue;
+            }
+
+            let frame = font_context.load_glyph(font_name, c, size_em);
+            let font = font_context.get_font(font_name);
+
+            let kerning = if let Some(p) = prior {
+                font.pair_kerning(p, c, scale)
+            } else {
+                0f32
+            };
+            prior = Some(c);
+
+            // Layout from 0-> and let our transform put us in the right spot.
+            let x0 = offset + font.left_side_bearing(c, scale) + kerning;
+            let x1 = offset + font.advance_width(c, scale);
+            let y0 = 0f32; // Note, 0 is not the font baseline.
+            let y1 = scale; // FIXME: how do advance and bearing relate to scale?
+
+            // Build 4 corner vertices.
+            let v00 = WidgetVertex {
+                position: [x0, y0, depth],
+                tex_coord: [frame.coord0.s, frame.coord0.t, frame.offset],
+                widget_info_index,
+            };
+            let v01 = WidgetVertex {
+                position: [x0, y1, depth],
+                tex_coord: [frame.coord0.s, frame.coord1.t, frame.offset],
+                widget_info_index,
+            };
+            let v10 = WidgetVertex {
+                position: [x1, y0, depth],
+                tex_coord: [frame.coord1.s, frame.coord0.t, frame.offset],
+                widget_info_index,
+            };
+            let v11 = WidgetVertex {
+                position: [x1, y1, depth],
+                tex_coord: [frame.coord1.s, frame.coord1.t, frame.offset],
+                widget_info_index,
+            };
+
+            // Push 2 triangles
+            verts.push(v00);
+            verts.push(v10);
+            verts.push(v01);
+            verts.push(v01);
+            verts.push(v10);
+            verts.push(v11);
+
+            offset += font.advance_width(c, scale);
+        }
+    }
 }
 
 // Note that each layout has its own vertex/index buffer and a tiny transform
@@ -159,71 +236,6 @@ impl Layout {
 
     pub fn handle(&self) -> LayoutHandle {
         self.layout_handle
-    }
-
-    fn span_to_triangles(
-        text: &str,
-        glyph_cache: &GlyphCache,
-        depth: f32,
-        widget_info_index: u32,
-        verts: &mut Vec<WidgetVertex>,
-    ) {
-        let mut offset = 0f32;
-        let mut prior = None;
-        for mut c in text.chars() {
-            if c == ' ' {
-                offset += SPACE_WIDTH;
-                continue;
-            }
-
-            if !glyph_cache.can_render_char(c) {
-                c = '?';
-            }
-
-            let frame = glyph_cache.frame_for(c);
-            let kerning = if let Some(p) = prior {
-                glyph_cache.pair_kerning(p, c)
-            } else {
-                0f32
-            };
-            prior = Some(c);
-
-            // Layout from 0-> and let our transform put us in the right spot.
-            let x0 = offset + frame.left_side_bearing + kerning;
-            let x1 = offset + frame.advance_width;
-            let y0 = 0f32; // Note, 0 is not the font baseline.
-            let y1 = glyph_cache.render_height();
-
-            // Build 4 corner vertices.
-            let v00 = WidgetVertex {
-                position: [x0, y0, depth],
-                tex_coord: [frame.s0, 0f32],
-                widget_info_index,
-            };
-            let v01 = WidgetVertex {
-                position: [x0, y1, depth],
-                tex_coord: [frame.s0, 1f32],
-                widget_info_index,
-            };
-            let v10 = WidgetVertex {
-                position: [x1, y0, depth],
-                tex_coord: [frame.s1, 0f32],
-                widget_info_index,
-            };
-            let v11 = WidgetVertex {
-                position: [x1, y1, depth],
-                tex_coord: [frame.s1, 1f32],
-                widget_info_index,
-            };
-
-            // Push 2 triangles
-            verts.push(v00);
-            verts.push(v10);
-            verts.push(v01);
-            verts.push(v01);
-            verts.push(v10);
-            verts.push(v11);
-        }
     }
 
     fn build_text_span(

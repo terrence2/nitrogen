@@ -12,9 +12,9 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use gpu::{texture_format_size, GPU};
+use gpu::{texture_format_component_type, texture_format_size, UploadTracker, GPU};
 use image::{GenericImage, ImageBuffer, Pixel};
-use std::{mem, num::NonZeroU32};
+use std::{mem, num::NonZeroU32, sync::Arc};
 
 // Each column indicates the filled height up to the given offset.
 #[derive(Debug)]
@@ -32,10 +32,10 @@ impl Column {
     }
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct TexCoord {
-    s: f32,
-    t: f32,
+    pub s: f32,
+    pub t: f32,
 }
 
 impl TexCoord {
@@ -48,11 +48,11 @@ impl TexCoord {
 }
 
 // The Frame tells our renderer how to get back to the texture in our eventual Atlas.
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Frame {
-    coord0: TexCoord,
-    coord1: TexCoord,
-    offset: f32,
+    pub coord0: TexCoord,
+    pub coord1: TexCoord,
+    pub offset: f32,
 }
 
 impl Frame {
@@ -96,8 +96,9 @@ pub struct AtlasPacker<P: Pixel + 'static> {
     dirty: bool,
     last_uploaded_offset: usize,
     texture_capacity: u32,
-    texture: Option<wgpu::Texture>,
+    texture: Option<Arc<Box<wgpu::Texture>>>,
     texture_view: Option<wgpu::TextureView>,
+    sampler: wgpu::Sampler,
 }
 
 impl<P: Pixel + 'static> AtlasPacker<P>
@@ -105,16 +106,33 @@ where
     [P::Subpixel]: AsRef<[u8]>,
     P::Subpixel: 'static,
 {
+    const MAX_LAYERS: u32 = 32;
+
     pub fn new(
+        device: &wgpu::Device,
         width: u32,
         height: u32,
         fill_color: P,
         format: wgpu::TextureFormat,
         usage: wgpu::TextureUsage,
+        filter: wgpu::FilterMode,
     ) -> Self {
         assert_eq!(texture_format_size(format) as usize, mem::size_of::<P>());
         let pix_size = mem::size_of::<P>() as u32;
         assert_eq!((width * pix_size) % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT, 0);
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("atlas-sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: filter,
+            min_filter: filter,
+            mipmap_filter: filter,
+            lod_min_clamp: 1.0,
+            lod_max_clamp: 1.0, // TODO: mipmapping
+            anisotropy_clamp: None,
+            compare: None,
+        });
         let mut packer = Self {
             fill_color,
             width,
@@ -130,6 +148,7 @@ where
             texture_capacity: 0,
             texture: None,
             texture_view: None,
+            sampler,
         };
         packer.add_plane();
         packer.buffer_offset = 0;
@@ -201,8 +220,43 @@ where
         }
     }
 
-    pub fn buffers(&self) -> &[ImageBuffer<P, Vec<P::Subpixel>>] {
+    pub fn images(&self) -> &[ImageBuffer<P, Vec<P::Subpixel>>] {
         &self.buffers
+    }
+
+    pub fn texture_layout_entry(&self, binding: u32) -> wgpu::BindGroupLayoutEntry {
+        wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStage::FRAGMENT,
+            ty: wgpu::BindingType::SampledTexture {
+                dimension: wgpu::TextureViewDimension::D2Array,
+                component_type: texture_format_component_type(self.format),
+                multisampled: false,
+            },
+            count: NonZeroU32::new(Self::MAX_LAYERS),
+        }
+    }
+
+    pub fn sampler_layout_entry(&self, binding: u32) -> wgpu::BindGroupLayoutEntry {
+        wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStage::FRAGMENT,
+            ty: wgpu::BindingType::Sampler { comparison: false },
+            count: None,
+        }
+    }
+
+    pub fn texture_binding(&self, binding: u32) -> wgpu::BindGroupEntry {
+        wgpu::BindGroupEntry {
+            binding,
+            resource: wgpu::BindingResource::TextureView(self.texture_view.as_ref().unwrap()),
+        }
+    }
+    pub fn sampler_binding(&self, binding: u32) -> wgpu::BindGroupEntry {
+        wgpu::BindGroupEntry {
+            binding,
+            resource: wgpu::BindingResource::Sampler(&self.sampler),
+        }
     }
 
     /// Note: panics if no upload has happened.
@@ -217,16 +271,11 @@ where
 
     /// Upload the current contents to the GPU. Note that this is non-destructive. If needed,
     /// the builder can accumulate more textures and upload again later.
-    pub fn upload(&mut self, gpu: &mut GPU) {
-        if !self.dirty {
+    pub fn upload(&mut self, gpu: &GPU, tracker: &mut UploadTracker) {
+        if !self.dirty && self.texture.is_some() {
             return;
         }
 
-        let mut encoder = gpu
-            .device()
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("shape-chunk-texture-atlas-uploader-command-encoder"),
-            });
         if self.texture.is_none() {
             assert!(self.texture_view.is_none());
             assert_eq!(self.texture_capacity, 0);
@@ -234,19 +283,21 @@ where
 
             self.last_uploaded_offset = self.buffer_offset;
             self.texture_capacity = self.buffer_offset as u32 + 1;
-            self.texture = Some(gpu.device().create_texture(&wgpu::TextureDescriptor {
-                label: Some("atlas-texture"),
-                size: wgpu::Extent3d {
-                    width: self.width,
-                    height: self.height,
-                    depth: self.texture_capacity,
+            self.texture = Some(Arc::new(Box::new(gpu.device().create_texture(
+                &wgpu::TextureDescriptor {
+                    label: Some("atlas-texture"),
+                    size: wgpu::Extent3d {
+                        width: self.width,
+                        height: self.height,
+                        depth: self.texture_capacity,
+                    },
+                    mip_level_count: 1, // TODO: mip-mapping for atlas textures
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: self.format,
+                    usage: self.usage,
                 },
-                mip_level_count: 1, // TODO: mip-mapping for atlas textures
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: self.format,
-                usage: self.usage,
-            }));
+            ))));
             self.texture_view = Some(self.texture.as_ref().unwrap().create_view(
                 &wgpu::TextureViewDescriptor {
                     label: Some("atlas-texture-view"),
@@ -265,29 +316,17 @@ where
                     &image.as_flat_samples().to_vec::<u8>().samples,
                     wgpu::BufferUsage::COPY_SRC,
                 );
-                encoder.copy_buffer_to_texture(
-                    wgpu::BufferCopyView {
-                        buffer: &buffer,
-                        layout: wgpu::TextureDataLayout {
-                            offset: 0,
-                            bytes_per_row: image.width() * 4,
-                            rows_per_image: image.height(),
-                        },
-                    },
-                    wgpu::TextureCopyView {
-                        texture: self.texture.as_ref().unwrap(),
-                        mip_level: 0,
-                        origin: wgpu::Origin3d {
-                            x: 0,
-                            y: 0,
-                            z: i as u32,
-                        },
-                    },
+                tracker.upload_to_texture(
+                    buffer,
+                    self.texture.clone().unwrap(),
                     wgpu::Extent3d {
                         width: image.width(),
                         height: image.height(),
                         depth: 1,
                     },
+                    self.format,
+                    i as u32,
+                    1,
                 );
             }
         } else if self.last_uploaded_offset == self.buffer_offset {
@@ -300,29 +339,17 @@ where
                 &image.as_flat_samples().to_vec::<u8>().samples,
                 wgpu::BufferUsage::COPY_SRC,
             );
-            encoder.copy_buffer_to_texture(
-                wgpu::BufferCopyView {
-                    buffer: &buffer,
-                    layout: wgpu::TextureDataLayout {
-                        offset: 0,
-                        bytes_per_row: image.width() * 4,
-                        rows_per_image: image.height(),
-                    },
-                },
-                wgpu::TextureCopyView {
-                    texture: self.texture.as_ref().unwrap(),
-                    mip_level: 0,
-                    origin: wgpu::Origin3d {
-                        x: 0,
-                        y: 0,
-                        z: self.last_uploaded_offset as u32,
-                    },
-                },
+            tracker.upload_to_texture(
+                buffer,
+                self.texture.clone().unwrap(),
                 wgpu::Extent3d {
                     width: image.width(),
                     height: image.height(),
                     depth: 1,
                 },
+                self.format,
+                self.last_uploaded_offset as u32,
+                1,
             );
         } else {
             // Otherwise, our texture is too small. We need to re-allocate, do a GPU-GPU copy of
@@ -330,19 +357,21 @@ where
             // the CPU to GPU.
             assert!((self.texture_capacity as usize) < self.buffer_offset + 1);
             let next_texture_capacity = self.buffer_offset as u32 + 1;
-            let next_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
-                label: Some("atlas-texture"),
-                size: wgpu::Extent3d {
-                    width: self.width,
-                    height: self.height,
-                    depth: next_texture_capacity,
+            let next_texture = Arc::new(Box::new(gpu.device().create_texture(
+                &wgpu::TextureDescriptor {
+                    label: Some("atlas-texture"),
+                    size: wgpu::Extent3d {
+                        width: self.width,
+                        height: self.height,
+                        depth: next_texture_capacity,
+                    },
+                    mip_level_count: 1, // TODO: mip-mapping for atlas textures
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: self.format,
+                    usage: self.usage,
                 },
-                mip_level_count: 1, // TODO: mip-mapping for atlas textures
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: self.format,
-                usage: self.usage,
-            });
+            )));
             let next_texture_view = next_texture.create_view(&wgpu::TextureViewDescriptor {
                 label: Some("atlas-texture-view"),
                 format: None,
@@ -354,32 +383,17 @@ where
                 array_layer_count: NonZeroU32::new(next_texture_capacity),
             });
             for i in 0..self.last_uploaded_offset {
-                // non-inclusive
-                encoder.copy_texture_to_texture(
-                    wgpu::TextureCopyView {
-                        texture: self.texture.as_ref().unwrap(),
-                        mip_level: 0,
-                        origin: wgpu::Origin3d {
-                            x: 0,
-                            y: 0,
-                            z: i as u32,
-                        },
-                    },
-                    wgpu::TextureCopyView {
-                        texture: &next_texture,
-                        mip_level: 0,
-                        origin: wgpu::Origin3d {
-                            x: 0,
-                            y: 0,
-                            z: i as u32,
-                        },
-                    },
+                tracker.copy_texture_to_texture(
+                    self.texture.clone().unwrap(),
+                    i as u32,
+                    next_texture.clone(),
+                    i as u32,
                     wgpu::Extent3d {
                         width: self.width,
                         height: self.height,
                         depth: 1,
                     },
-                )
+                );
             }
             for i in self.last_uploaded_offset..self.buffer_offset {
                 let image = &self.buffers[i];
@@ -388,29 +402,17 @@ where
                     &image.as_flat_samples().to_vec::<u8>().samples,
                     wgpu::BufferUsage::COPY_SRC,
                 );
-                encoder.copy_buffer_to_texture(
-                    wgpu::BufferCopyView {
-                        buffer: &buffer,
-                        layout: wgpu::TextureDataLayout {
-                            offset: 0,
-                            bytes_per_row: image.width() * 4,
-                            rows_per_image: image.height(),
-                        },
-                    },
-                    wgpu::TextureCopyView {
-                        texture: &next_texture,
-                        mip_level: 0,
-                        origin: wgpu::Origin3d {
-                            x: 0,
-                            y: 0,
-                            z: i as u32,
-                        },
-                    },
+                tracker.upload_to_texture(
+                    buffer,
+                    self.texture.clone().unwrap(),
                     wgpu::Extent3d {
                         width: image.width(),
                         height: image.height(),
                         depth: 1,
                     },
+                    self.format,
+                    i as u32,
+                    1,
                 );
             }
             self.texture = Some(next_texture);
@@ -418,14 +420,17 @@ where
             self.texture_capacity = next_texture_capacity;
             self.last_uploaded_offset = self.buffer_offset;
         }
-        gpu.queue_mut().submit(vec![encoder.finish()]);
         self.dirty = false;
     }
 
     /// Upload and then steal the texture. Useful when used as a one-shot atlas.
-    pub fn finish(mut self, gpu: &mut GPU) -> wgpu::TextureView {
-        self.upload(gpu);
-        self.texture_view.unwrap()
+    pub fn finish(
+        mut self,
+        gpu: &GPU,
+        tracker: &mut UploadTracker,
+    ) -> (wgpu::TextureView, wgpu::Sampler) {
+        self.upload(gpu, tracker);
+        (self.texture_view.unwrap(), self.sampler)
     }
 
     fn add_plane(&mut self) {

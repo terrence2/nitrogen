@@ -15,19 +15,21 @@
 pub(crate) mod float_box;
 pub(crate) mod label;
 
-use crate::{widget_vertex::WidgetVertex, FontName};
+use crate::{widget_vertex::WidgetVertex, FontName, FALLBACK_FONT_NAME};
 use atlas::{AtlasPacker, Frame};
-use failure::Fallible;
 use font_common::FontInterface;
-use image::Rgba;
+use gpu::{UploadTracker, GPU};
+use image::Luma;
+use ordered_float::OrderedFloat;
 use std::collections::HashMap;
+use zerocopy::{AsBytes, FromBytes};
 
-pub struct GlyphLoader {
+pub struct GlyphTracker {
     font: Box<dyn FontInterface>,
-    glyphs: HashMap<char, Frame>,
+    glyphs: HashMap<(char, OrderedFloat<f32>), Frame>,
 }
 
-impl GlyphLoader {
+impl GlyphTracker {
     pub fn new(font: Box<dyn FontInterface>) -> Self {
         Self {
             font,
@@ -35,50 +37,150 @@ impl GlyphLoader {
         }
     }
 
-    pub fn load_glyph(&mut self, c: char, size_em: f32) -> Frame {
-        unimplemented!()
+    pub fn font(&self) -> &dyn FontInterface {
+        self.font.as_ref()
+    }
+}
+
+pub struct FontContext {
+    glyph_sheet: AtlasPacker<Luma<u8>>,
+    trackers: HashMap<FontName, GlyphTracker>,
+}
+
+impl FontContext {
+    pub fn new(device: &wgpu::Device) -> Self {
+        Self {
+            glyph_sheet: AtlasPacker::new(
+                device,
+                512,
+                512,
+                Luma([0; 1]),
+                wgpu::TextureFormat::R8Unorm,
+                wgpu::TextureUsage::SAMPLED,
+                wgpu::FilterMode::Nearest,
+            ),
+            trackers: HashMap::new(),
+        }
+    }
+
+    pub fn upload(&mut self, gpu: &GPU, tracker: &mut UploadTracker) {
+        self.glyph_sheet.upload(gpu, tracker);
+    }
+
+    pub fn glyph_sheet_texture_layout_entry(&self, binding: u32) -> wgpu::BindGroupLayoutEntry {
+        self.glyph_sheet.texture_layout_entry(binding)
+    }
+
+    pub fn glyph_sheet_sampler_layout_entry(&self, binding: u32) -> wgpu::BindGroupLayoutEntry {
+        self.glyph_sheet.sampler_layout_entry(binding)
+    }
+
+    pub fn glyph_sheet_texture_binding(&self, binding: u32) -> wgpu::BindGroupEntry {
+        self.glyph_sheet.texture_binding(binding)
+    }
+
+    pub fn glyph_sheet_sampler_binding(&self, binding: u32) -> wgpu::BindGroupEntry {
+        self.glyph_sheet.sampler_binding(binding)
+    }
+
+    pub fn get_font(&self, font_name: &str) -> &dyn FontInterface {
+        self.trackers[self.font_name(font_name)].font()
+    }
+
+    pub fn add_font(&mut self, font_name: FontName, font: Box<dyn FontInterface>) {
+        assert!(
+            !self.trackers.contains_key(&font_name),
+            "font already loaded"
+        );
+        self.trackers.insert(font_name, GlyphTracker::new(font));
+    }
+
+    pub fn load_glyph(&mut self, font_name: &str, c: char, size_em: f32) -> Frame {
+        let name = self.font_name(font_name);
+        if let Some(frame) = self.trackers[name].glyphs.get(&(c, OrderedFloat(size_em))) {
+            return *frame;
+        }
+        // Note: cannot delegate to GlyphTracker because of the second mutable borrow.
+        // FIXME: how does em relate to scale?
+        let scale = size_em * 64.0;
+        let img = self.trackers[name].font.render_glyph(c, scale);
+        let frame = self.glyph_sheet.push_image(&img);
+        self.trackers
+            .get_mut(name)
+            .unwrap()
+            .glyphs
+            .insert((c, OrderedFloat(size_em)), frame);
+        frame
+    }
+
+    fn font_name<'a>(&self, font_name: &'a str) -> &'a str {
+        if self.trackers.contains_key(font_name) {
+            font_name
+        } else {
+            FALLBACK_FONT_NAME
+        }
     }
 }
 
 // Stored on the GPU, one per widget. Widget vertices reference one of these slots so that
 // pipelines can get at the data they need.
+#[repr(C)]
+#[derive(AsBytes, FromBytes, Copy, Clone, Debug, Default)]
 pub struct WidgetInfo {
     border_color: [f32; 4],
     background_color: [f32; 4],
+    foreground_color: [f32; 4],
 }
 
 pub struct PaintContext {
-    glyph_sheet: AtlasPacker<Rgba<u8>>,
-    font_info: HashMap<FontName, GlyphLoader>,
-
-    background_pool: Vec<WidgetVertex>,
-    text_pool: Vec<WidgetVertex>,
-    image_pool: Vec<WidgetVertex>,
+    pub current_depth: f32,
+    pub font_context: FontContext,
+    pub widget_info_pool: Vec<WidgetInfo>,
+    pub background_pool: Vec<WidgetVertex>,
+    pub text_pool: Vec<WidgetVertex>,
+    pub image_pool: Vec<WidgetVertex>,
 }
 
 impl PaintContext {
-    pub fn new() -> Self {
-        Self {
-            glyph_sheet: AtlasPacker::new(
-                512,
-                512,
-                Rgba([0; 4]),
-                wgpu::TextureFormat::Rgba8Unorm,
-                wgpu::TextureUsage::SAMPLED,
-            ),
-            font_info: HashMap::new(),
+    const TEXT_DEPTH: f32 = 0.75f32;
+    const BOX_DEPTH_SIZE: f32 = 1f32;
+
+    pub fn new(device: &wgpu::Device, fallback_font: Box<dyn FontInterface>) -> Self {
+        let mut obj = Self {
+            current_depth: 0f32,
+            font_context: FontContext::new(device),
+            widget_info_pool: Vec::new(),
             background_pool: Vec::new(),
             image_pool: Vec::new(),
             text_pool: Vec::new(),
-        }
+        };
+        obj.add_font(FALLBACK_FONT_NAME.to_owned(), fallback_font);
+        obj
+    }
+
+    // Some data is frame-coherent, some is fresh for each frame. We mix them together in this
+    // struct, inconveniently, so that we need to thread fewer random parameters through our
+    // entire upload call stack.
+    pub fn reset_for_frame(&mut self) {
+        self.current_depth = 0f32;
+        self.widget_info_pool.truncate(0);
+        self.background_pool.truncate(0);
+        self.image_pool.truncate(0);
+        self.text_pool.truncate(0);
     }
 
     pub fn add_font(&mut self, font_name: FontName, font: Box<dyn FontInterface>) {
-        assert!(
-            !self.font_info.contains_key(&font_name),
-            "font already loaded"
-        );
-        self.font_info.insert(font_name, GlyphLoader::new(font));
+        self.font_context.add_font(font_name, font);
+    }
+
+    pub fn enter_box(&mut self) {
+        self.current_depth += Self::BOX_DEPTH_SIZE;
+    }
+
+    pub fn push_widget(&mut self, info: WidgetInfo) -> u32 {
+        let offset = self.widget_info_pool.len();
+        self.widget_info_pool.push(info);
+        offset as u32
     }
 }
 

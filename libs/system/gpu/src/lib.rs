@@ -15,7 +15,9 @@
 mod frame_graph;
 mod upload_tracker;
 
-pub use crate::upload_tracker::{texture_format_size, UploadTracker};
+pub use crate::upload_tracker::{
+    texture_format_component_type, texture_format_size, UploadTracker,
+};
 
 // Note: re-export for use by FrameGraph when it is instantiated in other crates.
 pub use wgpu;

@@ -85,10 +85,38 @@ impl CopyBufferToBufferDescriptor {
     }
 }
 
+#[derive(Debug)]
+pub struct CopyTextureToTextureDescriptor {
+    source: Arc<Box<wgpu::Texture>>,
+    source_layer: u32,
+    target: Arc<Box<wgpu::Texture>>,
+    target_layer: u32,
+    size: wgpu::Extent3d,
+}
+
+impl CopyTextureToTextureDescriptor {
+    pub fn new(
+        source: Arc<Box<wgpu::Texture>>,
+        source_layer: u32,
+        target: Arc<Box<wgpu::Texture>>,
+        target_layer: u32,
+        size: wgpu::Extent3d,
+    ) -> Self {
+        Self {
+            source,
+            source_layer,
+            target,
+            target_layer,
+            size,
+        }
+    }
+}
+
 // Note: still quite limited; just precompute without dependencies.
 pub struct UploadTracker {
     b2b_uploads: Vec<CopyBufferToBufferDescriptor>,
     b2t_uploads: Vec<CopyBufferToTextureDescriptor>,
+    t2t_uploads: Vec<CopyTextureToTextureDescriptor>,
 }
 
 impl Default for UploadTracker {
@@ -96,6 +124,7 @@ impl Default for UploadTracker {
         Self {
             b2b_uploads: Vec::new(),
             b2t_uploads: Vec::new(),
+            t2t_uploads: Vec::new(),
         }
     }
 }
@@ -104,6 +133,7 @@ impl UploadTracker {
     pub fn reset(&mut self) {
         self.b2b_uploads.clear();
         self.b2t_uploads.clear();
+        self.t2t_uploads.clear();
     }
 
     pub fn upload(
@@ -153,13 +183,35 @@ impl UploadTracker {
         target_array_layer: u32,
         array_layer_count: u32,
     ) {
+        let target_element_size = texture_format_size(target_format);
+        assert_eq!(
+            target_extent.width * target_element_size % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT,
+            0
+        );
         self.b2t_uploads.push(CopyBufferToTextureDescriptor::new(
             source,
             target,
             target_extent,
-            texture_format_size(target_format),
+            target_element_size,
             target_array_layer,
             array_layer_count,
+        ));
+    }
+
+    pub fn copy_texture_to_texture(
+        &mut self,
+        source: Arc<Box<wgpu::Texture>>,
+        source_layer: u32,
+        target: Arc<Box<wgpu::Texture>>,
+        target_layer: u32,
+        size: wgpu::Extent3d,
+    ) {
+        self.t2t_uploads.push(CopyTextureToTextureDescriptor::new(
+            source,
+            source_layer,
+            target,
+            target_layer,
+            size,
         ));
     }
 
@@ -175,7 +227,6 @@ impl UploadTracker {
         }
 
         for desc in self.b2t_uploads.drain(..) {
-            assert_eq!(desc.target_extent.width * desc.target_element_size % 256, 0);
             encoder.copy_buffer_to_texture(
                 wgpu::BufferCopyView {
                     buffer: &desc.source,
@@ -201,6 +252,93 @@ impl UploadTracker {
                 },
             );
         }
+
+        for desc in self.t2t_uploads.drain(..) {
+            encoder.copy_texture_to_texture(
+                wgpu::TextureCopyView {
+                    texture: &desc.source,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d {
+                        x: 0,
+                        y: 0,
+                        z: desc.source_layer,
+                    },
+                },
+                wgpu::TextureCopyView {
+                    texture: &desc.target,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d {
+                        x: 0,
+                        y: 0,
+                        z: desc.target_layer,
+                    },
+                },
+                wgpu::Extent3d {
+                    width: desc.size.width,
+                    height: desc.size.height,
+                    depth: 1,
+                },
+            )
+        }
+    }
+}
+
+pub fn texture_format_component_type(
+    texture_format: wgpu::TextureFormat,
+) -> wgpu::TextureComponentType {
+    match texture_format {
+        wgpu::TextureFormat::R8Unorm => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::R8Snorm => wgpu::TextureComponentType::Sint,
+        wgpu::TextureFormat::R8Uint => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::R8Sint => wgpu::TextureComponentType::Sint,
+        wgpu::TextureFormat::R16Uint => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::R16Sint => wgpu::TextureComponentType::Sint,
+        wgpu::TextureFormat::R16Float => wgpu::TextureComponentType::Float,
+        wgpu::TextureFormat::Rg8Unorm => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Rg8Snorm => wgpu::TextureComponentType::Sint,
+        wgpu::TextureFormat::Rg8Uint => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Rg8Sint => wgpu::TextureComponentType::Sint,
+        wgpu::TextureFormat::R32Uint => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::R32Sint => wgpu::TextureComponentType::Sint,
+        wgpu::TextureFormat::R32Float => wgpu::TextureComponentType::Float,
+        wgpu::TextureFormat::Rg16Uint => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Rg16Sint => wgpu::TextureComponentType::Sint,
+        wgpu::TextureFormat::Rg16Float => wgpu::TextureComponentType::Float,
+        wgpu::TextureFormat::Rgba8Unorm => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Rgba8UnormSrgb => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Rgba8Snorm => wgpu::TextureComponentType::Sint,
+        wgpu::TextureFormat::Rgba8Uint => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Rgba8Sint => wgpu::TextureComponentType::Sint,
+        wgpu::TextureFormat::Bgra8Unorm => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Bgra8UnormSrgb => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Rgb10a2Unorm => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Rg11b10Float => wgpu::TextureComponentType::Float,
+        wgpu::TextureFormat::Rg32Uint => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Rg32Sint => wgpu::TextureComponentType::Sint,
+        wgpu::TextureFormat::Rg32Float => wgpu::TextureComponentType::Float,
+        wgpu::TextureFormat::Rgba16Uint => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Rgba16Sint => wgpu::TextureComponentType::Sint,
+        wgpu::TextureFormat::Rgba16Float => wgpu::TextureComponentType::Float,
+        wgpu::TextureFormat::Rgba32Uint => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Rgba32Sint => wgpu::TextureComponentType::Sint,
+        wgpu::TextureFormat::Rgba32Float => wgpu::TextureComponentType::Float,
+        wgpu::TextureFormat::Depth32Float => wgpu::TextureComponentType::Float,
+        wgpu::TextureFormat::Depth24Plus => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Depth24PlusStencil8 => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Bc1RgbaUnorm => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Bc1RgbaUnormSrgb => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Bc2RgbaUnorm => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Bc2RgbaUnormSrgb => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Bc3RgbaUnorm => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Bc3RgbaUnormSrgb => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Bc4RUnorm => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Bc4RSnorm => wgpu::TextureComponentType::Sint,
+        wgpu::TextureFormat::Bc5RgUnorm => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Bc5RgSnorm => wgpu::TextureComponentType::Sint,
+        wgpu::TextureFormat::Bc6hRgbUfloat => wgpu::TextureComponentType::Float,
+        wgpu::TextureFormat::Bc6hRgbSfloat => wgpu::TextureComponentType::Float,
+        wgpu::TextureFormat::Bc7RgbaUnorm => wgpu::TextureComponentType::Uint,
+        wgpu::TextureFormat::Bc7RgbaUnormSrgb => wgpu::TextureComponentType::Uint,
     }
 }
 

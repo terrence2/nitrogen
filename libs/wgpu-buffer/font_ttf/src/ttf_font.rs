@@ -89,7 +89,7 @@ impl FontInterface for TtfFont {
             glyph.draw(|x, y, v| {
                 image.put_pixel(
                     x,
-                    (v_metrics.ascent + bb.min.y as f32 + y as f32).floor() as u32,
+                    y, // wat? (v_metrics.ascent + bb.min.y as f32 + y as f32).floor() as u32,
                     Luma([(v * 255.0) as u8]),
                 )
             });

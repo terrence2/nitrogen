@@ -21,19 +21,24 @@ mod widgets;
 use crate::{glyph_cache::GlyphCache, layout::Layout};
 pub use crate::{
     layout_vertex::LayoutVertex,
-    widgets::{float_box::FloatBox, label::Label, PaintContext, Widget},
+    widget_vertex::WidgetVertex,
+    widgets::{float_box::FloatBox, label::Label, PaintContext, Widget, WidgetInfo},
 };
 
-use atlas::{AtlasPacker, Frame};
 use commandable::{commandable, Commandable};
 use failure::Fallible;
 use font_common::FontInterface;
 use font_ttf::TtfFont;
-use gpu::{UploadTracker, GPU};
-use image::Rgba;
+use gpu::{texture_format_component_type, UploadTracker, GPU};
 use log::trace;
 use parking_lot::RwLock;
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    mem,
+    num::{NonZeroU32, NonZeroU64},
+    ops::Range,
+    sync::Arc,
+};
 
 // Drawing UI efficiently:
 //
@@ -160,10 +165,29 @@ pub struct TextLayoutBuffer {
 
     glyph_bind_group_layout: wgpu::BindGroupLayout,
     layout_bind_group_layout: wgpu::BindGroupLayout,
+
+    // The four key buffers.
+    widget_info_buffer_size: wgpu::BufferAddress,
+    widget_info_buffer: Arc<Box<wgpu::Buffer>>,
+
+    // background_vertex_buffer_size: wgpu::BufferAddress,
+    // background_vertex_buffer: Arc<Box<wgpu::Buffer>>,
+    //
+    // image_vertex_buffer_size: wgpu::BufferAddress,
+    // image_vertex_buffer: Arc<Box<wgpu::Buffer>>,
+    text_vertex_buffer_size: wgpu::BufferAddress,
+    text_vertex_buffer: Arc<Box<wgpu::Buffer>>,
+
+    // The accumulated bind group for all widget rendering, encompasing everything we uploaded above.
+    bind_group_layout: wgpu::BindGroupLayout,
+    bind_group: Option<wgpu::BindGroup>,
 }
 
 #[commandable]
 impl TextLayoutBuffer {
+    const MAX_WIDGETS: usize = 512;
+    const MAX_TEXT_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6;
+
     pub fn new(gpu: &mut GPU) -> Fallible<Self> {
         trace!("LayoutBuffer::new");
 
@@ -177,12 +201,12 @@ impl TextLayoutBuffer {
                     entries: &[wgpu::BindGroupLayoutEntry {
                         binding: 0,
                         visibility: wgpu::ShaderStage::VERTEX,
+                        count: None,
                         ty: wgpu::BindingType::StorageBuffer {
                             dynamic: false,
                             readonly: true,
                             min_binding_size: None,
                         },
-                        count: None,
                     }],
                 });
 
@@ -196,14 +220,76 @@ impl TextLayoutBuffer {
             ))),
         );
 
+        let fallback_font = TtfFont::from_bytes("quantico", &QUANTICO_TTF_DATA, gpu)?;
+        let paint_context = PaintContext::new(gpu.device(), fallback_font);
+
+        // Create the core widget info buffer.
+        let widget_info_buffer_size =
+            (mem::size_of::<WidgetInfo>() * Self::MAX_WIDGETS) as wgpu::BufferAddress;
+        let widget_info_buffer = Arc::new(Box::new(gpu.device().create_buffer(
+            &wgpu::BufferDescriptor {
+                label: Some("widget-info-buffer"),
+                size: widget_info_buffer_size,
+                usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::UNIFORM,
+                mapped_at_creation: false,
+            },
+        )));
+
+        // Create the text vertex buffer.
+        let text_vertex_buffer_size =
+            (mem::size_of::<WidgetVertex>() * Self::MAX_TEXT_VERTICES) as wgpu::BufferAddress;
+        let text_vertex_buffer = Arc::new(Box::new(gpu.device().create_buffer(
+            &wgpu::BufferDescriptor {
+                label: Some("widget-text-vertex-buffer"),
+                size: text_vertex_buffer_size,
+                usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::VERTEX,
+                mapped_at_creation: false,
+            },
+        )));
+
+        let bind_group_layout =
+            gpu.device()
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("widget-bind-group-layout"),
+                    entries: &[
+                        // widget_info: WidgetInfo[MAX_WIDGETS]
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStage::all(),
+                            ty: wgpu::BindingType::UniformBuffer {
+                                dynamic: false,
+                                min_binding_size: NonZeroU64::new(widget_info_buffer_size),
+                            },
+                            count: None,
+                        },
+                        // glyph_sheet: Texture2d[MAX_LAYER]
+                        paint_context
+                            .font_context
+                            .glyph_sheet_texture_layout_entry(1),
+                        // glyph_sampler: Sampler
+                        paint_context
+                            .font_context
+                            .glyph_sheet_sampler_layout_entry(2),
+                    ],
+                });
+
         Ok(Self {
             root: Arc::new(RwLock::new(FloatBox::new())),
-            paint_context: PaintContext::new(),
+            paint_context,
             glyph_cache,
             layout_map: HashMap::new(),
             layouts: Vec::new(),
             glyph_bind_group_layout,
             layout_bind_group_layout,
+
+            widget_info_buffer_size,
+            widget_info_buffer,
+
+            text_vertex_buffer_size,
+            text_vertex_buffer,
+
+            bind_group_layout,
+            bind_group: None,
         })
     }
 
@@ -213,6 +299,25 @@ impl TextLayoutBuffer {
 
     pub fn add_font(&mut self, font_name: FontName, font: Box<dyn FontInterface>, gpu: &GPU) {
         self.paint_context.add_font(font_name, font);
+    }
+
+    pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+        &self.bind_group_layout
+    }
+
+    /// Must only be called after first upload
+    pub fn bind_group(&self) -> &wgpu::BindGroup {
+        self.bind_group.as_ref().unwrap()
+    }
+
+    pub fn text_vertex_buffer(&self) -> wgpu::BufferSlice {
+        self.text_vertex_buffer.slice(
+            0u64..(mem::size_of::<WidgetVertex>() * self.paint_context.text_pool.len()) as u64,
+        )
+    }
+
+    pub fn text_vertex_range(&self) -> Range<u32> {
+        0u32..self.paint_context.text_pool.len() as u32
     }
 
     pub fn glyph_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
@@ -276,11 +381,62 @@ impl TextLayoutBuffer {
     }
 
     pub fn make_upload_buffer(&mut self, gpu: &GPU, tracker: &mut UploadTracker) -> Fallible<()> {
+        self.paint_context.reset_for_frame();
         self.root.read().upload(&mut self.paint_context);
 
-        // for layout in self.layouts.iter_mut() {
-        //     layout.make_upload_buffer(&layout.glyph_cache().read(), gpu, tracker)?;
-        // }
+        self.paint_context.font_context.upload(gpu, tracker);
+
+        let widget_info_upload = gpu.push_slice(
+            "widget-info-upload",
+            &self.paint_context.widget_info_pool,
+            wgpu::BufferUsage::COPY_SRC,
+        );
+        let widget_info_size = self.widget_info_buffer_size.min(
+            (mem::size_of::<WidgetInfo>() * self.paint_context.widget_info_pool.len())
+                as wgpu::BufferAddress,
+        );
+        tracker.upload_ba(
+            widget_info_upload,
+            self.widget_info_buffer.clone(),
+            widget_info_size,
+        );
+
+        let text_vertex_upload = gpu.push_slice(
+            "widget-text-vertex-upload",
+            &self.paint_context.text_pool,
+            wgpu::BufferUsage::COPY_SRC,
+        );
+        let text_vertex_upload_size = self.text_vertex_buffer_size.min(
+            (mem::size_of::<WidgetVertex>() * self.paint_context.text_pool.len())
+                as wgpu::BufferAddress,
+        );
+        tracker.upload_ba(
+            text_vertex_upload,
+            self.text_vertex_buffer.clone(),
+            text_vertex_upload_size,
+        );
+
+        self.bind_group = Some(
+            gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("widget-bind-group"),
+                layout: &self.bind_group_layout,
+                entries: &[
+                    // widget_info
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Buffer(self.widget_info_buffer.slice(..)),
+                    },
+                    // glyph_sheet_texture: Texture2dArray
+                    self.paint_context
+                        .font_context
+                        .glyph_sheet_texture_binding(1),
+                    // glyph_sheet_sampler: Sampler2d
+                    self.paint_context
+                        .font_context
+                        .glyph_sheet_sampler_binding(2),
+                ],
+            }),
+        );
 
         Ok(())
     }
@@ -301,6 +457,9 @@ mod test {
         let mut widgets = TextLayoutBuffer::new(&mut gpu)?;
         let mut label = widgets.create_label("hello", 2.0);
         widgets.root().write().pin_child(label, 0.0, 0.0);
+
+        let mut tracker = Default::default();
+        widgets.make_upload_buffer(&gpu, &mut tracker)?;
 
         Ok(())
     }

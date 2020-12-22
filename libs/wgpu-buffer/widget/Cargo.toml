@@ -9,6 +9,7 @@ failure = "^ 0.1.2"
 image = "^ 0.21"
 log = "^ 0.4"
 memoffset = "^ 0.5"
+ordered-float = "^ 2"
 parking_lot = "^ 0.11"
 shader_shared = { path = "../../wgpu-render/shader_shared" }
 wgpu = "^ 0.6"

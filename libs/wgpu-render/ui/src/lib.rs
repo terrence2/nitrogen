@@ -18,11 +18,13 @@ use global_data::GlobalParametersBuffer;
 use gpu::GPU;
 use log::trace;
 use shader_shared::Group;
-use widget::{LayoutVertex, TextLayoutBuffer, Widget};
+use widget::{TextLayoutBuffer, Widget, WidgetVertex};
 
 #[derive(Commandable)]
 pub struct UiRenderPass {
-    pipeline: wgpu::RenderPipeline,
+    // background_pipeline: wgpu::RenderPipeline,
+    // image_pipeline: wgpu::RenderPipeline,
+    text_pipeline: wgpu::RenderPipeline,
 }
 
 #[commandable]
@@ -30,13 +32,11 @@ impl UiRenderPass {
     pub fn new(
         gpu: &mut GPU,
         global_data: &GlobalParametersBuffer,
-        layout_buffer: &TextLayoutBuffer,
+        widget_buffer: &TextLayoutBuffer,
     ) -> Fallible<Self> {
         trace!("UiRenderPass::new");
 
-        let vert_shader = gpu.create_shader_module(include_bytes!("../target/ui.vert.spirv"))?;
-        let frag_shader = gpu.create_shader_module(include_bytes!("../target/ui.frag.spirv"))?;
-
+        // Layout shared by all three render passes.
         let pipeline_layout =
             gpu.device()
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -44,27 +44,28 @@ impl UiRenderPass {
                     push_constant_ranges: &[],
                     bind_group_layouts: &[
                         global_data.bind_group_layout(),
-                        layout_buffer.glyph_bind_group_layout(),
-                        layout_buffer.layout_bind_group_layout(),
+                        widget_buffer.bind_group_layout(),
                     ],
                 });
 
-        let pipeline = gpu
+        let text_pipeline = gpu
             .device()
             .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("screen-text-pipeline"),
+                label: Some("ui-text-pipeline"),
                 layout: Some(&pipeline_layout),
                 vertex_stage: wgpu::ProgrammableStageDescriptor {
-                    module: &vert_shader,
+                    module: &gpu
+                        .create_shader_module(include_bytes!("../target/ui-text.vert.spirv"))?,
                     entry_point: "main",
                 },
                 fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                    module: &frag_shader,
+                    module: &gpu
+                        .create_shader_module(include_bytes!("../target/ui-text.frag.spirv"))?,
                     entry_point: "main",
                 }),
                 rasterization_state: Some(wgpu::RasterizationStateDescriptor {
                     front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: wgpu::CullMode::Back,
+                    cull_mode: wgpu::CullMode::None, // FIXME
                     depth_bias: 0,
                     depth_bias_slope_scale: 0.0,
                     depth_bias_clamp: 0.0,
@@ -83,8 +84,8 @@ impl UiRenderPass {
                 }],
                 depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
                     format: GPU::DEPTH_FORMAT,
-                    depth_write_enabled: false,
-                    depth_compare: wgpu::CompareFunction::Always,
+                    depth_write_enabled: false,                   // FIXME
+                    depth_compare: wgpu::CompareFunction::Always, // FIXME
                     stencil: wgpu::StencilStateDescriptor {
                         front: wgpu::StencilStateFaceDescriptor::IGNORE,
                         back: wgpu::StencilStateFaceDescriptor::IGNORE,
@@ -94,24 +95,30 @@ impl UiRenderPass {
                 }),
                 vertex_state: wgpu::VertexStateDescriptor {
                     index_format: wgpu::IndexFormat::Uint32,
-                    vertex_buffers: &[LayoutVertex::descriptor()],
+                    vertex_buffers: &[WidgetVertex::descriptor()],
                 },
                 sample_count: 1,
                 sample_mask: !0,
                 alpha_to_coverage_enabled: false,
             });
 
-        Ok(Self { pipeline })
+        Ok(Self { text_pipeline })
     }
 
     pub fn draw<'a>(
         &'a self,
         mut rpass: wgpu::RenderPass<'a>,
         global_data: &'a GlobalParametersBuffer,
-        layout_buffer: &'a TextLayoutBuffer,
+        widget_buffer: &'a TextLayoutBuffer,
     ) -> Fallible<wgpu::RenderPass<'a>> {
-        rpass.set_pipeline(&self.pipeline);
+        // Background
+        // Image
+        // Text
+        rpass.set_pipeline(&self.text_pipeline);
         rpass.set_bind_group(Group::Globals.index(), &global_data.bind_group(), &[]);
+        rpass.set_bind_group(Group::UI.index(), widget_buffer.bind_group(), &[]);
+        rpass.set_vertex_buffer(0, widget_buffer.text_vertex_buffer());
+        rpass.draw(widget_buffer.text_vertex_range(), 0..1);
 
         // FIXME: should be able to remove this
         /*
