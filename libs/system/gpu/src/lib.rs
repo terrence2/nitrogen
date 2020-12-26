@@ -63,6 +63,7 @@ pub struct GPU {
     depth_texture: wgpu::TextureView,
 
     config: GPUConfig,
+    scale_factor: f64,
     physical_size: PhysicalSize<u32>,
     logical_size: LogicalSize<f64>,
 }
@@ -70,6 +71,7 @@ pub struct GPU {
 impl GPU {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
     pub const SCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
+    pub const TYPICAL_DPI: f64 = 72.0;
 
     pub fn aspect_ratio(&self) -> f64 {
         self.logical_size.height.floor() / self.logical_size.width.floor()
@@ -77,6 +79,14 @@ impl GPU {
 
     pub fn aspect_ratio_f32(&self) -> f32 {
         (self.logical_size.height.floor() / self.logical_size.width.floor()) as f32
+    }
+
+    pub fn guess_dpi(&self) -> f64 {
+        Self::TYPICAL_DPI * self.scale_factor
+    }
+
+    pub fn scale_factor(&self) -> f64 {
+        self.scale_factor
     }
 
     pub fn logical_size(&self) -> LogicalSize<f64> {
@@ -118,8 +128,9 @@ impl GPU {
             )
             .await?;
 
+        let scale_factor = window.scale_factor();
         let physical_size = window.inner_size();
-        let logical_size = physical_size.to_logical::<f64>(window.scale_factor());
+        let logical_size = physical_size.to_logical::<f64>(scale_factor);
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
             format: Self::SCREEN_FORMAT,
@@ -138,6 +149,7 @@ impl GPU {
             swap_chain,
             depth_texture,
             config,
+            scale_factor,
             physical_size,
             logical_size,
         })
@@ -180,9 +192,10 @@ impl GPU {
         }
     }
 
-    pub fn note_resize(&mut self, window: &Window) {
+    pub fn note_resize(&mut self, override_scale: Option<f64>, window: &Window) {
+        self.scale_factor = override_scale.unwrap_or_else(|| window.scale_factor());
         self.physical_size = window.inner_size();
-        self.logical_size = self.physical_size.to_logical(window.scale_factor());
+        self.logical_size = self.physical_size.to_logical(self.scale_factor);
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
             format: Self::SCREEN_FORMAT,

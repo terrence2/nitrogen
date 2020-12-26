@@ -20,7 +20,7 @@ use zerocopy::{AsBytes, FromBytes};
 #[derive(AsBytes, FromBytes, Copy, Clone, Debug, Default)]
 pub struct WidgetVertex {
     pub(crate) position: [f32; 3],
-    pub(crate) tex_coord: [f32; 3],
+    pub(crate) tex_coord: [f32; 2],
     pub(crate) widget_info_index: u32,
 }
 
@@ -46,7 +46,7 @@ impl WidgetVertex {
                 // info_index
                 wgpu::VertexAttributeDescriptor {
                     format: wgpu::VertexFormat::Uint,
-                    offset: 24,
+                    offset: 20,
                     shader_location: 2,
                 },
             ],

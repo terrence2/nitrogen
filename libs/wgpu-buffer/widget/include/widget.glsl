@@ -12,17 +12,29 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+#define MAX_WIDGETS 512
 
-layout(set = 1, binding = 0) uniform texture2D glyph_cache_glyph_texture;
-layout(set = 1, binding = 1) uniform sampler glyph_cache_glyph_sampler;
+struct WidgetInfo {
+    vec4 border_color;
+    vec4 background_color;
+    vec4 foreground_color;
+};
 
+layout(set = 1, binding = 0) uniform WidgetBlock {
+    WidgetInfo widget_info[MAX_WIDGETS];
+};
+layout(set = 1, binding = 1) uniform texture2D glyph_sheet_texture;
+layout(set = 1, binding = 2) uniform sampler glyph_sheet_sampler;
+
+/*
 layout(set = 2, binding = 0) buffer LayoutData {
     vec4 text_layout_position;
     vec4 text_layout_color;
 };
+*/
 
 float
 glyph_alpha_uv(vec2 tex_coord)
 {
-    return texture(sampler2D(glyph_cache_glyph_texture, glyph_cache_glyph_sampler), tex_coord).r;
+    return texture(sampler2D(glyph_sheet_texture, glyph_sheet_sampler), tex_coord).r;
 }

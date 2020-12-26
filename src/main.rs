@@ -35,7 +35,7 @@ use terrain::TerrainRenderPass;
 use terrain_geo::{CpuDetailLevel, GpuDetailLevel, TerrainGeoBuffer};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use ui::UiRenderPass;
-use widget::{TextAnchorH, TextAnchorV, TextLayoutBuffer, TextPositionH, TextPositionV};
+use widget::WidgetBuffer;
 use winit::window::Window;
 
 /// Show the contents of an MM file
@@ -58,11 +58,11 @@ make_frame_graph!(
             globals: GlobalParametersBuffer,
             stars: StarsBuffer,
             terrain_geo: TerrainGeoBuffer,
-            text_layout: TextLayoutBuffer
+            widgets: WidgetBuffer
         };
         renderers: [
             terrain: TerrainRenderPass { globals, atmosphere, stars, terrain_geo },
-            ui: UiRenderPass { globals, text_layout }
+            ui: UiRenderPass { globals, widgets }
         ];
         passes: [
             // Update the indices so we have correct height data to tessellate with and normal
@@ -79,7 +79,7 @@ make_frame_graph!(
 
             draw: Render(Screen) {
                 terrain( globals, fullscreen, atmosphere, stars, terrain_geo ),
-                ui( globals, text_layout )
+                ui( globals, widgets )
             }
         ];
     }
@@ -138,7 +138,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     let stars_buffer = StarsBuffer::new(&gpu)?;
     let terrain_geo_buffer =
         TerrainGeoBuffer::new(&catalog, cpu_detail, gpu_detail, &globals_buffer, &mut gpu)?;
-    let text_layout_buffer = TextLayoutBuffer::new(&mut gpu)?;
+    let text_layout_buffer = WidgetBuffer::new(&mut gpu)?;
     let catalog = Arc::new(AsyncRwLock::new(catalog));
     let mut frame_graph = FrameGraph::new(
         &mut legion,
@@ -153,16 +153,13 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     ///////////////////////////////////////////////////////////
 
     //let fps_label = widget::Label::new("hello world");
-    let fps_label = frame_graph.text_layout.create_label("hello", 2.0);
-    frame_graph
-        .text_layout
-        .root()
-        .write()
-        .pin_child(fps_label, 50.0, 50.0);
-    //frame_graph.text_layout.root()
+    let fps_label = frame_graph.widgets.create_label("luqup testy 3456 MMMMM");
+    frame_graph.widgets.root().write().add_child(fps_label);
+    //frame_graph.widgets.root()
 
+    /*
     let fps_handle = frame_graph
-        .text_layout()
+        .widgets()
         .add_screen_text("", "", &gpu)?
         .with_color(&[1f32, 0f32, 0f32, 1f32])
         .with_horizontal_position(TextPositionH::Left)
@@ -170,6 +167,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         .with_vertical_position(TextPositionV::Top)
         .with_vertical_anchor(TextAnchorV::Top)
         .handle();
+     */
 
     let mut orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0));
 
@@ -213,42 +211,47 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         let loop_start = Instant::now();
 
         for command in input_controller.poll()? {
+            if InputSystem::is_close_command(&command) || command.full() == "demo.exit" {
+                return Ok(());
+            }
             frame_graph.handle_command(&command);
             arcball.handle_command(&command)?;
             orrery.handle_command(&command)?;
-            match command.command() {
-                "+target_up" => target_vec = meters!(1),
-                "-target_up" => target_vec = meters!(0),
-                "+target_down" => target_vec = meters!(-1),
-                "-target_down" => target_vec = meters!(0),
-                "+target_up_fast" => target_vec = meters!(100),
-                "-target_up_fast" => target_vec = meters!(0),
-                "+target_down_fast" => target_vec = meters!(-100),
-                "-target_down_fast" => target_vec = meters!(0),
-                "decrease_gamma" => tone_gamma /= 1.1,
-                "increase_gamma" => tone_gamma *= 1.1,
-                "decrease_exposure" => {
+            match command.full() {
+                "demo.+target_up" => target_vec = meters!(1),
+                "demo.-target_up" => target_vec = meters!(0),
+                "demo.+target_down" => target_vec = meters!(-1),
+                "demo.-target_down" => target_vec = meters!(0),
+                "demo.+target_up_fast" => target_vec = meters!(100),
+                "demo.-target_up_fast" => target_vec = meters!(0),
+                "demo.+target_down_fast" => target_vec = meters!(-100),
+                "demo.-target_down_fast" => target_vec = meters!(0),
+                "demo.decrease_gamma" => tone_gamma /= 1.1,
+                "demo.increase_gamma" => tone_gamma *= 1.1,
+                "demo.decrease_exposure" => {
                     let next_exposure = arcball.camera().exposure() / 1.1;
                     arcball.camera_mut().set_exposure(next_exposure);
                 }
-                "increase_exposure" => {
+                "demo.increase_exposure" => {
                     let next_exposure = arcball.camera().exposure() * 1.1;
                     arcball.camera_mut().set_exposure(next_exposure);
                 }
-                "pin_view" => {
+                "demo.pin_view" => {
                     println!("eye_rel: {}", arcball.get_eye_relative());
                     println!("target:  {}", arcball.get_target());
                     is_camera_pinned = !is_camera_pinned
                 }
                 // system bindings
-                "window-close" | "window-destroy" | "exit" => return Ok(()),
-                "resize" => {
-                    gpu.note_resize(&window);
+                "window.resize" => {
+                    gpu.note_resize(None, &window);
                     frame_graph.terrain_geo.note_resize(&gpu);
                     arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
                 }
-                "cursor-move" => {}
-                "mouse-move" => {}
+                "window.dpi-change" => {
+                    gpu.note_resize(Some(command.float(0)?), &window);
+                    frame_graph.terrain_geo.note_resize(&gpu);
+                    arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
+                }
                 _ => trace!("unhandled command: {}", command.full(),),
             }
         }
@@ -285,10 +288,10 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
             &mut tracker,
         )?;
         frame_graph
-            .text_layout()
+            .widgets()
             .make_upload_buffer(&gpu, &mut tracker)?;
         if !frame_graph.run(&mut gpu, tracker)? {
-            gpu.note_resize(&window);
+            gpu.note_resize(None, &window);
             frame_graph.terrain_geo.note_resize(&gpu);
             arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
         }
@@ -304,6 +307,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
             frame_time.as_secs() * 1000 + u64::from(frame_time.subsec_millis()),
             frame_time.subsec_micros(),
         );
-        fps_handle.grab(frame_graph.text_layout()).set_span(&ts);
+        //fps_handle.grab(frame_graph.widgets()).set_span(&ts);
     }
 }

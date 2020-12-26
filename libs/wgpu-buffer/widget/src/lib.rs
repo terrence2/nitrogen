@@ -12,33 +12,24 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-mod glyph_cache;
 mod layout;
-mod layout_vertex;
+mod packing;
 mod widget_vertex;
 mod widgets;
 
-use crate::{glyph_cache::GlyphCache, layout::Layout};
 pub use crate::{
-    layout_vertex::LayoutVertex,
     widget_vertex::WidgetVertex,
-    widgets::{float_box::FloatBox, label::Label, PaintContext, Widget, WidgetInfo},
+    widgets::{label::Label, vertical_box::VerticalBox, PaintContext, Widget, WidgetInfo},
 };
 
 use commandable::{commandable, Commandable};
 use failure::Fallible;
 use font_common::FontInterface;
 use font_ttf::TtfFont;
-use gpu::{texture_format_component_type, UploadTracker, GPU};
+use gpu::{UploadTracker, GPU};
 use log::trace;
 use parking_lot::RwLock;
-use std::{
-    collections::HashMap,
-    mem,
-    num::{NonZeroU32, NonZeroU64},
-    ops::Range,
-    sync::Arc,
-};
+use std::{mem, num::NonZeroU64, ops::Range, sync::Arc};
 
 // Drawing UI efficiently:
 //
@@ -56,87 +47,12 @@ use std::{
 
 // Fallback for when we have no libs loaded.
 // https://fonts.google.com/specimen/Quantico?selection.family=Quantico
-pub const FALLBACK_FONT_NAME: &str = "quantico";
-const QUANTICO_TTF_DATA: &[u8] = include_bytes!("../../../../assets/font/quantico.ttf");
-
-#[derive(Copy, Clone, Debug)]
-pub enum TextAnchorH {
-    Center,
-    Left,
-    Right,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum TextAnchorV {
-    Center,
-    Top,
-    Bottom,
-    // TODO: look for empty space under '1' or 'a' or similar.
-    // Baseline,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum TextPositionH {
-    // In vulkan screen space: -1.0 -> 1.0
-    Vulkan(f32),
-
-    // In FA screen space: 0 -> 640
-    FA(u32),
-
-    // Labeled positions
-    Center,
-    Left,
-    Right,
-}
-
-impl TextPositionH {
-    fn to_vulkan(self) -> f32 {
-        const SCALE: f32 = 640f32;
-        match self {
-            TextPositionH::Center => 0f32,
-            TextPositionH::Left => -1f32,
-            TextPositionH::Right => 1f32,
-            TextPositionH::Vulkan(v) => v,
-            TextPositionH::FA(i) => (i as f32) / SCALE * 2f32 - 1f32,
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum TextPositionV {
-    // In vulkan screen space: -1.0 -> 1.0
-    Vulkan(f32),
-
-    // In FA screen space: 0 -> 640 or 0 -> 480 depending on axis
-    FA(u32),
-
-    // Labeled positions
-    Center,
-    Top,
-    Bottom,
-}
-
-impl TextPositionV {
-    fn to_vulkan(self) -> f32 {
-        const SCALE: f32 = 480f32;
-        match self {
-            TextPositionV::Center => 0f32,
-            TextPositionV::Top => -1f32,
-            TextPositionV::Bottom => 1f32,
-            TextPositionV::Vulkan(v) => v,
-            TextPositionV::FA(i) => (i as f32) / SCALE * 2f32 - 1f32,
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct LayoutHandle(usize);
-
-impl LayoutHandle {
-    pub fn grab<'a>(&self, buffer: &'a mut TextLayoutBuffer) -> &'a mut Layout {
-        buffer.layout_mut(*self)
-    }
-}
+pub const SANS_FONT_NAME: &str = "sans";
+pub const MONO_FONT_NAME: &str = "mono";
+const FIRA_SANS_REGULAR_TTF_DATA: &[u8] =
+    include_bytes!("../../../../assets/font/FiraSans-Regular.ttf");
+const FIRA_MONO_REGULAR_TTF_DATA: &[u8] =
+    include_bytes!("../../../../assets/font/FiraMono-Regular.ttf");
 
 // Context required for rendering a specific text span (as opposed to the layout in general).
 // e.g. the vertex and index buffers.
@@ -150,21 +66,10 @@ struct LayoutTextRenderContext {
 pub type FontName = String;
 
 #[derive(Commandable)]
-pub struct TextLayoutBuffer {
-    // Map from fonts to the glyph cache needed to create and render layouts.
-    glyph_cache: HashMap<FontName, Arc<RwLock<GlyphCache>>>,
-
-    // FIXME: How do we want to manage our draw state? Seems like pre-mature optimization at this point.
-    layout_map: HashMap<FontName, Vec<LayoutHandle>>,
-
-    // Individual spans, rather than a label that may contain marked-up text.
-    layouts: Vec<Layout>,
-
-    root: Arc<RwLock<FloatBox>>,
+pub struct WidgetBuffer {
+    // Widget state.
+    root: Arc<RwLock<VerticalBox>>,
     paint_context: PaintContext,
-
-    glyph_bind_group_layout: wgpu::BindGroupLayout,
-    layout_bind_group_layout: wgpu::BindGroupLayout,
 
     // The four key buffers.
     widget_info_buffer_size: wgpu::BufferAddress,
@@ -184,44 +89,16 @@ pub struct TextLayoutBuffer {
 }
 
 #[commandable]
-impl TextLayoutBuffer {
+impl WidgetBuffer {
     const MAX_WIDGETS: usize = 512;
     const MAX_TEXT_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6;
 
     pub fn new(gpu: &mut GPU) -> Fallible<Self> {
-        trace!("LayoutBuffer::new");
+        trace!("WidgetBuffer::new");
 
-        let glyph_bind_group_layout = GlyphCache::create_bind_group_layout(gpu.device());
-        let mut glyph_cache = HashMap::new();
-
-        let layout_bind_group_layout =
-            gpu.device()
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("text-layout-bind-group-layout"),
-                    entries: &[wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStage::VERTEX,
-                        count: None,
-                        ty: wgpu::BindingType::StorageBuffer {
-                            dynamic: false,
-                            readonly: true,
-                            min_binding_size: None,
-                        },
-                    }],
-                });
-
-        // Add fallback font.
-        glyph_cache.insert(
-            FALLBACK_FONT_NAME.to_owned(),
-            Arc::new(RwLock::new(GlyphCache::new(
-                TtfFont::from_bytes("quantico", &QUANTICO_TTF_DATA, gpu)?,
-                &glyph_bind_group_layout,
-                gpu,
-            ))),
-        );
-
-        let fallback_font = TtfFont::from_bytes("quantico", &QUANTICO_TTF_DATA, gpu)?;
-        let paint_context = PaintContext::new(gpu.device(), fallback_font);
+        let mut paint_context = PaintContext::new(gpu.device());
+        paint_context.add_font("mono", TtfFont::from_bytes(&FIRA_MONO_REGULAR_TTF_DATA)?);
+        paint_context.add_font("sans", TtfFont::from_bytes(&FIRA_SANS_REGULAR_TTF_DATA)?);
 
         // Create the core widget info buffer.
         let widget_info_buffer_size =
@@ -274,13 +151,8 @@ impl TextLayoutBuffer {
                 });
 
         Ok(Self {
-            root: Arc::new(RwLock::new(FloatBox::new())),
+            root: Arc::new(RwLock::new(VerticalBox::new())),
             paint_context,
-            glyph_cache,
-            layout_map: HashMap::new(),
-            layouts: Vec::new(),
-            glyph_bind_group_layout,
-            layout_bind_group_layout,
 
             widget_info_buffer_size,
             widget_info_buffer,
@@ -293,12 +165,16 @@ impl TextLayoutBuffer {
         })
     }
 
-    pub fn root(&self) -> Arc<RwLock<FloatBox>> {
+    pub fn root(&self) -> Arc<RwLock<VerticalBox>> {
         self.root.clone()
     }
 
-    pub fn add_font(&mut self, font_name: FontName, font: Box<dyn FontInterface>, gpu: &GPU) {
-        self.paint_context.add_font(font_name, font);
+    pub fn add_font<S: Into<String>>(
+        &mut self,
+        font_name: S,
+        font: Arc<RwLock<dyn FontInterface>>,
+    ) {
+        self.paint_context.add_font(font_name.into(), font);
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
@@ -320,69 +196,13 @@ impl TextLayoutBuffer {
         0u32..self.paint_context.text_pool.len() as u32
     }
 
-    pub fn glyph_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
-        &self.glyph_bind_group_layout
-    }
-
-    pub fn layout_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
-        &self.layout_bind_group_layout
-    }
-
-    pub fn layouts(&self) -> &Vec<Layout> {
-        &self.layouts
-    }
-
-    pub fn layouts_by_font(&self) -> &HashMap<FontName, Vec<LayoutHandle>> {
-        &self.layout_map
-    }
-
-    pub fn layout(&self, handle: LayoutHandle) -> &Layout {
-        &self.layouts[handle.0]
-    }
-
-    pub fn layout_mut(&mut self, handle: LayoutHandle) -> &mut Layout {
-        &mut self.layouts[handle.0]
-    }
-
-    pub fn glyph_cache(&self, font_name: &str) -> Arc<RwLock<GlyphCache>> {
-        if let Some(cache) = self.glyph_cache.get(font_name) {
-            return cache.to_owned();
-        }
-        self.glyph_cache[FALLBACK_FONT_NAME].to_owned()
-    }
-
-    // pub fn layout_mut(&mut self, handle: LayoutHandle) -> &mut Layout {}
-
-    pub fn add_screen_text(
-        &mut self,
-        font_name: &str,
-        text: &str,
-        gpu: &GPU,
-    ) -> Fallible<&mut Layout> {
-        let glyph_cache = self.glyph_cache(font_name);
-        let handle = LayoutHandle(self.layouts.len());
-        let layout = Layout::new(
-            handle,
-            text,
-            glyph_cache,
-            &self.layout_bind_group_layout,
-            gpu,
-        )?;
-        self.layouts.push(layout);
-        self.layout_map
-            .entry(font_name.to_owned())
-            .and_modify(|e| e.push(handle))
-            .or_insert_with(|| vec![handle]);
-        Ok(self.layout_mut(handle))
-    }
-
-    pub fn create_label<S: Into<String>>(&self, markup: S, _size_em: f32) -> Arc<RwLock<Label>> {
+    pub fn create_label<S: Into<String>>(&self, markup: S) -> Arc<RwLock<Label>> {
         Arc::new(RwLock::new(Label::new(markup)))
     }
 
     pub fn make_upload_buffer(&mut self, gpu: &GPU, tracker: &mut UploadTracker) -> Fallible<()> {
         self.paint_context.reset_for_frame();
-        self.root.read().upload(&mut self.paint_context);
+        self.root.read().upload(gpu, &mut self.paint_context);
 
         self.paint_context.font_context.upload(gpu, tracker);
 
@@ -454,9 +274,9 @@ mod test {
         let window = Window::new(&event_loop)?;
         let mut gpu = GPU::new(&window, Default::default())?;
 
-        let mut widgets = TextLayoutBuffer::new(&mut gpu)?;
-        let mut label = widgets.create_label("hello", 2.0);
-        widgets.root().write().pin_child(label, 0.0, 0.0);
+        let mut widgets = WidgetBuffer::new(&mut gpu)?;
+        let label = widgets.create_label("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        widgets.root().write().add_child(label);
 
         let mut tracker = Default::default();
         widgets.make_upload_buffer(&gpu, &mut tracker)?;
@@ -464,6 +284,7 @@ mod test {
         Ok(())
     }
 
+    /*
     #[cfg(unix)]
     #[test]
     fn it_can_manage_text_layouts() -> Fallible<()> {
@@ -543,4 +364,5 @@ mod test {
         }
         Ok(())
     }
+     */
 }

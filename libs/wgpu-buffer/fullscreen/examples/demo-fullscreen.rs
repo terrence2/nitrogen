@@ -116,7 +116,11 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
             match command.command() {
                 "window-close" | "window-destroy" | "exit" => return Ok(()),
                 "window-resize" => {
-                    gpu.note_resize(&window);
+                    gpu.note_resize(None, &window);
+                    arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
+                }
+                "window.dpi-change" => {
+                    gpu.note_resize(Some(command.float(0)?), &window);
                     arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
                 }
                 "window-cursor-move" => {}

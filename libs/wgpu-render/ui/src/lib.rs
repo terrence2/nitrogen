@@ -18,7 +18,7 @@ use global_data::GlobalParametersBuffer;
 use gpu::GPU;
 use log::trace;
 use shader_shared::Group;
-use widget::{TextLayoutBuffer, Widget, WidgetVertex};
+use widget::{WidgetBuffer, WidgetVertex};
 
 #[derive(Commandable)]
 pub struct UiRenderPass {
@@ -32,7 +32,7 @@ impl UiRenderPass {
     pub fn new(
         gpu: &mut GPU,
         global_data: &GlobalParametersBuffer,
-        widget_buffer: &TextLayoutBuffer,
+        widget_buffer: &WidgetBuffer,
     ) -> Fallible<Self> {
         trace!("UiRenderPass::new");
 
@@ -109,7 +109,7 @@ impl UiRenderPass {
         &'a self,
         mut rpass: wgpu::RenderPass<'a>,
         global_data: &'a GlobalParametersBuffer,
-        widget_buffer: &'a TextLayoutBuffer,
+        widget_buffer: &'a WidgetBuffer,
     ) -> Fallible<wgpu::RenderPass<'a>> {
         // Background
         // Image

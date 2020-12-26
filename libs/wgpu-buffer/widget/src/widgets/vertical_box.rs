@@ -12,39 +12,45 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::widgets::{PaintContext, Widget};
-use failure::Fallible;
+use crate::{
+    packing::BoxPacking,
+    widgets::{PaintContext, Widget},
+};
+use gpu::GPU;
 use parking_lot::RwLock;
 use std::sync::Arc;
 
-pub struct FloatPackInfo {
-    child: Arc<RwLock<dyn Widget>>,
-    position: [f32; 2],
+// Items packed from top to bottom.
+pub struct VerticalBox {
+    children: Vec<BoxPacking>,
 }
 
-pub struct FloatBox {
-    children: Vec<FloatPackInfo>,
-}
-
-impl FloatBox {
+impl VerticalBox {
     pub fn new() -> Self {
         Self {
             children: Vec::new(),
         }
     }
 
-    pub fn pin_child(&mut self, child: Arc<RwLock<dyn Widget>>, x: f32, y: f32) {
-        self.children.push(FloatPackInfo {
-            child,
-            position: [x, y],
-        });
+    pub fn add_child(&mut self, child: Arc<RwLock<dyn Widget>>) -> &mut BoxPacking {
+        let offset = self.children.len();
+        self.children.push(BoxPacking::new(child, offset));
+        self.packing_mut(offset)
+    }
+
+    pub fn packing(&self, offset: usize) -> &BoxPacking {
+        &self.children[offset]
+    }
+
+    pub fn packing_mut(&mut self, offset: usize) -> &mut BoxPacking {
+        &mut self.children[offset]
     }
 }
 
-impl Widget for FloatBox {
-    fn upload(&self, context: &mut PaintContext) {
+impl Widget for VerticalBox {
+    fn upload(&self, gpu: &GPU, context: &mut PaintContext) {
         for pack in &self.children {
-            pack.child.read().upload(context);
+            pack.widget().read().upload(gpu, context);
         }
     }
     // fn draw<'a>(&self, rpass: wgpu::RenderPass<'a>) -> Fallible<wgpu::RenderPass<'a>> {

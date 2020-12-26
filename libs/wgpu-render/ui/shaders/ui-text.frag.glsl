@@ -13,14 +13,16 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 #version 450
-//#include <wgpu-buffer/widget/include/widget.glsl>
+#include <wgpu-buffer/widget/include/widget.glsl>
 
-layout(location = 0) in vec3 v_tex_coord;
+layout(location = 0) in vec2 v_tex_coord;
 layout(location = 1) in vec4 v_color;
 
 layout(location = 0) out vec4 f_color;
 
 void main() {
-    //f_color = vec4(v_color.xyz, glyph_alpha_uv(v_tex_coord));
-    f_color = v_color;
+    float alpha = texture(sampler2D(glyph_sheet_texture, glyph_sheet_sampler), v_tex_coord).r;
+    //f_color = v;
+    f_color = vec4(v_color.xyz, alpha);
+    //f_color = v_color;
 }

@@ -12,39 +12,40 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-pub(crate) mod float_box;
 pub(crate) mod label;
+pub(crate) mod vertical_box;
 
-use crate::{widget_vertex::WidgetVertex, FontName, FALLBACK_FONT_NAME};
+use crate::{widget_vertex::WidgetVertex, SANS_FONT_NAME};
 use atlas::{AtlasPacker, Frame};
 use font_common::FontInterface;
 use gpu::{UploadTracker, GPU};
 use image::Luma;
 use ordered_float::OrderedFloat;
-use std::collections::HashMap;
+use parking_lot::RwLock;
+use std::{collections::HashMap, sync::Arc};
 use zerocopy::{AsBytes, FromBytes};
 
 pub struct GlyphTracker {
-    font: Box<dyn FontInterface>,
+    font: Arc<RwLock<dyn FontInterface>>,
     glyphs: HashMap<(char, OrderedFloat<f32>), Frame>,
 }
 
 impl GlyphTracker {
-    pub fn new(font: Box<dyn FontInterface>) -> Self {
+    pub fn new(font: Arc<RwLock<dyn FontInterface>>) -> Self {
         Self {
             font,
             glyphs: HashMap::new(),
         }
     }
 
-    pub fn font(&self) -> &dyn FontInterface {
-        self.font.as_ref()
+    pub fn font(&self) -> Arc<RwLock<dyn FontInterface>> {
+        self.font.clone()
     }
 }
 
 pub struct FontContext {
     glyph_sheet: AtlasPacker<Luma<u8>>,
-    trackers: HashMap<FontName, GlyphTracker>,
+    trackers: HashMap<String, GlyphTracker>,
 }
 
 impl FontContext {
@@ -57,7 +58,7 @@ impl FontContext {
                 Luma([0; 1]),
                 wgpu::TextureFormat::R8Unorm,
                 wgpu::TextureUsage::SAMPLED,
-                wgpu::FilterMode::Nearest,
+                wgpu::FilterMode::Linear,
             ),
             trackers: HashMap::new(),
         }
@@ -83,11 +84,11 @@ impl FontContext {
         self.glyph_sheet.sampler_binding(binding)
     }
 
-    pub fn get_font(&self, font_name: &str) -> &dyn FontInterface {
-        self.trackers[self.font_name(font_name)].font()
+    pub fn get_font(&self, font_name: &str) -> Arc<RwLock<dyn FontInterface>> {
+        self.trackers[self.font_for(font_name)].font()
     }
 
-    pub fn add_font(&mut self, font_name: FontName, font: Box<dyn FontInterface>) {
+    pub fn add_font(&mut self, font_name: String, font: Arc<RwLock<dyn FontInterface>>) {
         assert!(
             !self.trackers.contains_key(&font_name),
             "font already loaded"
@@ -95,29 +96,27 @@ impl FontContext {
         self.trackers.insert(font_name, GlyphTracker::new(font));
     }
 
-    pub fn load_glyph(&mut self, font_name: &str, c: char, size_em: f32) -> Frame {
-        let name = self.font_name(font_name);
-        if let Some(frame) = self.trackers[name].glyphs.get(&(c, OrderedFloat(size_em))) {
+    pub fn load_glyph(&mut self, font_name: &str, c: char, scale: f32) -> Frame {
+        let name = self.font_for(font_name);
+        if let Some(frame) = self.trackers[name].glyphs.get(&(c, OrderedFloat(scale))) {
             return *frame;
         }
         // Note: cannot delegate to GlyphTracker because of the second mutable borrow.
-        // FIXME: how does em relate to scale?
-        let scale = size_em * 64.0;
-        let img = self.trackers[name].font.render_glyph(c, scale);
+        let img = self.trackers[name].font.read().render_glyph(c, scale);
         let frame = self.glyph_sheet.push_image(&img);
         self.trackers
             .get_mut(name)
             .unwrap()
             .glyphs
-            .insert((c, OrderedFloat(size_em)), frame);
+            .insert((c, OrderedFloat(scale)), frame);
         frame
     }
 
-    fn font_name<'a>(&self, font_name: &'a str) -> &'a str {
+    fn font_for<'a>(&self, font_name: &'a str) -> &'a str {
         if self.trackers.contains_key(font_name) {
             font_name
         } else {
-            FALLBACK_FONT_NAME
+            SANS_FONT_NAME
         }
     }
 }
@@ -145,17 +144,15 @@ impl PaintContext {
     const TEXT_DEPTH: f32 = 0.75f32;
     const BOX_DEPTH_SIZE: f32 = 1f32;
 
-    pub fn new(device: &wgpu::Device, fallback_font: Box<dyn FontInterface>) -> Self {
-        let mut obj = Self {
+    pub fn new(device: &wgpu::Device) -> Self {
+        Self {
             current_depth: 0f32,
             font_context: FontContext::new(device),
             widget_info_pool: Vec::new(),
             background_pool: Vec::new(),
             image_pool: Vec::new(),
             text_pool: Vec::new(),
-        };
-        obj.add_font(FALLBACK_FONT_NAME.to_owned(), fallback_font);
-        obj
+        }
     }
 
     // Some data is frame-coherent, some is fresh for each frame. We mix them together in this
@@ -169,8 +166,12 @@ impl PaintContext {
         self.text_pool.truncate(0);
     }
 
-    pub fn add_font(&mut self, font_name: FontName, font: Box<dyn FontInterface>) {
-        self.font_context.add_font(font_name, font);
+    pub fn add_font<S: Into<String>>(
+        &mut self,
+        font_name: S,
+        font: Arc<RwLock<dyn FontInterface>>,
+    ) {
+        self.font_context.add_font(font_name.into(), font);
     }
 
     pub fn enter_box(&mut self) {
@@ -185,5 +186,5 @@ impl PaintContext {
 }
 
 pub trait Widget {
-    fn upload(&self, context: &mut PaintContext);
+    fn upload(&self, gpu: &GPU, context: &mut PaintContext);
 }

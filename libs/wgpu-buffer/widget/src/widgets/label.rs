@@ -14,17 +14,15 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     layout::LayoutEngine,
-    widget_vertex::WidgetVertex,
     widgets::{PaintContext, Widget, WidgetInfo},
-    FontName,
+    SANS_FONT_NAME,
 };
-use failure::Fallible;
-use shader_shared::Group;
+use gpu::GPU;
 
 pub struct Label {
     content: String,
-    size_em: f32,
-    font_name: FontName,
+    size_pts: f32,
+    font_name: String,
     info: WidgetInfo,
 }
 
@@ -32,8 +30,8 @@ impl Label {
     pub fn new<S: Into<String>>(markup: S) -> Self {
         Self {
             content: markup.into(),
-            size_em: 1.0,
-            font_name: crate::FALLBACK_FONT_NAME.to_owned(),
+            size_pts: 14.0,
+            font_name: SANS_FONT_NAME.to_owned(),
             info: WidgetInfo {
                 border_color: [0f32; 4],
                 background_color: [0f32; 4],
@@ -44,16 +42,23 @@ impl Label {
 }
 
 impl Widget for Label {
-    fn upload(&self, context: &mut PaintContext) {
+    fn upload(&self, gpu: &GPU, context: &mut PaintContext) {
         let widget_id = context.push_widget(self.info);
         LayoutEngine::span_to_triangles(
+            gpu,
             &self.content,
             &mut context.font_context,
             &self.font_name,
-            self.size_em,
+            self.size_pts,
             context.current_depth + PaintContext::TEXT_DEPTH,
             widget_id,
             &mut context.text_pool,
         );
+        context
+            .font_context
+            .glyph_sheet
+            .buffer()
+            .save("./__dump__/atlas.png")
+            .unwrap();
     }
 }

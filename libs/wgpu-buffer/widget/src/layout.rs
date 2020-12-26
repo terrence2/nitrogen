@@ -12,87 +12,83 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{
-    glyph_cache::GlyphCache, layout_vertex::LayoutVertex, widget_vertex::WidgetVertex,
-    widgets::FontContext, LayoutHandle, LayoutTextRenderContext, TextAnchorH, TextAnchorV,
-    TextPositionH, TextPositionV,
-};
-use atlas::Frame;
-use failure::Fallible;
+use crate::{widget_vertex::WidgetVertex, widgets::FontContext};
 use font_common::FontInterface;
-use gpu::{UploadTracker, GPU};
-use parking_lot::RwLock;
-use std::{mem, ops::Range, sync::Arc};
-use zerocopy::{AsBytes, FromBytes};
-
-// FIXME: this needs to be font dependent, but I'm not sure where to pull it from.
-const SPACE_WIDTH: f32 = 5f32 / 640f32;
-
-#[repr(C)]
-#[derive(AsBytes, FromBytes, Copy, Clone, Debug)]
-struct LayoutData {
-    text_layout_position: [f32; 4],
-    text_layout_color: [f32; 4],
-}
+use gpu::GPU;
 
 pub struct LayoutEngine;
 
 impl LayoutEngine {
+    // Because of the indirection when rendering, we can't easily take advantage of sub-pixel
+    // techniques, or even guarantee pixel-perfect placement. To help with text clarity, we thus
+    // double our render size and use linear filtering. This is wasteful, however, so we scale
+    // up a bit when rendering to get more use out of the pixels we place. Thus we take a hint
+    // from Gnome's font rendering subsystem and assume a 96dpi screen compared to the 72 that
+    // TTF assumes, to get the same nice look to what Gnome gives us.
+    const TTF_FONT_DPI: f32 = 72.0;
+    const GNOME_DPI: f32 = 96.0;
+    const GNOME_SCALE_FACTOR: f32 = Self::TTF_FONT_DPI / Self::GNOME_DPI;
+
     pub fn span_to_triangles(
+        gpu: &GPU,
         span: &str,
         font_context: &mut FontContext,
         font_name: &str,
-        size_em: f32,
+        size_pts: f32,
         depth: f32,
         widget_info_index: u32,
         verts: &mut Vec<WidgetVertex>,
     ) {
-        // FIXME: figure out how these are related!
-        let scale = size_em * 64.0;
+        // Use ttf standard formula to adjust scale by pts to figure out base rendering size.
+        // Note that we add an extra scale by 2x and use linear filtering to help account for
+        // our lack of sub-pixel and pixel alignment techniques.
+        let scale_px = 2.0 * size_pts * gpu.guess_dpi() as f32 / 72.0;
+
+        // We used guess_dpi to project from logical to physical pixels for rendering, so scale
+        // vertices proportional to physical size for vertex layout. Note that the factor of 2
+        // here is to account for the fact that vertex ranges are between [-1,1], not to account
+        // for the scaling of scale_px above.
+        let scale_y = Self::GNOME_SCALE_FACTOR * 2.0 / gpu.physical_size().height as f32;
+        let scale_x = scale_y * gpu.aspect_ratio_f32();
 
         let mut offset = 0f32;
         let mut prior = None;
-        for mut c in span.chars() {
-            if c == ' ' {
-                offset += SPACE_WIDTH;
-                continue;
-            }
-
-            let frame = font_context.load_glyph(font_name, c, size_em);
+        for c in span.chars() {
+            let frame = font_context.load_glyph(font_name, c, scale_px);
             let font = font_context.get_font(font_name);
-
-            let kerning = if let Some(p) = prior {
-                font.pair_kerning(p, c, scale)
-            } else {
-                0f32
-            };
+            let ((lo_x, lo_y), (hi_x, hi_y)) = font.read().exact_bounding_box(c, scale_px);
+            let lsb = font.read().left_side_bearing(c, scale_px);
+            let adv = font.read().advance_width(c, scale_px);
+            let kerning = prior
+                .map(|p| font.read().pair_kerning(p, c, scale_px))
+                .unwrap_or(0f32);
             prior = Some(c);
 
             // Layout from 0-> and let our transform put us in the right spot.
-            let x0 = offset + font.left_side_bearing(c, scale) + kerning;
-            let x1 = offset + font.advance_width(c, scale);
-            let y0 = 0f32; // Note, 0 is not the font baseline.
-            let y1 = scale; // FIXME: how do advance and bearing relate to scale?
+            let x0 = (offset + kerning + lo_x) * scale_x;
+            let x1 = (offset + kerning + hi_x) * scale_x;
+            let y0 = -hi_y * scale_y;
+            let y1 = -lo_y * scale_y;
 
             // Build 4 corner vertices.
             let v00 = WidgetVertex {
                 position: [x0, y0, depth],
-                tex_coord: [frame.coord0.s, frame.coord0.t, frame.offset],
+                tex_coord: [frame.coord0.s, frame.coord0.t],
                 widget_info_index,
             };
             let v01 = WidgetVertex {
                 position: [x0, y1, depth],
-                tex_coord: [frame.coord0.s, frame.coord1.t, frame.offset],
+                tex_coord: [frame.coord0.s, frame.coord1.t],
                 widget_info_index,
             };
             let v10 = WidgetVertex {
                 position: [x1, y0, depth],
-                tex_coord: [frame.coord1.s, frame.coord0.t, frame.offset],
+                tex_coord: [frame.coord1.s, frame.coord0.t],
                 widget_info_index,
             };
             let v11 = WidgetVertex {
                 position: [x1, y1, depth],
-                tex_coord: [frame.coord1.s, frame.coord1.t, frame.offset],
+                tex_coord: [frame.coord1.s, frame.coord1.t],
                 widget_info_index,
             };
 
@@ -104,21 +100,22 @@ impl LayoutEngine {
             verts.push(v10);
             verts.push(v11);
 
-            offset += font.advance_width(c, scale);
+            offset += adv - lsb;
         }
     }
 }
 
+/*
 // Note that each layout has its own vertex/index buffer and a tiny transform
 // buffer that might get updated every frame. This is costly per layout. However,
 // these are screen text layouts, so there will hopefully never be too many of them
 // if we do end up creating lots, we'll need to do some sort of layout caching.
 pub struct Layout {
     // The externally exposed handle, for ease of use.
-    layout_handle: LayoutHandle,
+    // layout_handle: LayoutHandle,
 
     // The font used for rendering this layout.
-    glyph_cache: Arc<RwLock<GlyphCache>>,
+    // glyph_cache: Arc<RwLock<GlyphCache>>,
 
     // Cached per-frame render state.
     content: String,
@@ -136,9 +133,9 @@ pub struct Layout {
 
 impl Layout {
     pub(crate) fn new(
-        layout_handle: LayoutHandle,
+        // layout_handle: LayoutHandle,
         text: &str,
-        glyph_cache: Arc<RwLock<GlyphCache>>,
+        // glyph_cache: Arc<RwLock<GlyphCache>>,
         bind_group_layout: &wgpu::BindGroupLayout,
         gpu: &GPU,
     ) -> Fallible<Self> {
@@ -161,11 +158,10 @@ impl Layout {
             }],
         });
 
-        let text_render_context = Self::build_text_span(text, &glyph_cache.read(), gpu)?;
+        // let text_render_context = Self::build_text_span(text, &glyph_cache.read(), gpu)?;
         Ok(Self {
-            layout_handle,
-            glyph_cache,
-
+            // layout_handle,
+            //glyph_cache,
             content: text.to_owned(),
             position_x: TextPositionH::Center,
             position_y: TextPositionV::Center,
@@ -173,7 +169,7 @@ impl Layout {
             anchor_y: TextAnchorV::Top,
             color: [1f32, 0f32, 1f32, 1f32],
 
-            text_render_context: Some(text_render_context),
+            text_render_context: None,
             layout_data_buffer,
             bind_group: Arc::new(Box::new(bind_group)),
         })
@@ -234,106 +230,14 @@ impl Layout {
         self.content = text.to_owned();
     }
 
-    pub fn handle(&self) -> LayoutHandle {
-        self.layout_handle
-    }
+    // pub fn handle(&self) -> LayoutHandle {
+    //     self.layout_handle
+    // }
 
-    fn build_text_span(
-        text: &str,
-        glyph_cache: &GlyphCache,
-        gpu: &GPU,
-    ) -> Fallible<LayoutTextRenderContext> {
-        let mut verts = Vec::new();
-        let mut indices: Vec<u32> = Vec::new();
-
-        let mut offset = 0f32;
-        let mut prior = None;
-        for mut c in text.chars() {
-            if c == ' ' {
-                offset += SPACE_WIDTH;
-                continue;
-            }
-
-            if !glyph_cache.can_render_char(c) {
-                c = '?';
-            }
-
-            let frame = glyph_cache.frame_for(c);
-            let kerning = if let Some(p) = prior {
-                glyph_cache.pair_kerning(p, c, 64.0)
-            } else {
-                0f32
-            };
-            prior = Some(c);
-
-            // Always do layout from 0-> and let our transform put us in the right spot.
-            let x0 = offset + frame.left_side_bearing + kerning;
-            let x1 = offset + frame.advance_width;
-            let y0 = 0f32;
-            let y1 = glyph_cache.render_height();
-
-            let base = verts.len() as u32;
-            verts.push(LayoutVertex {
-                position: [x0, y0],
-                tex_coord: [frame.s0, 0f32],
-            });
-            verts.push(LayoutVertex {
-                position: [x0, y1],
-                tex_coord: [frame.s0, 1f32],
-            });
-            verts.push(LayoutVertex {
-                position: [x1, y0],
-                tex_coord: [frame.s1, 0f32],
-            });
-            verts.push(LayoutVertex {
-                position: [x1, y1],
-                tex_coord: [frame.s1, 1f32],
-            });
-
-            indices.push(base);
-            indices.push(base + 1u32);
-            indices.push(base + 3u32);
-            indices.push(base);
-            indices.push(base + 3u32);
-            indices.push(base + 2u32);
-
-            offset += frame.advance_width;
-        }
-
-        // Create a degenerate triangle if there was nothing to render, because we cannot
-        // push an empty buffer, but still want something to hold here.
-        if verts.is_empty() {
-            for i in 0..3 {
-                verts.push(LayoutVertex {
-                    position: [0f32, 0f32],
-                    tex_coord: [0f32, 0f32],
-                });
-                indices.push(i);
-            }
-        }
-
-        let vertex_buffer = gpu.push_slice(
-            "text-layout-vertex-buffer",
-            &verts,
-            wgpu::BufferUsage::all(),
-        );
-        let index_buffer = gpu.push_slice(
-            "text-layout-index-buffer",
-            &indices,
-            wgpu::BufferUsage::all(),
-        );
-
-        Ok(LayoutTextRenderContext {
-            render_width: offset,
-            vertex_buffer: Arc::new(Box::new(vertex_buffer)),
-            index_buffer: Arc::new(Box::new(index_buffer)),
-            index_count: indices.len() as u32,
-        })
-    }
-
+    /*
     pub(crate) fn make_upload_buffer(
         &mut self,
-        glyph_cache: &GlyphCache,
+        // glyph_cache: &GlyphCache,
         gpu: &GPU,
         tracker: &mut UploadTracker,
     ) -> Fallible<()> {
@@ -373,10 +277,7 @@ impl Layout {
 
         Ok(())
     }
-
-    pub(crate) fn glyph_cache(&self) -> Arc<RwLock<GlyphCache>> {
-        self.glyph_cache.clone()
-    }
+     */
 
     pub fn vertex_buffer(&self) -> wgpu::BufferSlice {
         self.text_render_context
@@ -402,3 +303,4 @@ impl Layout {
         &self.bind_group
     }
 }
+*/

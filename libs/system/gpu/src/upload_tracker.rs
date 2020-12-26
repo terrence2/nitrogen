@@ -20,8 +20,8 @@ pub struct CopyBufferToTextureDescriptor {
     target: Arc<Box<wgpu::Texture>>,
     target_extent: wgpu::Extent3d,
     target_element_size: u32,
-    target_array_layer: u32,
     array_layer_count: u32,
+    target_origin: wgpu::Origin3d,
 }
 
 impl CopyBufferToTextureDescriptor {
@@ -30,16 +30,16 @@ impl CopyBufferToTextureDescriptor {
         target: Arc<Box<wgpu::Texture>>,
         target_extent: wgpu::Extent3d,
         target_element_size: u32,
-        target_array_layer: u32,
         array_layer_count: u32,
+        target_origin: wgpu::Origin3d,
     ) -> Self {
         Self {
             source,
             target,
             target_extent,
             target_element_size,
-            target_array_layer,
             array_layer_count,
+            target_origin,
         }
     }
 }
@@ -180,12 +180,12 @@ impl UploadTracker {
         target: Arc<Box<wgpu::Texture>>,
         target_extent: wgpu::Extent3d,
         target_format: wgpu::TextureFormat,
-        target_array_layer: u32,
         array_layer_count: u32,
+        origin: wgpu::Origin3d,
     ) {
         let target_element_size = texture_format_size(target_format);
         assert_eq!(
-            target_extent.width * target_element_size % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT,
+            (target_extent.width * target_element_size) % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT,
             0
         );
         self.b2t_uploads.push(CopyBufferToTextureDescriptor::new(
@@ -193,8 +193,8 @@ impl UploadTracker {
             target,
             target_extent,
             target_element_size,
-            target_array_layer,
             array_layer_count,
+            origin,
         ));
     }
 
@@ -239,11 +239,7 @@ impl UploadTracker {
                 wgpu::TextureCopyView {
                     texture: &desc.target,
                     mip_level: 0, // TODO: need to scale extent appropriately
-                    origin: wgpu::Origin3d {
-                        x: 0,
-                        y: 0,
-                        z: desc.target_array_layer,
-                    },
+                    origin: desc.target_origin,
                 },
                 wgpu::Extent3d {
                     width: desc.target_extent.width,

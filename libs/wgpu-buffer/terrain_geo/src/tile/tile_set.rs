@@ -594,8 +594,12 @@ impl TileSet {
                 self.atlas_texture.clone(),
                 self.atlas_texture_extent,
                 self.atlas_texture_format,
-                atlas_slot as u32,
                 1,
+                wgpu::Origin3d {
+                    x: 0,
+                    y: 0,
+                    z: atlas_slot as u32,
+                },
             );
 
             let (tile_base_lat_as, tile_base_lon_as) = self.tile_tree.base(&qtid);
