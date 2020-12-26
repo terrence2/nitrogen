@@ -35,35 +35,22 @@ use std::{mem, num::NonZeroU64, ops::Range, sync::Arc};
 //
 // We have one pipeline for each of the following.
 // 1) Draw all widget backgrounds / borders in one pipeline, with depth.
-// 2) Draw all text
-// 3) Draw all images
+// 2) Draw all images
+// 3) Draw all text
 //
 // Widget upload recurses through the tree of widgets. Each layer gets a 1.0 wide depth slot to
 // render into. They may upload vertices to 3 vertex pools, one for each of the above concerns.
-// Rendering is done from leaf up, making use of the depth test to avoid overpaint. Vertices
-// contain x, y, and z coordinates in screen space, s and t texture coordinates, and an index
-// into the widget info buffer. There is one slot in the info buffer per widget where the majority
-// of the widget data lives, so save space in vertices.
+// Rendering is done from leaf up, making use of the depth test where possible to avoid overpaint.
+// Vertices contain x, y, and z coordinates in screen space, s and t texture coordinates, and an
+// index into the widget info buffer. There is one slot in the info buffer per widget where the
+// majority of the widget data lives, to save space in vertices.
 
-// Fallback for when we have no libs loaded.
-// https://fonts.google.com/specimen/Quantico?selection.family=Quantico
 pub const SANS_FONT_NAME: &str = "sans";
 pub const MONO_FONT_NAME: &str = "mono";
 const FIRA_SANS_REGULAR_TTF_DATA: &[u8] =
     include_bytes!("../../../../assets/font/FiraSans-Regular.ttf");
 const FIRA_MONO_REGULAR_TTF_DATA: &[u8] =
     include_bytes!("../../../../assets/font/FiraMono-Regular.ttf");
-
-// Context required for rendering a specific text span (as opposed to the layout in general).
-// e.g. the vertex and index buffers.
-struct LayoutTextRenderContext {
-    render_width: f32,
-    vertex_buffer: Arc<Box<wgpu::Buffer>>,
-    index_buffer: Arc<Box<wgpu::Buffer>>,
-    index_count: u32,
-}
-
-pub type FontName = String;
 
 #[derive(Commandable)]
 pub struct WidgetBuffer {
@@ -275,7 +262,16 @@ mod test {
         let mut gpu = GPU::new(&window, Default::default())?;
 
         let mut widgets = WidgetBuffer::new(&mut gpu)?;
-        let label = widgets.create_label("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        let label = widgets.create_label(
+            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\
+            สิบสองกษัตริย์ก่อนหน้าแลถัดไป       สององค์ไซร้โง่เขลาเบาปัญญา\
+            Зарегистрируйтесь сейчас на Десятую Международную Конференцию по\
+            გთხოვთ ახლავე გაიაროთ რეგისტრაცია Unicode-ის მეათე საერთაშორისო\
+            ∮ E⋅da = Q,  n → ∞, ∑ f(i) = ∏ g(i), ∀x∈ℝ: ⌈x⌉ = −⌊−x⌋, α ∧ ¬β = ¬(¬α ∨ β)\
+            Οὐχὶ ταὐτὰ παρίσταταί μοι γιγνώσκειν, ὦ ἄνδρες ᾿Αθηναῖοι,\
+            ði ıntəˈnæʃənəl fəˈnɛtık əsoʊsiˈeıʃn\
+            Y [ˈʏpsilɔn], Yen [jɛn], Yoga [ˈjoːgɑ]",
+        );
         widgets.root().write().add_child(label);
 
         let mut tracker = Default::default();

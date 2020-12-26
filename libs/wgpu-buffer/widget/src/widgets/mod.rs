@@ -53,8 +53,8 @@ impl FontContext {
         Self {
             glyph_sheet: AtlasPacker::new(
                 device,
-                512,
-                512,
+                256,
+                256,
                 Luma([0; 1]),
                 wgpu::TextureFormat::R8Unorm,
                 wgpu::TextureUsage::SAMPLED,
@@ -66,6 +66,14 @@ impl FontContext {
 
     pub fn upload(&mut self, gpu: &GPU, tracker: &mut UploadTracker) {
         self.glyph_sheet.upload(gpu, tracker);
+    }
+
+    pub fn glyph_sheet_width(&self) -> u32 {
+        self.glyph_sheet.width()
+    }
+
+    pub fn glyph_sheet_height(&self) -> u32 {
+        self.glyph_sheet.height()
     }
 
     pub fn glyph_sheet_texture_layout_entry(&self, binding: u32) -> wgpu::BindGroupLayoutEntry {

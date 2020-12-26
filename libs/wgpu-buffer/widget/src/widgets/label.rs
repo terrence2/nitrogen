@@ -54,11 +54,13 @@ impl Widget for Label {
             widget_id,
             &mut context.text_pool,
         );
-        context
-            .font_context
-            .glyph_sheet
-            .buffer()
-            .save("./__dump__/atlas.png")
-            .unwrap();
+        if std::env::var("DUMP") == Ok("1".to_owned()) {
+            context
+                .font_context
+                .glyph_sheet
+                .buffer()
+                .save("./__dump__/atlas.png")
+                .unwrap();
+        }
     }
 }

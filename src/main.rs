@@ -153,7 +153,16 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     ///////////////////////////////////////////////////////////
 
     //let fps_label = widget::Label::new("hello world");
-    let fps_label = frame_graph.widgets.create_label("luqup testy 3456 MMMMM");
+    let fps_label = frame_graph.widgets.create_label(
+        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\
+        สิบสองกษัตริย์ก่อนหน้าแลถัดไป       สององค์ไซร้โง่เขลาเบาปัญญา\
+        Зарегистрируйтесь сейчас на Десятую Международную Конференцию по\
+        გთხოვთ ახლავე გაიაროთ რეგისტრაცია Unicode-ის მეათე საერთაშორისო\
+        ∮ E⋅da = Q,  n → ∞, ∑ f(i) = ∏ g(i), ∀x∈ℝ: ⌈x⌉ = −⌊−x⌋, α ∧ ¬β = ¬(¬α ∨ β)\
+        Οὐχὶ ταὐτὰ παρίσταταί μοι γιγνώσκειν, ὦ ἄνδρες ᾿Αθηναῖοι,\
+        ði ıntəˈnæʃənəl fəˈnɛtık əsoʊsiˈeıʃn\
+        Y [ˈʏpsilɔn], Yen [jɛn], Yoga [ˈjoːgɑ]",
+    );
     frame_graph.widgets.root().write().add_child(fps_label);
     //frame_graph.widgets.root()
 

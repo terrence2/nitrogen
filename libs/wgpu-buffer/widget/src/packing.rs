@@ -54,4 +54,8 @@ impl BoxPacking {
     pub fn widget(&self) -> Arc<RwLock<dyn Widget>> {
         self.widget.clone()
     }
+
+    pub fn offset(&self) -> usize {
+        self.offset
+    }
 }

@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{widget_vertex::WidgetVertex, widgets::FontContext};
-use font_common::FontInterface;
 use gpu::GPU;
 
 pub struct LayoutEngine;
@@ -39,6 +38,9 @@ impl LayoutEngine {
         widget_info_index: u32,
         verts: &mut Vec<WidgetVertex>,
     ) {
+        let w = font_context.glyph_sheet_width();
+        let h = font_context.glyph_sheet_height();
+
         // Use ttf standard formula to adjust scale by pts to figure out base rendering size.
         // Note that we add an extra scale by 2x and use linear filtering to help account for
         // our lack of sub-pixel and pixel alignment techniques.
@@ -70,25 +72,30 @@ impl LayoutEngine {
             let y0 = -hi_y * scale_y;
             let y1 = -lo_y * scale_y;
 
+            let s0 = frame.s0(w);
+            let s1 = frame.s1(w);
+            let t0 = frame.t0(h);
+            let t1 = frame.t1(h);
+
             // Build 4 corner vertices.
             let v00 = WidgetVertex {
                 position: [x0, y0, depth],
-                tex_coord: [frame.coord0.s, frame.coord0.t],
+                tex_coord: [s0, t0],
                 widget_info_index,
             };
             let v01 = WidgetVertex {
                 position: [x0, y1, depth],
-                tex_coord: [frame.coord0.s, frame.coord1.t],
+                tex_coord: [s0, t1],
                 widget_info_index,
             };
             let v10 = WidgetVertex {
                 position: [x1, y0, depth],
-                tex_coord: [frame.coord1.s, frame.coord0.t],
+                tex_coord: [s1, t0],
                 widget_info_index,
             };
             let v11 = WidgetVertex {
                 position: [x1, y1, depth],
-                tex_coord: [frame.coord1.s, frame.coord1.t],
+                tex_coord: [s1, t1],
                 widget_info_index,
             };
 

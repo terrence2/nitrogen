@@ -53,11 +53,4 @@ impl Widget for VerticalBox {
             pack.widget().read().upload(gpu, context);
         }
     }
-    // fn draw<'a>(&self, rpass: wgpu::RenderPass<'a>) -> Fallible<wgpu::RenderPass<'a>> {
-    //     let mut rpass = rpass;
-    //     for child in &self.children {
-    //         rpass = child.draw(rpass)?;
-    //     }
-    //     Ok(rpass)
-    // }
 }
