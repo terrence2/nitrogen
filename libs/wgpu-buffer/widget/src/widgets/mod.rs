@@ -12,6 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+pub(crate) mod float_box;
 pub(crate) mod label;
 pub(crate) mod vertical_box;
 

@@ -153,17 +153,12 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     ///////////////////////////////////////////////////////////
 
     //let fps_label = widget::Label::new("hello world");
-    let fps_label = frame_graph.widgets.create_label(
-        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\
-        สิบสองกษัตริย์ก่อนหน้าแลถัดไป       สององค์ไซร้โง่เขลาเบาปัญญา\
-        Зарегистрируйтесь сейчас на Десятую Международную Конференцию по\
-        გთხოვთ ახლავე გაიაროთ რეგისტრაცია Unicode-ის მეათე საერთაშორისო\
-        ∮ E⋅da = Q,  n → ∞, ∑ f(i) = ∏ g(i), ∀x∈ℝ: ⌈x⌉ = −⌊−x⌋, α ∧ ¬β = ¬(¬α ∨ β)\
-        Οὐχὶ ταὐτὰ παρίσταταί μοι γιγνώσκειν, ὦ ἄνδρες ᾿Αθηναῖοι,\
-        ði ıntəˈnæʃənəl fəˈnɛtık əsoʊsiˈeıʃn\
-        Y [ˈʏpsilɔn], Yen [jɛn], Yoga [ˈjoːgɑ]",
-    );
-    frame_graph.widgets.root().write().add_child(fps_label);
+    let fps_label = frame_graph.widgets.create_label("");
+    frame_graph
+        .widgets
+        .root()
+        .write()
+        .add_child(fps_label.clone());
     //frame_graph.widgets.root()
 
     /*
@@ -316,6 +311,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
             frame_time.as_secs() * 1000 + u64::from(frame_time.subsec_millis()),
             frame_time.subsec_micros(),
         );
+        fps_label.write().set_markup(ts);
         //fps_handle.grab(frame_graph.widgets()).set_span(&ts);
     }
 }

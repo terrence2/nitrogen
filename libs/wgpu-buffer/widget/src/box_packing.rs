@@ -16,7 +16,6 @@ use crate::widgets::Widget;
 use parking_lot::RwLock;
 use std::sync::Arc;
 
-/*
 #[derive(Copy, Clone, Debug)]
 pub enum PositionH {
     Start,
@@ -31,7 +30,6 @@ pub enum PositionV {
     Bottom,
     Baseline, // widget defined visual bottom
 }
- */
 
 // Determine how the given widget should be packed into its box.
 pub struct BoxPacking {

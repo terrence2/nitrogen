@@ -12,14 +12,17 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+mod box_packing;
 mod layout;
-mod packing;
 mod widget_vertex;
 mod widgets;
 
 pub use crate::{
     widget_vertex::WidgetVertex,
-    widgets::{label::Label, vertical_box::VerticalBox, PaintContext, Widget, WidgetInfo},
+    widgets::{
+        float_box::FloatBox, label::Label, vertical_box::VerticalBox, PaintContext, Widget,
+        WidgetInfo,
+    },
 };
 
 use commandable::{commandable, Commandable};
@@ -55,7 +58,7 @@ const FIRA_MONO_REGULAR_TTF_DATA: &[u8] =
 #[derive(Commandable)]
 pub struct WidgetBuffer {
     // Widget state.
-    root: Arc<RwLock<VerticalBox>>,
+    root: Arc<RwLock<FloatBox>>,
     paint_context: PaintContext,
 
     // The four key buffers.
@@ -138,7 +141,7 @@ impl WidgetBuffer {
                 });
 
         Ok(Self {
-            root: Arc::new(RwLock::new(VerticalBox::new())),
+            root: Arc::new(RwLock::new(FloatBox::new())),
             paint_context,
 
             widget_info_buffer_size,
@@ -152,7 +155,7 @@ impl WidgetBuffer {
         })
     }
 
-    pub fn root(&self) -> Arc<RwLock<VerticalBox>> {
+    pub fn root(&self) -> Arc<RwLock<FloatBox>> {
         self.root.clone()
     }
 
@@ -193,35 +196,39 @@ impl WidgetBuffer {
 
         self.paint_context.font_context.upload(gpu, tracker);
 
-        let widget_info_upload = gpu.push_slice(
-            "widget-info-upload",
-            &self.paint_context.widget_info_pool,
-            wgpu::BufferUsage::COPY_SRC,
-        );
-        let widget_info_size = self.widget_info_buffer_size.min(
-            (mem::size_of::<WidgetInfo>() * self.paint_context.widget_info_pool.len())
-                as wgpu::BufferAddress,
-        );
-        tracker.upload_ba(
-            widget_info_upload,
-            self.widget_info_buffer.clone(),
-            widget_info_size,
-        );
+        if !self.paint_context.widget_info_pool.is_empty() {
+            let widget_info_upload = gpu.push_slice(
+                "widget-info-upload",
+                &self.paint_context.widget_info_pool,
+                wgpu::BufferUsage::COPY_SRC,
+            );
+            let widget_info_size = self.widget_info_buffer_size.min(
+                (mem::size_of::<WidgetInfo>() * self.paint_context.widget_info_pool.len())
+                    as wgpu::BufferAddress,
+            );
+            tracker.upload_ba(
+                widget_info_upload,
+                self.widget_info_buffer.clone(),
+                widget_info_size,
+            );
+        }
 
-        let text_vertex_upload = gpu.push_slice(
-            "widget-text-vertex-upload",
-            &self.paint_context.text_pool,
-            wgpu::BufferUsage::COPY_SRC,
-        );
-        let text_vertex_upload_size = self.text_vertex_buffer_size.min(
-            (mem::size_of::<WidgetVertex>() * self.paint_context.text_pool.len())
-                as wgpu::BufferAddress,
-        );
-        tracker.upload_ba(
-            text_vertex_upload,
-            self.text_vertex_buffer.clone(),
-            text_vertex_upload_size,
-        );
+        if !self.paint_context.text_pool.is_empty() {
+            let text_vertex_upload = gpu.push_slice(
+                "widget-text-vertex-upload",
+                &self.paint_context.text_pool,
+                wgpu::BufferUsage::COPY_SRC,
+            );
+            let text_vertex_upload_size = self.text_vertex_buffer_size.min(
+                (mem::size_of::<WidgetVertex>() * self.paint_context.text_pool.len())
+                    as wgpu::BufferAddress,
+            );
+            tracker.upload_ba(
+                text_vertex_upload,
+                self.text_vertex_buffer.clone(),
+                text_vertex_upload_size,
+            );
+        }
 
         self.bind_group = Some(
             gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {

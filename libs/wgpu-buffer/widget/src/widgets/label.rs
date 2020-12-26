@@ -39,6 +39,10 @@ impl Label {
             },
         }
     }
+
+    pub fn set_markup<S: Into<String>>(&mut self, markup: S) {
+        self.content = markup.into();
+    }
 }
 
 impl Widget for Label {
@@ -54,13 +58,5 @@ impl Widget for Label {
             widget_id,
             &mut context.text_pool,
         );
-        if std::env::var("DUMP") == Ok("1".to_owned()) {
-            context
-                .font_context
-                .glyph_sheet
-                .buffer()
-                .save("./__dump__/atlas.png")
-                .unwrap();
-        }
     }
 }
