@@ -13,7 +13,10 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    color::Color, paint_context::PaintContext, widget::Widget, widget_info::WidgetInfo,
+    color::Color,
+    paint_context::PaintContext,
+    widget::{UploadMetrics, Widget},
+    widget_info::WidgetInfo,
     SANS_FONT_NAME,
 };
 use gpu::GPU;
@@ -63,15 +66,21 @@ impl Label {
 }
 
 impl Widget for Label {
-    fn upload(&self, gpu: &GPU, context: &mut PaintContext) {
+    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> UploadMetrics {
         let info = WidgetInfo::default().with_foreground_color(self.color);
         let widget_info_index = context.push_widget(&info);
-        context.layout_text(
+        let span_metrics = context.layout_text(
             &self.span,
             &self.font_name,
             self.size_pts,
             widget_info_index,
             gpu,
         );
+        UploadMetrics {
+            widget_info_indexes: vec![widget_info_index],
+            width: span_metrics.width,
+            baseline_height: span_metrics.baseline_height,
+            height: span_metrics.height,
+        }
     }
 }

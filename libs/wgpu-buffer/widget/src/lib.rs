@@ -56,6 +56,10 @@ use std::{mem, num::NonZeroU64, ops::Range, sync::Arc};
 
 pub const SANS_FONT_NAME: &str = "sans";
 pub const MONO_FONT_NAME: &str = "mono";
+const DEJAVU_SANS_REGULAR_TTF_DATA: &[u8] =
+    include_bytes!("../../../../assets/font/DejaVuSans.ttf");
+const DEJAVU_MONO_REGULAR_TTF_DATA: &[u8] =
+    include_bytes!("../../../../assets/font/DejaVuSansMono.ttf");
 const FIRA_SANS_REGULAR_TTF_DATA: &[u8] =
     include_bytes!("../../../../assets/font/FiraSans-Regular.ttf");
 const FIRA_MONO_REGULAR_TTF_DATA: &[u8] =
@@ -93,8 +97,16 @@ impl WidgetBuffer {
         trace!("WidgetBuffer::new");
 
         let mut paint_context = PaintContext::new(gpu.device());
-        paint_context.add_font("mono", TtfFont::from_bytes(&FIRA_MONO_REGULAR_TTF_DATA)?);
-        paint_context.add_font("sans", TtfFont::from_bytes(&FIRA_SANS_REGULAR_TTF_DATA)?);
+        let fira_mono = TtfFont::from_bytes(&FIRA_MONO_REGULAR_TTF_DATA)?;
+        let fira_sans = TtfFont::from_bytes(&FIRA_SANS_REGULAR_TTF_DATA)?;
+        let dejavu_mono = TtfFont::from_bytes(&DEJAVU_MONO_REGULAR_TTF_DATA)?;
+        let dejavu_sans = TtfFont::from_bytes(&DEJAVU_SANS_REGULAR_TTF_DATA)?;
+        paint_context.add_font("fira-mono", fira_mono.clone());
+        paint_context.add_font("fira-sans", fira_sans);
+        paint_context.add_font("dejavu-mono", dejavu_mono);
+        paint_context.add_font("dejavu-sans", dejavu_sans.clone());
+        paint_context.add_font("mono", fira_mono);
+        paint_context.add_font("sans", dejavu_sans);
 
         // Create the core widget info buffer.
         let widget_info_buffer_size =

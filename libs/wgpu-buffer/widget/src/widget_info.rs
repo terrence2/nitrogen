@@ -23,7 +23,7 @@ pub struct WidgetInfo {
     foreground_color: [f32; 4],
     background_color: [f32; 4],
     border_color: [f32; 4],
-    //border_width: [u8; 4]
+    pub position: [f32; 4],
 }
 
 impl WidgetInfo {

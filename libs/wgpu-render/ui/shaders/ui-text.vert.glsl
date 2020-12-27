@@ -24,12 +24,11 @@ layout(location = 0) out vec2 v_tex_coord;
 layout(location = 1) flat out vec4 v_color;
 
 void main() {
-    WidgetInfo info = widget_info[widget_info_id];
-    //vec4 text_layout_position = vec4(-3.5804195, 0.0, 0.0, 0.0);
-    vec4 text_layout_position = vec4(0);
-    //gl_Position = /*screen_letterbox_projection() */ (vec4(position, 1.0) + text_layout_position);
-    gl_Position = vec4(position.x - 1, position.y + 1 - 2.5 * 0.019234834, 0, 1);
-    //gl_Position = vec4(position.x, position.y, 0, 1);
     v_tex_coord = tex_coord;
+
+    WidgetInfo info = widget_info[widget_info_id];
     v_color = info.foreground_color;
+
+    vec4 text_layout_position = vec4(info.position[0],  info.position[1], position.z, 0);
+    gl_Position = vec4(position.xy, 0, 1) + text_layout_position;
 }

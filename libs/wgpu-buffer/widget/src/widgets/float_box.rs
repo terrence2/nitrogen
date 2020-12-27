@@ -15,7 +15,7 @@
 use crate::{
     box_packing::{PositionH, PositionV},
     paint_context::PaintContext,
-    widget::Widget,
+    widget::{UploadMetrics, Widget},
 };
 use gpu::GPU;
 use parking_lot::RwLock;
@@ -81,9 +81,36 @@ impl FloatBox {
 }
 
 impl Widget for FloatBox {
-    fn upload(&self, gpu: &GPU, context: &mut PaintContext) {
+    // FIXME: use widget info for depth instead of vertices; save some upload bandwidth.
+    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> UploadMetrics {
+        let mut widget_info_indexes = Vec::with_capacity(self.children.len());
         for pack in &self.children {
-            pack.widget().read().upload(gpu, context);
+            let widget = pack.widget.read();
+            let mut child_metrics = widget.upload(gpu, context);
+
+            // Apply float to child.
+            let x_offset = match pack.float_h {
+                PositionH::Start => -1f32,
+                PositionH::Center => -child_metrics.width / 2f32,
+                PositionH::End => 1f32 - child_metrics.width,
+            };
+            let y_offset = match pack.float_v {
+                PositionV::Top => 1f32,
+                PositionV::Center => child_metrics.height / 2.0,
+                PositionV::Bottom => -1f32 + child_metrics.height,
+            };
+            for &widget_info_index in &child_metrics.widget_info_indexes {
+                context.widget_info_pool[widget_info_index as usize].position[0] += x_offset;
+                context.widget_info_pool[widget_info_index as usize].position[1] += y_offset;
+            }
+
+            widget_info_indexes.append(&mut child_metrics.widget_info_indexes);
+        }
+        UploadMetrics {
+            widget_info_indexes,
+            width: 2f32,
+            height: 2f32,
+            baseline_height: 2f32,
         }
     }
 }

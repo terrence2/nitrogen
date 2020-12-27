@@ -18,7 +18,7 @@ lazy_static = "^ 1"
 log = "^ 0.4"
 memoffset = "^ 0.5"
 nalgebra = "^ 0.20"
-smallvec = "^ 1"
+smallvec = "^ 1.4"
 static_assertions = "^ 1"
 tokio = { version = "^ 0.2", features = ["rt-threaded", "macros", "fs", "sync"] }
 wgpu = "^ 0.6"

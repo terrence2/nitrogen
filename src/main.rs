@@ -154,7 +154,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
 
     let version_label = Label::new("Nitrogen v0.1")
         .with_color(Color::Green)
-        .with_size(10.0)
+        .with_size(8.0)
         .wrapped();
     frame_graph
         .widgets
@@ -168,20 +168,8 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         .widgets
         .root()
         .write()
-        .add_child(fps_label.clone());
-    //frame_graph.widgets.root()
-
-    /*
-    let fps_handle = frame_graph
-        .widgets()
-        .add_screen_text("", "", &gpu)?
-        .with_color(&[1f32, 0f32, 0f32, 1f32])
-        .with_horizontal_position(TextPositionH::Left)
-        .with_horizontal_anchor(TextAnchorH::Left)
-        .with_vertical_position(TextPositionV::Top)
-        .with_vertical_anchor(TextAnchorV::Top)
-        .handle();
-     */
+        .add_child(fps_label.clone())
+        .set_float(PositionH::Start, PositionV::Top);
 
     let mut orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0));
 
@@ -322,6 +310,5 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
             frame_time.subsec_micros(),
         );
         fps_label.write().set_markup(ts);
-        //fps_handle.grab(frame_graph.widgets()).set_span(&ts);
     }
 }

@@ -18,6 +18,7 @@ struct WidgetInfo {
     vec4 foreground_color;
     vec4 background_color;
     vec4 border_color;
+    vec4 position;
 };
 
 layout(set = 1, binding = 0) uniform WidgetBlock {

@@ -12,7 +12,10 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{font_context::FontContext, widget_info::WidgetInfo, widget_vertex::WidgetVertex};
+use crate::{
+    font_context::FontContext, font_context::TextSpanMetrics, widget_info::WidgetInfo,
+    widget_vertex::WidgetVertex,
+};
 use font_common::FontInterface;
 use gpu::GPU;
 use parking_lot::RwLock;
@@ -71,6 +74,7 @@ impl PaintContext {
         offset as u32
     }
 
+    /// Returns [width, baseline_height, total_height]
     pub fn layout_text(
         &mut self,
         span: &str,
@@ -78,14 +82,13 @@ impl PaintContext {
         size_pts: f32,
         widget_info_index: u32,
         gpu: &GPU,
-    ) {
-        let depth = self.current_depth + Self::TEXT_DEPTH;
+    ) -> TextSpanMetrics {
         self.font_context.layout_text(
             span,
             font_name,
             size_pts,
             widget_info_index,
-            depth,
+            self.current_depth + Self::TEXT_DEPTH,
             gpu,
             &mut self.text_pool,
         )

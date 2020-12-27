@@ -44,6 +44,12 @@ pub struct FontContext {
     trackers: HashMap<String, GlyphTracker>,
 }
 
+pub struct TextSpanMetrics {
+    pub width: f32,
+    pub baseline_height: f32,
+    pub height: f32,
+}
+
 impl FontContext {
     pub fn new(device: &wgpu::Device) -> Self {
         Self {
@@ -143,21 +149,30 @@ impl FontContext {
         depth: f32,
         gpu: &GPU,
         pool: &mut Vec<WidgetVertex>,
-    ) {
+    ) -> TextSpanMetrics {
         let w = self.glyph_sheet_width();
         let h = self.glyph_sheet_height();
 
+        let px_scaling = if size_pts <= 12.0 { 4.0 } else { 2.0 };
+
         // Use ttf standard formula to adjust scale by pts to figure out base rendering size.
-        // Note that we add an extra scale by 2x and use linear filtering to help account for
+        // Note that we add some extra scaling and use linear filtering to help account for
         // our lack of sub-pixel and pixel alignment techniques.
-        let scale_px = 2.0 * size_pts * gpu.scale_factor() as f32;
+        let scale_px = px_scaling * size_pts * gpu.scale_factor() as f32;
 
         // We used guess_dpi to project from logical to physical pixels for rendering, so scale
         // vertices proportional to physical size for vertex layout. Note that the factor of 2
         // here is to account for the fact that vertex ranges are between [-1,1], not to account
         // for the scaling of scale_px above.
-        let scale_y = Self::GNOME_SCALE_FACTOR * 2.0 / gpu.physical_size().height as f32;
+        let scale_y =
+            Self::GNOME_SCALE_FACTOR * 4.0 / gpu.physical_size().height as f32 / px_scaling;
         let scale_x = scale_y * gpu.aspect_ratio_f32();
+
+        // Font rendering is based around the baseline. We want it based around the top-left
+        // corner instead, so move down by the ascent.
+        let font = self.get_font(font_name);
+        let descent = font.read().descent(scale_px);
+        let ascent = font.read().ascent(scale_px);
 
         let mut offset = 0f32;
         let mut prior = None;
@@ -175,8 +190,8 @@ impl FontContext {
             // Layout from 0-> and let our transform put us in the right spot.
             let x0 = (offset + kerning + lo_x) * scale_x;
             let x1 = (offset + kerning + hi_x) * scale_x;
-            let y0 = -hi_y * scale_y;
-            let y1 = -lo_y * scale_y;
+            let y0 = -(hi_y + ascent) * scale_y;
+            let y1 = -(lo_y + ascent) * scale_y;
 
             let s0 = frame.s0(w);
             let s1 = frame.s1(w);
@@ -214,6 +229,12 @@ impl FontContext {
             pool.push(v11);
 
             offset += adv - lsb;
+        }
+
+        TextSpanMetrics {
+            width: offset * scale_x,
+            height: (ascent - descent) * scale_y,
+            baseline_height: -descent * scale_y,
         }
     }
 }

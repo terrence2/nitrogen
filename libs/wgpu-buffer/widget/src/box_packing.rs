@@ -28,7 +28,6 @@ pub enum PositionV {
     Top,
     Center,
     Bottom,
-    Baseline, // widget defined visual bottom
 }
 
 // Determine how the given widget should be packed into its box.
