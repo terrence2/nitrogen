@@ -510,7 +510,7 @@ mod test {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
-        let mut gpu = GPU::new(&window, Default::default()).unwrap();
+        let gpu = GPU::new(&window, Default::default()).unwrap();
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             gpu.device(),
@@ -542,7 +542,7 @@ mod test {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
-        let mut gpu = GPU::new(&window, Default::default()).unwrap();
+        let gpu = GPU::new(&window, Default::default()).unwrap();
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             gpu.device(),

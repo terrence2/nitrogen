@@ -12,6 +12,23 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-pub(crate) mod float_box;
-pub(crate) mod label;
-pub(crate) mod vertical_box;
+use crate::color::Color;
+use zerocopy::{AsBytes, FromBytes};
+
+/// Stored on the GPU, one per widget. Widget vertices reference one of these slots so that
+/// pipelines can get at the data they need.
+#[repr(C)]
+#[derive(AsBytes, FromBytes, Copy, Clone, Debug, Default)]
+pub struct WidgetInfo {
+    foreground_color: [f32; 4],
+    background_color: [f32; 4],
+    border_color: [f32; 4],
+    //border_width: [u8; 4]
+}
+
+impl WidgetInfo {
+    pub fn with_foreground_color(mut self, color: Color) -> Self {
+        self.foreground_color = color.to_f32_array();
+        self
+    }
+}

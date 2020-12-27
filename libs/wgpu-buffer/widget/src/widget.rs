@@ -12,6 +12,9 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-pub(crate) mod float_box;
-pub(crate) mod label;
-pub(crate) mod vertical_box;
+use crate::paint_context::PaintContext;
+use gpu::GPU;
+
+pub trait Widget {
+    fn upload(&self, gpu: &GPU, context: &mut PaintContext);
+}

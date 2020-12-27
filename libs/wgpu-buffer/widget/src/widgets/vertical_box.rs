@@ -12,10 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{
-    box_packing::BoxPacking,
-    widgets::{PaintContext, Widget},
-};
+use crate::{box_packing::BoxPacking, paint_context::PaintContext, widget::Widget};
 use gpu::GPU;
 use parking_lot::RwLock;
 use std::sync::Arc;

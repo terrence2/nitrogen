@@ -14,7 +14,8 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     box_packing::{PositionH, PositionV},
-    widgets::{PaintContext, Widget},
+    paint_context::PaintContext,
+    widget::Widget,
 };
 use gpu::GPU;
 use parking_lot::RwLock;
@@ -58,10 +59,10 @@ pub struct FloatBox {
 }
 
 impl FloatBox {
-    pub fn new() -> Self {
-        Self {
+    pub fn new() -> Arc<RwLock<Self>> {
+        Arc::new(RwLock::new(Self {
             children: Vec::new(),
-        }
+        }))
     }
 
     pub fn add_child(&mut self, child: Arc<RwLock<dyn Widget>>) -> &mut FloatPacking {

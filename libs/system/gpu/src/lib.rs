@@ -71,7 +71,6 @@ pub struct GPU {
 impl GPU {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
     pub const SCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
-    pub const TYPICAL_DPI: f64 = 72.0;
 
     pub fn aspect_ratio(&self) -> f64 {
         self.logical_size.height.floor() / self.logical_size.width.floor()
@@ -79,10 +78,6 @@ impl GPU {
 
     pub fn aspect_ratio_f32(&self) -> f32 {
         (self.logical_size.height.floor() / self.logical_size.width.floor()) as f32
-    }
-
-    pub fn guess_dpi(&self) -> f64 {
-        Self::TYPICAL_DPI * self.scale_factor
     }
 
     pub fn scale_factor(&self) -> f64 {

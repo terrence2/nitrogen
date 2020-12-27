@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::widgets::Widget;
+use crate::widget::Widget;
 use parking_lot::RwLock;
 use std::sync::Arc;
 

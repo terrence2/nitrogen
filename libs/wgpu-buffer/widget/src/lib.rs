@@ -13,16 +13,23 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 mod box_packing;
+mod color;
+mod font_context;
 mod layout;
+mod paint_context;
+mod widget;
+mod widget_info;
 mod widget_vertex;
 mod widgets;
 
 pub use crate::{
+    box_packing::{PositionH, PositionV},
+    color::Color,
+    paint_context::PaintContext,
+    widget::Widget,
+    widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
-    widgets::{
-        float_box::FloatBox, label::Label, vertical_box::VerticalBox, PaintContext, Widget,
-        WidgetInfo,
-    },
+    widgets::{float_box::FloatBox, label::Label, vertical_box::VerticalBox},
 };
 
 use commandable::{commandable, Commandable};
@@ -141,7 +148,7 @@ impl WidgetBuffer {
                 });
 
         Ok(Self {
-            root: Arc::new(RwLock::new(FloatBox::new())),
+            root: FloatBox::new(),
             paint_context,
 
             widget_info_buffer_size,
@@ -184,10 +191,6 @@ impl WidgetBuffer {
 
     pub fn text_vertex_range(&self) -> Range<u32> {
         0u32..self.paint_context.text_pool.len() as u32
-    }
-
-    pub fn create_label<S: Into<String>>(&self, markup: S) -> Arc<RwLock<Label>> {
-        Arc::new(RwLock::new(Label::new(markup)))
     }
 
     pub fn make_upload_buffer(&mut self, gpu: &GPU, tracker: &mut UploadTracker) -> Fallible<()> {
@@ -269,7 +272,7 @@ mod test {
         let mut gpu = GPU::new(&window, Default::default())?;
 
         let mut widgets = WidgetBuffer::new(&mut gpu)?;
-        let label = widgets.create_label(
+        let label = Label::new(
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\
             สิบสองกษัตริย์ก่อนหน้าแลถัดไป       สององค์ไซร้โง่เขลาเบาปัญญา\
             Зарегистрируйтесь сейчас на Десятую Международную Конференцию по\
@@ -278,7 +281,8 @@ mod test {
             Οὐχὶ ταὐτὰ παρίσταταί μοι γιγνώσκειν, ὦ ἄνδρες ᾿Αθηναῖοι,\
             ði ıntəˈnæʃənəl fəˈnɛtık əsoʊsiˈeıʃn\
             Y [ˈʏpsilɔn], Yen [jɛn], Yoga [ˈjoːgɑ]",
-        );
+        )
+        .wrapped();
         widgets.root().write().add_child(label);
 
         let mut tracker = Default::default();

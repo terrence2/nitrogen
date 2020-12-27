@@ -15,9 +15,9 @@
 #define MAX_WIDGETS 512
 
 struct WidgetInfo {
-    vec4 border_color;
-    vec4 background_color;
     vec4 foreground_color;
+    vec4 background_color;
+    vec4 border_color;
 };
 
 layout(set = 1, binding = 0) uniform WidgetBlock {

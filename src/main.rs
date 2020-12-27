@@ -35,7 +35,7 @@ use terrain::TerrainRenderPass;
 use terrain_geo::{CpuDetailLevel, GpuDetailLevel, TerrainGeoBuffer};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use ui::UiRenderPass;
-use widget::WidgetBuffer;
+use widget::{Color, Label, PositionH, PositionV, WidgetBuffer};
 use winit::window::Window;
 
 /// Show the contents of an MM file
@@ -152,8 +152,18 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     )?;
     ///////////////////////////////////////////////////////////
 
-    //let fps_label = widget::Label::new("hello world");
-    let fps_label = frame_graph.widgets.create_label("");
+    let version_label = Label::new("Nitrogen v0.1")
+        .with_color(Color::Green)
+        .with_size(10.0)
+        .wrapped();
+    frame_graph
+        .widgets
+        .root()
+        .write()
+        .add_child(version_label)
+        .set_float(PositionH::End, PositionV::Bottom);
+
+    let fps_label = Label::new("fps").with_color(Color::Red).wrapped();
     frame_graph
         .widgets
         .root()
