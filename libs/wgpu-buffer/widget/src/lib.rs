@@ -15,7 +15,6 @@
 mod box_packing;
 mod color;
 mod font_context;
-mod layout;
 mod paint_context;
 mod widget;
 mod widget_info;

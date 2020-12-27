@@ -14,6 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{font_context::FontContext, widget_info::WidgetInfo, widget_vertex::WidgetVertex};
 use font_common::FontInterface;
+use gpu::GPU;
 use parking_lot::RwLock;
 use std::sync::Arc;
 
@@ -68,5 +69,25 @@ impl PaintContext {
         let offset = self.widget_info_pool.len();
         self.widget_info_pool.push(*info);
         offset as u32
+    }
+
+    pub fn layout_text(
+        &mut self,
+        span: &str,
+        font_name: &str,
+        size_pts: f32,
+        widget_info_index: u32,
+        gpu: &GPU,
+    ) {
+        let depth = self.current_depth + Self::TEXT_DEPTH;
+        self.font_context.layout_text(
+            span,
+            font_name,
+            size_pts,
+            widget_info_index,
+            depth,
+            gpu,
+            &mut self.text_pool,
+        )
     }
 }

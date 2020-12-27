@@ -13,15 +13,16 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    color::Color, layout::LayoutEngine, paint_context::PaintContext, widget::Widget,
-    widget_info::WidgetInfo, SANS_FONT_NAME,
+    color::Color, paint_context::PaintContext, widget::Widget, widget_info::WidgetInfo,
+    SANS_FONT_NAME,
 };
 use gpu::GPU;
 use parking_lot::RwLock;
 use std::sync::Arc;
 
 pub struct Label {
-    content: String,
+    // Todo: multi-span / markup
+    span: String,
     size_pts: f32,
     font_name: String,
     color: Color,
@@ -30,7 +31,7 @@ pub struct Label {
 impl Label {
     pub fn new<S: Into<String>>(markup: S) -> Self {
         Self {
-            content: markup.into(),
+            span: markup.into(),
             size_pts: 12.0,
             font_name: SANS_FONT_NAME.to_owned(),
             color: Color::Black,
@@ -38,7 +39,7 @@ impl Label {
     }
 
     pub fn with_size(mut self, size_pts: f32) -> Self {
-        self.size_pts = size_pts.into();
+        self.size_pts = size_pts;
         self
     }
 
@@ -57,23 +58,20 @@ impl Label {
     }
 
     pub fn set_markup<S: Into<String>>(&mut self, markup: S) {
-        self.content = markup.into();
+        self.span = markup.into();
     }
 }
 
 impl Widget for Label {
     fn upload(&self, gpu: &GPU, context: &mut PaintContext) {
         let info = WidgetInfo::default().with_foreground_color(self.color);
-        let widget_id = context.push_widget(&info);
-        LayoutEngine::span_to_triangles(
-            gpu,
-            &self.content,
-            &mut context.font_context,
+        let widget_info_index = context.push_widget(&info);
+        context.layout_text(
+            &self.span,
             &self.font_name,
             self.size_pts,
-            context.current_depth + PaintContext::TEXT_DEPTH,
-            widget_id,
-            &mut context.text_pool,
+            widget_info_index,
+            gpu,
         );
     }
 }
