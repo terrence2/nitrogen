@@ -32,7 +32,7 @@ pub use crate::{
 };
 
 use commandable::{commandable, Commandable};
-use failure::Fallible;
+use failure::{ensure, Fallible};
 use font_common::FontInterface;
 use font_ttf::TtfFont;
 use gpu::{UploadTracker, GPU};
@@ -72,18 +72,12 @@ pub struct WidgetBuffer {
     paint_context: PaintContext,
 
     // The four key buffers.
-    widget_info_buffer_size: wgpu::BufferAddress,
     widget_info_buffer: Arc<Box<wgpu::Buffer>>,
-
-    // background_vertex_buffer_size: wgpu::BufferAddress,
-    // background_vertex_buffer: Arc<Box<wgpu::Buffer>>,
-    //
-    // image_vertex_buffer_size: wgpu::BufferAddress,
-    // image_vertex_buffer: Arc<Box<wgpu::Buffer>>,
-    text_vertex_buffer_size: wgpu::BufferAddress,
+    background_vertex_buffer: Arc<Box<wgpu::Buffer>>,
+    image_vertex_buffer: Arc<Box<wgpu::Buffer>>,
     text_vertex_buffer: Arc<Box<wgpu::Buffer>>,
 
-    // The accumulated bind group for all widget rendering, encompasing everything we uploaded above.
+    // The accumulated bind group for all widget rendering, encompassing everything we uploaded above.
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: Option<wgpu::BindGroup>,
 }
@@ -92,6 +86,8 @@ pub struct WidgetBuffer {
 impl WidgetBuffer {
     const MAX_WIDGETS: usize = 512;
     const MAX_TEXT_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6;
+    const MAX_BACKGROUND_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6; // note: rounded corners
+    const MAX_IMAGE_VERTICES: usize = Self::MAX_WIDGETS * 4 * 6;
 
     pub fn new(gpu: &mut GPU) -> Fallible<Self> {
         trace!("WidgetBuffer::new");
@@ -116,6 +112,30 @@ impl WidgetBuffer {
                 label: Some("widget-info-buffer"),
                 size: widget_info_buffer_size,
                 usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::UNIFORM,
+                mapped_at_creation: false,
+            },
+        )));
+
+        // Create the background vertex buffer.
+        let background_vertex_buffer_size =
+            (mem::size_of::<WidgetVertex>() * Self::MAX_BACKGROUND_VERTICES) as wgpu::BufferAddress;
+        let background_vertex_buffer = Arc::new(Box::new(gpu.device().create_buffer(
+            &wgpu::BufferDescriptor {
+                label: Some("widget-bg-vertex-buffer"),
+                size: background_vertex_buffer_size,
+                usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::VERTEX,
+                mapped_at_creation: false,
+            },
+        )));
+
+        // Create the image vertex buffer.
+        let image_vertex_buffer_size =
+            (mem::size_of::<WidgetVertex>() * Self::MAX_IMAGE_VERTICES) as wgpu::BufferAddress;
+        let image_vertex_buffer = Arc::new(Box::new(gpu.device().create_buffer(
+            &wgpu::BufferDescriptor {
+                label: Some("widget-image-vertex-buffer"),
+                size: image_vertex_buffer_size,
+                usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::VERTEX,
                 mapped_at_creation: false,
             },
         )));
@@ -162,11 +182,10 @@ impl WidgetBuffer {
             root: FloatBox::new(),
             paint_context,
 
-            widget_info_buffer_size,
             widget_info_buffer,
-
-            text_vertex_buffer_size,
+            background_vertex_buffer,
             text_vertex_buffer,
+            image_vertex_buffer,
 
             bind_group_layout,
             bind_group: None,
@@ -211,36 +230,42 @@ impl WidgetBuffer {
         self.paint_context.font_context.upload(gpu, tracker);
 
         if !self.paint_context.widget_info_pool.is_empty() {
-            let widget_info_upload = gpu.push_slice(
+            ensure!(self.paint_context.widget_info_pool.len() <= Self::MAX_WIDGETS);
+            gpu.upload_slice_to(
                 "widget-info-upload",
                 &self.paint_context.widget_info_pool,
-                wgpu::BufferUsage::COPY_SRC,
-            );
-            let widget_info_size = self.widget_info_buffer_size.min(
-                (mem::size_of::<WidgetInfo>() * self.paint_context.widget_info_pool.len())
-                    as wgpu::BufferAddress,
-            );
-            tracker.upload_ba(
-                widget_info_upload,
                 self.widget_info_buffer.clone(),
-                widget_info_size,
+                tracker,
+            );
+        }
+
+        if !self.paint_context.background_pool.is_empty() {
+            ensure!(self.paint_context.background_pool.len() <= Self::MAX_BACKGROUND_VERTICES);
+            gpu.upload_slice_to(
+                "widget-bg-vertex-upload",
+                &self.paint_context.background_pool,
+                self.background_vertex_buffer.clone(),
+                tracker,
+            );
+        }
+
+        if !self.paint_context.image_pool.is_empty() {
+            ensure!(self.paint_context.image_pool.len() <= Self::MAX_IMAGE_VERTICES);
+            gpu.upload_slice_to(
+                "widget-image-vertex-upload",
+                &self.paint_context.image_pool,
+                self.image_vertex_buffer.clone(),
+                tracker,
             );
         }
 
         if !self.paint_context.text_pool.is_empty() {
-            let text_vertex_upload = gpu.push_slice(
+            ensure!(self.paint_context.text_pool.len() <= Self::MAX_TEXT_VERTICES);
+            gpu.upload_slice_to(
                 "widget-text-vertex-upload",
                 &self.paint_context.text_pool,
-                wgpu::BufferUsage::COPY_SRC,
-            );
-            let text_vertex_upload_size = self.text_vertex_buffer_size.min(
-                (mem::size_of::<WidgetVertex>() * self.paint_context.text_pool.len())
-                    as wgpu::BufferAddress,
-            );
-            tracker.upload_ba(
-                text_vertex_upload,
                 self.text_vertex_buffer.clone(),
-                text_vertex_upload_size,
+                tracker,
             );
         }
 
@@ -301,86 +326,4 @@ mod test {
 
         Ok(())
     }
-
-    /*
-    #[cfg(unix)]
-    #[test]
-    fn it_can_manage_text_layouts() -> Fallible<()> {
-        use winit::platform::unix::EventLoopExtUnix;
-        let event_loop = EventLoop::<()>::new_any_thread();
-        let window = Window::new(&event_loop)?;
-        let mut gpu = GPU::new(&window, Default::default())?;
-
-        let mut layout_buffer = TextLayoutBuffer::new(&mut gpu)?;
-
-        layout_buffer
-            .add_screen_text("quantico", "Top Left (r)", &gpu)?
-            .with_color(&[1f32, 0f32, 0f32, 1f32])
-            .with_horizontal_position(TextPositionH::Left)
-            .with_horizontal_anchor(TextAnchorH::Left)
-            .with_vertical_position(TextPositionV::Top)
-            .with_vertical_anchor(TextAnchorV::Top);
-
-        layout_buffer
-            .add_screen_text("quantico", "Top Right (b)", &gpu)?
-            .with_color(&[0f32, 0f32, 1f32, 1f32])
-            .with_horizontal_position(TextPositionH::Right)
-            .with_horizontal_anchor(TextAnchorH::Right)
-            .with_vertical_position(TextPositionV::Top)
-            .with_vertical_anchor(TextAnchorV::Top);
-
-        layout_buffer
-            .add_screen_text("quantico", "Bottom Left (w)", &gpu)?
-            .with_color(&[1f32, 1f32, 1f32, 1f32])
-            .with_horizontal_position(TextPositionH::Left)
-            .with_horizontal_anchor(TextAnchorH::Left)
-            .with_vertical_position(TextPositionV::Bottom)
-            .with_vertical_anchor(TextAnchorV::Bottom);
-
-        layout_buffer
-            .add_screen_text("quantico", "Bottom Right (m)", &gpu)?
-            .with_color(&[1f32, 0f32, 1f32, 1f32])
-            .with_horizontal_position(TextPositionH::Right)
-            .with_horizontal_anchor(TextAnchorH::Right)
-            .with_vertical_position(TextPositionV::Bottom)
-            .with_vertical_anchor(TextAnchorV::Bottom);
-
-        let handle_clr = layout_buffer
-            .add_screen_text("quantico", "", &gpu)?
-            .with_span("THR: AFT  1.0G   2462   LCOS   740 M61")
-            .with_color(&[1f32, 0f32, 0f32, 1f32])
-            .with_horizontal_position(TextPositionH::Center)
-            .with_horizontal_anchor(TextAnchorH::Center)
-            .with_vertical_position(TextPositionV::Bottom)
-            .with_vertical_anchor(TextAnchorV::Bottom)
-            .handle();
-
-        let handle_fin = layout_buffer
-            .add_screen_text("quantico", "DONE: 0%", &gpu)?
-            .with_color(&[0f32, 1f32, 0f32, 1f32])
-            .with_horizontal_position(TextPositionH::Center)
-            .with_horizontal_anchor(TextAnchorH::Center)
-            .with_vertical_position(TextPositionV::Center)
-            .with_vertical_anchor(TextAnchorV::Center)
-            .handle();
-
-        for i in 0..32 {
-            if i < 16 {
-                handle_clr
-                    .grab(&mut layout_buffer)
-                    .set_color(&[0f32, i as f32 / 16f32, 0f32, 1f32])
-            } else {
-                handle_clr.grab(&mut layout_buffer).set_color(&[
-                    (i as f32 - 16f32) / 16f32,
-                    1f32,
-                    (i as f32 - 16f32) / 16f32,
-                    1f32,
-                ])
-            };
-            let msg = format!("DONE: {}%", ((i as f32 / 32f32) * 100f32) as u32);
-            handle_fin.grab(&mut layout_buffer).set_span(&msg);
-        }
-        Ok(())
-    }
-     */
 }

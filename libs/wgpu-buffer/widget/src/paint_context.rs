@@ -21,6 +21,14 @@ use gpu::GPU;
 use parking_lot::RwLock;
 use std::sync::Arc;
 
+pub struct SpanLayoutContext<'a> {
+    pub span: &'a str,
+    pub font_name: &'a str,
+    pub size_pts: f32,
+    pub widget_info_index: u32,
+    pub depth: f32,
+}
+
 pub struct PaintContext {
     pub current_depth: f32,
     pub font_context: FontContext,
@@ -74,7 +82,6 @@ impl PaintContext {
         offset as u32
     }
 
-    /// Returns [width, baseline_height, total_height]
     pub fn layout_text(
         &mut self,
         span: &str,
@@ -84,11 +91,13 @@ impl PaintContext {
         gpu: &GPU,
     ) -> TextSpanMetrics {
         self.font_context.layout_text(
-            span,
-            font_name,
-            size_pts,
-            widget_info_index,
-            self.current_depth + Self::TEXT_DEPTH,
+            SpanLayoutContext {
+                span,
+                font_name,
+                size_pts,
+                widget_info_index,
+                depth: self.current_depth + Self::TEXT_DEPTH,
+            },
             gpu,
             &mut self.text_pool,
         )

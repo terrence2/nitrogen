@@ -22,17 +22,12 @@ use parking_lot::RwLock;
 use std::sync::Arc;
 
 // Items packed from top to bottom.
+#[derive(Default)]
 pub struct VerticalBox {
     children: Vec<BoxPacking>,
 }
 
 impl VerticalBox {
-    pub fn new() -> Self {
-        Self {
-            children: Vec::new(),
-        }
-    }
-
     pub fn add_child(&mut self, child: Arc<RwLock<dyn Widget>>) -> &mut BoxPacking {
         let offset = self.children.len();
         self.children.push(BoxPacking::new(child, offset));

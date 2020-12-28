@@ -169,7 +169,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         .root()
         .write()
         .add_child(fps_label.clone())
-        .set_float(PositionH::Start, PositionV::Top);
+        .set_float(PositionH::Start, PositionV::Bottom);
 
     let mut orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0));
 

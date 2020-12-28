@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{widget_vertex::WidgetVertex, SANS_FONT_NAME};
+use crate::{paint_context::SpanLayoutContext, widget_vertex::WidgetVertex, SANS_FONT_NAME};
 use atlas::{AtlasPacker, Frame};
 use font_common::FontInterface;
 use gpu::{UploadTracker, GPU};
@@ -142,23 +142,19 @@ impl FontContext {
 
     pub fn layout_text(
         &mut self,
-        span: &str,
-        font_name: &str,
-        size_pts: f32,
-        widget_info_index: u32,
-        depth: f32,
+        ctx: SpanLayoutContext,
         gpu: &GPU,
         pool: &mut Vec<WidgetVertex>,
     ) -> TextSpanMetrics {
         let w = self.glyph_sheet_width();
         let h = self.glyph_sheet_height();
 
-        let px_scaling = if size_pts <= 12.0 { 4.0 } else { 2.0 };
+        let px_scaling = if ctx.size_pts <= 12.0 { 4.0 } else { 2.0 };
 
         // Use ttf standard formula to adjust scale by pts to figure out base rendering size.
         // Note that we add some extra scaling and use linear filtering to help account for
         // our lack of sub-pixel and pixel alignment techniques.
-        let scale_px = px_scaling * size_pts * gpu.scale_factor() as f32;
+        let scale_px = px_scaling * ctx.size_pts * gpu.scale_factor() as f32;
 
         // We used guess_dpi to project from logical to physical pixels for rendering, so scale
         // vertices proportional to physical size for vertex layout. Note that the factor of 2
@@ -170,15 +166,15 @@ impl FontContext {
 
         // Font rendering is based around the baseline. We want it based around the top-left
         // corner instead, so move down by the ascent.
-        let font = self.get_font(font_name);
+        let font = self.get_font(ctx.font_name);
         let descent = font.read().descent(scale_px);
         let ascent = font.read().ascent(scale_px);
 
         let mut offset = 0f32;
         let mut prior = None;
-        for c in span.chars() {
-            let frame = self.load_glyph(font_name, c, scale_px);
-            let font = self.get_font(font_name);
+        for c in ctx.span.chars() {
+            let frame = self.load_glyph(ctx.font_name, c, scale_px);
+            let font = self.get_font(ctx.font_name);
             let ((lo_x, lo_y), (hi_x, hi_y)) = font.read().exact_bounding_box(c, scale_px);
             let lsb = font.read().left_side_bearing(c, scale_px);
             let adv = font.read().advance_width(c, scale_px);
@@ -200,24 +196,24 @@ impl FontContext {
 
             // Build 4 corner vertices.
             let v00 = WidgetVertex {
-                position: [x0, y0, depth],
+                position: [x0, y0, ctx.depth],
                 tex_coord: [s0, t0],
-                widget_info_index,
+                widget_info_index: ctx.widget_info_index,
             };
             let v01 = WidgetVertex {
-                position: [x0, y1, depth],
+                position: [x0, y1, ctx.depth],
                 tex_coord: [s0, t1],
-                widget_info_index,
+                widget_info_index: ctx.widget_info_index,
             };
             let v10 = WidgetVertex {
-                position: [x1, y0, depth],
+                position: [x1, y0, ctx.depth],
                 tex_coord: [s1, t0],
-                widget_info_index,
+                widget_info_index: ctx.widget_info_index,
             };
             let v11 = WidgetVertex {
-                position: [x1, y1, depth],
+                position: [x1, y1, ctx.depth],
                 tex_coord: [s1, t1],
-                widget_info_index,
+                widget_info_index: ctx.widget_info_index,
             };
 
             // Push 2 triangles
