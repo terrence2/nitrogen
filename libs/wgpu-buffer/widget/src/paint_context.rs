@@ -26,7 +26,7 @@ pub struct SpanLayoutContext<'a> {
     pub font_name: &'a str,
     pub size_pts: f32,
     pub widget_info_index: u32,
-    pub depth: f32,
+    pub offset: [f32; 3],
 }
 
 pub struct PaintContext {
@@ -87,6 +87,7 @@ impl PaintContext {
         span: &str,
         font_name: &str,
         size_pts: f32,
+        offset: [f32; 2],
         widget_info_index: u32,
         gpu: &GPU,
     ) -> TextSpanMetrics {
@@ -96,7 +97,7 @@ impl PaintContext {
                 font_name,
                 size_pts,
                 widget_info_index,
-                depth: self.current_depth + Self::TEXT_DEPTH,
+                offset: [offset[0], offset[1], self.current_depth + Self::TEXT_DEPTH],
             },
             gpu,
             &mut self.text_pool,

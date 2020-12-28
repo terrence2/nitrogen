@@ -35,7 +35,7 @@ use terrain::TerrainRenderPass;
 use terrain_geo::{CpuDetailLevel, GpuDetailLevel, TerrainGeoBuffer};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use ui::UiRenderPass;
-use widget::{Color, Label, PositionH, PositionV, WidgetBuffer};
+use widget::{Color, Label, PositionH, PositionV, Terminal, WidgetBuffer};
 use winit::window::Window;
 
 /// Show the contents of an MM file
@@ -170,6 +170,14 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         .write()
         .add_child(fps_label.clone())
         .set_float(PositionH::Start, PositionV::Bottom);
+
+    let terminal = Terminal::new();
+    frame_graph
+        .widgets
+        .root()
+        .write()
+        .add_child(terminal.clone())
+        .set_float(PositionH::Start, PositionV::Top);
 
     let mut orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0));
 

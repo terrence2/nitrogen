@@ -73,6 +73,7 @@ impl Widget for Label {
             &self.span,
             &self.font_name,
             self.size_pts,
+            [0., 0.],
             widget_info_index,
             gpu,
         );

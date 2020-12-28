@@ -31,4 +31,9 @@ impl WidgetInfo {
         self.foreground_color = color.to_f32_array();
         self
     }
+
+    pub fn with_background_color(mut self, color: Color) -> Self {
+        self.background_color = color.to_f32_array();
+        self
+    }
 }

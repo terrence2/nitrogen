@@ -12,8 +12,23 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-pub(crate) mod float_box;
-pub(crate) mod label;
-pub(crate) mod terminal;
-pub(crate) mod text_edit;
-pub(crate) mod vertical_box;
+#version 450
+#include <wgpu-buffer/global_data/include/global_data.glsl>
+#include <wgpu-buffer/widget/include/widget.glsl>
+
+layout(location = 0) in vec3 position;
+layout(location = 1) in vec2 tex_coord;
+layout(location = 2) in uint widget_info_id;
+
+layout(location = 0) out vec2 v_tex_coord;
+layout(location = 1) flat out vec4 v_color;
+
+void main() {
+    v_tex_coord = tex_coord;
+
+    WidgetInfo info = widget_info[widget_info_id];
+    v_color = info.background_color;
+
+    vec4 widget_position = vec4(info.position[0],  info.position[1], 0, 0);
+    gl_Position = widget_position + vec4(position.xyz, 1);
+}

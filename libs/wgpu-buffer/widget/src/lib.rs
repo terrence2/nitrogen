@@ -28,7 +28,10 @@ pub use crate::{
     widget::Widget,
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
-    widgets::{float_box::FloatBox, label::Label, vertical_box::VerticalBox},
+    widgets::{
+        float_box::FloatBox, label::Label, terminal::Terminal, text_edit::TextEdit,
+        vertical_box::VerticalBox,
+    },
 };
 
 use commandable::{commandable, Commandable};
@@ -211,6 +214,17 @@ impl WidgetBuffer {
     /// Must only be called after first upload
     pub fn bind_group(&self) -> &wgpu::BindGroup {
         self.bind_group.as_ref().unwrap()
+    }
+
+    pub fn background_vertex_buffer(&self) -> wgpu::BufferSlice {
+        self.background_vertex_buffer.slice(
+            0u64..(mem::size_of::<WidgetVertex>() * self.paint_context.background_pool.len())
+                as u64,
+        )
+    }
+
+    pub fn background_vertex_range(&self) -> Range<u32> {
+        0u32..self.paint_context.background_pool.len() as u32
     }
 
     pub fn text_vertex_buffer(&self) -> wgpu::BufferSlice {

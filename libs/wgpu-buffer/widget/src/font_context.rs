@@ -196,22 +196,22 @@ impl FontContext {
 
             // Build 4 corner vertices.
             let v00 = WidgetVertex {
-                position: [x0, y0, ctx.depth],
+                position: [ctx.offset[0] + x0, ctx.offset[1] + y0, ctx.offset[2]],
                 tex_coord: [s0, t0],
                 widget_info_index: ctx.widget_info_index,
             };
             let v01 = WidgetVertex {
-                position: [x0, y1, ctx.depth],
+                position: [ctx.offset[0] + x0, ctx.offset[1] + y1, ctx.offset[2]],
                 tex_coord: [s0, t1],
                 widget_info_index: ctx.widget_info_index,
             };
             let v10 = WidgetVertex {
-                position: [x1, y0, ctx.depth],
+                position: [ctx.offset[0] + x1, ctx.offset[1] + y0, ctx.offset[2]],
                 tex_coord: [s1, t0],
                 widget_info_index: ctx.widget_info_index,
             };
             let v11 = WidgetVertex {
-                position: [x1, y1, ctx.depth],
+                position: [ctx.offset[0] + x1, ctx.offset[1] + y1, ctx.offset[2]],
                 tex_coord: [s1, t1],
                 widget_info_index: ctx.widget_info_index,
             };
