@@ -12,13 +12,15 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-#[derive(Debug)]
-pub struct GlyphFrame {
-    // Left and right texture coordinates.
-    pub s0: f32,
-    pub s1: f32,
+#version 450
+#include <wgpu-buffer/widget/include/widget.glsl>
 
-    // Width scaled into the right perspective for rendering.
-    pub advance_width: f32,
-    pub left_side_bearing: f32,
+layout(location = 0) in vec2 v_tex_coord;
+layout(location = 1) in vec4 v_color;
+
+layout(location = 0) out vec4 f_color;
+
+void main() {
+    float alpha = texture(sampler2D(glyph_sheet_texture, glyph_sheet_sampler), v_tex_coord).r;
+    f_color = vec4(v_color.xyz, alpha);
 }

@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 log = "^ 0.4"
 failure = "^ 0.1.2"
-smallvec = "^ 0.6"
+smallvec = "^ 1.4"
 winit = { version = "^ 0.23", features = ["web-sys"] }
 command = { path = "../../system/command" }
 

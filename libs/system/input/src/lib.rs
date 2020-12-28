@@ -168,6 +168,13 @@ impl InputSystem {
         });
     }
 
+    pub fn is_close_command(command: &Command) -> bool {
+        matches!(
+            command.full(),
+            "window.close" | "window.destroy" | "window.exit"
+        )
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     fn handle_event(
         e: Event<MetaEvent>,

@@ -12,14 +12,23 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-#version 450
-#include <wgpu-buffer/widget/include/widget.glsl>
+use crate::color::Color;
+use zerocopy::{AsBytes, FromBytes};
 
-layout(location = 0) in vec2 v_tex_coord;
-layout(location = 1) in vec4 v_color;
+/// Stored on the GPU, one per widget. Widget vertices reference one of these slots so that
+/// pipelines can get at the data they need.
+#[repr(C)]
+#[derive(AsBytes, FromBytes, Copy, Clone, Debug, Default)]
+pub struct WidgetInfo {
+    foreground_color: [f32; 4],
+    background_color: [f32; 4],
+    border_color: [f32; 4],
+    pub position: [f32; 4],
+}
 
-layout(location = 0) out vec4 f_color;
-
-void main() {
-    f_color = vec4(v_color.xyz, glyph_alpha_uv(v_tex_coord));
+impl WidgetInfo {
+    pub fn with_foreground_color(mut self, color: Color) -> Self {
+        self.foreground_color = color.to_f32_array();
+        self
+    }
 }

@@ -18,26 +18,24 @@
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum Group {
     Globals,
-    GlyphCache,
     Atmosphere,
-    TextLayout,
     Stars,
     TerrainAcc,
     TerrainTileSet,
     TerrainComposite,
+    UI,
 }
 
 impl Group {
     pub fn index(self) -> u32 {
         match self {
-            Self::Globals => 0,
             Self::Atmosphere => 1,
-            Self::GlyphCache => 1,
-            Self::TerrainAcc => 1,
-            Self::TerrainTileSet => 2,
-            Self::TextLayout => 2,
+            Self::Globals => 0,
             Self::Stars => 2,
+            Self::TerrainAcc => 1,
             Self::TerrainComposite => 3,
+            Self::TerrainTileSet => 2,
+            Self::UI => 1,
         }
     }
 }

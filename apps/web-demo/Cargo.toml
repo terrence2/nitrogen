@@ -13,7 +13,7 @@ console_error_panic_hook = "^ 0.1"
 failure = "^ 0.1.2"
 legion = "= 0.2.4"
 log = "^ 0.4"
-smallvec = "^ 0.6"
+smallvec = "^ 1.4"
 tokio = { version = "^ 0.2", features = ["rt-threaded", "macros", "fs", "sync"] }
 wasm-bindgen = "^ 0.2"
 wasm-bindgen-futures = "^ 0.4"

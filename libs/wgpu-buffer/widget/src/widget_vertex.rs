@@ -18,13 +18,14 @@ use zerocopy::{AsBytes, FromBytes};
 
 #[repr(C)]
 #[derive(AsBytes, FromBytes, Copy, Clone, Debug, Default)]
-pub struct LayoutVertex {
-    pub(crate) position: [f32; 2],
+pub struct WidgetVertex {
+    pub(crate) position: [f32; 3],
     pub(crate) tex_coord: [f32; 2],
+    pub(crate) widget_info_index: u32,
 }
 
-impl LayoutVertex {
-    #[allow(clippy::unneeded_field_pattern)]
+impl WidgetVertex {
+    // #[allow(clippy::unneeded_field_pattern)]
     pub fn descriptor() -> wgpu::VertexBufferDescriptor<'static> {
         let tmp = wgpu::VertexBufferDescriptor {
             stride: mem::size_of::<Self>() as wgpu::BufferAddress,
@@ -32,26 +33,36 @@ impl LayoutVertex {
             attributes: &[
                 // position
                 wgpu::VertexAttributeDescriptor {
-                    format: wgpu::VertexFormat::Float2,
+                    format: wgpu::VertexFormat::Float3,
                     offset: 0,
                     shader_location: 0,
                 },
                 // tex_coord
                 wgpu::VertexAttributeDescriptor {
-                    format: wgpu::VertexFormat::Float2,
-                    offset: 8,
+                    format: wgpu::VertexFormat::Float3,
+                    offset: 12,
                     shader_location: 1,
+                },
+                // info_index
+                wgpu::VertexAttributeDescriptor {
+                    format: wgpu::VertexFormat::Uint,
+                    offset: 20,
+                    shader_location: 2,
                 },
             ],
         };
 
         assert_eq!(
             tmp.attributes[0].offset,
-            offset_of!(LayoutVertex, position) as wgpu::BufferAddress
+            offset_of!(WidgetVertex, position) as wgpu::BufferAddress
         );
         assert_eq!(
             tmp.attributes[1].offset,
-            offset_of!(LayoutVertex, tex_coord) as wgpu::BufferAddress
+            offset_of!(WidgetVertex, tex_coord) as wgpu::BufferAddress
+        );
+        assert_eq!(
+            tmp.attributes[2].offset,
+            offset_of!(WidgetVertex, widget_info_index) as wgpu::BufferAddress
         );
 
         tmp
