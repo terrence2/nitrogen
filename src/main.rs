@@ -176,7 +176,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         .widgets
         .root()
         .write()
-        .add_child(terminal.clone())
+        .add_child(terminal)
         .set_float(PositionH::Start, PositionV::Top);
 
     let mut orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0));

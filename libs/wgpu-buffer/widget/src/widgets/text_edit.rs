@@ -25,9 +25,9 @@ use std::sync::Arc;
 
 pub struct Span {
     span: String,
-    size_pts: f32,
-    font_id: u32,
-    color: Color,
+    _size_pts: f32,
+    _font_id: u32,
+    _color: Color,
 }
 
 pub struct Line {
@@ -39,9 +39,9 @@ impl Line {
         Self {
             spans: vec![Span {
                 span: markup.into(),
-                size_pts: 12.,
-                font_id: 0,
-                color: Default::default(),
+                _size_pts: 12.,
+                _font_id: 0,
+                _color: Default::default(),
             }],
         }
     }
@@ -91,7 +91,7 @@ impl TextEdit {
     pub fn replace_content(&mut self, markup: &str) {
         let lines = markup
             .split('\n')
-            .map(|s| Line::from_markup(s))
+            .map(Line::from_markup)
             .collect::<Vec<Line>>();
         self.lines = lines;
     }
@@ -119,7 +119,7 @@ impl Widget for TextEdit {
                 let span_metrics = context.layout_text(
                     &span.span,
                     &self.default_font,
-                    span.size_pts,
+                    self.default_size_pts,
                     [0., -height_offset],
                     widget_info_index,
                     gpu,

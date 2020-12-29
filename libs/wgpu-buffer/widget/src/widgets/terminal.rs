@@ -16,8 +16,6 @@ use crate::{
     color::Color,
     paint_context::PaintContext,
     widget::{UploadMetrics, Widget},
-    widget_info::WidgetInfo,
-    widget_vertex::WidgetVertex,
     Label, TextEdit, VerticalBox,
 };
 use gpu::GPU;
