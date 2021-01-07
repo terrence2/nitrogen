@@ -17,10 +17,11 @@ use failure::Fallible;
 use log::trace;
 use smallvec::{smallvec, SmallVec};
 use std::collections::{HashMap, HashSet};
-use winit::event::ElementState;
+use winit::event::{ElementState, ModifiersState};
 
 #[derive(Debug, Default)]
 pub struct BindingState {
+    pub modifiers_state: ModifiersState,
     pub key_states: HashMap<Key, ElementState>,
     active_chords: HashSet<KeySet>,
 }
@@ -77,7 +78,7 @@ impl Bindings {
         // active in the case that it is pressed so that we don't have to look at everything.
         if let Some(possible_chord_list) = self.press_chords.get(&key) {
             for chord in possible_chord_list {
-                if Self::chord_is_pressed(&chord.keys, &state.key_states) {
+                if chord.is_pressed(&state) {
                     self.maybe_activate_chord(chord, state, &mut commands)?;
                 }
             }
@@ -136,19 +137,6 @@ impl Bindings {
         Ok(())
     }
 
-    fn chord_is_pressed(binding_keys: &[Key], key_states: &HashMap<Key, ElementState>) -> bool {
-        for binding_key in binding_keys.iter() {
-            if let Some(current_state) = key_states.get(binding_key) {
-                if *current_state == ElementState::Released {
-                    return false;
-                }
-            } else {
-                return false;
-            }
-        }
-        true
-    }
-
     fn handle_release(
         &self,
         key: Key,
@@ -177,9 +165,7 @@ impl Bindings {
         // masked commands that were unmasked by this change.
         for released_chord in &released_chords {
             for (chord, command) in &self.command_map {
-                if chord.is_subset_of(released_chord)
-                    && Self::chord_is_pressed(&chord.keys, &state.key_states)
-                {
+                if chord.is_subset_of(released_chord) && chord.is_pressed(&state) {
                     state.active_chords.insert(chord.to_owned());
                     commands.push(command.to_owned());
                 }
@@ -194,6 +180,46 @@ impl Bindings {
 mod test {
     use super::*;
     use winit::event::VirtualKeyCode;
+
+    #[test]
+    fn test_modifier_planes_disable_bare() -> Fallible<()> {
+        let w_key = Key::Virtual(VirtualKeyCode::W);
+        let shift_key = Key::Virtual(VirtualKeyCode::LShift);
+
+        let mut state: BindingState = Default::default();
+        let bindings = Bindings::new("test").bind("player.+walk", "w")?;
+
+        state.key_states.insert(shift_key, ElementState::Pressed);
+        state.modifiers_state |= ModifiersState::SHIFT;
+        let cmds = bindings.match_key(shift_key, ElementState::Pressed, &mut state)?;
+        assert_eq!(cmds.len(), 0);
+
+        state.key_states.insert(w_key, ElementState::Pressed);
+        let cmds = bindings.match_key(w_key, ElementState::Pressed, &mut state)?;
+        assert_eq!(cmds.len(), 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_matches_exact_modifier_plane() -> Fallible<()> {
+        let w_key = Key::Virtual(VirtualKeyCode::W);
+        let shift_key = Key::Virtual(VirtualKeyCode::LShift);
+        let ctrl_key = Key::Virtual(VirtualKeyCode::RControl);
+
+        let mut state: BindingState = Default::default();
+        let bindings = Bindings::new("test").bind("player.+walk", "Shift+w")?;
+
+        state.key_states.insert(ctrl_key, ElementState::Pressed);
+        state.key_states.insert(shift_key, ElementState::Pressed);
+        state.modifiers_state |= ModifiersState::CTRL;
+        state.modifiers_state |= ModifiersState::SHIFT;
+        state.key_states.insert(w_key, ElementState::Pressed);
+        let cmds = bindings.match_key(w_key, ElementState::Pressed, &mut state)?;
+        assert_eq!(cmds.len(), 0);
+
+        Ok(())
+    }
 
     #[test]
     fn test_masking() -> Fallible<()> {
@@ -211,18 +237,21 @@ mod test {
         assert_eq!(cmds[0].full(), "player.+walk");
 
         state.key_states.insert(shift_key, ElementState::Pressed);
+        state.modifiers_state |= ModifiersState::SHIFT;
         let cmds = bindings.match_key(shift_key, ElementState::Pressed, &mut state)?;
         assert_eq!(cmds.len(), 2);
         assert_eq!(cmds[0].full(), "player.-walk");
         assert_eq!(cmds[1].full(), "player.+run");
 
         state.key_states.insert(shift_key, ElementState::Released);
+        state.modifiers_state -= ModifiersState::SHIFT;
         let cmds = bindings.match_key(shift_key, ElementState::Released, &mut state)?;
         assert_eq!(cmds.len(), 2);
         assert_eq!(cmds[0].full(), "player.-run");
         assert_eq!(cmds[1].full(), "player.+walk");
 
         state.key_states.insert(shift_key, ElementState::Pressed);
+        state.modifiers_state |= ModifiersState::SHIFT;
         let cmds = bindings.match_key(shift_key, ElementState::Pressed, &mut state)?;
         assert_eq!(cmds.len(), 2);
         assert_eq!(cmds[0].full(), "player.-walk");

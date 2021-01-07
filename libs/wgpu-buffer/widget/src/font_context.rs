@@ -19,7 +19,7 @@ use gpu::{UploadTracker, GPU};
 use image::Luma;
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
-use std::{collections::HashMap, sync::Arc};
+use std::{borrow::Borrow, collections::HashMap, sync::Arc};
 
 pub struct GlyphTracker {
     font: Arc<RwLock<dyn FontInterface>>,
@@ -39,15 +39,16 @@ impl GlyphTracker {
     }
 }
 
-pub struct FontContext {
-    glyph_sheet: AtlasPacker<Luma<u8>>,
-    trackers: HashMap<String, GlyphTracker>,
-}
-
 pub struct TextSpanMetrics {
     pub width: f32,
     pub baseline_height: f32,
     pub height: f32,
+}
+
+pub struct FontContext {
+    glyph_sheet: AtlasPacker<Luma<u8>>,
+    trackers: HashMap<FontId, GlyphTracker>,
+    name_manager: FontNameManager,
 }
 
 impl FontContext {
@@ -63,6 +64,7 @@ impl FontContext {
                 wgpu::FilterMode::Linear,
             ),
             trackers: HashMap::new(),
+            name_manager: Default::default(),
         }
     }
 
@@ -94,40 +96,51 @@ impl FontContext {
         self.glyph_sheet.sampler_binding(binding)
     }
 
-    pub fn get_font(&self, font_name: &str) -> Arc<RwLock<dyn FontInterface>> {
-        self.trackers[self.font_for(font_name)].font()
+    pub fn get_font_by_name(&self, font_name: &str) -> Arc<RwLock<dyn FontInterface>> {
+        self.get_font(self.font_id_for_name(font_name))
     }
 
-    pub fn add_font(&mut self, font_name: String, font: Arc<RwLock<dyn FontInterface>>) {
-        assert!(
-            !self.trackers.contains_key(&font_name),
-            "font already loaded"
-        );
-        self.trackers.insert(font_name, GlyphTracker::new(font));
+    pub fn get_font(&self, font_id: FontId) -> Arc<RwLock<dyn FontInterface>> {
+        self.trackers[&font_id].font()
     }
 
-    pub fn load_glyph(&mut self, font_name: &str, c: char, scale: f32) -> Frame {
-        let name = self.font_for(font_name);
-        if let Some(frame) = self.trackers[name].glyphs.get(&(c, OrderedFloat(scale))) {
+    pub fn add_font<S: Borrow<str> + Into<String>>(
+        &mut self,
+        font_name: S,
+        font: Arc<RwLock<dyn FontInterface>>,
+    ) {
+        let fid = self.name_manager.allocate(font_name);
+        self.trackers.insert(fid, GlyphTracker::new(font));
+    }
+
+    pub fn load_glyph(&mut self, fid: FontId, c: char, scale: f32) -> Frame {
+        if let Some(frame) = self.trackers[&fid].glyphs.get(&(c, OrderedFloat(scale))) {
             return *frame;
         }
         // Note: cannot delegate to GlyphTracker because of the second mutable borrow.
-        let img = self.trackers[name].font.read().render_glyph(c, scale);
+        let img = self.trackers[&fid].font.read().render_glyph(c, scale);
         let frame = self.glyph_sheet.push_image(&img);
         self.trackers
-            .get_mut(name)
+            .get_mut(&fid)
             .unwrap()
             .glyphs
             .insert((c, OrderedFloat(scale)), frame);
         frame
     }
 
-    fn font_for<'a>(&self, font_name: &'a str) -> &'a str {
-        if self.trackers.contains_key(font_name) {
-            font_name
-        } else {
-            SANS_FONT_NAME
+    pub fn font_id_for_name(&self, font_name: &str) -> FontId {
+        if let Some(fid) = self.name_manager.get_by_name(font_name) {
+            return fid;
         }
+        debug_assert_eq!(
+            self.name_manager.lookup_by_name(SANS_FONT_NAME),
+            SANS_FONT_ID
+        );
+        SANS_FONT_ID
+    }
+
+    pub fn font_name_for_id(&self, font_id: FontId) -> &str {
+        self.name_manager.lookup_by_id(font_id)
     }
 
     // Because of the indirection when rendering, we can't easily take advantage of sub-pixel
@@ -144,7 +157,8 @@ impl FontContext {
         &mut self,
         ctx: SpanLayoutContext,
         gpu: &GPU,
-        pool: &mut Vec<WidgetVertex>,
+        text_pool: &mut Vec<WidgetVertex>,
+        background_pool: &mut Vec<WidgetVertex>,
     ) -> TextSpanMetrics {
         let w = self.glyph_sheet_width();
         let h = self.glyph_sheet_height();
@@ -166,15 +180,15 @@ impl FontContext {
 
         // Font rendering is based around the baseline. We want it based around the top-left
         // corner instead, so move down by the ascent.
-        let font = self.get_font(ctx.font_name);
+        let font = self.get_font(ctx.font_id);
         let descent = font.read().descent(scale_px);
         let ascent = font.read().ascent(scale_px);
 
         let mut offset = 0f32;
         let mut prior = None;
-        for c in ctx.span.chars() {
-            let frame = self.load_glyph(ctx.font_name, c, scale_px);
-            let font = self.get_font(ctx.font_name);
+        for (i, c) in ctx.span.chars().enumerate() {
+            let frame = self.load_glyph(ctx.font_id, c, scale_px);
+            let font = self.get_font(ctx.font_id);
             let ((lo_x, lo_y), (hi_x, hi_y)) = font.read().exact_bounding_box(c, scale_px);
             let lsb = font.read().left_side_bearing(c, scale_px);
             let adv = font.read().advance_width(c, scale_px);
@@ -217,12 +231,27 @@ impl FontContext {
             };
 
             // Push 2 triangles
-            pool.push(v00);
-            pool.push(v10);
-            pool.push(v01);
-            pool.push(v01);
-            pool.push(v10);
-            pool.push(v11);
+            text_pool.push(v00);
+            text_pool.push(v10);
+            text_pool.push(v01);
+            text_pool.push(v01);
+            text_pool.push(v10);
+            text_pool.push(v11);
+
+            // Apply cursor or selection
+            if let Some(area) = &ctx.selection_area {
+                if area.start == i && area.is_empty() {
+                    // Draw cursor
+                } else if area.contains(&i) {
+                    // Draw selection over item
+                    background_pool.push(v00);
+                    background_pool.push(v10);
+                    background_pool.push(v01);
+                    background_pool.push(v01);
+                    background_pool.push(v10);
+                    background_pool.push(v11);
+                }
+            }
 
             offset += adv - lsb;
         }
@@ -232,5 +261,47 @@ impl FontContext {
             height: (ascent - descent) * scale_y,
             baseline_height: -descent * scale_y,
         }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
+pub struct FontId(u32);
+
+pub const SANS_FONT_ID: FontId = FontId(0);
+
+/// Enables tracking of font information without leaking lifetimes everywhere or taking String
+/// allocations everywhere. Generally the top-level widget system will hand this out with
+/// any operation that deals with fonts.
+#[derive(Clone, Default)]
+struct FontNameManager {
+    last_id: usize,
+    id_to_name: HashMap<FontId, String>,
+    name_to_id: HashMap<String, FontId>,
+}
+
+impl FontNameManager {
+    pub fn get_by_name(&self, name: &str) -> Option<FontId> {
+        self.name_to_id.get(name).map(|&v| v)
+    }
+
+    // panics if the name has not be allocated
+    pub fn lookup_by_name(&self, name: &str) -> FontId {
+        self.name_to_id[name]
+    }
+
+    // panics if the id has not be allocated
+    pub fn lookup_by_id(&self, font_id: FontId) -> &str {
+        &self.id_to_name[&font_id]
+    }
+
+    pub fn allocate<S: Borrow<str> + Into<String>>(&mut self, name: S) -> FontId {
+        assert!(!self.name_to_id.contains_key(name.borrow()));
+        assert!(self.last_id < std::u32::MAX as usize);
+        let name = name.into();
+        let fid = FontId(self.last_id as u32);
+        self.last_id += 1;
+        self.id_to_name.insert(fid, name.clone());
+        self.name_to_id.insert(name, fid);
+        fid
     }
 }

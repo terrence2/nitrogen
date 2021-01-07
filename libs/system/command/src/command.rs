@@ -14,7 +14,11 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use failure::{bail, ensure, Fallible};
 use smallvec::{smallvec, SmallVec};
-use std::{fmt, ops::Range, path::PathBuf};
+use std::{
+    fmt,
+    ops::Range,
+    path::{Path, PathBuf},
+};
 use winit::{
     dpi::{LogicalPosition, LogicalSize, PhysicalPosition, PhysicalSize},
     event::DeviceId,
@@ -88,9 +92,9 @@ impl From<PhysicalPosition<i32>> for CommandArg {
     }
 }
 
-impl From<PathBuf> for CommandArg {
-    fn from(v: PathBuf) -> Self {
-        CommandArg::Path(v)
+impl From<&Path> for CommandArg {
+    fn from(v: &Path) -> Self {
+        CommandArg::Path(v.to_owned())
     }
 }
 

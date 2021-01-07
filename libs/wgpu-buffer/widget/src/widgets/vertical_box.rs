@@ -20,9 +20,11 @@ use crate::{
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
 };
+use failure::Fallible;
 use gpu::GPU;
 use parking_lot::RwLock;
 use std::sync::Arc;
+use winit::event::{KeyboardInput, ModifiersState};
 
 // Items packed from top to bottom.
 #[derive(Default)]
@@ -121,5 +123,13 @@ impl Widget for VerticalBox {
             baseline_height: height,
             height,
         }
+    }
+
+    fn handle_keyboard(&mut self, events: &[(KeyboardInput, ModifiersState)]) -> Fallible<()> {
+        // TODO: track keyboard focus
+        for child in &self.children {
+            child.widget.write().handle_keyboard(events)?;
+        }
+        Ok(())
     }
 }

@@ -28,7 +28,7 @@ fn main() -> Fallible<()> {
 
 fn window_main(window: Window, input_controller: &InputController) -> Fallible<()> {
     loop {
-        for command in input_controller.poll()? {
+        for command in input_controller.poll_commands()? {
             println!("COMMAND: {:?} <- {:?}", window, command);
             match command.command() {
                 "exit" => {

@@ -14,45 +14,24 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     color::Color,
+    font_context::{FontId, SANS_FONT_ID},
     paint_context::PaintContext,
+    text_run::TextRun,
     widget::{UploadMetrics, Widget},
     widget_info::WidgetInfo,
-    SANS_FONT_NAME,
 };
+use failure::Fallible;
 use gpu::GPU;
 use parking_lot::RwLock;
 use std::sync::Arc;
-
-pub struct Span {
-    span: String,
-    _size_pts: f32,
-    _font_id: u32,
-    _color: Color,
-}
-
-pub struct Line {
-    spans: Vec<Span>,
-}
-
-impl Line {
-    pub fn from_markup<S: Into<String>>(markup: S) -> Self {
-        Self {
-            spans: vec![Span {
-                span: markup.into(),
-                _size_pts: 12.,
-                _font_id: 0,
-                _color: Default::default(),
-            }],
-        }
-    }
-}
+use winit::event::{KeyboardInput, ModifiersState};
 
 pub struct TextEdit {
-    // FIXME: font cache
-    lines: Vec<Line>,
+    lines: Vec<TextRun>,
     width: f32,
+    read_only: bool,
     default_color: Color,
-    default_font: String,
+    default_font: FontId,
     default_size_pts: f32,
 }
 
@@ -61,21 +40,27 @@ impl TextEdit {
         let mut obj = Self {
             lines: vec![],
             width: 1.,
+            read_only: true, // NOTE: writable text edits not supported yet.
             default_color: Color::Black,
-            default_font: SANS_FONT_NAME.to_owned(),
+            default_font: SANS_FONT_ID,
             default_size_pts: 12.,
         };
         obj.replace_content(markup);
         obj
     }
 
-    pub fn with_color(mut self, color: Color) -> Self {
+    pub fn with_default_color(mut self, color: Color) -> Self {
         self.default_color = color;
         self
     }
 
-    pub fn with_font(mut self, font: &str) -> Self {
-        self.default_font = font.to_owned();
+    pub fn with_default_font(mut self, font_id: FontId) -> Self {
+        self.default_font = font_id;
+        self
+    }
+
+    pub fn with_default_size(mut self, size_pts: f32) -> Self {
+        self.default_size_pts = size_pts;
         self
     }
 
@@ -91,13 +76,13 @@ impl TextEdit {
     pub fn replace_content(&mut self, markup: &str) {
         let lines = markup
             .split('\n')
-            .map(Line::from_markup)
-            .collect::<Vec<Line>>();
+            .map(TextRun::from_text)
+            .collect::<Vec<TextRun>>();
         self.lines = lines;
     }
 
-    pub fn append_line<S: Into<String>>(&mut self, markup: S) {
-        self.lines.push(Line::from_markup(markup));
+    pub fn append_line(&mut self, markup: &str) {
+        self.lines.push(TextRun::from_text(markup));
     }
 }
 
@@ -108,26 +93,8 @@ impl Widget for TextEdit {
 
         let mut height_offset = 0f32;
         for line in &self.lines {
-            let line_gap = context
-                .font_context
-                .get_font(&self.default_font)
-                .read()
-                .line_gap(self.default_size_pts);
-            let mut max_height = 0f32;
-            for span in &line.spans {
-                // FIXME: one info per span so that we can set the color
-                let span_metrics = context.layout_text(
-                    &span.span,
-                    &self.default_font,
-                    self.default_size_pts,
-                    [0., -height_offset],
-                    widget_info_index,
-                    gpu,
-                );
-                // FIXME: need to be able to offset height by line.
-                max_height = max_height.max(span_metrics.height + line_gap);
-            }
-            height_offset += max_height;
+            let run_metrics = line.upload(height_offset, widget_info_index, gpu, context);
+            height_offset += run_metrics.height;
         }
 
         UploadMetrics {
@@ -136,5 +103,10 @@ impl Widget for TextEdit {
             baseline_height: height_offset,
             height: height_offset,
         }
+    }
+
+    fn handle_keyboard(&mut self, _events: &[(KeyboardInput, ModifiersState)]) -> Fallible<()> {
+        assert!(self.read_only);
+        Ok(())
     }
 }

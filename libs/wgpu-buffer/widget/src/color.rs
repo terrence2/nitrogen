@@ -81,4 +81,12 @@ impl Color {
         }
         Self::Custom(a)
     }
+
+    pub fn invert(self) -> Self {
+        let mut a = self.to_f32_array();
+        for v in a.iter_mut().take(3) {
+            *v = 1f32 - *v;
+        }
+        Self::Custom(a)
+    }
 }

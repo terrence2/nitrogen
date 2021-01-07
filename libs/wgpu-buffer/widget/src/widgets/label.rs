@@ -14,45 +14,43 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     color::Color,
+    font_context::FontId,
     paint_context::PaintContext,
+    text_run::TextRun,
     widget::{UploadMetrics, Widget},
     widget_info::WidgetInfo,
-    SANS_FONT_NAME,
 };
+use failure::Fallible;
 use gpu::GPU;
 use parking_lot::RwLock;
 use std::sync::Arc;
+use winit::event::{KeyboardInput, ModifiersState};
 
 pub struct Label {
-    // Todo: multi-span / markup
-    span: String,
-    size_pts: f32,
-    font_name: String,
-    color: Color,
+    line: TextRun,
+    width: Option<f32>,
 }
 
 impl Label {
-    pub fn new<S: Into<String>>(markup: S) -> Self {
+    pub fn new<S: AsRef<str> + Into<String>>(content: S) -> Self {
         Self {
-            span: markup.into(),
-            size_pts: 12.0,
-            font_name: SANS_FONT_NAME.to_owned(),
-            color: Color::Black,
+            line: TextRun::from_text(content.as_ref()),
+            width: None,
         }
     }
 
     pub fn with_size(mut self, size_pts: f32) -> Self {
-        self.size_pts = size_pts;
+        self.line.set_all_size_pts(size_pts);
         self
     }
 
-    pub fn with_font<S: Into<String>>(mut self, font_name: S) -> Self {
-        self.font_name = font_name.into();
+    pub fn with_font(mut self, font_id: FontId) -> Self {
+        self.line.set_all_font(font_id);
         self
     }
 
     pub fn with_color(mut self, color: Color) -> Self {
-        self.color = color;
+        self.line.set_all_color(color);
         self
     }
 
@@ -60,28 +58,27 @@ impl Label {
         Arc::new(RwLock::new(self))
     }
 
-    pub fn set_markup<S: Into<String>>(&mut self, markup: S) {
-        self.span = markup.into();
+    pub fn set_text<S: AsRef<str> + Into<String>>(&mut self, content: S) {
+        self.line.select_all();
+        self.line.insert(content.as_ref());
     }
 }
 
 impl Widget for Label {
     fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> UploadMetrics {
-        let info = WidgetInfo::default().with_foreground_color(self.color);
+        let info = WidgetInfo::default(); //.with_foreground_color(self.default_color);
         let widget_info_index = context.push_widget(&info);
-        let span_metrics = context.layout_text(
-            &self.span,
-            &self.font_name,
-            self.size_pts,
-            [0., 0.],
-            widget_info_index,
-            gpu,
-        );
+
+        let line_metrics = self.line.upload(0f32, widget_info_index, gpu, context);
         UploadMetrics {
             widget_info_indexes: vec![widget_info_index],
-            width: span_metrics.width,
-            baseline_height: span_metrics.baseline_height,
-            height: span_metrics.height,
+            width: self.width.unwrap_or_else(|| line_metrics.width),
+            baseline_height: line_metrics.baseline_height,
+            height: line_metrics.height,
         }
+    }
+
+    fn handle_keyboard(&mut self, _events: &[(KeyboardInput, ModifiersState)]) -> Fallible<()> {
+        Ok(())
     }
 }

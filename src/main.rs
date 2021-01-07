@@ -171,7 +171,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         .add_child(fps_label.clone())
         .set_float(PositionH::Start, PositionV::Bottom);
 
-    let terminal = Terminal::new();
+    let terminal = Terminal::new(frame_graph.widgets.font_context());
     frame_graph
         .widgets
         .root()
@@ -220,7 +220,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     loop {
         let loop_start = Instant::now();
 
-        for command in input_controller.poll()? {
+        for command in input_controller.poll_commands()? {
             if InputSystem::is_close_command(&command) || command.full() == "demo.exit" {
                 return Ok(());
             }
@@ -265,6 +265,10 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                 _ => trace!("unhandled command: {}", command.full(),),
             }
         }
+        frame_graph
+            .widgets
+            .handle_keyboard(&input_controller.poll_keyboard()?)?;
+
         let mut g = arcball.get_target();
         g.distance += target_vec;
         if g.distance < meters!(0f64) {
@@ -317,6 +321,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
             frame_time.as_secs() * 1000 + u64::from(frame_time.subsec_millis()),
             frame_time.subsec_micros(),
         );
-        fps_label.write().set_markup(ts);
+        fps_label.write().set_text(ts);
     }
 }

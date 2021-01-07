@@ -12,6 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use crate::BindingState;
 use failure::{bail, ensure, Fallible};
 use lazy_static::lazy_static;
 use log::warn;
@@ -21,7 +22,7 @@ use std::{
     fmt,
 };
 use unicase::{eq_ascii, Ascii};
-use winit::event::{ButtonId, ScanCode, VirtualKeyCode};
+use winit::event::{ButtonId, ElementState, ModifiersState, ScanCode, VirtualKeyCode};
 
 // When providing keys via a typed in command ala `bind +moveleft a`, we are
 // talking about a virtual key name. When we poke a key in order to set a bind
@@ -223,11 +224,29 @@ impl Key {
         }
         bail!("unknown virtual keycode")
     }
+
+    pub fn modifier(&self) -> ModifiersState {
+        match self {
+            Key::Virtual(vkey) => match vkey {
+                VirtualKeyCode::LControl => ModifiersState::CTRL,
+                VirtualKeyCode::RControl => ModifiersState::CTRL,
+                VirtualKeyCode::LShift => ModifiersState::SHIFT,
+                VirtualKeyCode::RShift => ModifiersState::SHIFT,
+                VirtualKeyCode::LAlt => ModifiersState::ALT,
+                VirtualKeyCode::RAlt => ModifiersState::ALT,
+                VirtualKeyCode::LWin => ModifiersState::LOGO,
+                VirtualKeyCode::RWin => ModifiersState::LOGO,
+                _ => ModifiersState::default(),
+            },
+            _ => ModifiersState::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct KeySet {
     pub keys: SmallVec<[Key; 2]>,
+    pub modifiers: ModifiersState,
 }
 
 impl KeySet {
@@ -259,7 +278,15 @@ impl KeySet {
             }
         }
         ensure!(!out.is_empty(), "no key matching {}", keyset);
-        Ok(out.drain(..).map(|v| Self { keys: v }).collect::<Vec<_>>())
+        Ok(out
+            .drain(..)
+            .map(|v| Self {
+                modifiers: v.iter().fold(ModifiersState::default(), |modifiers, k| {
+                    modifiers | k.modifier()
+                }),
+                keys: v,
+            })
+            .collect::<Vec<_>>())
     }
 
     pub fn contains_key(&self, key: &Key) -> bool {
@@ -280,6 +307,38 @@ impl KeySet {
                 return false;
             }
         }
+        true
+    }
+
+    pub fn is_pressed(&self, state: &BindingState) -> bool {
+        // We want to account for:
+        //   * `Ctrl+e` && `Ctrl+o` being activated with a single hold of the Ctrl key.
+        //   * Multiple actions can run at once: e.g. if someone is holding `w` to walk
+        //     forward, they should still be able to tap `e` to use.
+        //   * On the other hand, `Shift+e` is a superset of `e`, but should not trigger
+        //     `e`'s action.
+        //   * Potential weird case: what if `Ctrl+w` is walk forward and someone taps `e` to use?
+        //     Should it depend on whether `Ctrl+e` is bound? I think we should disallow for now.
+        //     Most apps treat modifiers as different planes of keys and I think that makes sense
+        //     here as well.
+        //
+        // Simple solution: superset check, with special handling of modifier keys.
+        for key in &self.keys {
+            if let Some(current_state) = state.key_states.get(key) {
+                if *current_state == ElementState::Released {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        // All matching keys (including modifiers) are pressed.
+        // Also make sure we are in the same modifier plan.
+        if state.modifiers_state != self.modifiers {
+            return false;
+        }
+
         true
     }
 }

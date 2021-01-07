@@ -13,7 +13,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::paint_context::PaintContext;
+use failure::Fallible;
 use gpu::GPU;
+use winit::event::{KeyboardInput, ModifiersState};
 
 pub struct UploadMetrics {
     pub widget_info_indexes: Vec<u32>,
@@ -24,4 +26,5 @@ pub struct UploadMetrics {
 
 pub trait Widget {
     fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> UploadMetrics;
+    fn handle_keyboard(&mut self, events: &[(KeyboardInput, ModifiersState)]) -> Fallible<()>;
 }

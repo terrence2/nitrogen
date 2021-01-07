@@ -17,9 +17,11 @@ use crate::{
     paint_context::PaintContext,
     widget::{UploadMetrics, Widget},
 };
+use failure::Fallible;
 use gpu::GPU;
 use parking_lot::RwLock;
 use std::sync::Arc;
+use winit::event::{KeyboardInput, ModifiersState};
 
 // Pack boxes at an edge.
 pub struct FloatPacking {
@@ -112,5 +114,12 @@ impl Widget for FloatBox {
             height: 2f32,
             baseline_height: 2f32,
         }
+    }
+
+    fn handle_keyboard(&mut self, events: &[(KeyboardInput, ModifiersState)]) -> Fallible<()> {
+        for child in &self.children {
+            child.widget.write().handle_keyboard(events)?;
+        }
+        Ok(())
     }
 }
