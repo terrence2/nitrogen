@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 #version 450
-#include <wgpu-render/shader_shared/include/consts.glsl>
+#include <wgpu-buffer/shader_shared/include/consts.glsl>
 #include <wgpu-buffer/stars/include/stars.glsl>
 
 layout(location = 0) in vec3 v_ray;

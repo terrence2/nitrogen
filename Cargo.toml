@@ -32,18 +32,17 @@ members = [
 
     "libs/wgpu-buffer/atlas",
     "libs/wgpu-buffer/atmosphere",
+    "libs/wgpu-buffer/composite",
     "libs/wgpu-buffer/font_common",
     "libs/wgpu-buffer/font_ttf",
     "libs/wgpu-buffer/fullscreen",
     "libs/wgpu-buffer/global_data",
+    "libs/wgpu-buffer/shader_shared",
     "libs/wgpu-buffer/stars",
     "libs/wgpu-buffer/terrain_geo",
     "libs/wgpu-buffer/ui",
     "libs/wgpu-buffer/widget",
     "libs/wgpu-buffer/world",
-
-    "libs/wgpu-render/shader_shared",
-    "libs/wgpu-render/composite",
 ]
 
 [dependencies]
@@ -62,7 +61,7 @@ atmosphere = { path = "libs/wgpu-buffer/atmosphere" }
 camera = { path = "libs/sim/camera" }
 catalog = { path = "libs/system/catalog" }
 command = { path = "libs/system/command" }
-composite = { path = "libs/wgpu-render/composite" }
+composite = { path = "libs/wgpu-buffer/composite" }
 fullscreen = { path = "libs/wgpu-buffer/fullscreen" }
 geodesy = { path = "libs/sim/geodesy" }
 global_data = { path = "libs/wgpu-buffer/global_data" }

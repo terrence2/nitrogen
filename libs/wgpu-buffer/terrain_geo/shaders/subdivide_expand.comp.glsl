@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 #version 450
 #include <wgpu-buffer/terrain_geo/include/terrain_geo.glsl>
-#include <wgpu-render/shader_shared/include/buffer_helpers.glsl>
+#include <wgpu-buffer/shader_shared/include/buffer_helpers.glsl>
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 layout(binding = 0) uniform SubdivisionCtx { SubdivisionContext context; };
