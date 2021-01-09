@@ -27,6 +27,10 @@ pub struct WidgetInfo {
 }
 
 impl WidgetInfo {
+    pub fn background_color(&self) -> &[f32; 4] {
+        &self.background_color
+    }
+
     pub fn with_foreground_color(mut self, color: Color) -> Self {
         self.foreground_color = color.to_f32_array();
         self

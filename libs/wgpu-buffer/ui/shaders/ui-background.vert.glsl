@@ -30,5 +30,5 @@ void main() {
     v_color = info.background_color;
 
     vec4 widget_position = vec4(info.position[0],  info.position[1], 0, 0);
-    gl_Position = widget_position + vec4(position.xyz, 1);
+    gl_Position = widget_position + vec4(position.xy, position.z / MAX_WIDGETS, 1);
 }

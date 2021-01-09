@@ -15,7 +15,7 @@
 use commandable::{commandable, Commandable};
 use failure::Fallible;
 use gpu::GPU;
-use std::mem;
+use std::{mem, ops::Range};
 use zerocopy::{AsBytes, FromBytes};
 
 #[repr(C)]
@@ -73,6 +73,10 @@ impl FullscreenBuffer {
 
     pub fn vertex_buffer(&self) -> wgpu::BufferSlice {
         self.vertex_buffer.slice(..)
+    }
+
+    pub fn vertex_buffer_range(&self) -> Range<u32> {
+        0..4
     }
 }
 

@@ -155,7 +155,7 @@ impl FontContext {
 
     pub fn layout_text(
         &mut self,
-        ctx: SpanLayoutContext,
+        span: SpanLayoutContext,
         gpu: &GPU,
         text_pool: &mut Vec<WidgetVertex>,
         background_pool: &mut Vec<WidgetVertex>,
@@ -163,16 +163,16 @@ impl FontContext {
         let w = self.glyph_sheet_width();
         let h = self.glyph_sheet_height();
 
-        let px_scaling = if ctx.size_pts <= 12.0 { 4.0 } else { 2.0 };
+        let px_scaling = if span.size_pts <= 12.0 { 4.0 } else { 2.0 };
 
         // Use ttf standard formula to adjust scale by pts to figure out base rendering size.
         // Note that we add some extra scaling and use linear filtering to help account for
         // our lack of sub-pixel and pixel alignment techniques.
-        let scale_px = px_scaling * ctx.size_pts * gpu.scale_factor() as f32;
+        let scale_px = px_scaling * span.size_pts * gpu.scale_factor() as f32;
 
         // We used guess_dpi to project from logical to physical pixels for rendering, so scale
-        // vertices proportional to physical size for vertex layout. Note that the factor of 2
-        // here is to account for the fact that vertex ranges are between [-1,1], not to account
+        // vertices proportional to physical size for vertex layout. Note that the extra factor of
+        // 2 here is to account for the fact that vertex ranges are between [-1,1], not to account
         // for the scaling of scale_px above.
         let scale_y =
             Self::GNOME_SCALE_FACTOR * 4.0 / gpu.physical_size().height as f32 / px_scaling;
@@ -180,15 +180,15 @@ impl FontContext {
 
         // Font rendering is based around the baseline. We want it based around the top-left
         // corner instead, so move down by the ascent.
-        let font = self.get_font(ctx.font_id);
+        let font = self.get_font(span.font_id);
         let descent = font.read().descent(scale_px);
         let ascent = font.read().ascent(scale_px);
 
         let mut offset = 0f32;
         let mut prior = None;
-        for (i, c) in ctx.span.chars().enumerate() {
-            let frame = self.load_glyph(ctx.font_id, c, scale_px);
-            let font = self.get_font(ctx.font_id);
+        for (i, c) in span.span.chars().enumerate() {
+            let frame = self.load_glyph(span.font_id, c, scale_px);
+            let font = self.get_font(span.font_id);
             let ((lo_x, lo_y), (hi_x, hi_y)) = font.read().exact_bounding_box(c, scale_px);
             let lsb = font.read().left_side_bearing(c, scale_px);
             let adv = font.read().advance_width(c, scale_px);
@@ -198,10 +198,11 @@ impl FontContext {
             prior = Some(c);
 
             // Layout from 0-> and let our transform put us in the right spot.
-            let x0 = (offset + kerning + lo_x) * scale_x;
-            let x1 = (offset + kerning + hi_x) * scale_x;
-            let y0 = -(hi_y + ascent) * scale_y;
-            let y1 = -(lo_y + ascent) * scale_y;
+            let x0 = span.offset[0] + (offset + kerning + lo_x) * scale_x;
+            let x1 = span.offset[0] + (offset + kerning + hi_x) * scale_x;
+            let y0 = span.offset[1] - (hi_y + ascent) * scale_y;
+            let y1 = span.offset[1] - (lo_y + ascent) * scale_y;
+            let z = span.offset[2];
 
             let s0 = frame.s0(w);
             let s1 = frame.s1(w);
@@ -210,24 +211,24 @@ impl FontContext {
 
             // Build 4 corner vertices.
             let v00 = WidgetVertex {
-                position: [ctx.offset[0] + x0, ctx.offset[1] + y0, ctx.offset[2]],
+                position: [x0, y0, z],
                 tex_coord: [s0, t0],
-                widget_info_index: ctx.widget_info_index,
+                widget_info_index: span.widget_info_index,
             };
             let v01 = WidgetVertex {
-                position: [ctx.offset[0] + x0, ctx.offset[1] + y1, ctx.offset[2]],
+                position: [x0, y1, z],
                 tex_coord: [s0, t1],
-                widget_info_index: ctx.widget_info_index,
+                widget_info_index: span.widget_info_index,
             };
             let v10 = WidgetVertex {
-                position: [ctx.offset[0] + x1, ctx.offset[1] + y0, ctx.offset[2]],
+                position: [x1, y0, z],
                 tex_coord: [s1, t0],
-                widget_info_index: ctx.widget_info_index,
+                widget_info_index: span.widget_info_index,
             };
             let v11 = WidgetVertex {
-                position: [ctx.offset[0] + x1, ctx.offset[1] + y1, ctx.offset[2]],
+                position: [x1, y1, z],
                 tex_coord: [s1, t1],
-                widget_info_index: ctx.widget_info_index,
+                widget_info_index: span.widget_info_index,
             };
 
             // Push 2 triangles
@@ -239,17 +240,77 @@ impl FontContext {
             text_pool.push(v11);
 
             // Apply cursor or selection
-            if let Some(area) = &ctx.selection_area {
+            if let Some(area) = &span.selection_area {
                 if area.start == i && area.is_empty() {
                     // Draw cursor
-                } else if area.contains(&i) {
+                    let bx0 = span.offset[0] + offset * scale_x;
+                    let bx1 = span.offset[0] + (offset + 2.) * scale_x;
+                    let by0 = span.offset[1];
+                    let by1 = span.offset[1] - (ascent + descent) * scale_y;
+                    let bz = span.offset[2] + 0.1;
+                    let bv00 = WidgetVertex {
+                        position: [bx0, by0, bz],
+                        tex_coord: [0.0, 0.0],
+                        widget_info_index: span.widget_info_index,
+                    };
+                    let bv01 = WidgetVertex {
+                        position: [bx0, by1, bz],
+                        tex_coord: [0.0, 0.0],
+                        widget_info_index: span.widget_info_index,
+                    };
+                    let bv10 = WidgetVertex {
+                        position: [bx1, by0, bz],
+                        tex_coord: [0.0, 0.0],
+                        widget_info_index: span.widget_info_index,
+                    };
+                    let bv11 = WidgetVertex {
+                        position: [bx1, by1, bz],
+                        tex_coord: [0.0, 0.0],
+                        widget_info_index: span.widget_info_index,
+                    };
+
                     // Draw selection over item
-                    background_pool.push(v00);
-                    background_pool.push(v10);
-                    background_pool.push(v01);
-                    background_pool.push(v01);
-                    background_pool.push(v10);
-                    background_pool.push(v11);
+                    background_pool.push(bv00);
+                    background_pool.push(bv10);
+                    background_pool.push(bv01);
+                    background_pool.push(bv01);
+                    background_pool.push(bv10);
+                    background_pool.push(bv11);
+                } else if area.contains(&i) {
+                    let bx0 = span.offset[0] + offset * scale_x;
+                    let bx1 = span.offset[0] + (offset + kerning + hi_x) * scale_x;
+                    let by1 = span.offset[1];
+                    let by0 = span.offset[1] - (ascent + descent) * scale_y;
+                    let bz = span.offset[2] - 0.1;
+                    let bz = 0.1;
+                    let bv00 = WidgetVertex {
+                        position: [bx0, by0, bz],
+                        tex_coord: [0.0, 0.0],
+                        widget_info_index: span.widget_info_index,
+                    };
+                    let bv01 = WidgetVertex {
+                        position: [bx0, by1, bz],
+                        tex_coord: [0.0, 0.0],
+                        widget_info_index: span.widget_info_index,
+                    };
+                    let bv10 = WidgetVertex {
+                        position: [bx1, by0, bz],
+                        tex_coord: [0.0, 0.0],
+                        widget_info_index: span.widget_info_index,
+                    };
+                    let bv11 = WidgetVertex {
+                        position: [bx1, by1, bz],
+                        tex_coord: [0.0, 0.0],
+                        widget_info_index: span.widget_info_index,
+                    };
+
+                    // Draw selection over item
+                    background_pool.push(bv00);
+                    background_pool.push(bv10);
+                    background_pool.push(bv01);
+                    background_pool.push(bv01);
+                    background_pool.push(bv10);
+                    background_pool.push(bv11);
                 }
             }
 

@@ -75,8 +75,9 @@ impl Widget for VerticalBox {
         let widget_info_index = context.push_widget(&info);
         let mut widget_info_indexes = vec![widget_info_index];
 
-        let mut width = 2f32;
+        let mut width = 2f32; // FIXME: 0
         let mut height = 0f32;
+        context.current_depth += PaintContext::BOX_DEPTH_SIZE;
         for pack in &self.children {
             let mut child_metrics = pack.widget().read().upload(gpu, context);
 
@@ -89,6 +90,7 @@ impl Widget for VerticalBox {
             height += child_metrics.height;
             widget_info_indexes.append(&mut child_metrics.widget_info_indexes);
         }
+        context.current_depth -= PaintContext::BOX_DEPTH_SIZE;
 
         let v00 = WidgetVertex {
             position: [0., 0., context.current_depth],

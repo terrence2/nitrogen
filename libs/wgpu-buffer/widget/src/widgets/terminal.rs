@@ -37,11 +37,12 @@ impl Terminal {
             .with_default_font(font_context.font_id_for_name("mono"))
             .with_default_color(Color::Green)
             .wrapped();
-        let edit = LineEdit::new("help")
+        let edit = LineEdit::new("this is some test text for us to highlight")
             //.with_default_font("mono")
             .with_default_color(Color::White)
             .with_default_size_pts(12.0)
             .wrapped();
+        edit.write().line_mut().select_all();
         let container = VerticalBox::with_children(&[output, edit.clone()])
             .with_background_color(Color::Gray.darken(3.).opacity(0.8))
             .wrapped();

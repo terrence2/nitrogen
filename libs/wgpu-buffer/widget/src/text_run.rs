@@ -296,6 +296,7 @@ impl TextRun {
         let mut selection_offset = 0;
         let selections = self.selected_spans();
 
+        let mut char_offset = 0;
         let mut total_width = 0f32;
         let mut max_height = 0f32;
         let mut max_baseline = 0f32;
@@ -306,6 +307,12 @@ impl TextRun {
                 let area = selections[selection_offset].1.clone();
                 selection_offset += 1;
                 Some(area)
+            } else if selections.is_empty()
+                && self.selection.start > char_offset
+                && self.selection.start < char_offset + span.text.len()
+            {
+                let v = self.selection.start - char_offset;
+                Some(v..v)
             } else {
                 None
             };
@@ -329,6 +336,7 @@ impl TextRun {
                 .line_gap(span.size_pts);
             max_height = max_height.max(span_metrics.height + line_gap);
             max_baseline = max_baseline.max(span_metrics.baseline_height);
+            char_offset += span.text.len();
         }
         TextSpanMetrics {
             width: total_width,

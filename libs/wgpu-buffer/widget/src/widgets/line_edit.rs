@@ -37,7 +37,7 @@ impl LineEdit {
             line: TextRun::empty(),
             width: 1.,
         };
-        obj.replace_content(markup);
+        obj.line.insert(markup);
         obj
     }
 
@@ -56,9 +56,8 @@ impl LineEdit {
         self
     }
 
-    pub fn replace_content(&mut self, text: &str) {
-        self.line.select_all();
-        self.line.insert(text);
+    pub fn line_mut(&mut self) -> &mut TextRun {
+        &mut self.line
     }
 
     pub fn take_action(
