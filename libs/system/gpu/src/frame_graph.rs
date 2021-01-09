@@ -80,9 +80,6 @@ macro_rules! make_frame_graph {
     (
         $name:ident {
             buffers: { $($buffer_name:ident: $buffer_type:ty),* };
-            renderers: [
-                $( $renderer_name:ident: $renderer_type:ty { $($input_buffer_name:ident),* } ),*
-            ];
             passes: [
                 $( $pass_name:ident: $pass_type:ident($($pass_args:ident),*) {
                     $($pass_item_name:ident ( $($pass_item_input_name:ident),* ) ),*
@@ -94,9 +91,6 @@ macro_rules! make_frame_graph {
             $(
                 $buffer_name: $buffer_type
             ),*,
-            $(
-                $renderer_name: $renderer_type
-            ),*
         }
 
         impl $name {
@@ -110,14 +104,6 @@ macro_rules! make_frame_graph {
             ) -> ::failure::Fallible<Self> {
                 Ok(Self {
                     $(
-                        $renderer_name: <$renderer_type>::new(
-                            gpu,
-                            $(
-                                &$input_buffer_name
-                            ),*
-                        )?
-                    ),*,
-                    $(
                         $buffer_name
                     ),*
                 })
@@ -128,18 +114,10 @@ macro_rules! make_frame_graph {
                     &mut self.$buffer_name
                 }
             )*
-            $(
-                pub fn $renderer_name(&mut self) -> &mut $renderer_type {
-                    &mut self.$renderer_name
-                }
-            )*
 
             pub fn run(&mut self, gpu: &mut $crate::GPU, tracker: $crate::UploadTracker) -> ::failure::Fallible<bool> {
                 $(
                     let $buffer_name = &self.$buffer_name;
-                )*
-                $(
-                    let $renderer_name = &self.$renderer_name;
                 )*
 
                 let mut encoder = gpu
@@ -167,11 +145,6 @@ macro_rules! make_frame_graph {
                 $(
                     if command.target() == stringify!($buffer_name) {
                         self.$buffer_name.handle_command(command);
-                    }
-                )*
-                $(
-                    if command.target() == stringify!($renderer_name) {
-                        self.$renderer_name.handle_command(command);
                     }
                 )*
             }

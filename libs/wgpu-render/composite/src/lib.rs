@@ -19,7 +19,6 @@ use gpu::GPU;
 use log::trace;
 use shader_shared::Group;
 use ui::UiRenderPass;
-use widget::{WidgetBuffer, WidgetVertex};
 use world::WorldRenderPass;
 
 #[derive(Commandable)]
@@ -29,12 +28,7 @@ pub struct CompositeRenderPass {
 
 #[commandable]
 impl CompositeRenderPass {
-    pub fn new(
-        gpu: &mut GPU,
-        fullscreen: &FullscreenBuffer,
-        world: &WorldRenderPass,
-        ui: &UiRenderPass,
-    ) -> Fallible<Self> {
+    pub fn new(gpu: &mut GPU, world: &WorldRenderPass, ui: &UiRenderPass) -> Fallible<Self> {
         trace!("CompositeRenderPass::new");
 
         // Layout shared by all three render passes.

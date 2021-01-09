@@ -61,11 +61,9 @@ make_frame_graph!(
             terrain_geo: TerrainGeoBuffer,
             widgets: WidgetBuffer,
             world: WorldRenderPass,
-            ui: UiRenderPass
+            ui: UiRenderPass,
+            composite: CompositeRenderPass
         };
-        renderers: [
-            composite: CompositeRenderPass { fullscreen, world, ui }
-        ];
         passes: [
             // terrain_geo
             // Update the indices so we have correct height data to tessellate with and normal
@@ -161,6 +159,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         &terrain_geo_buffer,
     )?;
     let ui = UiRenderPass::new(&mut gpu, &globals_buffer, &widget_buffer)?;
+    let composite = CompositeRenderPass::new(&mut gpu, &world, &ui)?;
     let mut frame_graph = FrameGraph::new(
         &mut legion,
         &mut gpu,
@@ -172,6 +171,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         widget_buffer,
         world,
         ui,
+        composite,
     )?;
     ///////////////////////////////////////////////////////////
 
@@ -278,11 +278,15 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                 "window.resize" => {
                     gpu.note_resize(None, &window);
                     frame_graph.terrain_geo.note_resize(&gpu);
+                    frame_graph.world.note_resize(&gpu);
+                    frame_graph.ui.note_resize(&gpu);
                     arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
                 }
                 "window.dpi-change" => {
                     gpu.note_resize(Some(command.float(0)?), &window);
                     frame_graph.terrain_geo.note_resize(&gpu);
+                    frame_graph.world.note_resize(&gpu);
+                    frame_graph.ui.note_resize(&gpu);
                     arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
                 }
                 _ => trace!("unhandled command: {}", command.full(),),
@@ -330,6 +334,8 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         if !frame_graph.run(&mut gpu, tracker)? {
             gpu.note_resize(None, &window);
             frame_graph.terrain_geo.note_resize(&gpu);
+            frame_graph.world.note_resize(&gpu);
+            frame_graph.ui.note_resize(&gpu);
             arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
         }
 

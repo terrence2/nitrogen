@@ -310,6 +310,17 @@ impl UiRenderPass {
         })
     }
 
+    pub fn note_resize(&mut self, gpu: &GPU) {
+        self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
+        self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
+        self.deferred_bind_group = Self::_make_deferred_bind_group(
+            gpu,
+            &self.deferred_bind_group_layout,
+            &self.deferred_texture.1,
+            &self.deferred_sampler,
+        );
+    }
+
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.deferred_bind_group_layout
     }
@@ -329,7 +340,7 @@ impl UiRenderPass {
                 attachment: &self.deferred_texture.1,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::RED),
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                     store: true,
                 },
             }],

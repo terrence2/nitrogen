@@ -22,6 +22,5 @@ layout(location = 0) out vec4 f_color;
 void main() {
     vec4 world = texture(sampler2D(world_deferred_texture, world_deferred_sampler), v_tc);
     vec4 ui = texture(sampler2D(ui_deferred_texture, ui_deferred_sampler), v_tc);
-    float alpha = ui.a;
-    f_color = vec4(world.rgb * alpha + ui.rgb * (1 - alpha), 1.0);
+    f_color = vec4(world.rgb * (1 - ui.a) + ui.rgb * ui.a, 1.0);
 }
