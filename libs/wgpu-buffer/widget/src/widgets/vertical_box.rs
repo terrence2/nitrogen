@@ -29,7 +29,9 @@ use winit::event::{KeyboardInput, ModifiersState};
 // Items packed from top to bottom.
 #[derive(Default)]
 pub struct VerticalBox {
-    background_color: Color,
+    info: WidgetInfo,
+    override_width: Option<f32>,
+    override_height: Option<f32>,
     children: Vec<BoxPacking>,
 }
 
@@ -41,12 +43,28 @@ impl VerticalBox {
                 .enumerate()
                 .map(|(i, w)| BoxPacking::new(w.to_owned(), i))
                 .collect::<Vec<_>>(),
-            background_color: Color::Transparent,
+            info: WidgetInfo::default().with_background_color(Color::Transparent),
+            override_width: None,
+            override_height: None,
         }
     }
 
+    pub fn info_mut(&mut self) -> &mut WidgetInfo {
+        &mut self.info
+    }
+
     pub fn with_background_color(mut self, color: Color) -> Self {
-        self.background_color = color;
+        self.info.set_background_color(color);
+        self
+    }
+
+    pub fn with_width(mut self, width: f32) -> Self {
+        self.override_width = Some(width);
+        self
+    }
+
+    pub fn with_height(mut self, height: f32) -> Self {
+        self.override_height = Some(height);
         self
     }
 
@@ -71,11 +89,10 @@ impl VerticalBox {
 
 impl Widget for VerticalBox {
     fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> UploadMetrics {
-        let info = WidgetInfo::default().with_background_color(self.background_color);
-        let widget_info_index = context.push_widget(&info);
+        let widget_info_index = context.push_widget(&self.info);
         let mut widget_info_indexes = vec![widget_info_index];
 
-        let mut width = 2f32; // FIXME: 0
+        let mut width = 0f32;
         let mut height = 0f32;
         context.current_depth += PaintContext::BOX_DEPTH_SIZE;
         for pack in &self.children {
@@ -91,6 +108,13 @@ impl Widget for VerticalBox {
             widget_info_indexes.append(&mut child_metrics.widget_info_indexes);
         }
         context.current_depth -= PaintContext::BOX_DEPTH_SIZE;
+
+        if let Some(override_width) = self.override_width {
+            width = override_width;
+        }
+        if let Some(override_height) = self.override_height {
+            height = override_height;
+        }
 
         let v00 = WidgetVertex {
             position: [0., 0., context.current_depth],

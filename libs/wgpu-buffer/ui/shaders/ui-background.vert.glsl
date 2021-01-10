@@ -15,9 +15,7 @@
 #version 450
 #include <wgpu-buffer/global_data/include/global_data.glsl>
 #include <wgpu-buffer/widget/include/widget.glsl>
-
-layout(set = 2, binding = 0) uniform texture2D world_deferred_texture;
-layout(set = 2, binding = 1) uniform sampler world_deferred_sampler;
+#include <wgpu-buffer/world/include/world-deferred.glsl>
 
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec2 tex_coord;
@@ -25,13 +23,20 @@ layout(location = 2) in uint widget_info_id;
 
 layout(location = 0) out vec2 v_tex_coord;
 layout(location = 1) flat out vec4 v_color;
+layout(location = 2) out vec2 v_screen_tex_coord;
+layout(location = 3) flat out uint widget_info_id_frag;
 
 void main() {
+    widget_info_id_frag = widget_info_id;
     v_tex_coord = tex_coord;
 
     WidgetInfo info = widget_info[widget_info_id];
     v_color = info.background_color;
 
-    vec4 widget_position = vec4(info.position[0],  info.position[1], 0, 0);
-    gl_Position = widget_position + vec4(position.xy, position.z / MAX_WIDGETS, 1);
+    vec4 widget_position = vec4(info.position.xy, 0, 0) + vec4(position.xy, position.z / MAX_WIDGETS, 1);
+
+    v_screen_tex_coord = (widget_position.xy + 1) / 2;
+    v_screen_tex_coord.y = 1 - v_screen_tex_coord.y;
+
+    gl_Position = widget_position;
 }

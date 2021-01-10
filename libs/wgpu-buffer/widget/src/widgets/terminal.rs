@@ -45,7 +45,10 @@ impl Terminal {
         edit.write().line_mut().select_all();
         let container = VerticalBox::with_children(&[output, edit.clone()])
             .with_background_color(Color::Gray.darken(3.).opacity(0.8))
+            .with_width(2.0)
+            .with_height(1.5)
             .wrapped();
+        container.write().info_mut().set_glass_background(true);
         Arc::new(RwLock::new(Self { edit, container }))
     }
 }
