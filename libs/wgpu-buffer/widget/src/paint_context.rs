@@ -84,6 +84,7 @@ impl PaintContext {
         offset as u32
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn layout_text(
         &mut self,
         span: &str,

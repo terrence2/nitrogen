@@ -72,7 +72,7 @@ impl Widget for Label {
         let line_metrics = self.line.upload(0f32, widget_info_index, gpu, context);
         UploadMetrics {
             widget_info_indexes: vec![widget_info_index],
-            width: self.width.unwrap_or_else(|| line_metrics.width),
+            width: self.width.unwrap_or(line_metrics.width),
             baseline_height: line_metrics.baseline_height,
             height: line_metrics.height,
         }

@@ -341,7 +341,7 @@ struct FontNameManager {
 
 impl FontNameManager {
     pub fn get_by_name(&self, name: &str) -> Option<FontId> {
-        self.name_to_id.get(name).map(|&v| v)
+        self.name_to_id.get(name).copied()
     }
 
     // panics if the name has not be allocated
