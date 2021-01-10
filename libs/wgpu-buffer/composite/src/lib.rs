@@ -15,6 +15,7 @@
 use commandable::{commandable, Commandable};
 use failure::Fallible;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
+use global_data::GlobalParametersBuffer;
 use gpu::GPU;
 use log::trace;
 use shader_shared::Group;
@@ -28,7 +29,12 @@ pub struct CompositeRenderPass {
 
 #[commandable]
 impl CompositeRenderPass {
-    pub fn new(gpu: &mut GPU, world: &WorldRenderPass, ui: &UiRenderPass) -> Fallible<Self> {
+    pub fn new(
+        gpu: &mut GPU,
+        globals: &GlobalParametersBuffer,
+        world: &WorldRenderPass,
+        ui: &UiRenderPass,
+    ) -> Fallible<Self> {
         trace!("CompositeRenderPass::new");
 
         // Layout shared by all three render passes.
@@ -37,7 +43,11 @@ impl CompositeRenderPass {
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                     label: Some("composite-pipeline-layout"),
                     push_constant_ranges: &[],
-                    bind_group_layouts: &[world.bind_group_layout(), ui.bind_group_layout()],
+                    bind_group_layouts: &[
+                        globals.bind_group_layout(),
+                        world.bind_group_layout(),
+                        ui.bind_group_layout(),
+                    ],
                 });
 
         let pipeline = gpu
@@ -103,12 +113,14 @@ impl CompositeRenderPass {
         &'a self,
         mut rpass: wgpu::RenderPass<'a>,
         fullscreen: &'a FullscreenBuffer,
+        globals: &'a GlobalParametersBuffer,
         world: &'a WorldRenderPass,
         ui: &'a UiRenderPass,
     ) -> Fallible<wgpu::RenderPass<'a>> {
         rpass.set_pipeline(&self.pipeline);
-        rpass.set_bind_group(Group::OffScreenWorld.index(), &world.bind_group(), &[]);
-        rpass.set_bind_group(Group::OffScreenUi.index(), &ui.bind_group(), &[]);
+        rpass.set_bind_group(Group::Globals.index(), globals.bind_group(), &[]);
+        rpass.set_bind_group(Group::OffScreenWorld.index(), world.bind_group(), &[]);
+        rpass.set_bind_group(Group::OffScreenUi.index(), ui.bind_group(), &[]);
         rpass.set_vertex_buffer(0, fullscreen.vertex_buffer());
         rpass.draw(fullscreen.vertex_buffer_range(), 0..1);
         Ok(rpass)

@@ -14,6 +14,7 @@ gpu = { path = "../../system/gpu" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 shader_shared = { path = "../../wgpu-buffer/shader_shared" }
 widget = { path = "../../wgpu-buffer/widget" }
+world = { path = "../../wgpu-buffer/world" }
 
 [build-dependencies]
 build_shaders = { path = "../../system/build_shaders" }

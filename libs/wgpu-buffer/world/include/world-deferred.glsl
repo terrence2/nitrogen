@@ -13,5 +13,5 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 
-layout(set = 0, binding = 0) uniform texture2D world_deferred_texture;
-layout(set = 0, binding = 1) uniform sampler world_deferred_sampler;
+layout(set = 2, binding = 0) uniform texture2D world_deferred_texture;
+layout(set = 2, binding = 1) uniform sampler world_deferred_sampler;

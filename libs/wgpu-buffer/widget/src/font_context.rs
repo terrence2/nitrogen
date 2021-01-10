@@ -282,7 +282,6 @@ impl FontContext {
                     let by1 = span.offset[1];
                     let by0 = span.offset[1] - (ascent + descent) * scale_y;
                     let bz = span.offset[2] - 0.1;
-                    let bz = 0.1;
                     let bv00 = WidgetVertex {
                         position: [bx0, by0, bz],
                         tex_coord: [0.0, 0.0],

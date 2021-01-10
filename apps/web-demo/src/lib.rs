@@ -120,7 +120,7 @@ fn window_loop(
     input_controller: &InputController,
     app: &mut AppContext,
 ) -> Fallible<()> {
-    for command in input_controller.poll()? {
+    for command in input_controller.poll_commands()? {
         console::log_1(&format!("COMMAND: {:?}", command).into());
         app.arcball.handle_command(&command)?;
         match command.command() {
@@ -129,6 +129,7 @@ fn window_loop(
             _ => {}
         }
     }
+    let _ = input_controller.poll_keyboard()?;
     app.arcball.think();
 
     // Sim

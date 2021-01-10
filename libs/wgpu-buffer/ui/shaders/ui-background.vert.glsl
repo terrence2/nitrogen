@@ -16,6 +16,9 @@
 #include <wgpu-buffer/global_data/include/global_data.glsl>
 #include <wgpu-buffer/widget/include/widget.glsl>
 
+layout(set = 2, binding = 0) uniform texture2D world_deferred_texture;
+layout(set = 2, binding = 1) uniform sampler world_deferred_sampler;
+
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec2 tex_coord;
 layout(location = 2) in uint widget_info_id;

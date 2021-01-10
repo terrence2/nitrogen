@@ -97,7 +97,7 @@ macro_rules! make_frame_graph {
             #[allow(clippy::too_many_arguments)]
             pub fn new(
                 _legion: &mut ::legion::world::World,
-                gpu: &mut $crate::GPU,
+                _gpu: &mut $crate::GPU,
                 $(
                     $buffer_name: $buffer_type
                 ),*
@@ -274,11 +274,9 @@ mod test {
     make_frame_graph!(
         FrameGraph {
             buffers: {
-                test_buffer: TestBuffer
+                test_buffer: TestBuffer,
+                test_renderer: TestRenderer
             };
-            renderers: [
-                test_renderer: TestRenderer { test_buffer }
-            ];
             passes: [
                 example_render_pass: Render(test_buffer, example_render_pass_attachments) {
                     test_buffer()
@@ -304,7 +302,8 @@ mod test {
         let mut legion = World::default();
         let mut gpu = GPU::new(&window, Default::default())?;
         let test_buffer = TestBuffer::new(&gpu);
-        let mut frame_graph = FrameGraph::new(&mut legion, &mut gpu, test_buffer)?;
+        let test_renderer = TestRenderer::new(&gpu, &test_buffer)?;
+        let mut frame_graph = FrameGraph::new(&mut legion, &mut gpu, test_buffer, test_renderer)?;
 
         for _ in 0..3 {
             let mut upload_tracker = Default::default();

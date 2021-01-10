@@ -24,8 +24,8 @@ pub enum Group {
     TerrainTileSet,
     TerrainComposite,
     UI,
-    OffScreenWorld,
     OffScreenUi,
+    OffScreenWorld,
 }
 
 impl Group {
@@ -38,8 +38,8 @@ impl Group {
             Self::TerrainComposite => 3,
             Self::TerrainTileSet => 2,
             Self::UI => 1,
-            Self::OffScreenWorld => 0,
             Self::OffScreenUi => 1,
+            Self::OffScreenWorld => 2,
         }
     }
 }

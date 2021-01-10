@@ -129,7 +129,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     arcball.set_distance(meters!(40.0));
 
     loop {
-        for command in input_controller.poll()? {
+        for command in input_controller.poll_commands()? {
             arcball.handle_command(&command)?;
             match command.command() {
                 "window-close" | "window-destroy" | "exit" => return Ok(()),

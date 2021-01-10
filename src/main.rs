@@ -85,12 +85,12 @@ make_frame_graph!(
 
             // ui: Draw our widgets onto a buffer with resolution independent of the world.
             render_ui: Render(ui, offscreen_target) {
-                ui( globals, widgets )
+                ui( globals, widgets, world )
             },
 
             // composite: Accumulate offscreen buffers into a final image.
             composite_scene: Render(Screen) {
-                composite( fullscreen, world, ui )
+                composite( fullscreen, globals, world, ui )
             }
         ];
     }
@@ -145,27 +145,27 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     ///////////////////////////////////////////////////////////
     let atmosphere_buffer = AtmosphereBuffer::new(opt.no_cache, &mut gpu)?;
     let fullscreen_buffer = FullscreenBuffer::new(&gpu)?;
-    let globals_buffer = GlobalParametersBuffer::new(gpu.device())?;
+    let globals = GlobalParametersBuffer::new(gpu.device())?;
     let stars_buffer = StarsBuffer::new(&gpu)?;
     let terrain_geo_buffer =
-        TerrainGeoBuffer::new(&catalog, cpu_detail, gpu_detail, &globals_buffer, &mut gpu)?;
+        TerrainGeoBuffer::new(&catalog, cpu_detail, gpu_detail, &globals, &mut gpu)?;
     let widget_buffer = WidgetBuffer::new(&mut gpu)?;
     let catalog = Arc::new(AsyncRwLock::new(catalog));
     let world = WorldRenderPass::new(
         &mut gpu,
-        &globals_buffer,
+        &globals,
         &atmosphere_buffer,
         &stars_buffer,
         &terrain_geo_buffer,
     )?;
-    let ui = UiRenderPass::new(&mut gpu, &globals_buffer, &widget_buffer)?;
-    let composite = CompositeRenderPass::new(&mut gpu, &world, &ui)?;
+    let ui = UiRenderPass::new(&mut gpu, &globals, &widget_buffer, &world)?;
+    let composite = CompositeRenderPass::new(&mut gpu, &globals, &world, &ui)?;
     let mut frame_graph = FrameGraph::new(
         &mut legion,
         &mut gpu,
         atmosphere_buffer,
         fullscreen_buffer,
-        globals_buffer,
+        globals,
         stars_buffer,
         terrain_geo_buffer,
         widget_buffer,

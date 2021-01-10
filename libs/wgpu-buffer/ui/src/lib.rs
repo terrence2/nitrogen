@@ -19,6 +19,7 @@ use gpu::{texture_format_component_type, GPU};
 use log::trace;
 use shader_shared::Group;
 use widget::{WidgetBuffer, WidgetVertex};
+use world::WorldRenderPass;
 
 #[derive(Commandable)]
 pub struct UiRenderPass {
@@ -40,6 +41,7 @@ impl UiRenderPass {
         gpu: &mut GPU,
         global_data: &GlobalParametersBuffer,
         widget_buffer: &WidgetBuffer,
+        world_render_pass: &WorldRenderPass,
     ) -> Fallible<Self> {
         trace!("UiRenderPass::new");
 
@@ -99,6 +101,7 @@ impl UiRenderPass {
                     bind_group_layouts: &[
                         global_data.bind_group_layout(),
                         widget_buffer.bind_group_layout(),
+                        world_render_pass.bind_group_layout(),
                     ],
                 });
 
@@ -130,11 +133,7 @@ impl UiRenderPass {
                     primitive_topology: wgpu::PrimitiveTopology::TriangleList,
                     color_states: &[wgpu::ColorStateDescriptor {
                         format: GPU::SCREEN_FORMAT,
-                        alpha_blend: wgpu::BlendDescriptor {
-                            src_factor: wgpu::BlendFactor::Zero,
-                            dst_factor: wgpu::BlendFactor::One,
-                            operation: wgpu::BlendOperation::Add,
-                        },
+                        alpha_blend: wgpu::BlendDescriptor::REPLACE,
                         color_blend: wgpu::BlendDescriptor {
                             src_factor: wgpu::BlendFactor::SrcAlpha,
                             dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
@@ -360,11 +359,13 @@ impl UiRenderPass {
         mut rpass: wgpu::RenderPass<'a>,
         global_data: &'a GlobalParametersBuffer,
         widget_buffer: &'a WidgetBuffer,
+        world: &'a WorldRenderPass,
     ) -> Fallible<wgpu::RenderPass<'a>> {
         // Background
         rpass.set_pipeline(&self.background_pipeline);
         rpass.set_bind_group(Group::Globals.index(), &global_data.bind_group(), &[]);
         rpass.set_bind_group(Group::UI.index(), widget_buffer.bind_group(), &[]);
+        rpass.set_bind_group(Group::OffScreenWorld.index(), world.bind_group(), &[]);
         rpass.set_vertex_buffer(0, widget_buffer.background_vertex_buffer());
         rpass.draw(widget_buffer.background_vertex_range(), 0..1);
         // Image

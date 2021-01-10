@@ -578,7 +578,7 @@ mod test {
         let mut state = Default::default();
 
         let cmd = InputSystem::handle_event(
-            &win_evt(WindowEvent::Resized(physical_size())),
+            &mut win_evt(WindowEvent::Resized(physical_size())),
             &binding_list,
             &mut state,
         )?
@@ -589,15 +589,18 @@ mod test {
         assert_relative_eq!(cmd.displacement(0)?.0, 8f64);
         assert_relative_eq!(cmd.displacement(0)?.1, 9f64);
 
-        let cmd =
-            InputSystem::handle_event(&win_evt(WindowEvent::Destroyed), &binding_list, &mut state)?
-                .first()
-                .unwrap()
-                .to_owned();
+        let cmd = InputSystem::handle_event(
+            &mut win_evt(WindowEvent::Destroyed),
+            &binding_list,
+            &mut state,
+        )?
+        .first()
+        .unwrap()
+        .to_owned();
         assert_eq!(cmd.command(), "destroy");
 
         let cmd = InputSystem::handle_event(
-            &win_evt(WindowEvent::CloseRequested),
+            &mut win_evt(WindowEvent::CloseRequested),
             &binding_list,
             &mut state,
         )?
@@ -607,7 +610,7 @@ mod test {
         assert_eq!(cmd.command(), "close");
 
         let cmd = InputSystem::handle_event(
-            &win_evt(WindowEvent::DroppedFile(path())),
+            &mut win_evt(WindowEvent::DroppedFile(path())),
             &binding_list,
             &mut state,
         )?
@@ -618,7 +621,7 @@ mod test {
         assert_eq!(cmd.path(0)?, path());
 
         let cmd = InputSystem::handle_event(
-            &win_evt(WindowEvent::Focused(true)),
+            &mut win_evt(WindowEvent::Focused(true)),
             &binding_list,
             &mut state,
         )?
@@ -629,20 +632,23 @@ mod test {
         assert!(cmd.boolean(0)?);
 
         let cmd =
-            InputSystem::handle_event(&dev_evt(DeviceEvent::Added), &binding_list, &mut state)?
+            InputSystem::handle_event(&mut dev_evt(DeviceEvent::Added), &binding_list, &mut state)?
                 .first()
                 .unwrap()
                 .to_owned();
         assert_eq!(cmd.command(), "added");
-        let cmd =
-            InputSystem::handle_event(&dev_evt(DeviceEvent::Removed), &binding_list, &mut state)?
-                .first()
-                .unwrap()
-                .to_owned();
+        let cmd = InputSystem::handle_event(
+            &mut dev_evt(DeviceEvent::Removed),
+            &binding_list,
+            &mut state,
+        )?
+        .first()
+        .unwrap()
+        .to_owned();
         assert_eq!(cmd.command(), "removed");
 
         let cmd = InputSystem::handle_event(
-            &dev_evt(DeviceEvent::MouseMotion { delta: (8., 9.) }),
+            &mut dev_evt(DeviceEvent::MouseMotion { delta: (8., 9.) }),
             &binding_list,
             &mut state,
         )?
@@ -654,7 +660,7 @@ mod test {
         assert_relative_eq!(cmd.displacement(0)?.1, 9f64);
 
         let cmd = InputSystem::handle_event(
-            &dev_evt(DeviceEvent::MouseWheel {
+            &mut dev_evt(DeviceEvent::MouseWheel {
                 delta: MouseScrollDelta::LineDelta(8., 9.),
             }),
             &binding_list,
@@ -686,7 +692,7 @@ mod test {
 
         // FPS forward.
         let cmd = InputSystem::handle_event(
-            &dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::W, true))),
+            &mut dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::W, true))),
             &binding_list,
             &mut state,
         )?
@@ -695,7 +701,7 @@ mod test {
         .to_owned();
         assert_eq!(cmd.command(), "+move-forward");
         let cmd = InputSystem::handle_event(
-            &dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::W, false))),
+            &mut dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::W, false))),
             &binding_list,
             &mut state,
         )?
@@ -706,7 +712,7 @@ mod test {
 
         // Mouse Button + find fire before click.
         let cmd = InputSystem::handle_event(
-            &dev_evt(DeviceEvent::Button {
+            &mut dev_evt(DeviceEvent::Button {
                 button: 0,
                 state: ElementState::Pressed,
             }),
@@ -718,7 +724,7 @@ mod test {
         .to_owned();
         assert_eq!(cmd.command(), "fire");
         let cmd = InputSystem::handle_event(
-            &dev_evt(DeviceEvent::Button {
+            &mut dev_evt(DeviceEvent::Button {
                 button: 0,
                 state: ElementState::Released,
             }),
@@ -729,13 +735,13 @@ mod test {
 
         // Multiple buttons + found shift from LShfit + find eject instead of exit
         let cmd = InputSystem::handle_event(
-            &dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::LShift, true))),
+            &mut dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::LShift, true))),
             &binding_list,
             &mut state,
         )?;
         assert!(cmd.is_empty());
         let cmd = InputSystem::handle_event(
-            &dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::E, true))),
+            &mut dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::E, true))),
             &binding_list,
             &mut state,
         )?
@@ -746,14 +752,14 @@ mod test {
 
         // Let off e, drop fps, then hit again and get the other command
         let cmd = InputSystem::handle_event(
-            &dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::E, false))),
+            &mut dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::E, false))),
             &binding_list,
             &mut state,
         )?;
         assert!(cmd.is_empty());
         binding_list.pop();
         let cmd = InputSystem::handle_event(
-            &dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::E, true))),
+            &mut dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::E, true))),
             &binding_list,
             &mut state,
         )?
@@ -762,7 +768,7 @@ mod test {
         .to_owned();
         assert_eq!(cmd.command(), "exit");
         let cmd = InputSystem::handle_event(
-            &dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::LShift, false))),
+            &mut dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::LShift, false))),
             &binding_list,
             &mut state,
         )?;
@@ -773,7 +779,7 @@ mod test {
         binding_list.push(flight);
 
         let cmd = InputSystem::handle_event(
-            &dev_evt(DeviceEvent::Button {
+            &mut dev_evt(DeviceEvent::Button {
                 button: 0,
                 state: ElementState::Pressed,
             }),
@@ -785,7 +791,7 @@ mod test {
         .to_owned();
         assert_eq!(cmd.command(), "+pickle");
         let cmd = InputSystem::handle_event(
-            &dev_evt(DeviceEvent::Button {
+            &mut dev_evt(DeviceEvent::Button {
                 button: 0,
                 state: ElementState::Released,
             }),

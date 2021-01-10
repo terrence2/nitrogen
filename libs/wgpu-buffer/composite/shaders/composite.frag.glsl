@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 #version 450
+#include <wgpu-buffer/global_data/include/global_data.glsl>
 #include <wgpu-buffer/world/include/world-deferred.glsl>
 #include <wgpu-buffer/ui/include/ui-deferred.glsl>
 
@@ -23,4 +24,5 @@ void main() {
     vec4 world = texture(sampler2D(world_deferred_texture, world_deferred_sampler), v_tc);
     vec4 ui = texture(sampler2D(ui_deferred_texture, ui_deferred_sampler), v_tc);
     f_color = vec4(world.rgb * (1 - ui.a) + ui.rgb * ui.a, 1.0);
+    //f_color = vec4(ui.a, ui.a, ui.a, 1.0);
 }
