@@ -78,7 +78,7 @@ impl TextSpan {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub enum SpanSelection {
     None,
     Cursor { position: usize },

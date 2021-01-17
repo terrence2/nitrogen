@@ -1590,10 +1590,10 @@ impl Precompute {
                 a1 = 0f32;
             }
 
-            assert!(r1 >= 0.0 && r1 <= 1.0);
-            assert!(g1 >= 0.0 && g1 <= 1.0);
-            assert!(b1 >= 0.0 && b1 <= 1.0);
-            assert!(a1 >= 0.0 && a1 <= 1.0);
+            assert!((0.0..=1.0).contains(&r1));
+            assert!((0.0..=1.0).contains(&g1));
+            assert!((0.0..=1.0).contains(&b1));
+            assert!((0.0..=1.0).contains(&a1));
 
             p0.push((r1 * 255f32) as u8);
             p0.push((g1 * 255f32) as u8);

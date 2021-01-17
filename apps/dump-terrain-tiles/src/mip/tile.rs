@@ -93,21 +93,17 @@ impl TileData {
     }
 
     fn is_inline(&self) -> bool {
-        match self {
-            Self::InlineHeights { .. } => true,
-            Self::InlineNormals { .. } => true,
-            Self::InlineColors { .. } => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Self::InlineHeights {..} | Self::InlineNormals {..} | Self::InlineColors {..}
+        )
     }
 
     pub(crate) fn is_mapped(&self) -> bool {
-        match self {
-            Self::MappedHeights { .. } => true,
-            Self::MappedNormals { .. } => true,
-            Self::MappedColors { .. } => true,
-            _ => false,
-        }
+        matches!(
+            self,
+            Self::MappedHeights {..} | Self::MappedNormals {..} | Self::MappedColors {..}
+        )
     }
 
     pub(crate) fn is_empty(&self) -> bool {
