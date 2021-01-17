@@ -11,5 +11,5 @@ wgpu = "^ 0.6"
 gpu = { path = "../../system/gpu" }
 
 [dev-dependencies]
-rand = "^ 0.7"
+rand = "^ 0.8"
 winit = { version = "^ 0.24", features = ["web-sys"] }

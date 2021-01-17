@@ -485,8 +485,8 @@ mod test {
 
         for _ in 0..320 {
             let img = RgbaImage::from_pixel(
-                thread_rng().gen_range(minimum, maximum),
-                thread_rng().gen_range(minimum, maximum),
+                thread_rng().gen_range(minimum..maximum),
+                thread_rng().gen_range(minimum..maximum),
                 *Rgba::from_slice(&[random(), random(), random(), 255]),
             );
             let frame = packer.push_image(&img)?;
