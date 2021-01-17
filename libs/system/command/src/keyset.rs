@@ -274,6 +274,7 @@ impl KeySet {
                 }
                 out = next_out;
             } else {
+                println!("attempting to lookup unknown key name: {}", keyname);
                 warn!("unknown key name: {}", keyname);
             }
         }

@@ -29,10 +29,11 @@ use winit::event::{KeyboardInput, ModifiersState};
 pub struct Terminal {
     edit: Arc<RwLock<LineEdit>>,
     container: Arc<RwLock<VerticalBox>>,
+    visible: bool,
 }
 
 impl Terminal {
-    pub fn new(font_context: &FontContext) -> Arc<RwLock<Self>> {
+    pub fn new(font_context: &FontContext) -> Self {
         let output = TextEdit::new("")
             .with_default_font(font_context.font_id_for_name("mono"))
             .with_default_color(Color::Green)
@@ -48,19 +49,44 @@ impl Terminal {
         let container = VerticalBox::with_children(&[output, edit.clone()])
             .with_background_color(Color::Gray.darken(3.).opacity(0.8))
             .with_width(2.0)
-            .with_height(1.5)
+            .with_height(0.9)
             .wrapped();
         container.write().info_mut().set_glass_background(true);
-        Arc::new(RwLock::new(Self { edit, container }))
+        Self {
+            edit,
+            container,
+            visible: true,
+        }
+    }
+
+    pub fn with_visible(mut self, visible: bool) -> Self {
+        self.visible = visible;
+        self
+    }
+
+    pub fn set_visible(&mut self, visible: bool) {
+        self.visible = visible;
+    }
+
+    pub fn wrapped(self) -> Arc<RwLock<Self>> {
+        Arc::new(RwLock::new(self))
     }
 }
 
 impl Widget for Terminal {
     fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> UploadMetrics {
-        self.container.read().upload(gpu, context)
+        if self.visible {
+            self.container.read().upload(gpu, context)
+        } else {
+            Default::default()
+        }
     }
 
     fn handle_keyboard(&mut self, events: &[(KeyboardInput, ModifiersState)]) -> Fallible<()> {
-        self.edit.write().handle_keyboard(events)
+        if self.visible {
+            self.edit.write().handle_keyboard(events)
+        } else {
+            Ok(())
+        }
     }
 }

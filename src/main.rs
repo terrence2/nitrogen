@@ -100,8 +100,8 @@ fn main() -> Fallible<()> {
     env_logger::init();
 
     let system_bindings = Bindings::new("map")
-        .bind("terrain.toggle_wireframe", "w")?
-        .bind("terrain.toggle_debug_mode", "r")?
+        .bind("world.toggle_wireframe", "w")?
+        .bind("world.toggle_debug_mode", "r")?
         .bind("demo.+target_up_fast", "Shift+Up")?
         .bind("demo.+target_down_fast", "Shift+Down")?
         .bind("demo.+target_up", "Up")?
@@ -111,6 +111,7 @@ fn main() -> Fallible<()> {
         .bind("demo.decrease_exposure", "Shift+LBracket")?
         .bind("demo.increase_exposure", "Shift+RBracket")?
         .bind("demo.pin_view", "p")?
+        .bind("demo.toggle_terminal", "Shift+Grave")?
         .bind("demo.exit", "Escape")?
         .bind("demo.exit", "q")?;
     InputSystem::run_forever(
@@ -197,12 +198,14 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         .add_child(fps_label.clone())
         .set_float(PositionH::Start, PositionV::Bottom);
 
-    let terminal = Terminal::new(frame_graph.widgets.font_context());
+    let terminal = Terminal::new(frame_graph.widgets.font_context())
+        .with_visible(false)
+        .wrapped();
     frame_graph
         .widgets
         .root()
         .write()
-        .add_child(terminal)
+        .add_child(terminal.clone())
         .set_float(PositionH::Start, PositionV::Top);
 
     let mut orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0));
@@ -243,9 +246,13 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     let mut is_camera_pinned = false;
     let mut camera_double = arcball.camera().to_owned();
     let mut target_vec = meters!(0f64);
+    let mut show_terminal = false;
     loop {
         let loop_start = Instant::now();
 
+        frame_graph
+            .widgets
+            .handle_keyboard(&input_controller.poll_keyboard()?)?;
         for command in input_controller.poll_commands()? {
             if InputSystem::is_close_command(&command) || command.full() == "demo.exit" {
                 return Ok(());
@@ -277,6 +284,10 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                     println!("target:  {}", arcball.get_target());
                     is_camera_pinned = !is_camera_pinned
                 }
+                "demo.toggle_terminal" => {
+                    show_terminal = !show_terminal;
+                    terminal.write().set_visible(show_terminal);
+                }
                 // system bindings
                 "window.resize" => {
                     gpu.note_resize(None, &window);
@@ -295,9 +306,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                 _ => trace!("unhandled command: {}", command.full(),),
             }
         }
-        frame_graph
-            .widgets
-            .handle_keyboard(&input_controller.poll_keyboard()?)?;
 
         let mut g = arcball.get_target();
         g.distance += target_vec;
