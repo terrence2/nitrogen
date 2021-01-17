@@ -11,4 +11,4 @@ failure = "^ 0.1.2"
 lazy_static = "^ 1"
 smallvec = "^ 1.4"
 unicase = "^ 2.4"
-winit = "^ 0.23"
+winit = { version = "^ 0.24", features = ["web-sys"] }

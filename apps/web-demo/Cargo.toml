@@ -19,7 +19,7 @@ wasm-bindgen = "^ 0.2"
 wasm-bindgen-futures = "^ 0.4"
 web-sys = "=0.3.39"
 wgpu = "^ 0.6"
-winit = { version = "^ 0.23", features = ["web-sys"] }
+winit = { version = "^ 0.24", features = ["web-sys"] }
 absolute_unit = { path = "../../libs/sim/absolute_unit" }
 camera = { path = "../../libs/sim/camera" }
 command = { path = "../../libs/system/command" }

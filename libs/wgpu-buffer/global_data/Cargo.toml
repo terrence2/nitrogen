@@ -18,7 +18,7 @@ commandable = { path = "../../system/commandable" }
 gpu = { path = "../../system/gpu" }
 
 [dev-dependencies]
-winit = { version = "^ 0.23", features = ["web-sys"] }
+winit = { version = "^ 0.24", features = ["web-sys"] }
 
 [build-dependencies]
 build_shaders = { path = "../../system/build_shaders" }

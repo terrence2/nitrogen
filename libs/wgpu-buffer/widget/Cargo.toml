@@ -13,7 +13,7 @@ ordered-float = "^ 2"
 parking_lot = "^ 0.11"
 smallvec = "^ 1.4"
 wgpu = "^ 0.6"
-winit = { version = "^ 0.23", features = ["web-sys"] }
+winit = { version = "^ 0.24", features = ["web-sys"] }
 zerocopy = "^ 0.3"
 atlas = { path = "../../wgpu-buffer/atlas" }
 command = { path = "../../system/command" }
@@ -22,6 +22,3 @@ font_common = { path = "../../wgpu-buffer/font_common" }
 font_ttf = { path = "../../wgpu-buffer/font_ttf" }
 gpu = { path = "../../system/gpu" }
 shader_shared = { path = "../../wgpu-buffer/shader_shared" }
-
-[dev-dependencies]
-winit = { version = "^ 0.23", features = ["web-sys"] }
