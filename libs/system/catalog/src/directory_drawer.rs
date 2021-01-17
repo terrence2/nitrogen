@@ -24,8 +24,10 @@ use std::{
     ops::Range,
     path::PathBuf,
 };
-use tokio::fs::File as TokioFile;
-use tokio::io::AsyncReadExt;
+use tokio::{
+    fs::File as TokioFile,
+    io::{AsyncReadExt, AsyncSeekExt},
+};
 
 pub struct DirectoryDrawer {
     name: String,

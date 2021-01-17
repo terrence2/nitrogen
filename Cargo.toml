@@ -54,7 +54,7 @@ legion = "= 0.2.4"
 log = "^ 0.4"
 nalgebra = "^ 0.20"
 structopt = "^ 0.2"
-tokio = { version = "^ 0.2", features = ["rt-threaded", "macros", "fs", "sync"] }
+tokio = { version = "^ 1.0", features = ["rt-multi-thread", "macros", "io-util", "fs", "sync"] }
 winit = { version = "^ 0.23", features = ["web-sys"] }
 absolute_unit = { path = "libs/sim/absolute_unit" }
 atmosphere = { path = "libs/wgpu-buffer/atmosphere" }

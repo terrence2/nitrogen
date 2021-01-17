@@ -26,6 +26,7 @@ use absolute_unit::arcseconds;
 use bzip2::read::BzDecoder;
 use catalog::Catalog;
 use failure::{err_msg, Fallible};
+use futures::task::noop_waker;
 use geometry::AABB2;
 use gpu::{texture_format_size, UploadTracker, GPU};
 use image::{ImageBuffer, Rgb};
@@ -36,6 +37,7 @@ use std::{
     num::NonZeroU32,
     ops::Range,
     sync::Arc,
+    task::{Context, Poll},
     time::Instant,
 };
 use tokio::{
@@ -569,7 +571,10 @@ impl TileSet {
 
         // Check for any completed reads.
         let mut reads_ended_count = 0;
-        while let Ok((qtid, data)) = self.tile_receiver.try_recv() {
+        while let Poll::Ready(Some((qtid, data))) = self
+            .tile_receiver
+            .poll_recv(&mut Context::from_waker(&noop_waker()))
+        {
             self.tile_read_count -= 1;
             reads_ended_count += 1;
 
