@@ -74,11 +74,11 @@ impl Terminal {
 }
 
 impl Widget for Terminal {
-    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> UploadMetrics {
+    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Fallible<UploadMetrics> {
         if self.visible {
             self.container.read().upload(gpu, context)
         } else {
-            Default::default()
+            Ok(Default::default())
         }
     }
 

@@ -19,6 +19,7 @@ use crate::{
     SANS_FONT_NAME,
 };
 use atlas::{AtlasPacker, Frame};
+use failure::Fallible;
 use font_common::FontInterface;
 use gpu::{UploadTracker, GPU};
 use image::Luma;
@@ -118,19 +119,19 @@ impl FontContext {
         self.trackers.insert(fid, GlyphTracker::new(font));
     }
 
-    pub fn load_glyph(&mut self, fid: FontId, c: char, scale: f32) -> Frame {
+    pub fn load_glyph(&mut self, fid: FontId, c: char, scale: f32) -> Fallible<Frame> {
         if let Some(frame) = self.trackers[&fid].glyphs.get(&(c, OrderedFloat(scale))) {
-            return *frame;
+            return Ok(*frame);
         }
         // Note: cannot delegate to GlyphTracker because of the second mutable borrow.
         let img = self.trackers[&fid].font.read().render_glyph(c, scale);
-        let frame = self.glyph_sheet.push_image(&img);
+        let frame = self.glyph_sheet.push_image(&img)?;
         self.trackers
             .get_mut(&fid)
             .unwrap()
             .glyphs
             .insert((c, OrderedFloat(scale)), frame);
-        frame
+        Ok(frame)
     }
 
     pub fn font_id_for_name(&self, font_name: &str) -> FontId {
@@ -168,7 +169,7 @@ impl FontContext {
         gpu: &GPU,
         text_pool: &mut Vec<WidgetVertex>,
         background_pool: &mut Vec<WidgetVertex>,
-    ) -> TextSpanMetrics {
+    ) -> Fallible<TextSpanMetrics> {
         let w = self.glyph_sheet_width();
         let h = self.glyph_sheet_height();
 
@@ -198,7 +199,7 @@ impl FontContext {
         let mut x_pos = 0f32;
         let mut prior = None;
         for (i, c) in span.content().chars().enumerate() {
-            let frame = self.load_glyph(span.font(), c, scale_px);
+            let frame = self.load_glyph(span.font(), c, scale_px)?;
             let font = self.get_font(span.font());
             let ((lo_x, lo_y), (hi_x, hi_y)) = font.read().pixel_bounding_box(c, scale_px);
             let lsb = font.read().left_side_bearing(c, scale_px);
@@ -302,11 +303,11 @@ impl FontContext {
             }
         }
 
-        TextSpanMetrics {
+        Ok(TextSpanMetrics {
             width: x_pos * scale_x,
             height: (ascent - descent) * scale_y,
             baseline_height: -descent * scale_y,
-        }
+        })
     }
 }
 

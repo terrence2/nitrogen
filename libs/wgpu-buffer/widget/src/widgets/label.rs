@@ -69,17 +69,17 @@ impl Label {
 }
 
 impl Widget for Label {
-    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> UploadMetrics {
+    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Fallible<UploadMetrics> {
         let info = WidgetInfo::default(); //.with_foreground_color(self.default_color);
         let widget_info_index = context.push_widget(&info);
 
-        let line_metrics = self.line.upload(0f32, widget_info_index, gpu, context);
-        UploadMetrics {
+        let line_metrics = self.line.upload(0f32, widget_info_index, gpu, context)?;
+        Ok(UploadMetrics {
             widget_info_indexes: vec![widget_info_index],
             width: self.width.unwrap_or(line_metrics.width),
             baseline_height: line_metrics.baseline_height,
             height: line_metrics.height,
-        }
+        })
     }
 
     fn handle_keyboard(&mut self, _events: &[(KeyboardInput, ModifiersState)]) -> Fallible<()> {

@@ -101,22 +101,22 @@ impl TextEdit {
 }
 
 impl Widget for TextEdit {
-    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> UploadMetrics {
+    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Fallible<UploadMetrics> {
         let info = WidgetInfo::default();
         let widget_info_index = context.push_widget(&info);
 
         let mut height_offset = 0f32;
         for line in &self.lines {
-            let run_metrics = line.upload(height_offset, widget_info_index, gpu, context);
+            let run_metrics = line.upload(height_offset, widget_info_index, gpu, context)?;
             height_offset += run_metrics.height;
         }
 
-        UploadMetrics {
+        Ok(UploadMetrics {
             widget_info_indexes: vec![widget_info_index],
             width: self.width,
             baseline_height: height_offset,
             height: height_offset,
-        }
+        })
     }
 
     fn handle_keyboard(&mut self, _events: &[(KeyboardInput, ModifiersState)]) -> Fallible<()> {

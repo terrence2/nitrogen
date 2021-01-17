@@ -250,7 +250,7 @@ impl WidgetBuffer {
 
     pub fn make_upload_buffer(&mut self, gpu: &GPU, tracker: &mut UploadTracker) -> Fallible<()> {
         self.paint_context.reset_for_frame();
-        self.root.read().upload(gpu, &mut self.paint_context);
+        self.root.read().upload(gpu, &mut self.paint_context)?;
 
         self.paint_context.font_context.upload(gpu, tracker);
 

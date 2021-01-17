@@ -49,7 +49,7 @@ members = [
 chrono = "^ 0.4"
 env_logger = "^ 0.7"
 failure = "^ 0.1.2"
-image = "^ 0.21"
+image = "^ 0.23"
 legion = "= 0.2.4"
 log = "^ 0.4"
 nalgebra = "^ 0.20"

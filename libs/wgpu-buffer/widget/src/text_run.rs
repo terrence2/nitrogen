@@ -18,6 +18,7 @@ use crate::{
     font_context::{FontId, TextSpanMetrics},
     paint_context::PaintContext,
 };
+use failure::Fallible;
 use gpu::GPU;
 use smallvec::{smallvec, SmallVec};
 use std::{cmp::Ordering, ops::Range};
@@ -386,7 +387,7 @@ impl TextRun {
         widget_info_index: u32,
         gpu: &GPU,
         context: &mut PaintContext,
-    ) -> TextSpanMetrics {
+    ) -> Fallible<TextSpanMetrics> {
         let mut total_width = 0f32;
         let mut max_height = 0f32;
         let mut max_baseline = 0f32;
@@ -404,7 +405,7 @@ impl TextRun {
                 widget_info_index,
                 selection_area,
                 gpu,
-            );
+            )?;
             total_width += span_metrics.width;
 
             // FIXME: need to be able to offset height by line.
@@ -416,11 +417,11 @@ impl TextRun {
             max_height = max_height.max(span_metrics.height + line_gap);
             max_baseline = max_baseline.max(span_metrics.baseline_height);
         }
-        TextSpanMetrics {
+        Ok(TextSpanMetrics {
             width: total_width,
             baseline_height: max_baseline,
             height: max_height,
-        }
+        })
     }
 }
 

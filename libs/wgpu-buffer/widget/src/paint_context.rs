@@ -18,6 +18,7 @@ use crate::{
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
 };
+use failure::Fallible;
 use font_common::FontInterface;
 use gpu::GPU;
 use parking_lot::RwLock;
@@ -83,7 +84,7 @@ impl PaintContext {
         widget_info_index: u32,
         selection_area: SpanSelection,
         gpu: &GPU,
-    ) -> TextSpanMetrics {
+    ) -> Fallible<TextSpanMetrics> {
         self.font_context.layout_text(
             span,
             widget_info_index,
