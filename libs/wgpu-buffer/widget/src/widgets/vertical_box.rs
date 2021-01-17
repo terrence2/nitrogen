@@ -90,7 +90,7 @@ impl VerticalBox {
 }
 
 impl Widget for VerticalBox {
-    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> UploadMetrics {
+    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Fallible<UploadMetrics> {
         let widget_info_index = context.push_widget(&self.info);
         let mut widget_info_indexes = vec![widget_info_index];
 
@@ -98,7 +98,7 @@ impl Widget for VerticalBox {
         let mut height = 0f32;
         context.current_depth += PaintContext::BOX_DEPTH_SIZE;
         for pack in &self.children {
-            let mut child_metrics = pack.widget().read().upload(gpu, context);
+            let mut child_metrics = pack.widget().read().upload(gpu, context)?;
 
             // Offset children by our current box offset.
             for &widget_info_index in &child_metrics.widget_info_indexes {
@@ -149,12 +149,12 @@ impl Widget for VerticalBox {
         context.background_pool.push(v01);
         context.background_pool.push(v11);
 
-        UploadMetrics {
+        Ok(UploadMetrics {
             widget_info_indexes,
             width,
             baseline_height: height,
             height,
-        }
+        })
     }
 
     fn handle_keyboard(&mut self, events: &[(KeyboardInput, ModifiersState)]) -> Fallible<()> {

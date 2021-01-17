@@ -25,7 +25,7 @@ use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
 use gpu::{make_frame_graph, GPU};
 use input::{InputController, InputSystem};
-use legion::prelude::*;
+use legion::world::World;
 use log::trace;
 use nalgebra::convert;
 use orrery::Orrery;

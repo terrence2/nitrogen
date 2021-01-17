@@ -8,7 +8,7 @@ edition = "2018"
 log = "^ 0.4"
 failure = "^ 0.1.2"
 smallvec = "^ 1.4"
-winit = { version = "^ 0.23", features = ["web-sys"] }
+winit = { version = "^ 0.24", features = ["web-sys"] }
 command = { path = "../../system/command" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -18,4 +18,4 @@ web-sys = "=0.3.39"
 futures = "^ 0.3"
 
 [dev-dependencies]
-approx = "^ 0.3"
+approx = "^ 0.4"

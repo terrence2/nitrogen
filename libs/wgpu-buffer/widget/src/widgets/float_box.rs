@@ -84,11 +84,11 @@ impl FloatBox {
 
 impl Widget for FloatBox {
     // FIXME: use widget info for depth instead of vertices; save some upload bandwidth.
-    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> UploadMetrics {
+    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Fallible<UploadMetrics> {
         let mut widget_info_indexes = Vec::with_capacity(self.children.len());
         for pack in &self.children {
             let widget = pack.widget.read();
-            let mut child_metrics = widget.upload(gpu, context);
+            let mut child_metrics = widget.upload(gpu, context)?;
 
             // Apply float to child.
             let x_offset = match pack.float_h {
@@ -108,12 +108,12 @@ impl Widget for FloatBox {
 
             widget_info_indexes.append(&mut child_metrics.widget_info_indexes);
         }
-        UploadMetrics {
+        Ok(UploadMetrics {
             widget_info_indexes,
             width: 2f32,
             height: 2f32,
             baseline_height: 2f32,
-        }
+        })
     }
 
     fn handle_keyboard(&mut self, events: &[(KeyboardInput, ModifiersState)]) -> Fallible<()> {

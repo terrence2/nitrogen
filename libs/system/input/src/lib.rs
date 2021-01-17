@@ -16,11 +16,10 @@ use command::{BindingState, Bindings, Command, Key};
 use failure::{bail, Fallible};
 use smallvec::{smallvec, SmallVec};
 use std::sync::mpsc::{channel, Receiver, TryRecvError};
-use winit::event::ModifiersState;
 use winit::{
     event::{
-        DeviceEvent, DeviceId, ElementState, Event, KeyboardInput, MouseScrollDelta, StartCause,
-        VirtualKeyCode, WindowEvent,
+        DeviceEvent, DeviceId, ElementState, Event, KeyboardInput, ModifiersState,
+        MouseScrollDelta, StartCause, VirtualKeyCode, WindowEvent,
     },
     event_loop::{ControlFlow, EventLoop, EventLoopProxy},
     window::{Window, WindowBuilder},
@@ -492,13 +491,13 @@ impl InputSystem {
         };
 
         if virtual_key.is_some() {
-            debug_assert_eq!(virtual_key, discovered);
             if virtual_key != discovered {
                 println!(
                     "Warning: broken scancode map for: {}; got virtual: {:?}; expected: {:?}",
                     scancode, discovered, virtual_key
                 );
             }
+            debug_assert_eq!(virtual_key, discovered);
             return virtual_key;
         }
 
@@ -558,17 +557,33 @@ mod test {
         }
     }
 
-    fn vkey(key: VirtualKeyCode, state: bool) -> KeyboardInput {
+    fn key(scancode: u32, key: VirtualKeyCode, state: bool) -> Event<'static, MetaEvent> {
+        win_evt(wkey(scancode, key, state))
+    }
+
+    fn wkey(scancode: u32, key: VirtualKeyCode, state: bool) -> WindowEvent<'static> {
+        WindowEvent::KeyboardInput {
+            device_id: unsafe { DeviceId::dummy() },
+            input: vkey(scancode, key, state),
+            is_synthetic: true,
+        }
+    }
+
+    fn vkey(scancode: u32, key: VirtualKeyCode, state: bool) -> KeyboardInput {
         #[allow(deprecated)]
         KeyboardInput {
-            scancode: 0,
+            scancode,
             virtual_keycode: Some(key),
             state: if state {
                 ElementState::Pressed
             } else {
                 ElementState::Released
             },
-            modifiers: ModifiersState::empty(),
+            modifiers: if key == VirtualKeyCode::LShift && state {
+                ModifiersState::SHIFT
+            } else {
+                ModifiersState::empty()
+            },
         }
     }
 
@@ -680,19 +695,24 @@ mod test {
     fn test_can_handle_nested_events() -> Fallible<()> {
         let menu = Bindings::new("menu")
             .bind("menu.+enter", "alt")?
-            .bind("menu.exit", "shift+e")?
+            .bind("menu.exit", "q+e")?
             .bind("menu.click", "mouse0")?;
         let fps = Bindings::new("fps")
             .bind("player.+move-forward", "w")?
-            .bind("player.eject", "shift+e")?
+            .bind("player.eject", "q+e")?
             .bind("player.fire", "mouse0")?;
 
         let mut binding_list = vec![menu, fps];
         let mut state = Default::default();
 
         // FPS forward.
+        InputSystem::handle_event(
+            &mut dev_evt(DeviceEvent::Key(vkey(17, VirtualKeyCode::W, true))),
+            &binding_list,
+            &mut state,
+        )?;
         let cmd = InputSystem::handle_event(
-            &mut dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::W, true))),
+            &mut key(17, VirtualKeyCode::W, true),
             &binding_list,
             &mut state,
         )?
@@ -700,8 +720,13 @@ mod test {
         .unwrap()
         .to_owned();
         assert_eq!(cmd.command(), "+move-forward");
+        InputSystem::handle_event(
+            &mut dev_evt(DeviceEvent::Key(vkey(17, VirtualKeyCode::W, false))),
+            &binding_list,
+            &mut state,
+        )?;
         let cmd = InputSystem::handle_event(
-            &mut dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::W, false))),
+            &mut key(17, VirtualKeyCode::W, false),
             &binding_list,
             &mut state,
         )?
@@ -734,14 +759,24 @@ mod test {
         assert!(cmd.is_empty());
 
         // Multiple buttons + found shift from LShfit + find eject instead of exit
+        InputSystem::handle_event(
+            &mut dev_evt(DeviceEvent::Key(vkey(16, VirtualKeyCode::Q, true))),
+            &binding_list,
+            &mut state,
+        )?;
         let cmd = InputSystem::handle_event(
-            &mut dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::LShift, true))),
+            &mut key(16, VirtualKeyCode::Q, true),
             &binding_list,
             &mut state,
         )?;
         assert!(cmd.is_empty());
+        InputSystem::handle_event(
+            &mut dev_evt(DeviceEvent::Key(vkey(18, VirtualKeyCode::E, true))),
+            &binding_list,
+            &mut state,
+        )?;
         let cmd = InputSystem::handle_event(
-            &mut dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::E, true))),
+            &mut key(18, VirtualKeyCode::E, true),
             &binding_list,
             &mut state,
         )?
@@ -752,14 +787,14 @@ mod test {
 
         // Let off e, drop fps, then hit again and get the other command
         let cmd = InputSystem::handle_event(
-            &mut dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::E, false))),
+            &mut key(18, VirtualKeyCode::E, false),
             &binding_list,
             &mut state,
         )?;
         assert!(cmd.is_empty());
         binding_list.pop();
         let cmd = InputSystem::handle_event(
-            &mut dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::E, true))),
+            &mut key(18, VirtualKeyCode::E, true),
             &binding_list,
             &mut state,
         )?
@@ -768,7 +803,7 @@ mod test {
         .to_owned();
         assert_eq!(cmd.command(), "exit");
         let cmd = InputSystem::handle_event(
-            &mut dev_evt(DeviceEvent::Key(vkey(VirtualKeyCode::LShift, false))),
+            &mut key(16, VirtualKeyCode::Q, false),
             &binding_list,
             &mut state,
         )?;

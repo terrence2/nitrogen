@@ -157,7 +157,7 @@ mod test {
     use crate::{UploadTracker, GPU};
     use commandable::{commandable, Commandable};
     use failure::Fallible;
-    use legion::prelude::*;
+    use legion::*;
     use std::cell::RefCell;
     use winit::{event_loop::EventLoop, window::Window};
 

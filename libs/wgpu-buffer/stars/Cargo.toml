@@ -5,12 +5,12 @@ authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-approx = "^ 0.3"
+approx = "^ 0.4"
 bitflags = ">= 1.0"
 failure = "^ 0.1.2"
 lazy_static = "^ 1"
 log = "^ 0.4"
-nalgebra = "^ 0.20"
+nalgebra = "^ 0.24"
 static_assertions = "^ 1"
 wgpu = "^ 0.6"
 zerocopy = "^ 0.3"
@@ -27,7 +27,7 @@ fullscreen = { path = "../../wgpu-buffer/fullscreen" }
 geodesy = { path = "../../sim/geodesy" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 input = { path = "../../system/input" }
-winit = { version = "^ 0.23", features = ["web-sys"] }
+winit = { version = "^ 0.24", features = ["web-sys"] }
 
 [build-dependencies]
 build_shaders = { path = "../../system/build_shaders" }

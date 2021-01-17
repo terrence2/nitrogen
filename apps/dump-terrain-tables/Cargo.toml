@@ -6,6 +6,6 @@ edition = "2018"
 
 [dependencies]
 failure = "^ 0.1.2"
-nalgebra = "^ 0.18"
+nalgebra = "^ 0.24"
 structopt = "^ 0.3"
 

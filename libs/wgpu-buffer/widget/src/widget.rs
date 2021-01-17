@@ -26,6 +26,6 @@ pub struct UploadMetrics {
 }
 
 pub trait Widget {
-    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> UploadMetrics;
+    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Fallible<UploadMetrics>;
     fn handle_keyboard(&mut self, events: &[(KeyboardInput, ModifiersState)]) -> Fallible<()>;
 }

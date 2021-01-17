@@ -6,21 +6,22 @@ authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-approx = "^ 0.3"
+approx = "^ 0.4"
 bzip2 = "^ 0.4"
 backtrace = "^ 0.3"
 failure = "^ 0.1.2"
 float-ord = "^ 0.2"
+futures = "^ 0.3"
 fxhash = "^ 0.2"
-image = "^ 0.21"
+image = "^ 0.23"
 json = "^ 0.12"
 lazy_static = "^ 1"
 log = "^ 0.4"
-memoffset = "^ 0.5"
-nalgebra = "^ 0.20"
+memoffset = "^ 0.6"
+nalgebra = "^ 0.24"
 smallvec = "^ 1.4"
 static_assertions = "^ 1"
-tokio = { version = "^ 0.2", features = ["rt-threaded", "macros", "fs", "sync"] }
+tokio = { version = "^ 1.0", features = ["rt-multi-thread", "macros", "io-util", "fs", "sync"] }
 wgpu = "^ 0.6"
 zerocopy = "^ 0.3"
 absolute_unit = { path = "../../sim/absolute_unit" }

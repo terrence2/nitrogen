@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-
+use failure::Fallible;
 use gpu::{texture_format_component_type, texture_format_size, UploadTracker, GPU};
 use image::{GenericImage, ImageBuffer, Pixel};
 use std::{mem, sync::Arc};
@@ -195,7 +195,7 @@ where
         self
     }
 
-    pub fn push_image(&mut self, image: &ImageBuffer<P, Vec<P::Subpixel>>) -> Frame {
+    pub fn push_image(&mut self, image: &ImageBuffer<P, Vec<P::Subpixel>>) -> Fallible<Frame> {
         let w = image.width() + self.padding;
         let h = image.height() + self.padding;
         assert!(w < self.initial_width);
@@ -235,9 +235,9 @@ where
 
         self.assert_column_constraints();
 
-        if let Some((x, y)) = position {
+        Ok(if let Some((x, y)) = position {
             self.mark_dirty_region(x, y, w + self.padding, h + self.padding);
-            self.blit(image, x + self.padding, y + self.padding);
+            self.blit(image, x + self.padding, y + self.padding)?;
             Frame::new(
                 x + self.padding,
                 y + self.padding,
@@ -248,9 +248,9 @@ where
             )
         } else {
             // Did not find room in this image, try the next one.
-            self.grow();
-            self.push_image(image)
-        }
+            self.grow()?;
+            self.push_image(image)?
+        })
     }
 
     fn mark_dirty_region(&mut self, x: u32, y: u32, w: u32, h: u32) {
@@ -423,7 +423,7 @@ where
         (self.texture_view, self.sampler)
     }
 
-    fn grow(&mut self) {
+    fn grow(&mut self) -> Fallible<()> {
         // panic!("Cannot safely grow");
         self.width += self.initial_width;
         self.height += self.initial_height;
@@ -432,14 +432,16 @@ where
             self.height,
             self.fill_color,
         );
-        next_buffer.copy_from(&self.buffer, 0, 0);
+        next_buffer.copy_from(&self.buffer, 0, 0)?;
         self.dirty_region =
             DirtyState::RecreateTexture((self.buffer.width(), self.buffer.height()));
         self.buffer = next_buffer;
+        Ok(())
     }
 
-    fn blit(&mut self, other: &ImageBuffer<P, Vec<P::Subpixel>>, x: u32, y: u32) {
-        self.buffer.copy_from(other, x, y);
+    fn blit(&mut self, other: &ImageBuffer<P, Vec<P::Subpixel>>, x: u32, y: u32) -> Fallible<()> {
+        self.buffer.copy_from(other, x, y)?;
+        Ok(())
     }
 
     fn assert_column_constraints(&self) {
@@ -463,7 +465,7 @@ mod test {
 
     #[cfg(unix)]
     #[test]
-    fn test_random_packing() {
+    fn test_random_packing() -> Fallible<()> {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
@@ -483,11 +485,11 @@ mod test {
 
         for _ in 0..320 {
             let img = RgbaImage::from_pixel(
-                thread_rng().gen_range(minimum, maximum),
-                thread_rng().gen_range(minimum, maximum),
+                thread_rng().gen_range(minimum..maximum),
+                thread_rng().gen_range(minimum..maximum),
                 *Rgba::from_slice(&[random(), random(), random(), 255]),
             );
-            let frame = packer.push_image(&img);
+            let frame = packer.push_image(&img)?;
             let w = packer.width();
             let h = packer.height();
             // Frame edges should keep these from ever being full.
@@ -509,11 +511,12 @@ mod test {
                 .save("../../../__dump__/test_atlas_random_packing.png")
                 .unwrap();
         }
+        Ok(())
     }
 
     #[cfg(unix)]
     #[test]
-    fn test_finish() {
+    fn test_finish() -> Fallible<()> {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
@@ -532,7 +535,7 @@ mod test {
             254,
             254,
             *Rgba::from_slice(&[255, 0, 0, 255]),
-        ));
+        ))?;
         if env::var("DUMP") == Ok("1".to_owned()) {
             packer
                 .buffer()
@@ -541,11 +544,12 @@ mod test {
         }
 
         let _ = packer.finish(&gpu, &mut Default::default());
+        Ok(())
     }
 
     #[cfg(unix)]
     #[test]
-    fn test_incremental_upload() {
+    fn test_incremental_upload() -> Fallible<()> {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
@@ -566,7 +570,7 @@ mod test {
             254,
             254,
             *Rgba::from_slice(&[255, 0, 0, 255]),
-        ));
+        ))?;
         packer.upload(&gpu, &mut Default::default());
         let _ = packer.texture();
 
@@ -575,7 +579,7 @@ mod test {
             24,
             254,
             *Rgba::from_slice(&[255, 0, 0, 255]),
-        ));
+        ))?;
         packer.upload(&gpu, &mut Default::default());
         let _ = packer.texture();
 
@@ -584,9 +588,10 @@ mod test {
             24,
             254,
             *Rgba::from_slice(&[255, 0, 0, 255]),
-        ));
+        ))?;
         packer.upload(&gpu, &mut Default::default());
         let _ = packer.texture();
+        Ok(())
     }
 
     #[cfg(unix)]
@@ -608,7 +613,7 @@ mod test {
             wgpu::FilterMode::Linear,
         );
         let img = RgbaImage::from_pixel(255, 24, *Rgba::from_slice(&[255, 0, 0, 1]));
-        packer.push_image(&img);
+        packer.push_image(&img).unwrap();
     }
 
     #[cfg(unix)]
@@ -630,6 +635,6 @@ mod test {
             wgpu::FilterMode::Linear,
         );
         let img = RgbaImage::from_pixel(24, 255, *Rgba::from_slice(&[255, 0, 0, 1]));
-        packer.push_image(&img);
+        packer.push_image(&img).unwrap();
     }
 }
