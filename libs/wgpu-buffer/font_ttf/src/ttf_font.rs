@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use failure::Fallible;
+use failure::{err_msg, Fallible};
 use font_common::FontInterface;
 use image::{GrayImage, Luma};
 use parking_lot::RwLock;
@@ -107,7 +107,8 @@ impl FontInterface for TtfFont {
 impl TtfFont {
     pub fn from_bytes(bytes: &'static [u8]) -> Fallible<Arc<RwLock<dyn FontInterface>>> {
         Ok(Arc::new(RwLock::new(Self {
-            font: Font::from_bytes(bytes)?,
+            font: Font::try_from_bytes(bytes)
+                .ok_or_else(|| err_msg("failed to load font from bytes"))?,
         })))
     }
 }

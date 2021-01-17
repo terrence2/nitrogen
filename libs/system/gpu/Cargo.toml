@@ -9,7 +9,7 @@ failure = "^ 0.1.2"
 futures = "^ 0.3"
 legion = "= 0.2.4"
 log = "^ 0.4"
-raw-window-handle = "0.1"
+raw-window-handle = "^ 0.3"
 tokio = { version = "^ 1.0", features = ["rt-multi-thread", "macros", "io-util", "fs", "sync"] }
 zerocopy = "^ 0.3"
 wgpu = "^ 0.6"
