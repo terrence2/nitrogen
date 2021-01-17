@@ -6,4 +6,4 @@ edition = "2018"
 
 [dependencies]
 legion = "= 0.2.4"
-nalgebra = "^ 0.20"
+nalgebra = "^ 0.24"

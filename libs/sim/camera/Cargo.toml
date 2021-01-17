@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 failure = "^ 0.1.2"
 log = ">= 0.4"
-nalgebra = "^ 0.20"
+nalgebra = "^ 0.24"
 num = "^ 0.3"
 absolute_unit = { path = "../../sim/absolute_unit" }
 geometry = { path = "../../sim/geometry" }
@@ -15,5 +15,5 @@ geodesy = { path = "../../sim/geodesy" }
 command = { path = "../../system/command" }
 
 [dev-dependencies]
-approx = "^ 0.3"
+approx = "^ 0.4"
 physical_constants = { path = "../../sim/physical_constants" }

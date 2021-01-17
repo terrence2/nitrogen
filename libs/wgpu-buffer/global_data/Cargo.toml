@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 failure = "^ 0.1.2"
 log = "^ 0.4"
-nalgebra = "^ 0.20"
+nalgebra = "^ 0.24"
 wgpu = "^ 0.6"
 zerocopy = "^ 0.3"
 absolute_unit = { path = "../../sim/absolute_unit" }

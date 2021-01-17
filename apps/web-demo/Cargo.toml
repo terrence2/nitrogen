@@ -8,7 +8,7 @@ edition = "2018"
 crate-type = ["cdylib"]
 
 [dependencies]
-approx = "^ 0.3"
+approx = "^ 0.4"
 console_error_panic_hook = "^ 0.1"
 failure = "^ 0.1.2"
 legion = "= 0.2.4"
