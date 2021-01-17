@@ -66,6 +66,7 @@ pub struct GPU {
     scale_factor: f64,
     physical_size: PhysicalSize<u32>,
     logical_size: LogicalSize<f64>,
+    frame_count: usize,
 }
 
 impl GPU {
@@ -90,6 +91,10 @@ impl GPU {
 
     pub fn physical_size(&self) -> PhysicalSize<u32> {
         self.physical_size
+    }
+
+    pub fn frame_count(&self) -> usize {
+        self.frame_count
     }
 
     pub fn new(window: &Window, config: GPUConfig) -> Fallible<Self> {
@@ -147,6 +152,7 @@ impl GPU {
             scale_factor,
             physical_size,
             logical_size,
+            frame_count: 0,
         })
     }
 
@@ -203,6 +209,7 @@ impl GPU {
     }
 
     pub fn get_next_framebuffer(&mut self) -> Fallible<Option<wgpu::SwapChainFrame>> {
+        self.frame_count += 1;
         match self.swap_chain.get_current_frame() {
             Ok(frame) => Ok(Some(frame)),
             Err(wgpu::SwapChainError::Timeout) => bail!("Timeout: gpu is locked up"),

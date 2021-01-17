@@ -12,7 +12,12 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{paint_context::SpanLayoutContext, widget_vertex::WidgetVertex, SANS_FONT_NAME};
+use crate::{
+    color::Color,
+    text_run::{SpanSelection, TextSpan},
+    widget_vertex::WidgetVertex,
+    SANS_FONT_NAME,
+};
 use atlas::{AtlasPacker, Frame};
 use font_common::FontInterface;
 use gpu::{UploadTracker, GPU};
@@ -153,9 +158,13 @@ impl FontContext {
     const GNOME_DPI: f32 = 96.0;
     const GNOME_SCALE_FACTOR: f32 = Self::TTF_FONT_DPI / Self::GNOME_DPI;
 
+    #[allow(clippy::too_many_arguments)]
     pub fn layout_text(
         &mut self,
-        span: SpanLayoutContext,
+        span: &TextSpan,
+        widget_info_index: u32,
+        offset: [f32; 3],
+        selection_area: SpanSelection,
         gpu: &GPU,
         text_pool: &mut Vec<WidgetVertex>,
         background_pool: &mut Vec<WidgetVertex>,
@@ -163,12 +172,14 @@ impl FontContext {
         let w = self.glyph_sheet_width();
         let h = self.glyph_sheet_height();
 
-        let px_scaling = if span.size_pts <= 12.0 { 4.0 } else { 2.0 };
+        let phys_w = gpu.physical_size().width as f32;
+
+        let px_scaling = if span.size_pts() <= 12.0 { 4.0 } else { 2.0 };
 
         // Use ttf standard formula to adjust scale by pts to figure out base rendering size.
         // Note that we add some extra scaling and use linear filtering to help account for
         // our lack of sub-pixel and pixel alignment techniques.
-        let scale_px = px_scaling * span.size_pts * gpu.scale_factor() as f32;
+        let scale_px = px_scaling * span.size_pts() * gpu.scale_factor() as f32;
 
         // We used guess_dpi to project from logical to physical pixels for rendering, so scale
         // vertices proportional to physical size for vertex layout. Note that the extra factor of
@@ -180,16 +191,16 @@ impl FontContext {
 
         // Font rendering is based around the baseline. We want it based around the top-left
         // corner instead, so move down by the ascent.
-        let font = self.get_font(span.font_id);
+        let font = self.get_font(span.font());
         let descent = font.read().descent(scale_px);
         let ascent = font.read().ascent(scale_px);
 
-        let mut offset = 0f32;
+        let mut x_pos = 0f32;
         let mut prior = None;
-        for (i, c) in span.span.chars().enumerate() {
-            let frame = self.load_glyph(span.font_id, c, scale_px);
-            let font = self.get_font(span.font_id);
-            let ((lo_x, lo_y), (hi_x, hi_y)) = font.read().exact_bounding_box(c, scale_px);
+        for (i, c) in span.content().chars().enumerate() {
+            let frame = self.load_glyph(span.font(), c, scale_px);
+            let font = self.get_font(span.font());
+            let ((lo_x, lo_y), (hi_x, hi_y)) = font.read().pixel_bounding_box(c, scale_px);
             let lsb = font.read().left_side_bearing(c, scale_px);
             let adv = font.read().advance_width(c, scale_px);
             let kerning = prior
@@ -197,127 +208,102 @@ impl FontContext {
                 .unwrap_or(0f32);
             prior = Some(c);
 
-            // Layout from 0-> and let our transform put us in the right spot.
-            let x0 = span.offset[0] + (offset + kerning + lo_x) * scale_x;
-            let x1 = span.offset[0] + (offset + kerning + hi_x) * scale_x;
-            let y0 = span.offset[1] - (hi_y + ascent) * scale_y;
-            let y1 = span.offset[1] - (lo_y + ascent) * scale_y;
-            let z = span.offset[2];
+            x_pos += kerning;
+            x_pos = (x_pos * phys_w).floor() / phys_w;
+
+            let px0 = x_pos + lo_x as f32;
+            let px1 = x_pos + hi_x as f32;
+            let mut x0 = offset[0] + px0 * scale_x;
+            let mut x1 = offset[0] + px1 * scale_x;
+            x0 = (x0 * phys_w).floor() / phys_w;
+            x1 = (x1 * phys_w).floor() / phys_w;
+
+            let y0 = offset[1] - (hi_y as f32 + ascent) * scale_y;
+            let y1 = offset[1] - (lo_y as f32 + ascent) * scale_y;
+            let z = offset[2];
 
             let s0 = frame.s0(w);
             let s1 = frame.s1(w);
             let t0 = frame.t0(h);
             let t1 = frame.t1(h);
 
-            // Build 4 corner vertices.
-            let v00 = WidgetVertex {
-                position: [x0, y0, z],
-                tex_coord: [s0, t0],
-                widget_info_index: span.widget_info_index,
-            };
-            let v01 = WidgetVertex {
-                position: [x0, y1, z],
-                tex_coord: [s0, t1],
-                widget_info_index: span.widget_info_index,
-            };
-            let v10 = WidgetVertex {
-                position: [x1, y0, z],
-                tex_coord: [s1, t0],
-                widget_info_index: span.widget_info_index,
-            };
-            let v11 = WidgetVertex {
-                position: [x1, y1, z],
-                tex_coord: [s1, t1],
-                widget_info_index: span.widget_info_index,
-            };
-
-            // Push 2 triangles
-            text_pool.push(v00);
-            text_pool.push(v10);
-            text_pool.push(v01);
-            text_pool.push(v01);
-            text_pool.push(v10);
-            text_pool.push(v11);
+            WidgetVertex::push_textured_quad(
+                [x0, y0],
+                [x1, y1],
+                z,
+                [s0, t0],
+                [s1, t1],
+                span.color(),
+                widget_info_index,
+                text_pool,
+            );
 
             // Apply cursor or selection
-            if let Some(area) = &span.selection_area {
-                if area.start == i && area.is_empty() {
-                    // Draw cursor
-                    let bx0 = span.offset[0] + offset * scale_x;
-                    let bx1 = span.offset[0] + (offset + 2.) * scale_x;
-                    let by0 = span.offset[1];
-                    let by1 = span.offset[1] - (ascent + descent) * scale_y;
-                    let bz = span.offset[2] + 0.1;
-                    let bv00 = WidgetVertex {
-                        position: [bx0, by0, bz],
-                        tex_coord: [0.0, 0.0],
-                        widget_info_index: span.widget_info_index,
-                    };
-                    let bv01 = WidgetVertex {
-                        position: [bx0, by1, bz],
-                        tex_coord: [0.0, 0.0],
-                        widget_info_index: span.widget_info_index,
-                    };
-                    let bv10 = WidgetVertex {
-                        position: [bx1, by0, bz],
-                        tex_coord: [0.0, 0.0],
-                        widget_info_index: span.widget_info_index,
-                    };
-                    let bv11 = WidgetVertex {
-                        position: [bx1, by1, bz],
-                        tex_coord: [0.0, 0.0],
-                        widget_info_index: span.widget_info_index,
-                    };
+            if let SpanSelection::Cursor { position } = selection_area {
+                if i == position {
+                    // Draw cursor, pixel aligned.
+                    let mut bx0 = offset[0] + x_pos * scale_x;
+                    bx0 = (bx0 * phys_w).floor() / phys_w;
+                    let bx1 = bx0 + px_scaling / gpu.physical_size().width as f32;
+                    let by0 = offset[1] + (descent - ascent) * scale_y;
+                    let by1 = offset[1];
+                    let bz = offset[2] - 0.1;
 
-                    // Draw selection over item
-                    background_pool.push(bv00);
-                    background_pool.push(bv10);
-                    background_pool.push(bv01);
-                    background_pool.push(bv01);
-                    background_pool.push(bv10);
-                    background_pool.push(bv11);
-                } else if area.contains(&i) {
-                    let bx0 = span.offset[0] + offset * scale_x;
-                    let bx1 = span.offset[0] + (offset + kerning + hi_x) * scale_x;
-                    let by1 = span.offset[1];
-                    let by0 = span.offset[1] - (ascent + descent) * scale_y;
-                    let bz = span.offset[2] - 0.1;
-                    let bv00 = WidgetVertex {
-                        position: [bx0, by0, bz],
-                        tex_coord: [0.0, 0.0],
-                        widget_info_index: span.widget_info_index,
-                    };
-                    let bv01 = WidgetVertex {
-                        position: [bx0, by1, bz],
-                        tex_coord: [0.0, 0.0],
-                        widget_info_index: span.widget_info_index,
-                    };
-                    let bv10 = WidgetVertex {
-                        position: [bx1, by0, bz],
-                        tex_coord: [0.0, 0.0],
-                        widget_info_index: span.widget_info_index,
-                    };
-                    let bv11 = WidgetVertex {
-                        position: [bx1, by1, bz],
-                        tex_coord: [0.0, 0.0],
-                        widget_info_index: span.widget_info_index,
-                    };
+                    WidgetVertex::push_quad(
+                        [bx0, by0],
+                        [bx1, by1],
+                        bz,
+                        &Color::White,
+                        widget_info_index,
+                        background_pool,
+                    );
+                }
+            }
+            if let SpanSelection::Select { range } = &selection_area {
+                if range.contains(&i) {
+                    let bx0 = offset[0] + x_pos * scale_x;
+                    let bx1 = offset[0] + (x_pos + kerning + lo_x as f32 + adv) * scale_x;
+                    let by0 = offset[1] + (descent - ascent) * scale_y;
+                    let by1 = offset[1];
+                    let bz = offset[2] - 0.1;
 
-                    // Draw selection over item
-                    background_pool.push(bv00);
-                    background_pool.push(bv10);
-                    background_pool.push(bv01);
-                    background_pool.push(bv01);
-                    background_pool.push(bv10);
-                    background_pool.push(bv11);
+                    WidgetVertex::push_quad(
+                        [bx0, by0],
+                        [bx1, by1],
+                        bz,
+                        &Color::Blue,
+                        widget_info_index,
+                        background_pool,
+                    );
                 }
             }
 
-            offset += adv - lsb;
+            x_pos += adv - lsb;
+        }
+
+        if let SpanSelection::Cursor { position } = selection_area {
+            if position == span.content().len() {
+                // Draw cursor, pixel aligned.
+                let mut bx0 = offset[0] + x_pos * scale_x;
+                bx0 = (bx0 * phys_w).floor() / phys_w;
+                let bx1 = bx0 + px_scaling / gpu.physical_size().width as f32;
+                let by0 = offset[1] + (descent - ascent) * scale_y;
+                let by1 = offset[1];
+                let bz = offset[2] - 0.1;
+
+                WidgetVertex::push_quad(
+                    [bx0, by0],
+                    [bx1, by1],
+                    bz,
+                    &Color::White,
+                    widget_info_index,
+                    background_pool,
+                );
+            }
         }
 
         TextSpanMetrics {
-            width: offset * scale_x,
+            width: x_pos * scale_x,
             height: (ascent - descent) * scale_y,
             baseline_height: -descent * scale_y,
         }

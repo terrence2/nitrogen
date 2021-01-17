@@ -12,7 +12,6 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::color::Color;
 use zerocopy::{AsBytes, FromBytes};
 
 /// Stored on the GPU, one per widget. Widget vertices reference one of these slots so that
@@ -20,9 +19,6 @@ use zerocopy::{AsBytes, FromBytes};
 #[repr(C)]
 #[derive(AsBytes, FromBytes, Copy, Clone, Debug, Default)]
 pub struct WidgetInfo {
-    foreground_color: [f32; 4],
-    background_color: [f32; 4],
-    border_color: [f32; 4],
     pub position: [f32; 4],
     flags: [u32; 4],
 }
@@ -30,28 +26,6 @@ pub struct WidgetInfo {
 const GLASS_BACKGROUND: u32 = 0x0000_0001;
 
 impl WidgetInfo {
-    pub fn background_color(&self) -> &[f32; 4] {
-        &self.background_color
-    }
-
-    pub fn with_foreground_color(mut self, color: Color) -> Self {
-        self.foreground_color = color.to_f32_array();
-        self
-    }
-
-    pub fn with_background_color(mut self, color: Color) -> Self {
-        self.background_color = color.to_f32_array();
-        self
-    }
-
-    pub fn set_foreground_color(&mut self, color: Color) {
-        self.foreground_color = color.to_f32_array();
-    }
-
-    pub fn set_background_color(&mut self, color: Color) {
-        self.background_color = color.to_f32_array();
-    }
-
     pub fn set_glass_background(&mut self, status: bool) {
         if status {
             self.flags[0] |= GLASS_BACKGROUND;

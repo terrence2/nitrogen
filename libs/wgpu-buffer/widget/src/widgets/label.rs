@@ -34,23 +34,27 @@ pub struct Label {
 impl Label {
     pub fn new<S: AsRef<str> + Into<String>>(content: S) -> Self {
         Self {
-            line: TextRun::from_text(content.as_ref()),
+            line: TextRun::from_text(content.as_ref()).with_hidden_selection(),
             width: None,
         }
     }
 
     pub fn with_size(mut self, size_pts: f32) -> Self {
-        self.line.set_all_size_pts(size_pts);
+        self.line.set_default_size_pts(size_pts);
         self
     }
 
     pub fn with_font(mut self, font_id: FontId) -> Self {
-        self.line.set_all_font(font_id);
+        self.line.set_default_font(font_id);
         self
     }
 
     pub fn with_color(mut self, color: Color) -> Self {
-        self.line.set_all_color(color);
+        self.line.set_default_color(color);
+        // Note: this is a label; we don't allow selection, so no need to save and restore it.
+        self.line.select_all();
+        self.line.change_color(color);
+        self.line.select_none();
         self
     }
 

@@ -33,14 +33,16 @@ pub struct Terminal {
 
 impl Terminal {
     pub fn new(font_context: &FontContext) -> Arc<RwLock<Self>> {
-        let output = TextEdit::new("Nitrogen Terminal\nType `help` for help.")
+        let output = TextEdit::new("")
             .with_default_font(font_context.font_id_for_name("mono"))
             .with_default_color(Color::Green)
+            .with_text("Nitrogen Terminal\nType `help` for help.")
             .wrapped();
-        let edit = LineEdit::new("this is some test text for us to highlight")
-            //.with_default_font("mono")
+        let edit = LineEdit::empty()
+            .with_default_font(font_context.font_id_for_name("mono"))
             .with_default_color(Color::White)
             .with_default_size_pts(12.0)
+            .with_text("this is some test text for us to highlight")
             .wrapped();
         edit.write().line_mut().select_all();
         let container = VerticalBox::with_children(&[output, edit.clone()])

@@ -186,7 +186,10 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         .add_child(version_label)
         .set_float(PositionH::End, PositionV::Bottom);
 
-    let fps_label = Label::new("fps").with_color(Color::Red).wrapped();
+    let fps_label = Label::new("fps")
+        .with_color(Color::Red)
+        .with_size(13.0)
+        .wrapped();
     frame_graph
         .widgets
         .root()

@@ -28,31 +28,39 @@ use winit::event::{ElementState, KeyboardInput, ModifiersState, VirtualKeyCode};
 
 pub struct LineEdit {
     line: TextRun,
-    width: f32,
+    override_width: Option<f32>,
 }
 
 impl LineEdit {
-    pub fn new(markup: &str) -> Self {
-        let mut obj = Self {
+    pub fn empty() -> Self {
+        Self {
             line: TextRun::empty(),
-            width: 1.,
-        };
-        obj.line.insert(markup);
-        obj
+            override_width: None,
+        }
+    }
+
+    pub fn with_width(mut self, width: f32) -> Self {
+        self.override_width = Some(width);
+        self
     }
 
     pub fn with_default_color(mut self, color: Color) -> Self {
-        self.line = self.line.with_default_color(color);
+        self.line.set_default_color(color);
         self
     }
 
     pub fn with_default_font(mut self, font_id: FontId) -> Self {
-        self.line = self.line.with_default_font_id(font_id);
+        self.line.set_default_font(font_id);
         self
     }
 
     pub fn with_default_size_pts(mut self, size_pts: f32) -> Self {
-        self.line = self.line.with_default_size_pts(size_pts);
+        self.line.set_default_size_pts(size_pts);
+        self
+    }
+
+    pub fn with_text(mut self, text: &str) -> Self {
+        self.line.insert(text);
         self
     }
 
@@ -91,15 +99,13 @@ impl LineEdit {
 
 impl Widget for LineEdit {
     fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> UploadMetrics {
-        let info = WidgetInfo::default()
-            .with_background_color(Color::White)
-            .with_foreground_color(Color::White);
+        let info = WidgetInfo::default();
         let widget_info_index = context.push_widget(&info);
 
         let line_metrics = self.line.upload(0f32, widget_info_index, gpu, context);
         UploadMetrics {
             widget_info_indexes: vec![widget_info_index],
-            width: self.width,
+            width: self.override_width.unwrap_or(line_metrics.width),
             baseline_height: line_metrics.baseline_height,
             height: line_metrics.height,
         }

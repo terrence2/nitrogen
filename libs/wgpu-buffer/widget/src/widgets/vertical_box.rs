@@ -30,6 +30,7 @@ use winit::event::{KeyboardInput, ModifiersState};
 #[derive(Default)]
 pub struct VerticalBox {
     info: WidgetInfo,
+    background_color: Color,
     override_width: Option<f32>,
     override_height: Option<f32>,
     children: Vec<BoxPacking>,
@@ -43,7 +44,8 @@ impl VerticalBox {
                 .enumerate()
                 .map(|(i, w)| BoxPacking::new(w.to_owned(), i))
                 .collect::<Vec<_>>(),
-            info: WidgetInfo::default().with_background_color(Color::Transparent),
+            background_color: Color::Magenta,
+            info: WidgetInfo::default(),
             override_width: None,
             override_height: None,
         }
@@ -54,7 +56,7 @@ impl VerticalBox {
     }
 
     pub fn with_background_color(mut self, color: Color) -> Self {
-        self.info.set_background_color(color);
+        self.background_color = color;
         self
     }
 
@@ -119,21 +121,25 @@ impl Widget for VerticalBox {
         let v00 = WidgetVertex {
             position: [0., 0., context.current_depth],
             tex_coord: [0., 0.],
+            color: self.background_color.to_u8_array(),
             widget_info_index,
         };
         let v01 = WidgetVertex {
             position: [0., -height, context.current_depth],
             tex_coord: [0., 0.],
+            color: self.background_color.to_u8_array(),
             widget_info_index,
         };
         let v10 = WidgetVertex {
             position: [width, 0., context.current_depth],
             tex_coord: [0., 0.],
+            color: self.background_color.to_u8_array(),
             widget_info_index,
         };
         let v11 = WidgetVertex {
             position: [width, -height, context.current_depth],
             tex_coord: [0., 0.],
+            color: self.background_color.to_u8_array(),
             widget_info_index,
         };
         context.background_pool.push(v00);

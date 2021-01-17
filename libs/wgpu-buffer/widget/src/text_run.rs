@@ -20,24 +20,24 @@ use crate::{
 };
 use gpu::GPU;
 use smallvec::{smallvec, SmallVec};
-use std::ops::Range;
+use std::{cmp::Ordering, ops::Range};
 use winit::event::ModifiersState;
 
 #[derive(Debug)]
 pub struct TextSpan {
     text: String,
+    color: Color,
     size_pts: f32,
     font_id: FontId,
-    color: Color,
 }
 
 impl TextSpan {
     pub fn new(text: &str, size_pts: f32, font_id: FontId, color: Color) -> Self {
         Self {
             text: text.to_owned(),
+            color,
             size_pts,
             font_id,
-            color,
         }
     }
 
@@ -60,15 +60,114 @@ impl TextSpan {
     pub fn delete_range(&mut self, range: Range<usize>) {
         self.text.replace_range(range, "");
     }
+
+    pub fn content(&self) -> &str {
+        &self.text
+    }
+
+    pub fn size_pts(&self) -> f32 {
+        self.size_pts
+    }
+
+    pub fn font(&self) -> FontId {
+        self.font_id
+    }
+
+    pub fn color(&self) -> &Color {
+        &self.color
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum SpanSelection {
+    None,
+    Cursor { position: usize },
+    Select { range: Range<usize> },
+}
+
+#[derive(Copy, Clone, Debug, Default)]
+pub struct TextSelection {
+    anchor: usize,
+    focus: usize,
+}
+
+impl TextSelection {
+    fn is_empty(&self) -> bool {
+        self.anchor == self.focus
+    }
+
+    fn anchor(&self) -> usize {
+        self.anchor
+    }
+
+    fn leftmost(&self) -> usize {
+        self.anchor.min(self.focus)
+    }
+
+    fn rightmost(&self) -> usize {
+        self.anchor.max(self.focus)
+    }
+
+    fn as_range(&self) -> Range<usize> {
+        self.leftmost()..self.rightmost()
+    }
+
+    // Find intersection between this selection and the given range. Return a span sele
+    fn intersect(&self, other: Range<usize>) -> SpanSelection {
+        let rng = self.as_range();
+        let start = rng.start.max(other.start);
+        let end = rng.end.min(other.end);
+        match start.cmp(&end) {
+            Ordering::Equal => SpanSelection::Cursor {
+                position: start - other.start,
+            },
+            Ordering::Less => SpanSelection::Select {
+                range: start - other.start..end - other.start,
+            },
+            Ordering::Greater => SpanSelection::None,
+        }
+    }
+
+    fn move_to(&mut self, offset: usize) {
+        self.focus = offset;
+        self.anchor = self.focus;
+    }
+
+    fn move_home(&mut self, pin_anchor: bool) {
+        self.focus = 0;
+        if !pin_anchor {
+            self.anchor = self.focus;
+        }
+    }
+
+    fn move_end(&mut self, pin_anchor: bool, end: usize) {
+        self.focus = end;
+        if !pin_anchor {
+            self.anchor = self.focus;
+        }
+    }
+
+    fn move_left(&mut self, pin_anchor: bool) {
+        self.focus = self.focus.saturating_sub(1);
+        if !pin_anchor {
+            self.anchor = self.focus;
+        }
+    }
+
+    fn move_right(&mut self, pin_anchor: bool, end: usize) {
+        self.focus = self.focus.saturating_add(1).min(end);
+        if !pin_anchor {
+            self.anchor = self.focus;
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct TextRun {
     pub spans: Vec<TextSpan>,
 
-    // When the range is empty, this is a cursor at `start`. When selection is non-empty,
-    // it represents a selection.
-    selection: Range<usize>,
+    selection: TextSelection,
+    hide_selection: bool, // e.g. for Label
 
     default_font_id: FontId,
     default_size_pts: f32,
@@ -87,11 +186,23 @@ impl TextRun {
     pub fn empty() -> Self {
         Self {
             spans: vec![],
-            selection: 0..0,
+            selection: Default::default(),
+            hide_selection: false,
             default_font_id: SANS_FONT_ID,
             default_size_pts: 12.0,
             default_color: Color::Magenta,
         }
+    }
+
+    pub fn with_hidden_selection(mut self) -> Self {
+        self.hide_selection = true;
+        self
+    }
+
+    pub fn with_text(mut self, text: &str) -> Self {
+        self.select_all();
+        self.insert(text);
+        self
     }
 
     pub fn with_default_color(mut self, color: Color) -> Self {
@@ -99,14 +210,26 @@ impl TextRun {
         self
     }
 
-    pub fn with_default_font_id(mut self, font_id: FontId) -> Self {
+    pub fn set_default_color(&mut self, color: Color) {
+        self.default_color = color;
+    }
+
+    pub fn with_default_font(mut self, font_id: FontId) -> Self {
         self.default_font_id = font_id;
         self
+    }
+
+    pub fn set_default_font(&mut self, font_id: FontId) {
+        self.default_font_id = font_id;
     }
 
     pub fn with_default_size_pts(mut self, size_pts: f32) -> Self {
         self.default_size_pts = size_pts;
         self
+    }
+
+    pub fn set_default_size_pts(&mut self, size_pts: f32) {
+        self.default_size_pts = size_pts;
     }
 
     pub fn from_text(text: &str) -> Self {
@@ -116,61 +239,52 @@ impl TextRun {
         obj
     }
 
+    /// Change the selected region's color.
+    pub fn change_color(&mut self, color: Color) {
+        for (span_offset, span_range) in self.selected_spans() {
+            let span = &mut self.spans[span_offset];
+            if span_range.start == 0 && span_range.end == span.text.len() {
+                span.set_color(color);
+            } else {
+                panic!("Would subdivide span");
+            }
+        }
+    }
+
     /// Selects the entire text run.
     pub fn select_all(&mut self) {
-        self.selection = 0..self.len();
+        self.selection.move_home(false);
+        self.selection.move_end(true, self.len());
+    }
+
+    /// Turn the selection area into a cursor.
+    pub fn select_none(&mut self) {
+        self.selection = Default::default();
     }
 
     /// Set the cursor position in the run, deselecting any previous selection.
     pub fn set_cursor(&mut self, cursor: usize) {
-        let c = cursor.min(self.len());
-        self.selection = c..c;
+        self.selection.move_to(cursor.min(self.len()));
     }
 
     /// Set the cursor to the start of the line. If shift is held, the selection end remains fixed.
     pub fn move_home(&mut self, modifiers: &ModifiersState) {
-        if modifiers.shift() {
-            self.selection.start = 0;
-        } else {
-            self.selection = 0..0;
-        }
+        self.selection.move_home(modifiers.shift());
     }
 
     /// Set the cursor to the end of the line. If shift is held, the selection start remains fixed.
     pub fn move_end(&mut self, modifiers: &ModifiersState) {
-        let own_len = self.len();
-        if modifiers.shift() {
-            self.selection.end = own_len;
-        } else {
-            self.selection = own_len..own_len;
-        }
+        self.selection.move_end(modifiers.shift(), self.len());
     }
 
     /// Move the cursor one left. If shift is held, the selection end remains fixed.
     pub fn move_left(&mut self, modifiers: &ModifiersState) {
-        if modifiers.shift() {
-            if self.selection.start > 0 {
-                self.selection.start -= 1;
-            }
-        } else {
-            if self.selection.start > 0 {
-                self.selection = self.selection.start - 1..self.selection.start - 1;
-            }
-        }
+        self.selection.move_left(modifiers.shift());
     }
 
     /// Move the cursor one right. If shift is held, the selection start remains fixed.
     pub fn move_right(&mut self, modifiers: &ModifiersState) {
-        let own_len = self.len();
-        if modifiers.shift() {
-            if self.selection.end < own_len {
-                self.selection.end += 1;
-            }
-        } else {
-            if self.selection.end < own_len {
-                self.selection = self.selection.end + 1..self.selection.end + 1;
-            }
-        }
+        self.selection.move_right(modifiers.shift(), self.len());
     }
 
     /// Delete any selected range and insert the given text at the new cursor.
@@ -178,7 +292,6 @@ impl TextRun {
         if !self.selection.is_empty() {
             self.delete();
         }
-        assert!(self.selection.is_empty());
         self.insert_at_cursor(text);
     }
 
@@ -190,7 +303,8 @@ impl TextRun {
         for (span_id, span_range) in self.selected_spans() {
             self.spans[span_id].delete_range(span_range);
         }
-        self.selection = self.selection.start..self.selection.start;
+        self.selection
+            .move_to(self.selection.leftmost().min(self.len()));
     }
 
     /// Delete either the selected range or one left of the cursor.
@@ -201,13 +315,8 @@ impl TextRun {
         for (span_id, span_range) in self.selected_spans() {
             self.spans[span_id].delete_range(span_range);
         }
-        self.selection = self.selection.start..self.selection.start;
-    }
-
-    // Panic if called with a selection.
-    fn cursor_position(&self) -> usize {
-        assert!(self.selection.is_empty());
-        self.selection.start
+        self.selection
+            .move_to(self.selection.leftmost().min(self.len()));
     }
 
     fn insert_at_cursor(&mut self, text: &str) {
@@ -223,12 +332,12 @@ impl TextRun {
                 self.default_color,
             ));
         }
-        let cursor_offset = self.selection.start + text.len();
-        self.selection = cursor_offset..cursor_offset;
+        let offset = self.selection.anchor() + text.len();
+        self.selection.move_to(offset.min(self.len()));
     }
 
     fn find_cursor_in_span(&mut self) -> Option<(&mut TextSpan, usize)> {
-        let cursor = self.cursor_position();
+        let cursor = self.selection.anchor();
         let mut base = 0;
         for span in self.spans.iter_mut() {
             if cursor >= base && cursor < base + span.text.len() {
@@ -243,8 +352,7 @@ impl TextRun {
         let mut out = smallvec![];
         let mut span_start = 0;
         for (i, span) in self.spans.iter().enumerate() {
-            let span_selected = self.selected_span_region(span, span_start);
-            if !span_selected.is_empty() {
+            if let Some(span_selected) = self.selected_span_region(span, span_start) {
                 out.push((i, span_selected));
             }
             span_start += span.text.len();
@@ -253,29 +361,15 @@ impl TextRun {
     }
 
     // Find the overlap between the given span, starting at base, and the current selection.
-    fn selected_span_region(&self, span: &TextSpan, base: usize) -> Range<usize> {
+    fn selected_span_region(&self, span: &TextSpan, base: usize) -> Option<Range<usize>> {
         let span_range = base..base + span.text.len();
+        let selection_range = self.selection.as_range();
         let intersect =
-            self.selection.start.max(span_range.start)..self.selection.end.min(span_range.end);
-        intersect.start - base..intersect.end - base
-    }
-
-    pub fn set_all_font(&mut self, font_id: FontId) {
-        for span in self.spans.iter_mut() {
-            span.set_font(font_id);
+            selection_range.start.max(span_range.start)..selection_range.end.min(span_range.end);
+        if intersect.start <= intersect.end {
+            return Some(intersect.start - base..intersect.end - base);
         }
-    }
-
-    pub fn set_all_size_pts(&mut self, size_pts: f32) {
-        for span in self.spans.iter_mut() {
-            span.set_size_pts(size_pts);
-        }
-    }
-
-    pub fn set_all_color(&mut self, color: Color) {
-        for span in self.spans.iter_mut() {
-            span.set_color(color);
-        }
+        None
     }
 
     pub fn flatten(&self) -> String {
@@ -293,41 +387,26 @@ impl TextRun {
         gpu: &GPU,
         context: &mut PaintContext,
     ) -> TextSpanMetrics {
-        let mut selection_offset = 0;
-        let selections = self.selected_spans();
-
-        let mut char_offset = 0;
         let mut total_width = 0f32;
         let mut max_height = 0f32;
         let mut max_baseline = 0f32;
         for (span_offset, span) in self.spans.iter().enumerate() {
-            let selection_area = if selections.len() > selection_offset
-                && selections[selection_offset].0 == span_offset
-            {
-                let area = selections[selection_offset].1.clone();
-                selection_offset += 1;
-                Some(area)
-            } else if selections.is_empty()
-                && self.selection.start > char_offset
-                && self.selection.start < char_offset + span.text.len()
-            {
-                let v = self.selection.start - char_offset;
-                Some(v..v)
+            let selection_area = if self.hide_selection {
+                SpanSelection::None
             } else {
-                None
+                self.selection
+                    .intersect(span_offset..span_offset + span.content().len())
             };
 
-            // FIXME: one info per span so that we can set the color? Or pass the color with the vert?
             let span_metrics = context.layout_text(
-                &span.text,
-                span.font_id,
-                span.size_pts,
+                &span,
                 [0., -height_offset],
                 widget_info_index,
                 selection_area,
                 gpu,
             );
             total_width += span_metrics.width;
+
             // FIXME: need to be able to offset height by line.
             let line_gap = context
                 .font_context
@@ -336,7 +415,6 @@ impl TextRun {
                 .line_gap(span.size_pts);
             max_height = max_height.max(span_metrics.height + line_gap);
             max_baseline = max_baseline.max(span_metrics.baseline_height);
-            char_offset += span.text.len();
         }
         TextSpanMetrics {
             width: total_width,

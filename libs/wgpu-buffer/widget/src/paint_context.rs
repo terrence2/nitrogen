@@ -13,23 +13,15 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    font_context::{FontContext, FontId, TextSpanMetrics},
+    font_context::{FontContext, TextSpanMetrics},
+    text_run::{SpanSelection, TextSpan},
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
 };
 use font_common::FontInterface;
 use gpu::GPU;
 use parking_lot::RwLock;
-use std::{borrow::Borrow, ops::Range, sync::Arc};
-
-pub struct SpanLayoutContext<'a> {
-    pub span: &'a str,
-    pub font_id: FontId,
-    pub size_pts: f32,
-    pub widget_info_index: u32,
-    pub offset: [f32; 3],
-    pub selection_area: Option<Range<usize>>,
-}
+use std::{borrow::Borrow, sync::Arc};
 
 pub struct PaintContext {
     pub current_depth: f32,
@@ -84,26 +76,19 @@ impl PaintContext {
         offset as u32
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub fn layout_text(
         &mut self,
-        span: &str,
-        font_id: FontId,
-        size_pts: f32,
+        span: &TextSpan,
         offset: [f32; 2],
         widget_info_index: u32,
-        selection_area: Option<Range<usize>>,
+        selection_area: SpanSelection,
         gpu: &GPU,
     ) -> TextSpanMetrics {
         self.font_context.layout_text(
-            SpanLayoutContext {
-                span,
-                font_id,
-                size_pts,
-                widget_info_index,
-                offset: [offset[0], offset[1], self.current_depth + Self::TEXT_DEPTH],
-                selection_area,
-            },
+            span,
+            widget_info_index,
+            [offset[0], offset[1], self.current_depth + Self::TEXT_DEPTH],
+            selection_area,
             gpu,
             &mut self.text_pool,
             &mut self.background_pool,

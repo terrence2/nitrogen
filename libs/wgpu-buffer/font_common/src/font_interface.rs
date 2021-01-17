@@ -28,6 +28,7 @@ pub trait FontInterface {
     fn left_side_bearing(&self, c: char, scale: f32) -> f32;
     fn pair_kerning(&self, a: char, b: char, scale: f32) -> f32;
     fn exact_bounding_box(&self, c: char, scale: f32) -> ((f32, f32), (f32, f32));
+    fn pixel_bounding_box(&self, c: char, scale: f32) -> ((i32, i32), (i32, i32));
 
     // rendering
     fn render_glyph(&self, c: char, scale: f32) -> GrayImage;

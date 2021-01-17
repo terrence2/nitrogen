@@ -27,7 +27,7 @@ layout(location = 0) out vec4 f_color;
 void main() {
     WidgetInfo info = widget_info[widget_info_id];
 
-    vec4 world_clr = vec4(0);
+    vec3 world_clr = vec3(0);
     if (widget_has_glass_background(info)) {
         float x_step = 1.0 / screen_logical_width * 4.0;
         float y_step = 1.0 / screen_logical_height * 4.0;
@@ -47,12 +47,14 @@ void main() {
                 float weight = weights[x + y * 7];
                 float dx = (float(x) - 3.0) * x_step;
                 vec4 world = texture(sampler2D(world_deferred_texture, world_deferred_sampler), v_screen_tex_coord + vec2(dx, dy));
-                world_clr += world * weight;
+                world_clr += world.rgb * weight;
             }
         }
+        float alpha = v_color.a;
+        world_clr = world_clr * (1.0 - alpha) + v_color.rgb * alpha;
+    } else {
+        world_clr = v_color.rgb;
     }
 
-    //f_color = vec4(world_clr.rgb, 1);
-    f_color = vec4(world_clr.rgb * (1 - v_color.a) + v_color.rgb * v_color.a, 1.0);
-    //f_color = v_color;
+    f_color = vec4(world_clr, 1.0);
 }

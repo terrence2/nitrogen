@@ -15,9 +15,6 @@
 #define MAX_WIDGETS 512
 
 struct WidgetInfo {
-    vec4 foreground_color;
-    vec4 background_color;
-    vec4 border_color;
     vec4 position;
     uvec4 flags;
 };

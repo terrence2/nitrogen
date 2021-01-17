@@ -69,6 +69,11 @@ impl TextEdit {
         self
     }
 
+    pub fn with_text(mut self, text: &str) -> Self {
+        self.replace_content(text);
+        self
+    }
+
     pub fn wrapped(self) -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(self))
     }
@@ -76,19 +81,28 @@ impl TextEdit {
     pub fn replace_content(&mut self, markup: &str) {
         let lines = markup
             .split('\n')
-            .map(TextRun::from_text)
+            .map(|markup| self.make_run(markup))
             .collect::<Vec<TextRun>>();
         self.lines = lines;
     }
 
     pub fn append_line(&mut self, markup: &str) {
-        self.lines.push(TextRun::from_text(markup));
+        self.lines.push(self.make_run(markup));
+    }
+
+    fn make_run(&self, text: &str) -> TextRun {
+        TextRun::empty()
+            .with_hidden_selection()
+            .with_default_size_pts(self.default_size_pts)
+            .with_default_color(self.default_color)
+            .with_default_font(self.default_font)
+            .with_text(text)
     }
 }
 
 impl Widget for TextEdit {
     fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> UploadMetrics {
-        let info = WidgetInfo::default().with_foreground_color(self.default_color);
+        let info = WidgetInfo::default();
         let widget_info_index = context.push_widget(&info);
 
         let mut height_offset = 0f32;

@@ -18,7 +18,8 @@
 
 layout(location = 0) in vec3 position;
 layout(location = 1) in vec2 tex_coord;
-layout(location = 2) in uint widget_info_id;
+layout(location = 2) in vec4 color;
+layout(location = 3) in uint widget_info_id;
 
 layout(location = 0) out vec2 v_tex_coord;
 layout(location = 1) flat out vec4 v_color;
@@ -27,7 +28,7 @@ void main() {
     v_tex_coord = tex_coord;
 
     WidgetInfo info = widget_info[widget_info_id];
-    v_color = info.foreground_color;
+    v_color = color;
 
     vec4 text_layout_position = vec4(info.position[0],  info.position[1], position.z / MAX_WIDGETS, 0);
     gl_Position = vec4(position.xy, 0, 1) + text_layout_position;

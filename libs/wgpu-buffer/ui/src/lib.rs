@@ -143,8 +143,8 @@ impl UiRenderPass {
                     }],
                     depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
                         format: GPU::DEPTH_FORMAT,
-                        depth_write_enabled: false, // FIXME
-                        depth_compare: wgpu::CompareFunction::Always,
+                        depth_write_enabled: true,
+                        depth_compare: wgpu::CompareFunction::Greater,
                         stencil: wgpu::StencilStateDescriptor {
                             front: wgpu::StencilStateFaceDescriptor::IGNORE,
                             back: wgpu::StencilStateFaceDescriptor::IGNORE,
@@ -187,7 +187,11 @@ impl UiRenderPass {
                 primitive_topology: wgpu::PrimitiveTopology::TriangleList,
                 color_states: &[wgpu::ColorStateDescriptor {
                     format: GPU::SCREEN_FORMAT,
-                    alpha_blend: wgpu::BlendDescriptor::REPLACE,
+                    alpha_blend: wgpu::BlendDescriptor {
+                        src_factor: wgpu::BlendFactor::SrcAlpha,
+                        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                        operation: wgpu::BlendOperation::Max,
+                    },
                     color_blend: wgpu::BlendDescriptor {
                         src_factor: wgpu::BlendFactor::SrcAlpha,
                         dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
