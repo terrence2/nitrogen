@@ -56,6 +56,12 @@ struct Globals {
     // Overlay screen info
     screen_letterbox_projection: [[f32; 4]; 4],
 
+    // Screen info
+    screen_physical_width: f32,
+    screen_physical_height: f32,
+    screen_logical_width: f32,
+    screen_logical_height: f32,
+
     // Camera properties
     camera_fov_y: f32,
     camera_aspect_ratio: f32,
@@ -80,7 +86,7 @@ struct Globals {
     tone_gamma: f32,
 
     // Pad out to [f32;4] alignment
-    pad: [f32; 2],
+    pad1: [f32; 2],
 }
 
 impl Globals {
@@ -98,6 +104,14 @@ impl Globals {
         };
         self.screen_letterbox_projection =
             m2v(&Matrix4::new_nonuniform_scaling(&Vector3::new(w, h, 1f32)));
+
+        let physical = gpu.physical_size();
+        let logical = gpu.logical_size();
+        self.screen_physical_width = physical.width as f32;
+        self.screen_physical_height = physical.width as f32;
+        self.screen_logical_width = logical.width as f32;
+        self.screen_logical_height = logical.width as f32;
+
         self
     }
 

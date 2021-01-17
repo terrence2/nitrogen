@@ -18,6 +18,7 @@ use camera::ArcBallCamera;
 use catalog::{Catalog, DirectoryDrawer};
 use chrono::prelude::*;
 use command::{Bindings, CommandHandler};
+use composite::CompositeRenderPass;
 use failure::Fallible;
 use fullscreen::FullscreenBuffer;
 use geodesy::{GeoSurface, Graticule, Target};
@@ -31,12 +32,12 @@ use orrery::Orrery;
 use stars::StarsBuffer;
 use std::{path::PathBuf, sync::Arc, time::Instant};
 use structopt::StructOpt;
-use terrain::TerrainRenderPass;
 use terrain_geo::{CpuDetailLevel, GpuDetailLevel, TerrainGeoBuffer};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use ui::UiRenderPass;
-use widget::{Color, Label, PositionH, PositionV, WidgetBuffer};
+use widget::{Color, Label, PositionH, PositionV, Terminal, WidgetBuffer};
 use winit::window::Window;
+use world::WorldRenderPass;
 
 /// Show the contents of an MM file
 #[derive(Debug, StructOpt)]
@@ -58,13 +59,13 @@ make_frame_graph!(
             globals: GlobalParametersBuffer,
             stars: StarsBuffer,
             terrain_geo: TerrainGeoBuffer,
-            widgets: WidgetBuffer
+            widgets: WidgetBuffer,
+            world: WorldRenderPass,
+            ui: UiRenderPass,
+            composite: CompositeRenderPass
         };
-        renderers: [
-            terrain: TerrainRenderPass { globals, atmosphere, stars, terrain_geo },
-            ui: UiRenderPass { globals, widgets }
-        ];
         passes: [
+            // terrain_geo
             // Update the indices so we have correct height data to tessellate with and normal
             // and color data to accumulate.
             paint_atlas_indices: Any() { terrain_geo() },
@@ -77,9 +78,19 @@ make_frame_graph!(
             // Accumulate normal and color data.
             accumulate_normal_and_color: Compute() { terrain_geo( globals ) },
 
-            draw: Render(Screen) {
-                terrain( globals, fullscreen, atmosphere, stars, terrain_geo ),
-                ui( globals, widgets )
+            // world: Flatten terrain g-buffer into the final image and mix in stars.
+            render_world: Render(world, offscreen_target) {
+                world( globals, fullscreen, atmosphere, stars, terrain_geo )
+            },
+
+            // ui: Draw our widgets onto a buffer with resolution independent of the world.
+            render_ui: Render(ui, offscreen_target) {
+                ui( globals, widgets, world )
+            },
+
+            // composite: Accumulate offscreen buffers into a final image.
+            composite_scene: Render(Screen) {
+                composite( fullscreen, globals, world, ui )
             }
         ];
     }
@@ -89,8 +100,8 @@ fn main() -> Fallible<()> {
     env_logger::init();
 
     let system_bindings = Bindings::new("map")
-        .bind("terrain.toggle_wireframe", "w")?
-        .bind("terrain.toggle_debug_mode", "r")?
+        .bind("world.toggle_wireframe", "w")?
+        .bind("world.toggle_debug_mode", "r")?
         .bind("demo.+target_up_fast", "Shift+Up")?
         .bind("demo.+target_down_fast", "Shift+Down")?
         .bind("demo.+target_up", "Up")?
@@ -100,6 +111,7 @@ fn main() -> Fallible<()> {
         .bind("demo.decrease_exposure", "Shift+LBracket")?
         .bind("demo.increase_exposure", "Shift+RBracket")?
         .bind("demo.pin_view", "p")?
+        .bind("demo.toggle_terminal", "Shift+Grave")?
         .bind("demo.exit", "Escape")?
         .bind("demo.exit", "q")?;
     InputSystem::run_forever(
@@ -134,21 +146,33 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     ///////////////////////////////////////////////////////////
     let atmosphere_buffer = AtmosphereBuffer::new(opt.no_cache, &mut gpu)?;
     let fullscreen_buffer = FullscreenBuffer::new(&gpu)?;
-    let globals_buffer = GlobalParametersBuffer::new(gpu.device())?;
+    let globals = GlobalParametersBuffer::new(gpu.device())?;
     let stars_buffer = StarsBuffer::new(&gpu)?;
     let terrain_geo_buffer =
-        TerrainGeoBuffer::new(&catalog, cpu_detail, gpu_detail, &globals_buffer, &mut gpu)?;
-    let text_layout_buffer = WidgetBuffer::new(&mut gpu)?;
+        TerrainGeoBuffer::new(&catalog, cpu_detail, gpu_detail, &globals, &mut gpu)?;
+    let widget_buffer = WidgetBuffer::new(&mut gpu)?;
     let catalog = Arc::new(AsyncRwLock::new(catalog));
+    let world = WorldRenderPass::new(
+        &mut gpu,
+        &globals,
+        &atmosphere_buffer,
+        &stars_buffer,
+        &terrain_geo_buffer,
+    )?;
+    let ui = UiRenderPass::new(&mut gpu, &globals, &widget_buffer, &world)?;
+    let composite = CompositeRenderPass::new(&mut gpu, &globals, &world, &ui)?;
     let mut frame_graph = FrameGraph::new(
         &mut legion,
         &mut gpu,
         atmosphere_buffer,
         fullscreen_buffer,
-        globals_buffer,
+        globals,
         stars_buffer,
         terrain_geo_buffer,
-        text_layout_buffer,
+        widget_buffer,
+        world,
+        ui,
+        composite,
     )?;
     ///////////////////////////////////////////////////////////
 
@@ -163,13 +187,26 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         .add_child(version_label)
         .set_float(PositionH::End, PositionV::Bottom);
 
-    let fps_label = Label::new("fps").with_color(Color::Red).wrapped();
+    let fps_label = Label::new("fps")
+        .with_color(Color::Red)
+        .with_size(13.0)
+        .wrapped();
     frame_graph
         .widgets
         .root()
         .write()
         .add_child(fps_label.clone())
         .set_float(PositionH::Start, PositionV::Bottom);
+
+    let terminal = Terminal::new(frame_graph.widgets.font_context())
+        .with_visible(false)
+        .wrapped();
+    frame_graph
+        .widgets
+        .root()
+        .write()
+        .add_child(terminal.clone())
+        .set_float(PositionH::Start, PositionV::Top);
 
     let mut orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0));
 
@@ -209,10 +246,14 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     let mut is_camera_pinned = false;
     let mut camera_double = arcball.camera().to_owned();
     let mut target_vec = meters!(0f64);
+    let mut show_terminal = false;
     loop {
         let loop_start = Instant::now();
 
-        for command in input_controller.poll()? {
+        frame_graph
+            .widgets
+            .handle_keyboard(&input_controller.poll_keyboard()?)?;
+        for command in input_controller.poll_commands()? {
             if InputSystem::is_close_command(&command) || command.full() == "demo.exit" {
                 return Ok(());
             }
@@ -243,20 +284,29 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                     println!("target:  {}", arcball.get_target());
                     is_camera_pinned = !is_camera_pinned
                 }
+                "demo.toggle_terminal" => {
+                    show_terminal = !show_terminal;
+                    terminal.write().set_visible(show_terminal);
+                }
                 // system bindings
                 "window.resize" => {
                     gpu.note_resize(None, &window);
                     frame_graph.terrain_geo.note_resize(&gpu);
+                    frame_graph.world.note_resize(&gpu);
+                    frame_graph.ui.note_resize(&gpu);
                     arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
                 }
                 "window.dpi-change" => {
                     gpu.note_resize(Some(command.float(0)?), &window);
                     frame_graph.terrain_geo.note_resize(&gpu);
+                    frame_graph.world.note_resize(&gpu);
+                    frame_graph.ui.note_resize(&gpu);
                     arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
                 }
                 _ => trace!("unhandled command: {}", command.full(),),
             }
         }
+
         let mut g = arcball.get_target();
         g.distance += target_vec;
         if g.distance < meters!(0f64) {
@@ -295,6 +345,8 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         if !frame_graph.run(&mut gpu, tracker)? {
             gpu.note_resize(None, &window);
             frame_graph.terrain_geo.note_resize(&gpu);
+            frame_graph.world.note_resize(&gpu);
+            frame_graph.ui.note_resize(&gpu);
             arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
         }
 
@@ -309,6 +361,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
             frame_time.as_secs() * 1000 + u64::from(frame_time.subsec_millis()),
             frame_time.subsec_micros(),
         );
-        fps_label.write().set_markup(ts);
+        fps_label.write().set_text(ts);
     }
 }

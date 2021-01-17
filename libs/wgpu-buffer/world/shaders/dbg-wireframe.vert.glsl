@@ -12,20 +12,14 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::paint_context::PaintContext;
-use failure::Fallible;
-use gpu::GPU;
-use winit::event::{KeyboardInput, ModifiersState};
+#version 450
+#include <wgpu-buffer/shader_shared/include/consts.glsl>
+#include <wgpu-buffer/global_data/include/global_data.glsl>
 
-#[derive(Clone, Default)]
-pub struct UploadMetrics {
-    pub widget_info_indexes: Vec<u32>,
-    pub width: f32,
-    pub baseline_height: f32,
-    pub height: f32,
-}
+layout(location = 0) in vec3 position;
+layout(location = 1) in vec3 normal;
+layout(location = 2) in vec2 graticule;
 
-pub trait Widget {
-    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> UploadMetrics;
-    fn handle_keyboard(&mut self, events: &[(KeyboardInput, ModifiersState)]) -> Fallible<()>;
+void main() {
+    gl_Position = camera_perspective_m * vec4(position, 1);
 }

@@ -12,6 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use std::default::Default;
 
 #[derive(Copy, Clone, Debug)]
 pub enum Color {
@@ -29,6 +30,12 @@ pub enum Color {
     Purple,
     Magenta,
     Custom([f32; 4]),
+}
+
+impl Default for Color {
+    fn default() -> Self {
+        Color::Black
+    }
 }
 
 impl Color {
@@ -59,5 +66,27 @@ impl Color {
             Self::Magenta => [1., 0., 1., 1.],
             Self::Custom(f) => *f,
         }
+    }
+
+    pub fn opacity(self, amount: f32) -> Self {
+        let mut a = self.to_f32_array();
+        a[3] = amount;
+        Self::Custom(a)
+    }
+
+    pub fn darken(self, amount: f32) -> Self {
+        let mut a = self.to_f32_array();
+        for v in a.iter_mut() {
+            *v /= amount;
+        }
+        Self::Custom(a)
+    }
+
+    pub fn invert(self) -> Self {
+        let mut a = self.to_f32_array();
+        for v in a.iter_mut().take(3) {
+            *v = 1f32 - *v;
+        }
+        Self::Custom(a)
     }
 }

@@ -14,4 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 pub(crate) mod float_box;
 pub(crate) mod label;
+pub(crate) mod line_edit;
+pub(crate) mod terminal;
+pub(crate) mod text_edit;
 pub(crate) mod vertical_box;

@@ -13,21 +13,15 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    font_context::FontContext, font_context::TextSpanMetrics, widget_info::WidgetInfo,
+    font_context::{FontContext, TextSpanMetrics},
+    text_run::{SpanSelection, TextSpan},
+    widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
 };
 use font_common::FontInterface;
 use gpu::GPU;
 use parking_lot::RwLock;
-use std::sync::Arc;
-
-pub struct SpanLayoutContext<'a> {
-    pub span: &'a str,
-    pub font_name: &'a str,
-    pub size_pts: f32,
-    pub widget_info_index: u32,
-    pub depth: f32,
-}
+use std::{borrow::Borrow, sync::Arc};
 
 pub struct PaintContext {
     pub current_depth: f32,
@@ -64,12 +58,12 @@ impl PaintContext {
         self.text_pool.truncate(0);
     }
 
-    pub fn add_font<S: Into<String>>(
+    pub fn add_font<S: Borrow<str> + Into<String>>(
         &mut self,
         font_name: S,
         font: Arc<RwLock<dyn FontInterface>>,
     ) {
-        self.font_context.add_font(font_name.into(), font);
+        self.font_context.add_font(font_name, font);
     }
 
     pub fn enter_box(&mut self) {
@@ -84,22 +78,20 @@ impl PaintContext {
 
     pub fn layout_text(
         &mut self,
-        span: &str,
-        font_name: &str,
-        size_pts: f32,
+        span: &TextSpan,
+        offset: [f32; 2],
         widget_info_index: u32,
+        selection_area: SpanSelection,
         gpu: &GPU,
     ) -> TextSpanMetrics {
         self.font_context.layout_text(
-            SpanLayoutContext {
-                span,
-                font_name,
-                size_pts,
-                widget_info_index,
-                depth: self.current_depth + Self::TEXT_DEPTH,
-            },
+            span,
+            widget_info_index,
+            [offset[0], offset[1], self.current_depth + Self::TEXT_DEPTH],
+            selection_area,
             gpu,
             &mut self.text_pool,
+            &mut self.background_pool,
         )
     }
 }

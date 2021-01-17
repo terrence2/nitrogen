@@ -15,6 +15,10 @@
 
 layout(set = 0, binding = 0) buffer CameraParameters {
     mat4 globals_screen_letterbox_projection;
+    float screen_physical_width;
+    float screen_physical_height;
+    float screen_logical_width;
+    float screen_logical_height;
 
     // Camera
     float camera_fov_y;
@@ -40,8 +44,7 @@ layout(set = 0, binding = 0) buffer CameraParameters {
     float tone_gamma;
 
     // Padding
-    float pad0;
-    float pad1;
+    float pad1[2];
 
     // Orrery
 };

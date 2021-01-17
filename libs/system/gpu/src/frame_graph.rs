@@ -80,9 +80,6 @@ macro_rules! make_frame_graph {
     (
         $name:ident {
             buffers: { $($buffer_name:ident: $buffer_type:ty),* };
-            renderers: [
-                $( $renderer_name:ident: $renderer_type:ty { $($input_buffer_name:ident),* } ),*
-            ];
             passes: [
                 $( $pass_name:ident: $pass_type:ident($($pass_args:ident),*) {
                     $($pass_item_name:ident ( $($pass_item_input_name:ident),* ) ),*
@@ -94,29 +91,18 @@ macro_rules! make_frame_graph {
             $(
                 $buffer_name: $buffer_type
             ),*,
-            $(
-                $renderer_name: $renderer_type
-            ),*
         }
 
         impl $name {
             #[allow(clippy::too_many_arguments)]
             pub fn new(
                 _legion: &mut ::legion::world::World,
-                gpu: &mut $crate::GPU,
+                _gpu: &mut $crate::GPU,
                 $(
                     $buffer_name: $buffer_type
                 ),*
             ) -> ::failure::Fallible<Self> {
                 Ok(Self {
-                    $(
-                        $renderer_name: <$renderer_type>::new(
-                            gpu,
-                            $(
-                                &$input_buffer_name
-                            ),*
-                        )?
-                    ),*,
                     $(
                         $buffer_name
                     ),*
@@ -128,18 +114,10 @@ macro_rules! make_frame_graph {
                     &mut self.$buffer_name
                 }
             )*
-            $(
-                pub fn $renderer_name(&mut self) -> &mut $renderer_type {
-                    &mut self.$renderer_name
-                }
-            )*
 
             pub fn run(&mut self, gpu: &mut $crate::GPU, tracker: $crate::UploadTracker) -> ::failure::Fallible<bool> {
                 $(
                     let $buffer_name = &self.$buffer_name;
-                )*
-                $(
-                    let $renderer_name = &self.$renderer_name;
                 )*
 
                 let mut encoder = gpu
@@ -167,11 +145,6 @@ macro_rules! make_frame_graph {
                 $(
                     if command.target() == stringify!($buffer_name) {
                         self.$buffer_name.handle_command(command);
-                    }
-                )*
-                $(
-                    if command.target() == stringify!($renderer_name) {
-                        self.$renderer_name.handle_command(command);
                     }
                 )*
             }
@@ -301,11 +274,9 @@ mod test {
     make_frame_graph!(
         FrameGraph {
             buffers: {
-                test_buffer: TestBuffer
+                test_buffer: TestBuffer,
+                test_renderer: TestRenderer
             };
-            renderers: [
-                test_renderer: TestRenderer { test_buffer }
-            ];
             passes: [
                 example_render_pass: Render(test_buffer, example_render_pass_attachments) {
                     test_buffer()
@@ -331,7 +302,8 @@ mod test {
         let mut legion = World::default();
         let mut gpu = GPU::new(&window, Default::default())?;
         let test_buffer = TestBuffer::new(&gpu);
-        let mut frame_graph = FrameGraph::new(&mut legion, &mut gpu, test_buffer)?;
+        let test_renderer = TestRenderer::new(&gpu, &test_buffer)?;
+        let mut frame_graph = FrameGraph::new(&mut legion, &mut gpu, test_buffer, test_renderer)?;
 
         for _ in 0..3 {
             let mut upload_tracker = Default::default();

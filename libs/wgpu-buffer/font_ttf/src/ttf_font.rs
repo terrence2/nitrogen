@@ -69,7 +69,20 @@ impl FontInterface for TtfFont {
         {
             return ((bb.min.x, bb.min.y), (bb.max.x, bb.max.y));
         }
-        ((0.0, 0.0), (0.0, 0.0))
+        Default::default()
+    }
+
+    fn pixel_bounding_box(&self, c: char, scale: f32) -> ((i32, i32), (i32, i32)) {
+        if let Some(bb) = self
+            .font
+            .glyph(c)
+            .scaled(Scale::uniform(scale))
+            .positioned(Default::default())
+            .pixel_bounding_box()
+        {
+            return ((bb.min.x, bb.min.y), (bb.max.x, bb.max.y));
+        }
+        Default::default()
     }
 
     fn render_glyph(&self, c: char, scale: f32) -> GrayImage {

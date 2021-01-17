@@ -13,8 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 #version 450
-#include <wgpu-render/shader_shared/include/consts.glsl>
-#include <wgpu-render/shader_shared/include/quaternion.glsl>
+#include <wgpu-buffer/shader_shared/include/consts.glsl>
+#include <wgpu-buffer/shader_shared/include/quaternion.glsl>
 #include <wgpu-buffer/global_data/include/global_data.glsl>
 #include <wgpu-buffer/terrain_geo/include/layout_composite.glsl>
 

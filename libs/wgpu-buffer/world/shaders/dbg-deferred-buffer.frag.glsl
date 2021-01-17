@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 #version 450
-#include <wgpu-render/shader_shared/include/consts.glsl>
+#include <wgpu-buffer/shader_shared/include/consts.glsl>
 #include <wgpu-buffer/global_data/include/global_data.glsl>
 #include <wgpu-buffer/terrain_geo/include/layout_composite.glsl>
 
@@ -24,16 +24,10 @@ layout(location = 1) in vec3 v_ray;
 void
 main()
 {
+    vec4 texel = texture(sampler2D(terrain_deferred_texture, terrain_linear_sampler), v_tc);
     float depth = texture(sampler2D(terrain_deferred_depth, terrain_linear_sampler), v_tc).x;
     if (depth > -1) {
-        ivec2 raw_normal = texture(isampler2D(terrain_normal_acc_texture, terrain_linear_sampler), v_tc).xy;
-        vec2 flat_normal = raw_normal / 32768.0;
-        vec3 local_normal = vec3(
-            flat_normal.x,
-            sqrt(1.0 - (flat_normal.x * flat_normal.x + flat_normal.y * flat_normal.y)),
-            flat_normal.y
-        );
-        f_color = vec4((local_normal + 1) / 2, 1);
+        f_color = vec4(texel.xy, 0, 1);
     } else {
         f_color = vec4(0, 0, 0, 1);
     }

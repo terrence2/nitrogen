@@ -16,6 +16,7 @@ mod box_packing;
 mod color;
 mod font_context;
 mod paint_context;
+mod text_run;
 mod widget;
 mod widget_info;
 mod widget_vertex;
@@ -28,9 +29,13 @@ pub use crate::{
     widget::Widget,
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
-    widgets::{float_box::FloatBox, label::Label, vertical_box::VerticalBox},
+    widgets::{
+        float_box::FloatBox, label::Label, line_edit::LineEdit, terminal::Terminal,
+        text_edit::TextEdit, vertical_box::VerticalBox,
+    },
 };
 
+use crate::font_context::FontContext;
 use commandable::{commandable, Commandable};
 use failure::{ensure, Fallible};
 use font_common::FontInterface;
@@ -38,7 +43,8 @@ use font_ttf::TtfFont;
 use gpu::{UploadTracker, GPU};
 use log::trace;
 use parking_lot::RwLock;
-use std::{mem, num::NonZeroU64, ops::Range, sync::Arc};
+use std::{borrow::Borrow, mem, num::NonZeroU64, ops::Range, sync::Arc};
+use winit::event::{KeyboardInput, ModifiersState};
 
 // Drawing UI efficiently:
 //
@@ -196,12 +202,20 @@ impl WidgetBuffer {
         self.root.clone()
     }
 
-    pub fn add_font<S: Into<String>>(
+    pub fn add_font<S: Borrow<str> + Into<String>>(
         &mut self,
         font_name: S,
         font: Arc<RwLock<dyn FontInterface>>,
     ) {
-        self.paint_context.add_font(font_name.into(), font);
+        self.paint_context.add_font(font_name, font);
+    }
+
+    pub fn font_context(&self) -> &FontContext {
+        &self.paint_context.font_context
+    }
+
+    pub fn handle_keyboard(&mut self, inputs: &[(KeyboardInput, ModifiersState)]) -> Fallible<()> {
+        self.root().write().handle_keyboard(inputs)
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
@@ -211,6 +225,17 @@ impl WidgetBuffer {
     /// Must only be called after first upload
     pub fn bind_group(&self) -> &wgpu::BindGroup {
         self.bind_group.as_ref().unwrap()
+    }
+
+    pub fn background_vertex_buffer(&self) -> wgpu::BufferSlice {
+        self.background_vertex_buffer.slice(
+            0u64..(mem::size_of::<WidgetVertex>() * self.paint_context.background_pool.len())
+                as u64,
+        )
+    }
+
+    pub fn background_vertex_range(&self) -> Range<u32> {
+        0u32..self.paint_context.background_pool.len() as u32
     }
 
     pub fn text_vertex_buffer(&self) -> wgpu::BufferSlice {

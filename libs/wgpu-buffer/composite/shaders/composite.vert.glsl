@@ -13,22 +13,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 #version 450
-#include <wgpu-render/shader_shared/include/consts.glsl>
-#include <wgpu-buffer/global_data/include/global_data.glsl>
-#include <wgpu-buffer/terrain_geo/include/layout_composite.glsl>
 
-layout(location = 0) out vec4 f_color;
-layout(location = 0) in vec2 v_tc;
-layout(location = 1) in vec3 v_ray;
+layout(location = 0) in vec2 position;
+layout(location = 0) out vec2 v_tc;
 
-void
-main()
-{
-    vec4 texel = texture(sampler2D(terrain_deferred_texture, terrain_linear_sampler), v_tc);
-    float depth = texture(sampler2D(terrain_deferred_depth, terrain_linear_sampler), v_tc).x;
-    if (depth > -1) {
-        f_color = vec4(texel.xy, 0, 1);
-    } else {
-        f_color = vec4(0, 0, 0, 1);
-    }
+void main() {
+    gl_Position = vec4(position, 0.0, 1.0);
+    v_tc = (position + 1.0) / 2.0;
+    v_tc.y = 1.0 - v_tc.y;
 }

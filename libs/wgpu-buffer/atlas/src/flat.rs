@@ -319,13 +319,17 @@ where
     pub fn upload(&mut self, gpu: &GPU, tracker: &mut UploadTracker) {
         match self.dirty_region {
             DirtyState::Clean => {}
-            DirtyState::Dirty(((lo_x, lo_y), (hi_x, hi_y))) => {
+            DirtyState::Dirty(((mut lo_x, lo_y), (hi_x, hi_y))) => {
                 // Note: even sub-region uploads need to obey row stride constraints.
                 // Note: this cannot overflow width because full width is aligned to row stride and
                 //       we never overflow our width when dirtying.
+                // Note: we need to adjust lo_x to account for our alignment.
                 let upload_width =
                     GPU::stride_for_row_size((hi_x - lo_x) * mem::size_of::<P>() as u32)
                         / mem::size_of::<P>() as u32;
+                if lo_x + upload_width >= self.width {
+                    lo_x = self.width - upload_width;
+                }
 
                 let contiguous = self
                     .buffer
@@ -383,7 +387,10 @@ where
                     base_array_layer: 0,
                     array_layer_count: None,
                 });
-                let contiguous = self.buffer.sub_image(0, 0, hi_x, hi_y).to_image();
+
+                let upload_width = GPU::stride_for_row_size(hi_x * mem::size_of::<P>() as u32)
+                    / mem::size_of::<P>() as u32;
+                let contiguous = self.buffer.sub_image(0, 0, upload_width, hi_y).to_image();
                 let buffer = gpu.push_buffer(
                     "atlas-upload-buffer",
                     &contiguous.as_flat_samples().to_vec::<u8>().samples,
@@ -393,7 +400,7 @@ where
                     buffer,
                     self.texture.clone(),
                     wgpu::Extent3d {
-                        width: hi_x,
+                        width: upload_width,
                         height: hi_y,
                         depth: 1,
                     },

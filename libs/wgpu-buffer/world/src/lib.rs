@@ -18,7 +18,7 @@ use commandable::{command, commandable, Commandable};
 use failure::Fallible;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::GlobalParametersBuffer;
-use gpu::GPU;
+use gpu::{texture_format_component_type, GPU};
 use log::trace;
 use shader_shared::Group;
 use stars::StarsBuffer;
@@ -34,7 +34,15 @@ enum DebugMode {
 }
 
 #[derive(Commandable)]
-pub struct TerrainRenderPass {
+pub struct WorldRenderPass {
+    // Offscreen render targets
+    deferred_texture: (wgpu::Texture, wgpu::TextureView),
+    deferred_depth: (wgpu::Texture, wgpu::TextureView),
+    deferred_sampler: wgpu::Sampler,
+    deferred_bind_group_layout: wgpu::BindGroupLayout,
+    deferred_bind_group: wgpu::BindGroup,
+
+    // Debug and normal pipelines
     composite_pipeline: wgpu::RenderPipeline,
     dbg_deferred_pipeline: wgpu::RenderPipeline,
     dbg_depth_pipeline: wgpu::RenderPipeline,
@@ -42,6 +50,8 @@ pub struct TerrainRenderPass {
     dbg_normal_local_pipeline: wgpu::RenderPipeline,
     dbg_normal_global_pipeline: wgpu::RenderPipeline,
     wireframe_pipeline: wgpu::RenderPipeline,
+
+    // Render Mode
     show_wireframe: bool,
     debug_mode: DebugMode,
 }
@@ -52,7 +62,7 @@ pub struct TerrainRenderPass {
 // 4) For each pixel of the accumulator and depth, compute lighting, skybox, stars, etc.
 
 #[commandable]
-impl TerrainRenderPass {
+impl WorldRenderPass {
     pub fn new(
         gpu: &mut GPU,
         globals_buffer: &GlobalParametersBuffer,
@@ -60,14 +70,61 @@ impl TerrainRenderPass {
         stars_buffer: &StarsBuffer,
         terrain_geo_buffer: &TerrainGeoBuffer,
     ) -> Fallible<Self> {
-        trace!("TerrainRenderPass::new");
+        trace!("WorldRenderPass::new");
+
+        let deferred_bind_group_layout =
+            gpu.device()
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("world-deferred-bind-group-layout"),
+                    entries: &[
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            ty: wgpu::BindingType::SampledTexture {
+                                dimension: wgpu::TextureViewDimension::D2,
+                                component_type: texture_format_component_type(GPU::SCREEN_FORMAT),
+                                multisampled: false,
+                            },
+                            count: None,
+                        },
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler { comparison: false },
+                            count: None,
+                        },
+                    ],
+                });
+
+        let deferred_sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("world-deferred-sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Linear,
+            lod_min_clamp: 0f32,
+            lod_max_clamp: 0f32,
+            compare: None,
+            anisotropy_clamp: None,
+        });
+
+        let deferred_texture = Self::_make_deferred_texture_targets(gpu);
+        let deferred_depth = Self::_make_deferred_depth_targets(gpu);
+        let deferred_bind_group = Self::_make_deferred_bind_group(
+            gpu,
+            &deferred_bind_group_layout,
+            &deferred_texture.1,
+            &deferred_sampler,
+        );
 
         let fullscreen_shared_vert =
             gpu.create_shader_module(include_bytes!("../target/dbg-fullscreen-shared.vert.spirv"))?;
         let fullscreen_layout =
             gpu.device()
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("terrain-dbg-deferred-pipeline-layout"),
+                    label: Some("world-dbg-deferred-pipeline-layout"),
                     push_constant_ranges: &[],
                     bind_group_layouts: &[
                         globals_buffer.bind_group_layout(),
@@ -82,7 +139,7 @@ impl TerrainRenderPass {
             &fullscreen_layout,
             &fullscreen_shared_vert,
             &gpu.create_shader_module(include_bytes!(
-                "../target/terrain-composite-buffer.frag.spirv"
+                "../target/world-composite-buffer.frag.spirv"
             ))?,
         );
         let dbg_deferred_pipeline = Self::make_fullscreen_pipeline(
@@ -123,10 +180,10 @@ impl TerrainRenderPass {
         let wireframe_pipeline =
             gpu.device()
                 .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                    label: Some("terrain-wireframe-pipeline"),
+                    label: Some("world-wireframe-pipeline"),
                     layout: Some(&gpu.device().create_pipeline_layout(
                         &wgpu::PipelineLayoutDescriptor {
-                            label: Some("terrain-wireframe-pipeline-layout"),
+                            label: Some("world-wireframe-pipeline-layout"),
                             push_constant_ranges: &[],
                             bind_group_layouts: &[globals_buffer.bind_group_layout()],
                         },
@@ -179,6 +236,12 @@ impl TerrainRenderPass {
                 });
 
         Ok(Self {
+            deferred_texture,
+            deferred_depth,
+            deferred_sampler,
+            deferred_bind_group_layout,
+            deferred_bind_group,
+
             composite_pipeline,
             dbg_deferred_pipeline,
             dbg_depth_pipeline,
@@ -192,6 +255,88 @@ impl TerrainRenderPass {
         })
     }
 
+    fn _make_deferred_texture_targets(gpu: &GPU) -> (wgpu::Texture, wgpu::TextureView) {
+        let sz = gpu.physical_size();
+        let target = gpu.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("world-offscreen-texture-target"),
+            size: wgpu::Extent3d {
+                width: sz.width as u32,
+                height: sz.height as u32,
+                depth: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: GPU::SCREEN_FORMAT,
+            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT
+                | wgpu::TextureUsage::COPY_SRC
+                | wgpu::TextureUsage::SAMPLED,
+        });
+        let view = target.create_view(&wgpu::TextureViewDescriptor {
+            label: Some("world-offscreen-texture-target-view"),
+            format: None,
+            dimension: None,
+            aspect: wgpu::TextureAspect::All,
+            base_mip_level: 0,
+            level_count: None,
+            base_array_layer: 0,
+            array_layer_count: None,
+        });
+        (target, view)
+    }
+
+    fn _make_deferred_depth_targets(gpu: &GPU) -> (wgpu::Texture, wgpu::TextureView) {
+        let sz = gpu.physical_size();
+        let depth_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("world-offscreen-depth-texture"),
+            size: wgpu::Extent3d {
+                width: sz.width as u32,
+                height: sz.height as u32,
+                depth: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: GPU::DEPTH_FORMAT,
+            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT
+                | wgpu::TextureUsage::COPY_SRC
+                | wgpu::TextureUsage::SAMPLED,
+        });
+        let depth_view = depth_texture.create_view(&wgpu::TextureViewDescriptor {
+            label: Some("world-offscreen-depth-texture-view"),
+            format: None,
+            dimension: None,
+            aspect: wgpu::TextureAspect::All,
+            base_mip_level: 0,
+            level_count: None,
+            base_array_layer: 0,
+            array_layer_count: None,
+        });
+        (depth_texture, depth_view)
+    }
+
+    fn _make_deferred_bind_group(
+        gpu: &GPU,
+        deferred_bind_group_layout: &wgpu::BindGroupLayout,
+        deferred_texture_view: &wgpu::TextureView,
+        deferred_sampler: &wgpu::Sampler,
+    ) -> wgpu::BindGroup {
+        gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("world-deferred-bind-group"),
+            layout: deferred_bind_group_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(deferred_texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(deferred_sampler),
+                },
+            ],
+        })
+    }
+
     pub fn make_fullscreen_pipeline(
         device: &wgpu::Device,
         layout: &wgpu::PipelineLayout,
@@ -199,7 +344,7 @@ impl TerrainRenderPass {
         frag_shader: &wgpu::ShaderModule,
     ) -> wgpu::RenderPipeline {
         device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("terrain-dbg-deferred-pipeline"),
+            label: Some("world-dbg-deferred-pipeline"),
             layout: Some(layout),
             vertex_stage: wgpu::ProgrammableStageDescriptor {
                 module: &vert_shader,
@@ -262,7 +407,52 @@ impl TerrainRenderPass {
         };
     }
 
-    pub fn draw<'a>(
+    pub fn note_resize(&mut self, gpu: &GPU) {
+        self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
+        self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
+        self.deferred_bind_group = Self::_make_deferred_bind_group(
+            gpu,
+            &self.deferred_bind_group_layout,
+            &self.deferred_texture.1,
+            &self.deferred_sampler,
+        );
+    }
+
+    pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+        &self.deferred_bind_group_layout
+    }
+
+    pub fn bind_group(&self) -> &wgpu::BindGroup {
+        &self.deferred_bind_group
+    }
+
+    pub fn offscreen_target(
+        &self,
+    ) -> (
+        [wgpu::RenderPassColorAttachmentDescriptor; 1],
+        Option<wgpu::RenderPassDepthStencilAttachmentDescriptor>,
+    ) {
+        (
+            [wgpu::RenderPassColorAttachmentDescriptor {
+                attachment: &self.deferred_texture.1,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::RED),
+                    store: true,
+                },
+            }],
+            Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
+                attachment: &self.deferred_depth.1,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(-1f32),
+                    store: true,
+                }),
+                stencil_ops: None,
+            }),
+        )
+    }
+
+    pub fn render_world<'a>(
         &'a self,
         mut rpass: wgpu::RenderPass<'a>,
         globals_buffer: &'a GlobalParametersBuffer,

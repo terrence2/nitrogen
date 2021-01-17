@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-#include <wgpu-render/shader_shared/include/consts.glsl>
+#include <wgpu-buffer/shader_shared/include/consts.glsl>
 #include <wgpu-buffer/atmosphere/include/global.glsl>
 
 float

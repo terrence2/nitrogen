@@ -13,29 +13,5 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 
-// Our shared shader includes expect certain bind groups to be in certain spots.
-// Note that these are not unique because we need to stay under 4 and thus re-use heavily.
-#[derive(Clone, Copy, Eq, PartialEq, Debug)]
-pub enum Group {
-    Globals,
-    Atmosphere,
-    Stars,
-    TerrainAcc,
-    TerrainTileSet,
-    TerrainComposite,
-    UI,
-}
-
-impl Group {
-    pub fn index(self) -> u32 {
-        match self {
-            Self::Atmosphere => 1,
-            Self::Globals => 0,
-            Self::Stars => 2,
-            Self::TerrainAcc => 1,
-            Self::TerrainComposite => 3,
-            Self::TerrainTileSet => 2,
-            Self::UI => 1,
-        }
-    }
-}
+layout(set = 1, binding = 0) uniform texture2D ui_deferred_texture;
+layout(set = 1, binding = 1) uniform sampler ui_deferred_sampler;

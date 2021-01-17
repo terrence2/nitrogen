@@ -15,11 +15,12 @@
 #define MAX_WIDGETS 512
 
 struct WidgetInfo {
-    vec4 foreground_color;
-    vec4 background_color;
-    vec4 border_color;
     vec4 position;
+    uvec4 flags;
 };
+
+// Flags
+#define GLASS_BACKGROUND 0x00000001
 
 layout(set = 1, binding = 0) uniform WidgetBlock {
     WidgetInfo widget_info[MAX_WIDGETS];
@@ -27,12 +28,10 @@ layout(set = 1, binding = 0) uniform WidgetBlock {
 layout(set = 1, binding = 1) uniform texture2D glyph_sheet_texture;
 layout(set = 1, binding = 2) uniform sampler glyph_sheet_sampler;
 
-/*
-layout(set = 2, binding = 0) buffer LayoutData {
-    vec4 text_layout_position;
-    vec4 text_layout_color;
-};
-*/
+bool
+widget_has_glass_background(WidgetInfo info) {
+    return (info.flags.x & GLASS_BACKGROUND) > 0;
+}
 
 float
 glyph_alpha_uv(vec2 tex_coord)

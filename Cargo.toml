@@ -32,17 +32,17 @@ members = [
 
     "libs/wgpu-buffer/atlas",
     "libs/wgpu-buffer/atmosphere",
+    "libs/wgpu-buffer/composite",
     "libs/wgpu-buffer/font_common",
     "libs/wgpu-buffer/font_ttf",
     "libs/wgpu-buffer/fullscreen",
     "libs/wgpu-buffer/global_data",
+    "libs/wgpu-buffer/shader_shared",
     "libs/wgpu-buffer/stars",
     "libs/wgpu-buffer/terrain_geo",
+    "libs/wgpu-buffer/ui",
     "libs/wgpu-buffer/widget",
-
-    "libs/wgpu-render/shader_shared",
-    "libs/wgpu-render/terrain",
-    "libs/wgpu-render/ui",
+    "libs/wgpu-buffer/world",
 ]
 
 [dependencies]
@@ -61,6 +61,7 @@ atmosphere = { path = "libs/wgpu-buffer/atmosphere" }
 camera = { path = "libs/sim/camera" }
 catalog = { path = "libs/system/catalog" }
 command = { path = "libs/system/command" }
+composite = { path = "libs/wgpu-buffer/composite" }
 fullscreen = { path = "libs/wgpu-buffer/fullscreen" }
 geodesy = { path = "libs/sim/geodesy" }
 global_data = { path = "libs/wgpu-buffer/global_data" }
@@ -68,8 +69,8 @@ gpu = { path = "libs/system/gpu" }
 input = { path = "libs/system/input" }
 orrery = { path = "libs/sim/orrery" }
 stars = { path = "libs/wgpu-buffer/stars" }
-terrain = { path = "libs/wgpu-render/terrain" }
 terrain_geo = { path = "libs/wgpu-buffer/terrain_geo" }
-ui = { path = "libs/wgpu-render/ui" }
+ui = { path = "libs/wgpu-buffer/ui" }
 universe = { path = "libs/sim/universe" }
 widget = { path = "libs/wgpu-buffer/widget" }
+world = { path = "libs/wgpu-buffer/world" }
