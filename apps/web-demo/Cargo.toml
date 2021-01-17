@@ -11,7 +11,7 @@ crate-type = ["cdylib"]
 approx = "^ 0.4"
 console_error_panic_hook = "^ 0.1"
 failure = "^ 0.1.2"
-legion = "= 0.2.4"
+legion = "^ 0.3"
 log = "^ 0.4"
 smallvec = "^ 1.4"
 tokio = { version = "^ 1.0", features = ["rt-multi-thread", "macros", "io-util", "fs", "sync"] }

@@ -21,7 +21,7 @@ use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
 use gpu::GPU;
 use input::{InputController, InputSystem};
-use legion::prelude::*;
+use legion::*;
 // use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
