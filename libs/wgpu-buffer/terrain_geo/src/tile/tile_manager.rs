@@ -180,7 +180,7 @@ impl TileManager {
                 });
 
         // Scan catalog for all tile sets.
-        for index_fid in catalog.find_matching("*-index.json", Some("json"))? {
+        for index_fid in catalog.find_labeled_matching("default", "*-index.json", Some("json"))? {
             let index_data = from_utf8_string(catalog.read_sync(index_fid)?)?;
             let index_json = json::parse(&index_data)?;
             tile_sets.push(TileSet::new(
