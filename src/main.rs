@@ -16,7 +16,7 @@ use absolute_unit::{degrees, meters};
 use atmosphere::AtmosphereBuffer;
 use camera::ArcBallCamera;
 use catalog::{Catalog, DirectoryDrawer};
-use chrono::prelude::*;
+use chrono::{TimeZone, Utc};
 use command::{Bindings, CommandHandler};
 use composite::CompositeRenderPass;
 use failure::Fallible;
@@ -185,7 +185,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         .root()
         .write()
         .add_child(version_label)
-        .set_float(PositionH::End, PositionV::Bottom);
+        .set_float(PositionH::End, PositionV::Top);
 
     let fps_label = Label::new("fps")
         .with_color(Color::Red)

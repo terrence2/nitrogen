@@ -200,9 +200,10 @@ impl UiRenderPass {
                     write_mask: wgpu::ColorWrite::ALL,
                 }],
                 depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
+                    // text is mostly transparent, so we cannot elide.
                     format: GPU::DEPTH_FORMAT,
-                    depth_write_enabled: false,                   // FIXME
-                    depth_compare: wgpu::CompareFunction::Always, // FIXME
+                    depth_write_enabled: false,
+                    depth_compare: wgpu::CompareFunction::Always,
                     stencil: wgpu::StencilStateDescriptor {
                         front: wgpu::StencilStateFaceDescriptor::IGNORE,
                         back: wgpu::StencilStateFaceDescriptor::IGNORE,

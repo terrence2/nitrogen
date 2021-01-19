@@ -252,6 +252,18 @@ impl TextRun {
         }
     }
 
+    /// Change the selected region's font.
+    pub fn change_font(&mut self, font_id: FontId) {
+        for (span_offset, span_range) in self.selected_spans() {
+            let span = &mut self.spans[span_offset];
+            if span_range.start == 0 && span_range.end == span.text.len() {
+                span.set_font(font_id);
+            } else {
+                panic!("Would subdivide span");
+            }
+        }
+    }
+
     /// Selects the entire text run.
     pub fn select_all(&mut self) {
         self.selection.move_home(false);
@@ -408,13 +420,16 @@ impl TextRun {
             )?;
             total_width += span_metrics.width;
 
-            // FIXME: need to be able to offset height by line.
+            // FIXME: Do we need to be able to offset height by line.
+            // FIXME: I think the parent adds line gap rather than us.
             let line_gap = context
                 .font_context
                 .get_font(span.font_id)
                 .read()
                 .line_gap(span.size_pts);
             max_height = max_height.max(span_metrics.height + line_gap);
+
+            // FIXME: this is probably not accurate and we should just guess at 80%.
             max_baseline = max_baseline.max(span_metrics.baseline_height);
         }
         Ok(TextSpanMetrics {

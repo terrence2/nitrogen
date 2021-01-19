@@ -17,7 +17,7 @@ use failure::Fallible;
 use gpu::GPU;
 use winit::event::{KeyboardInput, ModifiersState};
 
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct UploadMetrics {
     pub widget_info_indexes: Vec<u32>,
     pub width: f32,

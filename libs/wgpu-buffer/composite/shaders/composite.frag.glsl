@@ -25,4 +25,5 @@ void main() {
     vec4 ui = texture(sampler2D(ui_deferred_texture, ui_deferred_sampler), v_tc);
     f_color = vec4(world.rgb * (1 - ui.a) + ui.rgb * ui.a, 1.0);
     //f_color = vec4(ui.a, ui.a, ui.a, 1.0);
+    //f_color = vec4(1, 0, 1, 1);
 }

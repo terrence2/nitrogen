@@ -23,4 +23,5 @@ layout(location = 0) out vec4 f_color;
 void main() {
     float alpha = texture(sampler2D(glyph_sheet_texture, glyph_sheet_sampler), v_tex_coord).r;
     f_color = vec4(v_color.xyz, alpha);
+    //f_color = vec4(1, 0, 1, 1);
 }

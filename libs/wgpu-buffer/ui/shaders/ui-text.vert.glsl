@@ -25,11 +25,14 @@ layout(location = 0) out vec2 v_tex_coord;
 layout(location = 1) flat out vec4 v_color;
 
 void main() {
-    v_tex_coord = tex_coord;
-
     WidgetInfo info = widget_info[widget_info_id];
-    v_color = color;
 
-    vec4 text_layout_position = vec4(info.position[0],  info.position[1], position.z / MAX_WIDGETS, 0);
-    gl_Position = vec4(position.xy, 0, 1) + text_layout_position;
+    v_tex_coord = tex_coord;
+    v_color = color;
+    gl_Position = vec4(
+        position.x + info.position[0],
+        position.y + info.position[1],
+        position.z / MAX_WIDGETS,
+        1
+    );
 }

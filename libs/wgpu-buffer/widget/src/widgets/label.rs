@@ -46,6 +46,10 @@ impl Label {
 
     pub fn with_font(mut self, font_id: FontId) -> Self {
         self.line.set_default_font(font_id);
+        // Note: this is a label; we don't allow selection, so no need to save and restore it.
+        self.line.select_all();
+        self.line.change_font(font_id);
+        self.line.select_none();
         self
     }
 

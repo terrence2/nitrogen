@@ -219,8 +219,8 @@ impl FontContext {
             x0 = (x0 * phys_w).floor() / phys_w;
             x1 = (x1 * phys_w).floor() / phys_w;
 
-            let y0 = offset[1] - (hi_y as f32 + ascent) * scale_y;
-            let y1 = offset[1] - (lo_y as f32 + ascent) * scale_y;
+            let y0 = offset[1] + lo_y as f32 * scale_y;
+            let y1 = offset[1] + hi_y as f32 * scale_y;
             let z = offset[2];
 
             let s0 = frame.s0(w);
