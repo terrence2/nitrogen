@@ -12,11 +12,11 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::font_context::SANS_FONT_ID;
 use crate::{
     color::Color,
-    font_context::{FontId, TextSpanMetrics},
+    font_context::{FontId, TextSpanMetrics, SANS_FONT_ID},
     paint_context::PaintContext,
+    widget::UploadMetrics,
 };
 use failure::Fallible;
 use gpu::GPU;
@@ -113,19 +113,25 @@ impl TextSelection {
         self.leftmost()..self.rightmost()
     }
 
-    // Find intersection between this selection and the given range. Return a span sele
+    // Find intersection between this selection and the given range. Return a span selection.
     fn intersect(&self, other: Range<usize>) -> SpanSelection {
+        if self.anchor == self.focus {
+            return if other.contains(&self.anchor) {
+                SpanSelection::Cursor {
+                    position: self.anchor - other.start,
+                }
+            } else {
+                SpanSelection::None
+            };
+        }
         let rng = self.as_range();
         let start = rng.start.max(other.start);
         let end = rng.end.min(other.end);
         match start.cmp(&end) {
-            Ordering::Equal => SpanSelection::Cursor {
-                position: start - other.start,
-            },
             Ordering::Less => SpanSelection::Select {
                 range: start - other.start..end - other.start,
             },
-            Ordering::Greater => SpanSelection::None,
+            _ => SpanSelection::None,
         }
     }
 
@@ -169,6 +175,7 @@ pub struct TextRun {
 
     selection: TextSelection,
     hide_selection: bool, // e.g. for Label
+    pre_blend_text: bool,
 
     default_font_id: FontId,
     default_size_pts: f32,
@@ -189,6 +196,7 @@ impl TextRun {
             spans: vec![],
             selection: Default::default(),
             hide_selection: false,
+            pre_blend_text: false,
             default_font_id: SANS_FONT_ID,
             default_size_pts: 12.0,
             default_color: Color::Magenta,
@@ -197,6 +205,11 @@ impl TextRun {
 
     pub fn with_hidden_selection(mut self) -> Self {
         self.hide_selection = true;
+        self
+    }
+
+    pub fn with_pre_blended_text(mut self) -> Self {
+        self.pre_blend_text = true;
         self
     }
 
@@ -242,14 +255,70 @@ impl TextRun {
 
     /// Change the selected region's color.
     pub fn change_color(&mut self, color: Color) {
-        for (span_offset, span_range) in self.selected_spans() {
-            let span = &mut self.spans[span_offset];
-            if span_range.start == 0 && span_range.end == span.text.len() {
-                span.set_color(color);
+        self.change_properties(Some(color), None, None);
+    }
+
+    /// Change the selected region's font.
+    pub fn change_font(&mut self, font_id: FontId) {
+        self.change_properties(None, None, Some(font_id));
+    }
+
+    /// Change the selected region's size.
+    pub fn change_size_pts(&mut self, size_pts: f32) {
+        self.change_properties(None, Some(size_pts), None);
+    }
+
+    fn change_properties(
+        &mut self,
+        color: Option<Color>,
+        size_pts: Option<f32>,
+        font_id: Option<FontId>,
+    ) {
+        if self.selection.is_empty() {
+            return;
+        }
+        let mut next_spans = Vec::new();
+        let mut position = 0;
+        for mut span in self.spans.drain(..) {
+            if let SpanSelection::Select { range: span_range } = self
+                .selection
+                .intersect(position..position + span.content().len())
+            {
+                position += span.content().len();
+                if span_range.start == 0 && span_range.end == span.content().len() {
+                    if let Some(color) = color {
+                        span.set_color(color);
+                    }
+                    if let Some(size_pts) = size_pts {
+                        span.set_size_pts(size_pts);
+                    }
+                    if let Some(font_id) = font_id {
+                        span.set_font(font_id);
+                    }
+                    next_spans.push(span);
+                } else {
+                    let parts = [
+                        (0..span_range.start, None, None, None),
+                        (span_range.clone(), color, size_pts, font_id),
+                        (span_range.end..span.text.len(), None, None, None),
+                    ];
+                    for (part_range, color, size_pts, font_id) in &parts {
+                        if !part_range.is_empty() {
+                            next_spans.push(TextSpan::new(
+                                &span.content()[part_range.to_owned()],
+                                size_pts.unwrap_or_else(|| span.size_pts()),
+                                font_id.unwrap_or_else(|| span.font()),
+                                color.unwrap_or_else(|| *span.color()),
+                            ));
+                        }
+                    }
+                }
             } else {
-                panic!("Would subdivide span");
+                position += span.content().len();
+                next_spans.push(span);
             }
         }
+        self.spans = next_spans;
     }
 
     /// Selects the entire text run.
@@ -261,6 +330,15 @@ impl TextRun {
     /// Turn the selection area into a cursor.
     pub fn select_none(&mut self) {
         self.selection = Default::default();
+    }
+
+    /// Select the given character range.
+    pub fn select(&mut self, range: Range<usize>) {
+        let own_len = self.len();
+        self.selection = TextSelection {
+            anchor: range.start.min(own_len),
+            focus: range.end.min(own_len),
+        };
     }
 
     /// Set the cursor position in the run, deselecting any previous selection.
@@ -387,41 +465,67 @@ impl TextRun {
         widget_info_index: u32,
         gpu: &GPU,
         context: &mut PaintContext,
-    ) -> Fallible<TextSpanMetrics> {
+    ) -> Fallible<(UploadMetrics, TextSpanMetrics)> {
+        let mut min_text_offset = usize::MAX;
+        let mut min_background_offset = usize::MAX;
+        let mut position = 0;
         let mut total_width = 0f32;
         let mut max_height = 0f32;
-        let mut max_baseline = 0f32;
-        for (span_offset, span) in self.spans.iter().enumerate() {
+        let mut max_ascent = 0f32;
+        let mut min_descent = 0f32;
+        let mut max_line_gap = 0f32;
+        for span in self.spans.iter() {
             let selection_area = if self.hide_selection {
                 SpanSelection::None
             } else {
                 self.selection
-                    .intersect(span_offset..span_offset + span.content().len())
+                    .intersect(position..position + span.content().len())
             };
+            position += span.content().len();
 
             let span_metrics = context.layout_text(
                 &span,
-                [0., -height_offset],
+                [total_width, -height_offset],
                 widget_info_index,
                 selection_area,
                 gpu,
             )?;
             total_width += span_metrics.width;
 
-            // FIXME: need to be able to offset height by line.
-            let line_gap = context
-                .font_context
-                .get_font(span.font_id)
-                .read()
-                .line_gap(span.size_pts);
-            max_height = max_height.max(span_metrics.height + line_gap);
-            max_baseline = max_baseline.max(span_metrics.baseline_height);
+            max_height = max_height.max(span_metrics.height);
+            max_line_gap = max_line_gap.max(span_metrics.line_gap);
+            max_ascent = max_ascent.max(span_metrics.ascent);
+            min_descent = min_descent.min(span_metrics.descent);
+            min_text_offset = min_text_offset.min(span_metrics.initial_text_offset);
+            min_background_offset =
+                min_background_offset.min(span_metrics.initial_background_offset);
         }
-        Ok(TextSpanMetrics {
-            width: total_width,
-            baseline_height: max_baseline,
-            height: max_height,
-        })
+        min_text_offset = min_text_offset.min(context.text_pool.len());
+        min_background_offset = min_background_offset.min(context.background_pool.len());
+
+        for v in &mut context.text_pool[min_text_offset..] {
+            v.position[1] -= max_ascent;
+        }
+        for v in &mut context.background_pool[min_background_offset..] {
+            v.position[1] -= max_ascent;
+        }
+
+        Ok((
+            UploadMetrics {
+                widget_info_indexes: vec![widget_info_index],
+                width: total_width,
+                height: max_height,
+            },
+            TextSpanMetrics {
+                width: total_width,
+                ascent: max_ascent,
+                descent: min_descent,
+                height: max_height,
+                line_gap: max_line_gap,
+                initial_text_offset: min_text_offset,
+                initial_background_offset: min_background_offset,
+            },
+        ))
     }
 }
 

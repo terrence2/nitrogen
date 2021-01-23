@@ -67,7 +67,7 @@ impl FontInterface for TtfFont {
             .scaled(Scale::uniform(scale))
             .exact_bounding_box()
         {
-            return ((bb.min.x, bb.min.y), (bb.max.x, bb.max.y));
+            return ((bb.min.x, -bb.max.y), (bb.max.x, -bb.min.y));
         }
         Default::default()
     }
@@ -80,7 +80,7 @@ impl FontInterface for TtfFont {
             .positioned(Default::default())
             .pixel_bounding_box()
         {
-            return ((bb.min.x, bb.min.y), (bb.max.x, bb.max.y));
+            return ((bb.min.x, -bb.max.y), (bb.max.x, -bb.min.y));
         }
         Default::default()
     }

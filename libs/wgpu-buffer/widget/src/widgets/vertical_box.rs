@@ -98,9 +98,10 @@ impl Widget for VerticalBox {
         let mut height = 0f32;
         context.current_depth += PaintContext::BOX_DEPTH_SIZE;
         for pack in &self.children {
+            // Pack at 0,0
             let mut child_metrics = pack.widget().read().upload(gpu, context)?;
 
-            // Offset children by our current box offset.
+            // Offset up to our current height.
             for &widget_info_index in &child_metrics.widget_info_indexes {
                 context.widget_info_pool[widget_info_index as usize].position[1] -= height;
             }
@@ -118,41 +119,18 @@ impl Widget for VerticalBox {
             height = override_height;
         }
 
-        let v00 = WidgetVertex {
-            position: [0., 0., context.current_depth],
-            tex_coord: [0., 0.],
-            color: self.background_color.to_u8_array(),
+        WidgetVertex::push_quad(
+            [0., -height],
+            [width, 0.],
+            context.current_depth,
+            &self.background_color,
             widget_info_index,
-        };
-        let v01 = WidgetVertex {
-            position: [0., -height, context.current_depth],
-            tex_coord: [0., 0.],
-            color: self.background_color.to_u8_array(),
-            widget_info_index,
-        };
-        let v10 = WidgetVertex {
-            position: [width, 0., context.current_depth],
-            tex_coord: [0., 0.],
-            color: self.background_color.to_u8_array(),
-            widget_info_index,
-        };
-        let v11 = WidgetVertex {
-            position: [width, -height, context.current_depth],
-            tex_coord: [0., 0.],
-            color: self.background_color.to_u8_array(),
-            widget_info_index,
-        };
-        context.background_pool.push(v00);
-        context.background_pool.push(v01);
-        context.background_pool.push(v10);
-        context.background_pool.push(v10);
-        context.background_pool.push(v01);
-        context.background_pool.push(v11);
+            &mut context.background_pool,
+        );
 
         Ok(UploadMetrics {
             widget_info_indexes,
             width,
-            baseline_height: height,
             height,
         })
     }

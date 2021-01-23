@@ -46,6 +46,10 @@ impl Label {
 
     pub fn with_font(mut self, font_id: FontId) -> Self {
         self.line.set_default_font(font_id);
+        // Note: this is a label; we don't allow selection, so no need to save and restore it.
+        self.line.select_all();
+        self.line.change_font(font_id);
+        self.line.select_none();
         self
     }
 
@@ -55,6 +59,11 @@ impl Label {
         self.line.select_all();
         self.line.change_color(color);
         self.line.select_none();
+        self
+    }
+
+    pub fn with_pre_blended_text(mut self) -> Self {
+        self.line = self.line.with_pre_blended_text();
         self
     }
 
@@ -73,11 +82,11 @@ impl Widget for Label {
         let info = WidgetInfo::default(); //.with_foreground_color(self.default_color);
         let widget_info_index = context.push_widget(&info);
 
-        let line_metrics = self.line.upload(0f32, widget_info_index, gpu, context)?;
+        let (line_metrics, _) = self.line.upload(0f32, widget_info_index, gpu, context)?;
+
         Ok(UploadMetrics {
-            widget_info_indexes: vec![widget_info_index],
+            widget_info_indexes: line_metrics.widget_info_indexes,
             width: self.width.unwrap_or(line_metrics.width),
-            baseline_height: line_metrics.baseline_height,
             height: line_metrics.height,
         })
     }

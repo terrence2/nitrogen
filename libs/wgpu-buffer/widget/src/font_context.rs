@@ -46,9 +46,22 @@ impl GlyphTracker {
 }
 
 pub struct TextSpanMetrics {
+    // The width of the span.
     pub width: f32,
-    pub baseline_height: f32,
+
+    // The height of the span from top of ascent to bottom of descent.
     pub height: f32,
+
+    // Distance from the origin to the top and bottom of the span, respectively.
+    pub ascent: f32,
+    pub descent: f32,
+
+    // Expected additional builtin line gap (baseline to baseline) for this span.
+    pub line_gap: f32,
+
+    // Initial position of text and background buffers that we push into.
+    pub initial_text_offset: usize,
+    pub initial_background_offset: usize,
 }
 
 pub struct FontContext {
@@ -170,6 +183,9 @@ impl FontContext {
         text_pool: &mut Vec<WidgetVertex>,
         background_pool: &mut Vec<WidgetVertex>,
     ) -> Fallible<TextSpanMetrics> {
+        let initial_text_offset = text_pool.len();
+        let initial_background_offset = background_pool.len();
+
         let w = self.glyph_sheet_width();
         let h = self.glyph_sheet_height();
 
@@ -195,6 +211,7 @@ impl FontContext {
         let font = self.get_font(span.font());
         let descent = font.read().descent(scale_px);
         let ascent = font.read().ascent(scale_px);
+        let line_gap = font.read().line_gap(scale_px);
 
         let mut x_pos = 0f32;
         let mut prior = None;
@@ -219,8 +236,8 @@ impl FontContext {
             x0 = (x0 * phys_w).floor() / phys_w;
             x1 = (x1 * phys_w).floor() / phys_w;
 
-            let y0 = offset[1] - (hi_y as f32 + ascent) * scale_y;
-            let y1 = offset[1] - (lo_y as f32 + ascent) * scale_y;
+            let y0 = offset[1] + lo_y as f32 * scale_y;
+            let y1 = offset[1] + hi_y as f32 * scale_y;
             let z = offset[2];
 
             let s0 = frame.s0(w);
@@ -246,8 +263,8 @@ impl FontContext {
                     let mut bx0 = offset[0] + x_pos * scale_x;
                     bx0 = (bx0 * phys_w).floor() / phys_w;
                     let bx1 = bx0 + px_scaling / gpu.physical_size().width as f32;
-                    let by0 = offset[1] + (descent - ascent) * scale_y;
-                    let by1 = offset[1];
+                    let by0 = offset[1] + descent * scale_y;
+                    let by1 = offset[1] + ascent * scale_y;
                     let bz = offset[2] - 0.1;
 
                     WidgetVertex::push_quad(
@@ -264,8 +281,8 @@ impl FontContext {
                 if range.contains(&i) {
                     let bx0 = offset[0] + x_pos * scale_x;
                     let bx1 = offset[0] + (x_pos + kerning + lo_x as f32 + adv) * scale_x;
-                    let by0 = offset[1] + (descent - ascent) * scale_y;
-                    let by1 = offset[1];
+                    let by0 = offset[1] + descent * scale_y;
+                    let by1 = offset[1] + ascent * scale_y;
                     let bz = offset[2] - 0.1;
 
                     WidgetVertex::push_quad(
@@ -288,8 +305,8 @@ impl FontContext {
                 let mut bx0 = offset[0] + x_pos * scale_x;
                 bx0 = (bx0 * phys_w).floor() / phys_w;
                 let bx1 = bx0 + px_scaling / gpu.physical_size().width as f32;
-                let by0 = offset[1] + (descent - ascent) * scale_y;
-                let by1 = offset[1];
+                let by0 = offset[1] + descent * scale_y;
+                let by1 = offset[1] + ascent * scale_y;
                 let bz = offset[2] - 0.1;
 
                 WidgetVertex::push_quad(
@@ -306,7 +323,11 @@ impl FontContext {
         Ok(TextSpanMetrics {
             width: x_pos * scale_x,
             height: (ascent - descent) * scale_y,
-            baseline_height: -descent * scale_y,
+            ascent: ascent * scale_y,
+            descent: descent * scale_y,
+            line_gap,
+            initial_text_offset,
+            initial_background_offset,
         })
     }
 }

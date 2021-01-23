@@ -106,15 +106,19 @@ impl Widget for TextEdit {
         let widget_info_index = context.push_widget(&info);
 
         let mut height_offset = 0f32;
-        for line in &self.lines {
-            let run_metrics = line.upload(height_offset, widget_info_index, gpu, context)?;
+        for (i, line) in self.lines.iter().enumerate() {
+            let (run_metrics, span_metrics) =
+                line.upload(height_offset, widget_info_index, gpu, context)?;
+
+            if i != self.lines.len() - 1 {
+                height_offset += span_metrics.line_gap;
+            }
             height_offset += run_metrics.height;
         }
 
         Ok(UploadMetrics {
             widget_info_indexes: vec![widget_info_index],
             width: self.width,
-            baseline_height: height_offset,
             height: height_offset,
         })
     }

@@ -23,6 +23,7 @@ use crate::{
 use failure::Fallible;
 use gpu::GPU;
 use parking_lot::RwLock;
+use std::ops::Range;
 use std::sync::Arc;
 use winit::event::{ElementState, KeyboardInput, ModifiersState, VirtualKeyCode};
 
@@ -68,6 +69,14 @@ impl LineEdit {
         &mut self.line
     }
 
+    pub fn select(&mut self, range: Range<usize>) {
+        self.line.select(range);
+    }
+
+    pub fn change_size_pts(&mut self, size_pts: f32) {
+        self.line.change_size_pts(size_pts);
+    }
+
     pub fn take_action(
         &mut self,
         virtual_keycode: Option<VirtualKeyCode>,
@@ -102,11 +111,10 @@ impl Widget for LineEdit {
         let info = WidgetInfo::default();
         let widget_info_index = context.push_widget(&info);
 
-        let line_metrics = self.line.upload(0f32, widget_info_index, gpu, context)?;
+        let (line_metrics, _) = self.line.upload(0f32, widget_info_index, gpu, context)?;
         Ok(UploadMetrics {
-            widget_info_indexes: vec![widget_info_index],
+            widget_info_indexes: line_metrics.widget_info_indexes,
             width: self.override_width.unwrap_or(line_metrics.width),
-            baseline_height: line_metrics.baseline_height,
             height: line_metrics.height,
         })
     }

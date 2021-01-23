@@ -24,6 +24,7 @@ pub struct WidgetInfo {
 }
 
 const GLASS_BACKGROUND: u32 = 0x0000_0001;
+const PRE_BLEND_TEXT: u32 = 0x0000_0002;
 
 impl WidgetInfo {
     pub fn set_glass_background(&mut self, status: bool) {
@@ -31,6 +32,14 @@ impl WidgetInfo {
             self.flags[0] |= GLASS_BACKGROUND;
         } else {
             self.flags[0] &= !GLASS_BACKGROUND;
+        }
+    }
+
+    pub fn set_pre_blend_text(&mut self, status: bool) {
+        if status {
+            self.flags[0] |= PRE_BLEND_TEXT;
+        } else {
+            self.flags[0] &= !PRE_BLEND_TEXT;
         }
     }
 }
