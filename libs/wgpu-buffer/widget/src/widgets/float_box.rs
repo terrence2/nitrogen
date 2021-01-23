@@ -84,7 +84,7 @@ impl FloatBox {
 
 impl Widget for FloatBox {
     // Webgpu: (-1, -1) maps to the bottom-left of the screen.
-    // FIXME: use widget info for depth instead of vertices; save some upload bandwidth.
+    // Widget: (0, 0) maps to the top-left of the widget.
     fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Fallible<UploadMetrics> {
         let mut widget_info_indexes = Vec::with_capacity(self.children.len());
         for pack in &self.children {
@@ -98,9 +98,9 @@ impl Widget for FloatBox {
                 PositionH::End => 1f32 - child_metrics.width,
             };
             let y_offset = match pack.float_v {
-                PositionV::Top => 1f32 - child_metrics.height,
+                PositionV::Top => 1f32,
                 PositionV::Center => child_metrics.height / 2.0,
-                PositionV::Bottom => -1f32 + child_metrics.baseline_height,
+                PositionV::Bottom => -1f32 + child_metrics.height,
             };
             for &widget_info_index in &child_metrics.widget_info_indexes {
                 context.widget_info_pool[widget_info_index as usize].position[0] += x_offset;
@@ -113,7 +113,6 @@ impl Widget for FloatBox {
             widget_info_indexes,
             width: 2f32,
             height: 2f32,
-            baseline_height: 2f32,
         })
     }
 

@@ -21,7 +21,6 @@ use winit::event::{KeyboardInput, ModifiersState};
 pub struct UploadMetrics {
     pub widget_info_indexes: Vec<u32>,
     pub width: f32,
-    pub baseline_height: f32,
     pub height: f32,
 }
 

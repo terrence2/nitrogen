@@ -62,6 +62,11 @@ impl Label {
         self
     }
 
+    pub fn with_pre_blended_text(mut self) -> Self {
+        self.line = self.line.with_pre_blended_text();
+        self
+    }
+
     pub fn wrapped(self) -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(self))
     }
@@ -77,11 +82,11 @@ impl Widget for Label {
         let info = WidgetInfo::default(); //.with_foreground_color(self.default_color);
         let widget_info_index = context.push_widget(&info);
 
-        let line_metrics = self.line.upload(0f32, widget_info_index, gpu, context)?;
+        let (line_metrics, _) = self.line.upload(0f32, widget_info_index, gpu, context)?;
+
         Ok(UploadMetrics {
-            widget_info_indexes: vec![widget_info_index],
+            widget_info_indexes: line_metrics.widget_info_indexes,
             width: self.width.unwrap_or(line_metrics.width),
-            baseline_height: line_metrics.baseline_height,
             height: line_metrics.height,
         })
     }

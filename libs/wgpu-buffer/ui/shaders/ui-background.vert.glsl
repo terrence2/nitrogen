@@ -34,8 +34,12 @@ void main() {
     WidgetInfo info = widget_info[widget_info_id];
     v_color = color;
 
-    vec4 widget_position = vec4(info.position.xy, 0, 0) + vec4(position.xy, position.z / MAX_WIDGETS, 1);
-
+    vec4 widget_position = vec4(
+        position.x + info.position.x,
+        position.y + info.position.y,
+        position.z / MAX_WIDGETS,
+        1
+    );
     v_screen_tex_coord = (widget_position.xy + 1) / 2;
     v_screen_tex_coord.y = 1 - v_screen_tex_coord.y;
 

@@ -179,6 +179,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     let version_label = Label::new("Nitrogen v0.1")
         .with_color(Color::Green)
         .with_size(8.0)
+        .with_pre_blended_text()
         .wrapped();
     frame_graph
         .widgets
@@ -190,6 +191,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     let fps_label = Label::new("fps")
         .with_color(Color::Red)
         .with_size(13.0)
+        .with_pre_blended_text()
         .wrapped();
     frame_graph
         .widgets

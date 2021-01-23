@@ -21,6 +21,7 @@ struct WidgetInfo {
 
 // Flags
 #define GLASS_BACKGROUND 0x00000001
+#define PRE_BLEND_TEXT 0x00000002
 
 layout(set = 1, binding = 0) uniform WidgetBlock {
     WidgetInfo widget_info[MAX_WIDGETS];
@@ -31,6 +32,11 @@ layout(set = 1, binding = 2) uniform sampler glyph_sheet_sampler;
 bool
 widget_has_glass_background(WidgetInfo info) {
     return (info.flags.x & GLASS_BACKGROUND) > 0;
+}
+
+bool
+widget_has_pre_blended_text(WidgetInfo info) {
+    return (info.flags.x & PRE_BLEND_TEXT) > 0;
 }
 
 float
