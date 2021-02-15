@@ -161,6 +161,9 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     )?;
     let ui = UiRenderPass::new(&mut gpu, &globals, &widget_buffer, &world)?;
     let composite = CompositeRenderPass::new(&mut gpu, &globals, &world, &ui)?;
+
+    let interpreter = Interpreter::boot();
+
     let mut frame_graph = FrameGraph::new(
         &mut legion,
         &mut gpu,

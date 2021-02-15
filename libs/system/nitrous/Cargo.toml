@@ -1,0 +1,15 @@
+[package]
+name = "nitrous"
+version = "0.1.0"
+authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
+edition = "2018"
+
+[build-dependencies]
+lalrpop = "0.19.4"
+
+[dependencies]
+failure = "^ 0.1"
+lalrpop-util = "0.19.4"
+ordered-float = "^ 2"
+parking_lot = "^ 0.11"
+regex = "1"

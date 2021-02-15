@@ -28,6 +28,7 @@ members = [
     "libs/system/commandable",
     "libs/system/gpu",
     "libs/system/input",
+    "libs/system/nitrous",
     "libs/system/packed_struct",
 
     "libs/wgpu-buffer/atlas",
