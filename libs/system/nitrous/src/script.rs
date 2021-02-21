@@ -13,10 +13,27 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use lalrpop_util::lalrpop_mod;
+lalrpop_mod!(#[allow(clippy::all)] pub(crate) script);
+use script::ExprParser;
 
-lalrpop_mod!(pub(crate) script);
+use crate::ir::Expr;
+use failure::{bail, Fallible};
 
-pub use script::{ExprParser, TermParser};
+pub struct Script {
+    pub(crate) expr: Box<Expr>,
+}
+
+impl Script {
+    pub fn compile_expr(raw: &str) -> Fallible<Self> {
+        Ok(match ExprParser::new().parse(raw) {
+            Ok(expr) => Self { expr },
+            Err(e) => {
+                println!("parse failure: {}", e);
+                bail!(format!("parse failure: {}", e))
+            }
+        })
+    }
+}
 
 #[cfg(test)]
 mod test {
@@ -27,46 +44,45 @@ mod test {
 
     #[test]
     fn script_terms() -> Fallible<()> {
-        assert!(TermParser::new().parse("22").is_ok());
-        assert!(TermParser::new().parse("(22)").is_ok());
-        assert!(TermParser::new().parse("((((22))))").is_ok());
+        assert!(ExprParser::new().parse("22").is_ok());
+        assert!(ExprParser::new().parse("(22)").is_ok());
+        assert!(ExprParser::new().parse("((((22))))").is_ok());
         assert_eq!(
-            TermParser::new().parse("((\"a\"))")?,
-            Term::String("a".to_owned())
+            ExprParser::new().parse("((\"a\"))")?,
+            Box::new(Expr::Term(Term::String("a".to_owned())))
         );
         assert_eq!(
-            TermParser::new().parse("((\'a\'))")?,
-            Term::String("a".to_owned())
+            ExprParser::new().parse("((\'a\'))")?,
+            Box::new(Expr::Term(Term::String("a".to_owned())))
         );
         assert_eq!(
-            TermParser::new().parse("+123.")?,
-            Term::Float(OrderedFloat(123f64))
+            ExprParser::new().parse("+123.")?,
+            Box::new(Expr::Term(Term::Float(OrderedFloat(123f64))))
         );
         assert_eq!(
-            TermParser::new().parse("-123.")?,
-            Term::Float(OrderedFloat(-123f64))
+            ExprParser::new().parse("-123.")?,
+            Box::new(Expr::Term(Term::Float(OrderedFloat(-123f64))))
         );
         assert_eq!(
-            TermParser::new().parse("+0.123")?,
-            Term::Float(OrderedFloat(0.123f64))
+            ExprParser::new().parse("+0.123")?,
+            Box::new(Expr::Term(Term::Float(OrderedFloat(0.123f64))))
         );
         assert_eq!(
-            TermParser::new().parse("-0.123")?,
-            Term::Float(OrderedFloat(-0.123f64))
+            ExprParser::new().parse("-0.123")?,
+            Box::new(Expr::Term(Term::Float(OrderedFloat(-0.123f64))))
         );
         assert_eq!(
-            TermParser::new().parse("123.123")?,
-            Term::Float(OrderedFloat(123.123f64))
+            ExprParser::new().parse("123.123")?,
+            Box::new(Expr::Term(Term::Float(OrderedFloat(123.123f64))))
         );
         assert_eq!(
-            TermParser::new().parse("-123.123")?,
-            Term::Float(OrderedFloat(-123.123f64))
+            ExprParser::new().parse("-123.123")?,
+            Box::new(Expr::Term(Term::Float(OrderedFloat(-123.123f64))))
         );
         assert_eq!(
-            TermParser::new().parse("asdf")?,
-            Term::Symbol("asdf".into())
+            ExprParser::new().parse("asdf")?,
+            Box::new(Expr::Term(Term::Symbol("asdf".into())))
         );
-        assert_eq!(TermParser::new().parse("ƛ")?, Term::Symbol("ƛ".into()));
         Ok(())
     }
 
@@ -116,6 +132,6 @@ mod test {
 
     #[test]
     fn script_mismatched_parens() {
-        assert!(script::TermParser::new().parse("((22)").is_err());
+        assert!(script::ExprParser::new().parse("((22)").is_err());
     }
 }

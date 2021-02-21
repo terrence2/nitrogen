@@ -15,22 +15,20 @@
 mod ir;
 mod script;
 
-pub use crate::{
-    ir::Expr,
-    script::{ExprParser, TermParser},
-};
+pub use crate::script::Script;
 
-use crate::ir::{Operator, Term};
+use crate::ir::{Expr, Operator, Term};
 use failure::{bail, Fallible};
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
 use std::{collections::HashMap, fmt::Debug, ops, sync::Arc};
 
+// Note: manually passing the module until we have arbitrary self.
 pub trait Module: Debug {
     fn module_name(&self) -> String;
     fn call_method(&self, name: &str, args: &[Value]) -> Fallible<Value>;
-    fn put(&mut self, name: &str, value: Value) -> Fallible<()>;
-    fn get(&self, name: &str) -> Fallible<Value>;
+    fn put(&mut self, module: Arc<RwLock<dyn Module>>, name: &str, value: Value) -> Fallible<()>;
+    fn get(&self, module: Arc<RwLock<dyn Module>>, name: &str) -> Fallible<Value>;
 }
 
 #[derive(Clone, Debug)]
@@ -66,7 +64,7 @@ impl PartialEq for Value {
 impl Eq for Value {}
 
 impl Value {
-    pub fn multiply(self, other: Self) -> Fallible<Self> {
+    pub fn impl_multiply(self, other: Self) -> Fallible<Self> {
         Ok(match self {
             Value::Integer(lhs) => match other {
                 Value::Integer(rhs) => Value::Integer(lhs * rhs),
@@ -83,10 +81,8 @@ impl Value {
                 Value::Method(_, _) => bail!("cannot multiply a number by a method"),
             },
             Value::String(lhs) => match other {
-                Value::Integer(rhs) => Value::String(lhs.clone().repeat(rhs.max(0) as usize)),
-                Value::Float(rhs) => {
-                    Value::String(lhs.clone().repeat(rhs.floor().max(0f64) as usize))
-                }
+                Value::Integer(rhs) => Value::String(lhs.repeat(rhs.max(0) as usize)),
+                Value::Float(rhs) => Value::String(lhs.repeat(rhs.floor().max(0f64) as usize)),
                 Value::String(_) => bail!("cannot multiply a string by a string"),
                 Value::Module(_) => bail!("cannot multiply a string by a module"),
                 Value::Method(_, _) => bail!("cannot multiply a string by a method"),
@@ -96,7 +92,7 @@ impl Value {
         })
     }
 
-    pub fn divide(self, other: Self) -> Fallible<Self> {
+    pub fn impl_divide(self, other: Self) -> Fallible<Self> {
         Ok(match self {
             Value::Integer(lhs) => match other {
                 Value::Integer(rhs) => Value::Integer(lhs / rhs),
@@ -118,7 +114,7 @@ impl Value {
         })
     }
 
-    pub fn add(self, other: Self) -> Fallible<Self> {
+    pub fn impl_add(self, other: Self) -> Fallible<Self> {
         Ok(match self {
             Value::Integer(lhs) => match other {
                 Value::Integer(rhs) => Value::Integer(lhs + rhs),
@@ -137,7 +133,7 @@ impl Value {
             Value::String(lhs) => match other {
                 Value::Integer(_) => bail!("cannot add a number to a string"),
                 Value::Float(_) => bail!("cannot add a number to a string"),
-                Value::String(rhs) => Value::String(lhs.clone() + &rhs),
+                Value::String(rhs) => Value::String(lhs + &rhs),
                 Value::Module(_) => bail!("cannot add a module to a string"),
                 Value::Method(_, _) => bail!("cannot add a method to a string"),
             },
@@ -146,7 +142,7 @@ impl Value {
         })
     }
 
-    pub fn subtract(self, other: Self) -> Fallible<Self> {
+    pub fn impl_subtract(self, other: Self) -> Fallible<Self> {
         Ok(match self {
             Value::Integer(lhs) => match other {
                 Value::Integer(rhs) => Value::Integer(lhs - rhs),
@@ -207,19 +203,8 @@ impl Interpreter {
         }
     }
 
-    // Interpret an expression.
-    pub fn interpret(&self, raw: &str) -> Fallible<Value> {
-        match ExprParser::new().parse(raw) {
-            Ok(expr) => {
-                let value = self.interpret_expr(&expr)?;
-                println!("Value: {:#?}", value);
-                Ok(value)
-            }
-            Err(e) => {
-                println!("Parse Error: {}", e);
-                bail!(format!("interpret failed with: {}", e))
-            }
-        }
+    pub fn interpret(&self, script: &Script) -> Fallible<Value> {
+        self.interpret_expr(&script.expr)
     }
 
     pub fn interpret_expr(&self, expr: &Expr) -> Fallible<Value> {
@@ -240,15 +225,15 @@ impl Interpreter {
                 let t0 = self.interpret_expr(lhs)?;
                 let t1 = self.interpret_expr(rhs)?;
                 match op {
-                    Operator::Multiply => t0.multiply(t1)?,
-                    Operator::Divide => t0.divide(t1)?,
-                    Operator::Add => t0.add(t1)?,
-                    Operator::Subtract => t0.subtract(t1)?,
+                    Operator::Multiply => t0.impl_multiply(t1)?,
+                    Operator::Divide => t0.impl_divide(t1)?,
+                    Operator::Add => t0.impl_add(t1)?,
+                    Operator::Subtract => t0.impl_subtract(t1)?,
                 }
             }
             Expr::Attr(base, member) => match self.interpret_expr(base)? {
                 Value::Module(ns) => match member {
-                    Term::Symbol(sym) => ns.read().get(sym)?,
+                    Term::Symbol(sym) => ns.read().get(ns.clone(), sym)?,
                     _ => bail!("attribute expr member is not a symbol"),
                 },
                 _ => bail!("attribute expr base did not evaluate to a module"),
@@ -280,12 +265,12 @@ impl Module for Interpreter {
         bail!("no methods are defined on the interpreter")
     }
 
-    fn put(&mut self, name: &str, value: Value) -> Fallible<()> {
+    fn put(&mut self, _module: Arc<RwLock<dyn Module>>, name: &str, value: Value) -> Fallible<()> {
         self.memory.insert(name.to_owned(), value);
         Ok(())
     }
 
-    fn get(&self, name: &str) -> Fallible<Value> {
+    fn get(&self, _module: Arc<RwLock<dyn Module>>, name: &str) -> Fallible<Value> {
         match self.memory.get(name) {
             Some(v) => Ok(v.to_owned()),
             None => bail!(
@@ -304,7 +289,8 @@ mod test {
     #[test]
     fn test_interpret_basic() -> Fallible<()> {
         let interpreter = Interpreter::boot();
-        assert_eq!(interpreter.interpret("2 + 2")?, Value::Integer(4));
+        let script = Script::parse_expr("2 + 2")?;
+        assert_eq!(interpreter.interpret(&script)?, Value::Integer(4));
         Ok(())
     }
 

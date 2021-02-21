@@ -12,7 +12,6 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-
 use crate::ir::{Term, Expr, Operator};
 use std::str::FromStr;
 
@@ -39,13 +38,13 @@ MulOp: Operator = {
     "/" => Operator::Divide,
 };
 
-Symbol: Term = r"[\p{Ll}\p{Lm}\p{Lo}\p{Lt}\p{Lu}][\p{Ll}\p{Lm}\p{Lo}\p{Lt}\p{Lu}\p{Nd}]*" => Term::Symbol(<>.to_owned());
+Symbol: Term = r"[a-zA-Z][a-zA-Z0-9]*" => Term::Symbol(<>.to_owned());
 DoubleQuotedString: Term = r#""[^"]*""# => Term::String(<>[1..<>.len() - 1].to_owned());
 SingleQuotedString: Term = r"'[^']*'" => Term::String(<>[1..<>.len() - 1].to_owned());
 Integer: Term = r"[0-9]+" => Term::Integer(i64::from_str(<>).unwrap());
 Float: Term = r"[+-]?[0-9]+[.]([0-9]*)?" => Term::Float(f64::from_str(<>).unwrap().into());
 
-pub Term: Term = {
+Term: Term = {
     Symbol,
     DoubleQuotedString,
     SingleQuotedString,

@@ -28,7 +28,9 @@ use input::{InputController, InputSystem};
 use legion::world::World;
 use log::trace;
 use nalgebra::convert;
+use nitrous::{Interpreter, Module, Value};
 use orrery::Orrery;
+use parking_lot::RwLock;
 use stars::StarsBuffer;
 use std::{path::PathBuf, sync::Arc, time::Instant};
 use structopt::StructOpt;
@@ -162,7 +164,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     let ui = UiRenderPass::new(&mut gpu, &globals, &widget_buffer, &world)?;
     let composite = CompositeRenderPass::new(&mut gpu, &globals, &world, &ui)?;
 
-    let interpreter = Interpreter::boot();
+    let interpreter = Arc::new(RwLock::new(Interpreter::boot()));
 
     let mut frame_graph = FrameGraph::new(
         &mut legion,
@@ -222,26 +224,34 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     camera.apply_rotation(&Vector3::new(0.0, 1.0, 0.0), PI);
     */
 
-    let mut arcball = ArcBallCamera::new(gpu.aspect_ratio(), meters!(0.5));
+    let arcball = Arc::new(RwLock::new(ArcBallCamera::new(
+        gpu.aspect_ratio(),
+        meters!(0.5),
+    )));
+    interpreter.write().put(
+        interpreter.clone(),
+        "camera",
+        Value::Module(arcball.clone()),
+    )?;
 
     // everest: 27.9880704,86.9245623
-    arcball.set_target(Graticule::<GeoSurface>::new(
+    arcball.write().set_target(Graticule::<GeoSurface>::new(
         degrees!(27.9880704),
         degrees!(-86.9245623), // FIXME: wat?
         meters!(8000.),
     ));
-    arcball.set_eye_relative(Graticule::<Target>::new(
+    arcball.write().set_eye_relative(Graticule::<Target>::new(
         degrees!(11.5),
         degrees!(869.5),
         meters!(67668.5053),
     ))?;
     // ISS: 408km up
-    // arcball.set_target(Graticule::<GeoSurface>::new(
+    // arcball.write().set_target(Graticule::<GeoSurface>::new(
     //     degrees!(27.9880704),
     //     degrees!(-86.9245623), // FIXME: wat?
     //     meters!(408_000.),
     // ));
-    // arcball.set_eye_relative(Graticule::<Target>::new(
+    // arcball.write().set_eye_relative(Graticule::<Target>::new(
     //     degrees!(58),
     //     degrees!(668.0),
     //     meters!(1308.7262),
@@ -249,7 +259,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
 
     let mut tone_gamma = 2.2f32;
     let mut is_camera_pinned = false;
-    let mut camera_double = arcball.camera().to_owned();
+    let mut camera_double = arcball.read().camera().to_owned();
     let mut target_vec = meters!(0f64);
     let mut show_terminal = false;
     loop {
@@ -263,7 +273,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                 return Ok(());
             }
             frame_graph.handle_command(&command);
-            arcball.handle_command(&command)?;
+            arcball.write().handle_command(&command)?;
             orrery.handle_command(&command)?;
             match command.full() {
                 "demo.+target_up" => target_vec = meters!(1),
@@ -277,16 +287,16 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                 "demo.decrease_gamma" => tone_gamma /= 1.1,
                 "demo.increase_gamma" => tone_gamma *= 1.1,
                 "demo.decrease_exposure" => {
-                    let next_exposure = arcball.camera().exposure() / 1.1;
-                    arcball.camera_mut().set_exposure(next_exposure);
+                    let next_exposure = arcball.read().camera().exposure() / 1.1;
+                    arcball.write().camera_mut().set_exposure(next_exposure);
                 }
                 "demo.increase_exposure" => {
-                    let next_exposure = arcball.camera().exposure() * 1.1;
-                    arcball.camera_mut().set_exposure(next_exposure);
+                    let next_exposure = arcball.read().camera().exposure() * 1.1;
+                    arcball.write().camera_mut().set_exposure(next_exposure);
                 }
                 "demo.pin_view" => {
-                    println!("eye_rel: {}", arcball.get_eye_relative());
-                    println!("target:  {}", arcball.get_target());
+                    println!("eye_rel: {}", arcball.read().get_eye_relative());
+                    println!("target:  {}", arcball.read().get_target());
                     is_camera_pinned = !is_camera_pinned
                 }
                 "demo.toggle_terminal" => {
@@ -299,34 +309,43 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                     frame_graph.terrain_geo.note_resize(&gpu);
                     frame_graph.world.note_resize(&gpu);
                     frame_graph.ui.note_resize(&gpu);
-                    arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
+                    arcball
+                        .write()
+                        .camera_mut()
+                        .set_aspect_ratio(gpu.aspect_ratio());
                 }
                 "window.dpi-change" => {
                     gpu.note_resize(Some(command.float(0)?), &window);
                     frame_graph.terrain_geo.note_resize(&gpu);
                     frame_graph.world.note_resize(&gpu);
                     frame_graph.ui.note_resize(&gpu);
-                    arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
+                    arcball
+                        .write()
+                        .camera_mut()
+                        .set_aspect_ratio(gpu.aspect_ratio());
                 }
                 _ => trace!("unhandled command: {}", command.full(),),
             }
         }
 
-        let mut g = arcball.get_target();
+        // let script = Script::compile_expr("camera.test()")?;
+        // interpreter.read().interpret(&script)?;
+
+        let mut g = arcball.read().get_target();
         g.distance += target_vec;
         if g.distance < meters!(0f64) {
             g.distance = meters!(0f64);
         }
-        arcball.set_target(g);
+        arcball.write().set_target(g);
 
-        arcball.think();
+        arcball.write().think();
         if !is_camera_pinned {
-            camera_double = arcball.camera().to_owned();
+            camera_double = arcball.read().camera().to_owned();
         }
 
         let mut tracker = Default::default();
         frame_graph.globals().make_upload_buffer(
-            arcball.camera(),
+            arcball.read().camera(),
             tone_gamma,
             &gpu,
             &mut tracker,
@@ -337,7 +356,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
             &mut tracker,
         )?;
         frame_graph.terrain_geo().make_upload_buffer(
-            arcball.camera(),
+            arcball.read().camera(),
             &camera_double,
             catalog.clone(),
             &mut async_rt,
@@ -352,16 +371,19 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
             frame_graph.terrain_geo.note_resize(&gpu);
             frame_graph.world.note_resize(&gpu);
             frame_graph.ui.note_resize(&gpu);
-            arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
+            arcball
+                .write()
+                .camera_mut()
+                .set_aspect_ratio(gpu.aspect_ratio());
         }
 
         let frame_time = loop_start.elapsed();
         let ts = format!(
             "eye_rel: {} | tgt: {} | asl: {}, fov: {} || Date: {:?} || frame: {}.{}ms",
-            arcball.get_eye_relative(),
-            arcball.get_target(),
+            arcball.read().get_eye_relative(),
+            arcball.read().get_target(),
             g.distance,
-            degrees!(arcball.camera().fov_y()),
+            degrees!(arcball.read().camera().fov_y()),
             orrery.get_time(),
             frame_time.as_secs() * 1000 + u64::from(frame_time.subsec_millis()),
             frame_time.subsec_micros(),

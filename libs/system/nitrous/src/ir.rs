@@ -19,6 +19,7 @@ pub enum Expr {
     BinOp(Box<Expr>, Operator, Box<Expr>),
     Term(Term),
     Attr(Box<Expr>, Term),
+    #[allow(clippy::vec_box)]
     Call(Box<Expr>, Vec<Box<Expr>>),
 }
 
