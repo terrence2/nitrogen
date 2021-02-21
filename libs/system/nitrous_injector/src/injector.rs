@@ -17,7 +17,7 @@ use quote::quote;
 use syn::{
     parse2,
     visit::{self, Visit},
-    Arm, DeriveInput, Ident, ImplItemMethod, ItemImpl,
+    Arm, DeriveInput, Ident, ImplItemMethod, ItemFn, ItemImpl,
 };
 
 pub(crate) fn make_derive_nitrous_module(item: DeriveInput) -> TokenStream2 {
@@ -42,6 +42,13 @@ pub(crate) fn make_derive_nitrous_module(item: DeriveInput) -> TokenStream2 {
                 self.__get_inner__(module, name)
             }
         }
+    }
+}
+
+pub(crate) fn make_augment_method(item: ItemFn) -> TokenStream2 {
+    quote! {
+        #[allow(clippy::unnecessary_wraps)]
+        #item
     }
 }
 

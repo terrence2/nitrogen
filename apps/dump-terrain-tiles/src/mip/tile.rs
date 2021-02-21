@@ -95,14 +95,14 @@ impl TileData {
     fn is_inline(&self) -> bool {
         matches!(
             self,
-            Self::InlineHeights {..} | Self::InlineNormals {..} | Self::InlineColors {..}
+            Self::InlineHeights { .. } | Self::InlineNormals { .. } | Self::InlineColors { .. }
         )
     }
 
     pub(crate) fn is_mapped(&self) -> bool {
         matches!(
             self,
-            Self::MappedHeights {..} | Self::MappedNormals {..} | Self::MappedColors {..}
+            Self::MappedHeights { .. } | Self::MappedNormals { .. } | Self::MappedColors { .. }
         )
     }
 

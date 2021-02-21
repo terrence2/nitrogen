@@ -14,10 +14,10 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 mod injector;
 
-use crate::injector::{make_derive_nitrous_module, make_inject_attribute};
+use crate::injector::{make_augment_method, make_derive_nitrous_module, make_inject_attribute};
 
 use proc_macro::TokenStream;
-use syn::{parse2, DeriveInput, ItemImpl};
+use syn::{parse2, DeriveInput, ItemFn, ItemImpl};
 
 /// Adds a derivation of the nitrous::Module trait and associated methods.
 /// These methods proxy to various _inner versions, which are built
@@ -58,7 +58,14 @@ pub fn method(
     _attr: proc_macro::TokenStream,
     input: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
-    input
+    let input = proc_macro2::TokenStream::from(input);
+
+    let output: proc_macro2::TokenStream = {
+        let item: ItemFn = parse2(input).unwrap();
+        make_augment_method(item)
+    };
+
+    proc_macro::TokenStream::from(output)
 }
 
 /// Just a tag for the injector.

@@ -706,14 +706,14 @@ impl Precompute {
                 l0[0], l0[1], l0[2], 0f64, l1[0], l1[1], l1[2], 0f64, l2[0], l2[1], l2[2], 0f64,
                 l3[0], l3[1], l3[2], 0f64,
             ];
-            self.precompute_one_step(lambdas, num_scattering_passes, rad_to_lum, gpu)?;
+            self.precompute_one_step(lambdas, num_scattering_passes, rad_to_lum, gpu);
 
             gpu.device().poll(wgpu::Maintain::Poll);
         }
 
         // Rebuild transmittance at RGB instead of high UV.
         // Upload atmosphere parameters for this set of wavelengths.
-        self.compute_transmittance_at(RGB_LAMBDAS, gpu, &srgb_atmosphere_buffer)?;
+        self.compute_transmittance_at(RGB_LAMBDAS, gpu, &srgb_atmosphere_buffer);
 
         if DUMP_FINAL {
             block_on(Self::dump_texture(
@@ -756,7 +756,7 @@ impl Precompute {
         num_scattering_passes: usize,
         rad_to_lum: [f64; 16],
         gpu: &mut GPU,
-    ) -> Fallible<()> {
+    ) {
         // Upload atmosphere parameters for this set of wavelengths.
         let atmosphere_params_buffer = gpu.push_data(
             "atmosphere-params-buffer",
@@ -797,7 +797,7 @@ impl Precompute {
         );
 
         let transmittance_start = Instant::now();
-        self.compute_transmittance_at(lambdas, gpu, &atmosphere_params_buffer)?;
+        self.compute_transmittance_at(lambdas, gpu, &atmosphere_params_buffer);
         let transmittance_time = transmittance_start.elapsed();
         println!(
             "transmittance      {:?}: {}.{}ms",
@@ -807,7 +807,7 @@ impl Precompute {
         );
 
         let direct_irradiance_start = Instant::now();
-        self.compute_direct_irradiance_at(lambdas, gpu, &atmosphere_params_buffer)?;
+        self.compute_direct_irradiance_at(lambdas, gpu, &atmosphere_params_buffer);
         let direct_irradiance_time = direct_irradiance_start.elapsed();
         println!(
             "direct-irradiance  {:?}: {}.{}ms",
@@ -823,7 +823,7 @@ impl Precompute {
             gpu,
             &atmosphere_params_buffer,
             &rad_to_lum_buffer,
-        )?;
+        );
         let single_scattering_time = single_scattering_start.elapsed();
         println!(
             "single-scattering  {:?}: {}.{}ms",
@@ -847,7 +847,7 @@ impl Precompute {
                 gpu,
                 &atmosphere_params_buffer,
                 &scattering_order_buffer,
-            )?;
+            );
             let scattering_density_time = scattering_density_start.elapsed();
             println!(
                 "scattering-density {:?}: {}.{}ms",
@@ -865,7 +865,7 @@ impl Precompute {
                 &atmosphere_params_buffer,
                 &rad_to_lum_buffer,
                 &scattering_order_buffer,
-            )?;
+            );
             let indirect_irradiance_time = indirect_irradiance_start.elapsed();
             println!(
                 "indirect-irradiance{:?}: {}.{}ms",
@@ -883,7 +883,7 @@ impl Precompute {
                 &atmosphere_params_buffer,
                 &rad_to_lum_buffer,
                 &scattering_order_buffer,
-            )?;
+            );
             let multiple_scattering_time = multiple_scattering_start.elapsed();
             println!(
                 "multiple-scattering{:?}: {}.{}ms",
@@ -893,8 +893,6 @@ impl Precompute {
                 multiple_scattering_time.subsec_micros()
             );
         }
-
-        Ok(())
     }
 
     fn compute_transmittance_at(
@@ -902,7 +900,7 @@ impl Precompute {
         lambdas: [f64; 4],
         gpu: &mut GPU,
         atmosphere_params_buffer: &wgpu::Buffer, // AtmosphereParameters
-    ) -> Fallible<()> {
+    ) {
         let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("atmosphere-compute-transmittance-bind-group"),
             layout: &self.build_transmittance_lut_bind_group_layout,
@@ -944,8 +942,6 @@ impl Precompute {
                 &self.transmittance_texture,
             ));
         }
-
-        Ok(())
     }
 
     fn compute_direct_irradiance_at(
@@ -953,7 +949,7 @@ impl Precompute {
         lambdas: [f64; 4],
         gpu: &mut GPU,
         atmosphere_params_buffer: &wgpu::Buffer, // AtmosphereParameters
-    ) -> Fallible<()> {
+    ) {
         let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("atmosphere-compute-direct-irradiance-bind-group"),
             layout: &self.build_direct_irradiance_lut_bind_group_layout,
@@ -1005,8 +1001,6 @@ impl Precompute {
                 &self.delta_irradiance_texture,
             ));
         }
-
-        Ok(())
     }
 
     fn compute_single_scattering_at(
@@ -1015,7 +1009,7 @@ impl Precompute {
         gpu: &mut GPU,
         atmosphere_params_buffer: &wgpu::Buffer,
         rad_to_lum_buffer: &wgpu::Buffer,
-    ) -> Fallible<()> {
+    ) {
         /*
         uniform(0),           // atmosphere
         texture2d(1),         // transmittance_texture
@@ -1124,8 +1118,6 @@ impl Precompute {
                 &self.single_mie_scattering_texture,
             ));
         }
-
-        Ok(())
     }
 
     fn compute_scattering_density_at(
@@ -1135,7 +1127,7 @@ impl Precompute {
         gpu: &mut GPU,
         atmosphere_params_buffer: &wgpu::Buffer,
         scattering_order_buffer: &wgpu::Buffer,
-    ) -> Fallible<()> {
+    ) {
         /*
         uniform(0),            // atmosphere
         uniform(1),            // scattering_order
@@ -1246,8 +1238,6 @@ impl Precompute {
                 &self.delta_scattering_density_texture,
             ));
         }
-
-        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1259,7 +1249,7 @@ impl Precompute {
         atmosphere_params_buffer: &wgpu::Buffer,
         rad_to_lum_buffer: &wgpu::Buffer,
         scattering_order_buffer: &wgpu::Buffer,
-    ) -> Fallible<()> {
+    ) {
         /*
         uniform(0),            // atmosphere
         uniform(1),            // rad_to_lum
@@ -1367,8 +1357,6 @@ impl Precompute {
                 &self.irradiance_texture,
             ));
         }
-
-        Ok(())
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1380,7 +1368,7 @@ impl Precompute {
         atmosphere_params_buffer: &wgpu::Buffer,
         rad_to_lum_buffer: &wgpu::Buffer,
         scattering_order_buffer: &wgpu::Buffer,
-    ) -> Fallible<()> {
+    ) {
         /*
         uniform(0),           // atmosphere; };
         uniform(1),           // rad_to_lum; };
@@ -1472,8 +1460,6 @@ impl Precompute {
                 &self.scattering_texture,
             ));
         }
-
-        Ok(())
     }
 
     async fn dump_texture(

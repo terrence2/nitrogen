@@ -849,11 +849,11 @@ impl PatchTree {
         (child_edge_offset + child_offset_in_parent) % 3
     }
 
-    fn child_inner_peer_of(&self, peer: TreeIndex, opposite_edge: u8) -> Option<Peer> {
-        Some(Peer {
+    fn child_inner_peer_of(&self, peer: TreeIndex, opposite_edge: u8) -> Peer {
+        Peer {
             peer,
             opposite_edge,
-        })
+        }
     }
 
     fn make_children_peers(
@@ -864,23 +864,23 @@ impl PatchTree {
         [
             [
                 self.child_peer_of(peers[0], 1, 2),
-                self.child_inner_peer_of(children[3], 0),
+                Some(self.child_inner_peer_of(children[3], 0)),
                 self.child_peer_of(peers[2], 0, 0),
             ],
             [
                 self.child_peer_of(peers[1], 1, 2),
-                self.child_inner_peer_of(children[3], 1),
+                Some(self.child_inner_peer_of(children[3], 1)),
                 self.child_peer_of(peers[0], 0, 0),
             ],
             [
                 self.child_peer_of(peers[2], 1, 2),
-                self.child_inner_peer_of(children[3], 2),
+                Some(self.child_inner_peer_of(children[3], 2)),
                 self.child_peer_of(peers[1], 0, 0),
             ],
             [
-                self.child_inner_peer_of(children[0], 1),
-                self.child_inner_peer_of(children[1], 1),
-                self.child_inner_peer_of(children[2], 1),
+                Some(self.child_inner_peer_of(children[0], 1)),
+                Some(self.child_inner_peer_of(children[1], 1)),
+                Some(self.child_inner_peer_of(children[2], 1)),
             ],
         ]
     }
