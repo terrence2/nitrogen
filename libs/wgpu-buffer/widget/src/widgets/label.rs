@@ -22,9 +22,10 @@ use crate::{
 };
 use failure::Fallible;
 use gpu::GPU;
+use input::GenericEvent;
+use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::sync::Arc;
-use winit::event::{KeyboardInput, ModifiersState};
 
 pub struct Label {
     line: TextRun,
@@ -91,7 +92,11 @@ impl Widget for Label {
         })
     }
 
-    fn handle_keyboard(&mut self, _events: &[(KeyboardInput, ModifiersState)]) -> Fallible<()> {
+    fn handle_events(
+        &mut self,
+        _events: &[GenericEvent],
+        _interpreter: Arc<RwLock<Interpreter>>,
+    ) -> Fallible<()> {
         Ok(())
     }
 }

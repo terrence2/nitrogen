@@ -19,9 +19,10 @@ use crate::{
 };
 use failure::Fallible;
 use gpu::GPU;
+use input::GenericEvent;
+use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::sync::Arc;
-use winit::event::{KeyboardInput, ModifiersState};
 
 // Pack boxes at an edge.
 pub struct FloatPacking {
@@ -116,9 +117,16 @@ impl Widget for FloatBox {
         })
     }
 
-    fn handle_keyboard(&mut self, events: &[(KeyboardInput, ModifiersState)]) -> Fallible<()> {
+    fn handle_events(
+        &mut self,
+        events: &[GenericEvent],
+        interpreter: Arc<RwLock<Interpreter>>,
+    ) -> Fallible<()> {
         for child in &self.children {
-            child.widget.write().handle_keyboard(events)?;
+            child
+                .widget
+                .write()
+                .handle_events(events, interpreter.clone())?;
         }
         Ok(())
     }

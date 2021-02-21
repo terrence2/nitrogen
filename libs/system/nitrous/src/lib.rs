@@ -207,7 +207,7 @@ impl Interpreter {
         self.interpret_expr(&script.expr)
     }
 
-    pub fn interpret_expr(&self, expr: &Expr) -> Fallible<Value> {
+    fn interpret_expr(&self, expr: &Expr) -> Fallible<Value> {
         Ok(match expr {
             Expr::Term(term) => match term {
                 Term::Float(f) => Value::Float(*f),

@@ -266,8 +266,9 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         let loop_start = Instant::now();
 
         frame_graph
-            .widgets
-            .handle_keyboard(&input_controller.poll_keyboard()?)?;
+            .widgets()
+            .handle_events(&input_controller.poll_events()?, interpreter.clone())?;
+
         for command in input_controller.poll_commands()? {
             if InputSystem::is_close_command(&command) || command.full() == "demo.exit" {
                 return Ok(());

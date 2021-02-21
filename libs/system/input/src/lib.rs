@@ -12,14 +12,21 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+mod generic;
+
+pub use generic::{GenericEvent, GenericSystemEvent, GenericWindowEvent, MouseAxis};
+pub use winit::event::{ElementState, ModifiersState, VirtualKeyCode};
+
 use command::{BindingState, Bindings, Command, Key};
 use failure::{bail, Fallible};
 use smallvec::{smallvec, SmallVec};
-use std::sync::mpsc::{channel, Receiver, TryRecvError};
+use std::{
+    collections::HashMap,
+    sync::mpsc::{channel, Receiver, TryRecvError},
+};
 use winit::{
     event::{
-        DeviceEvent, DeviceId, ElementState, Event, KeyboardInput, ModifiersState,
-        MouseScrollDelta, StartCause, VirtualKeyCode, WindowEvent,
+        DeviceEvent, DeviceId, Event, KeyboardInput, MouseScrollDelta, StartCause, WindowEvent,
     },
     event_loop::{ControlFlow, EventLoop, EventLoopProxy},
     window::{Window, WindowBuilder},
@@ -30,21 +37,28 @@ pub enum MetaEvent {
     Stop,
 }
 
+#[derive(Debug, Default)]
+pub struct InputState {
+    modifiers_state: ModifiersState,
+    cursor_in_window: HashMap<DeviceId, bool>,
+    window_focused: bool,
+}
+
 pub struct InputController {
     proxy: EventLoopProxy<MetaEvent>,
-    raw_keyboard_source: Receiver<(KeyboardInput, ModifiersState)>,
+    event_source: Receiver<GenericEvent>,
     command_source: Receiver<Command>,
 }
 
 impl InputController {
     fn new(
         proxy: EventLoopProxy<MetaEvent>,
-        raw_keyboard_source: Receiver<(KeyboardInput, ModifiersState)>,
+        event_source: Receiver<GenericEvent>,
         command_source: Receiver<Command>,
     ) -> Self {
         Self {
             proxy,
-            raw_keyboard_source,
+            event_source,
             command_source,
         }
     }
@@ -52,6 +66,19 @@ impl InputController {
     pub fn quit(&self) -> Fallible<()> {
         self.proxy.send_event(MetaEvent::Stop)?;
         Ok(())
+    }
+
+    pub fn poll_events(&self) -> Fallible<SmallVec<[GenericEvent; 8]>> {
+        let mut out = SmallVec::new();
+        let mut event_input = self.event_source.try_recv();
+        while event_input.is_ok() {
+            out.push(event_input?);
+            event_input = self.event_source.try_recv();
+        }
+        match event_input.err().unwrap() {
+            TryRecvError::Empty => Ok(out),
+            TryRecvError::Disconnected => bail!("input system stopped"),
+        }
     }
 
     pub fn poll_commands(&self) -> Fallible<SmallVec<[Command; 8]>> {
@@ -62,19 +89,6 @@ impl InputController {
             command = self.command_source.try_recv();
         }
         match command.err().unwrap() {
-            TryRecvError::Empty => Ok(out),
-            TryRecvError::Disconnected => bail!("input system stopped"),
-        }
-    }
-
-    pub fn poll_keyboard(&self) -> Fallible<SmallVec<[(KeyboardInput, ModifiersState); 8]>> {
-        let mut out = SmallVec::new();
-        let mut kb_input = self.raw_keyboard_source.try_recv();
-        while kb_input.is_ok() {
-            out.push(kb_input?);
-            kb_input = self.raw_keyboard_source.try_recv();
-        }
-        match kb_input.err().unwrap() {
             TryRecvError::Empty => Ok(out),
             TryRecvError::Disconnected => bail!("input system stopped"),
         }
@@ -169,6 +183,7 @@ impl InputSystem {
         });
 
         // Hijack the main thread.
+        let mut input_state: InputState = Default::default();
         let mut state: BindingState = Default::default();
         event_loop.run(move |mut event, _target, control_flow| {
             *control_flow = ControlFlow::Wait;
@@ -177,6 +192,16 @@ impl InputSystem {
                 return;
             }
             // TODO: poll receive queue for bindings changes?
+
+            let mut generic_events = SmallVec::new();
+            Self::wrap_event(&event, &mut input_state, &mut generic_events);
+            for evt in generic_events.drain(..) {
+                if let Err(e) = tx_event.send(evt) {
+                    println!("Game loop hung up ({}), exiting...", e);
+                    *control_flow = ControlFlow::Exit;
+                    return;
+                }
+            }
 
             // Process and send commands from the input thread.
             let commands = Self::handle_event(&mut event, &bindings, &mut state).unwrap();
@@ -188,20 +213,273 @@ impl InputSystem {
                     return;
                 }
             }
+        });
+    }
 
-            // Send any raw keyboard events.
-            if let Event::WindowEvent {
-                event: WindowEvent::KeyboardInput { input, .. },
+    fn wrap_event(
+        e: &Event<MetaEvent>,
+        input_state: &mut InputState,
+        out: &mut SmallVec<[GenericEvent; 2]>,
+    ) {
+        match e {
+            Event::WindowEvent { event, .. } => Self::wrap_window_event(event, input_state, out),
+            Event::DeviceEvent { device_id, event } => {
+                Self::wrap_device_event(device_id, event, input_state, out)
+            }
+            Event::MainEventsCleared => {}
+            Event::RedrawRequested(_window_id) => {}
+            Event::RedrawEventsCleared => {}
+            Event::NewEvents(StartCause::WaitCancelled { .. }) => {}
+            unhandled => {
+                log::warn!("don't know how to handle: {:?}", unhandled);
+            }
+        }
+    }
+
+    fn wrap_window_event(
+        event: &WindowEvent,
+        input_state: &mut InputState,
+        out: &mut SmallVec<[GenericEvent; 2]>,
+    ) {
+        match event {
+            WindowEvent::Resized(s) => {
+                out.push(GenericEvent::Window(GenericWindowEvent::Resized {
+                    width: s.width,
+                    height: s.height,
+                }));
+            }
+            WindowEvent::Moved(_) => {}
+            WindowEvent::Destroyed => {
+                out.push(GenericEvent::System(GenericSystemEvent::Quit));
+            }
+            WindowEvent::CloseRequested => {
+                out.push(GenericEvent::System(GenericSystemEvent::Quit));
+            }
+            WindowEvent::Focused(b) => {
+                input_state.window_focused = *b;
+            }
+            WindowEvent::DroppedFile(_) => {}
+            WindowEvent::HoveredFile(_) => {}
+            WindowEvent::HoveredFileCancelled => {}
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                out.push(GenericEvent::Window(
+                    GenericWindowEvent::ScaleFactorChanged {
+                        scale: *scale_factor,
+                    },
+                ));
+            }
+            WindowEvent::CursorEntered { device_id } => {
+                input_state.cursor_in_window.insert(*device_id, true);
+            }
+            WindowEvent::CursorLeft { device_id } => {
+                input_state.cursor_in_window.insert(*device_id, false);
+            }
+
+            // Track real cursor position in the window including window system accel
+            // warping, and other such; mostly useful for software mice, but also for
+            // picking with a hardware mouse.
+            WindowEvent::CursorMoved {
+                position,
+                device_id,
                 ..
-            } = event
-            {
-                if let Err(e) = tx_event.send((input, state.modifiers_state)) {
-                    println!("Game loop hung up ({}), exiting...", e);
-                    *control_flow = ControlFlow::Exit;
-                    return;
+            } => {
+                let in_window = *input_state
+                    .cursor_in_window
+                    .get(device_id)
+                    .unwrap_or(&false);
+                out.push(GenericEvent::CursorMove {
+                    pixel_position: (position.x, position.y),
+                    modifiers_state: input_state.modifiers_state,
+                    in_window,
+                    window_focused: input_state.window_focused,
+                });
+            }
+
+            // We need to capture keyboard input both here and below because of web.
+            WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        virtual_keycode,
+                        scancode,
+                        state,
+                        ..
+                    },
+                ..
+            } => {
+                if let Some(vkey) = Self::guess_key(
+                    *scancode,
+                    *virtual_keycode,
+                    input_state.modifiers_state.shift(),
+                ) {
+                    out.push(GenericEvent::KeyboardKey {
+                        scancode: *scancode,
+                        virtual_keycode: vkey,
+                        press_state: *state,
+                        modifiers_state: input_state.modifiers_state,
+                        window_focused: true,
+                    });
                 }
             }
-        });
+
+            // Ignore events duplicated by other capture methods.
+            WindowEvent::ReceivedCharacter { .. } => {}
+            WindowEvent::MouseInput { .. } => {}
+            WindowEvent::MouseWheel { .. } => {}
+            WindowEvent::AxisMotion { .. } => {}
+
+            // Don't worry about touch just yet.
+            WindowEvent::Touch(_) => {}
+            WindowEvent::TouchpadPressure { .. } => {}
+
+            WindowEvent::ModifiersChanged(modifiers_state) => {
+                input_state.modifiers_state = *modifiers_state;
+            }
+
+            WindowEvent::ThemeChanged(_) => {}
+        }
+    }
+
+    fn wrap_device_event(
+        device_id: &DeviceId,
+        event: &DeviceEvent,
+        input_state: &mut InputState,
+        out: &mut SmallVec<[GenericEvent; 2]>,
+    ) {
+        match event {
+            // Device change events
+            DeviceEvent::Added => {
+                out.push(GenericEvent::System(GenericSystemEvent::DeviceAdded {
+                    dummy: 0,
+                }));
+            }
+            DeviceEvent::Removed => {
+                out.push(GenericEvent::System(GenericSystemEvent::DeviceRemoved {
+                    dummy: 0,
+                }));
+            }
+
+            // Mouse Motion: unfiltered, arbitrary units
+            DeviceEvent::MouseMotion { delta: (dx, dy) } => {
+                let in_window = *input_state
+                    .cursor_in_window
+                    .get(device_id)
+                    .unwrap_or(&false);
+                out.push(GenericEvent::MouseMotion {
+                    axis: MouseAxis::X,
+                    amount: *dx as f32,
+                    modifiers_state: input_state.modifiers_state,
+                    in_window,
+                    window_focused: input_state.window_focused,
+                });
+                out.push(GenericEvent::MouseMotion {
+                    axis: MouseAxis::Y,
+                    amount: *dy as f32,
+                    modifiers_state: input_state.modifiers_state,
+                    in_window,
+                    window_focused: input_state.window_focused,
+                });
+            }
+
+            // Mouse Wheel
+            DeviceEvent::MouseWheel {
+                delta: MouseScrollDelta::LineDelta(dx, dy),
+            } => {
+                let in_window = *input_state
+                    .cursor_in_window
+                    .get(device_id)
+                    .unwrap_or(&false);
+                out.push(GenericEvent::MouseMotion {
+                    axis: MouseAxis::ScrollH,
+                    amount: *dx,
+                    modifiers_state: input_state.modifiers_state,
+                    in_window,
+                    window_focused: input_state.window_focused,
+                });
+                out.push(GenericEvent::MouseMotion {
+                    axis: MouseAxis::ScrollV,
+                    amount: *dy,
+                    modifiers_state: input_state.modifiers_state,
+                    in_window,
+                    window_focused: input_state.window_focused,
+                });
+            }
+            DeviceEvent::MouseWheel {
+                delta: MouseScrollDelta::PixelDelta(s),
+            } => {
+                let in_window = *input_state
+                    .cursor_in_window
+                    .get(device_id)
+                    .unwrap_or(&false);
+                out.push(GenericEvent::MouseMotion {
+                    axis: MouseAxis::ScrollH,
+                    amount: s.x as f32,
+                    modifiers_state: input_state.modifiers_state,
+                    in_window,
+                    window_focused: input_state.window_focused,
+                });
+                out.push(GenericEvent::MouseMotion {
+                    axis: MouseAxis::ScrollV,
+                    amount: s.y as f32,
+                    modifiers_state: input_state.modifiers_state,
+                    in_window,
+                    window_focused: input_state.window_focused,
+                });
+            }
+
+            // Mouse Button, maybe also joystick button?
+            DeviceEvent::Button { button, state } => {
+                let in_window = *input_state
+                    .cursor_in_window
+                    .get(device_id)
+                    .unwrap_or(&false);
+                out.push(GenericEvent::MouseButton {
+                    button: *button,
+                    press_state: *state,
+                    modifiers_state: input_state.modifiers_state,
+                    in_window,
+                    window_focused: input_state.window_focused,
+                })
+            }
+
+            // Match virtual keycodes.
+            DeviceEvent::Key(KeyboardInput {
+                virtual_keycode,
+                scancode,
+                state,
+                ..
+            }) => {
+                // If not focused, send from the device event. Note that this is important for
+                // keeping key states, e.g. when the mouse is not locked with focus-on-hover.
+                if !input_state.window_focused {
+                    if let Some(vkey) = Self::guess_key(
+                        *scancode,
+                        *virtual_keycode,
+                        input_state.modifiers_state.shift(),
+                    ) {
+                        out.push(GenericEvent::KeyboardKey {
+                            scancode: *scancode,
+                            virtual_keycode: vkey,
+                            press_state: *state,
+                            modifiers_state: input_state.modifiers_state,
+                            window_focused: false,
+                        });
+                    }
+                }
+            }
+
+            // Includes both joystick and mouse axis motion.
+            DeviceEvent::Motion { axis, value } => {
+                out.push(GenericEvent::JoystickAxis {
+                    id: *axis,
+                    value: *value,
+                    modifiers_state: input_state.modifiers_state,
+                    window_focused: input_state.window_focused,
+                });
+            }
+
+            // I'm not sure what this does?
+            DeviceEvent::Text { .. } => {}
+        }
     }
 
     pub fn is_close_command(command: &Command) -> bool {
@@ -290,7 +568,8 @@ impl InputSystem {
             } => {
                 // Web backends deliver only Window::KeyboardInput events, so we need to track
                 // state here too, but only on wasm.
-                *virtual_key = Self::guess_key(*scancode, *virtual_key);
+                *virtual_key =
+                    Self::guess_key(*scancode, *virtual_key, state.modifiers_state.shift());
                 #[cfg(target_arch = "wasm32")]
                 {
                     state
@@ -375,7 +654,8 @@ impl InputSystem {
             }) => {
                 // Track key states on the device so that we don't lose our state if the mouse
                 // happens to leave the window.
-                *virtual_key = Self::guess_key(*scancode, *virtual_key);
+                *virtual_key =
+                    Self::guess_key(*scancode, *virtual_key, state.modifiers_state.shift());
                 state
                     .key_states
                     .insert(Key::Physical(*scancode), *key_state);
@@ -393,98 +673,103 @@ impl InputSystem {
         })
     }
 
-    fn guess_key(scancode: u32, virtual_key: Option<VirtualKeyCode>) -> Option<VirtualKeyCode> {
+    fn guess_key(
+        scancode: u32,
+        virtual_key: Option<VirtualKeyCode>,
+        shift_pressed: bool,
+    ) -> Option<VirtualKeyCode> {
         // The X11 driver is using XLookupString rather than XIM or xinput2, so gets modified
         // keys, losing the key code in the process. e.g. a press of the 5 key may return Key5 or
         // None, depending on whether shift is also pressed, because percent is not a physical key.
-        let discovered = match scancode {
-            1 => Some(VirtualKeyCode::Escape),
-            59 => Some(VirtualKeyCode::F1),
-            60 => Some(VirtualKeyCode::F2),
-            61 => Some(VirtualKeyCode::F3),
-            62 => Some(VirtualKeyCode::F4),
-            63 => Some(VirtualKeyCode::F5),
-            64 => Some(VirtualKeyCode::F6),
-            65 => Some(VirtualKeyCode::F7),
-            66 => Some(VirtualKeyCode::F8),
-            67 => Some(VirtualKeyCode::F9),
-            68 => Some(VirtualKeyCode::F10),
-            87 => Some(VirtualKeyCode::F11),
-            88 => Some(VirtualKeyCode::F12),
+        let discovered = match (shift_pressed, scancode) {
+            (_, 1) => Some(VirtualKeyCode::Escape),
+            (_, 59) => Some(VirtualKeyCode::F1),
+            (_, 60) => Some(VirtualKeyCode::F2),
+            (_, 61) => Some(VirtualKeyCode::F3),
+            (_, 62) => Some(VirtualKeyCode::F4),
+            (_, 63) => Some(VirtualKeyCode::F5),
+            (_, 64) => Some(VirtualKeyCode::F6),
+            (_, 65) => Some(VirtualKeyCode::F7),
+            (_, 66) => Some(VirtualKeyCode::F8),
+            (_, 67) => Some(VirtualKeyCode::F9),
+            (_, 68) => Some(VirtualKeyCode::F10),
+            (_, 87) => Some(VirtualKeyCode::F11),
+            (_, 88) => Some(VirtualKeyCode::F12),
 
-            41 => Some(VirtualKeyCode::Grave),
-            2 => Some(VirtualKeyCode::Key1),
-            3 => Some(VirtualKeyCode::Key2),
-            4 => Some(VirtualKeyCode::Key3),
-            5 => Some(VirtualKeyCode::Key4),
-            6 => Some(VirtualKeyCode::Key5),
-            7 => Some(VirtualKeyCode::Key6),
-            8 => Some(VirtualKeyCode::Key7),
-            9 => Some(VirtualKeyCode::Key8),
-            10 => Some(VirtualKeyCode::Key9),
-            11 => Some(VirtualKeyCode::Key0),
-            12 => Some(VirtualKeyCode::Minus),
-            13 => Some(VirtualKeyCode::Equals),
-            14 => Some(VirtualKeyCode::Back),
+            (_, 41) => Some(VirtualKeyCode::Grave),
+            (_, 2) => Some(VirtualKeyCode::Key1),
+            (_, 3) => Some(VirtualKeyCode::Key2),
+            (_, 4) => Some(VirtualKeyCode::Key3),
+            (_, 5) => Some(VirtualKeyCode::Key4),
+            (_, 6) => Some(VirtualKeyCode::Key5),
+            (_, 7) => Some(VirtualKeyCode::Key6),
+            (_, 8) => Some(VirtualKeyCode::Key7),
+            (_, 9) => Some(VirtualKeyCode::Key8),
+            (_, 10) => Some(VirtualKeyCode::Key9),
+            (_, 11) => Some(VirtualKeyCode::Key0),
+            (_, 12) => Some(VirtualKeyCode::Minus),
+            (false, 13) => Some(VirtualKeyCode::Equals),
+            (true, 13) => Some(VirtualKeyCode::Plus),
+            (_, 14) => Some(VirtualKeyCode::Back),
 
-            15 => Some(VirtualKeyCode::Tab),
-            16 => Some(VirtualKeyCode::Q),
-            17 => Some(VirtualKeyCode::W),
-            18 => Some(VirtualKeyCode::E),
-            19 => Some(VirtualKeyCode::R),
-            20 => Some(VirtualKeyCode::T),
-            21 => Some(VirtualKeyCode::Y),
-            22 => Some(VirtualKeyCode::U),
-            23 => Some(VirtualKeyCode::I),
-            24 => Some(VirtualKeyCode::O),
-            25 => Some(VirtualKeyCode::P),
-            26 => Some(VirtualKeyCode::LBracket),
-            27 => Some(VirtualKeyCode::RBracket),
-            43 => Some(VirtualKeyCode::Backslash),
+            (_, 15) => Some(VirtualKeyCode::Tab),
+            (_, 16) => Some(VirtualKeyCode::Q),
+            (_, 17) => Some(VirtualKeyCode::W),
+            (_, 18) => Some(VirtualKeyCode::E),
+            (_, 19) => Some(VirtualKeyCode::R),
+            (_, 20) => Some(VirtualKeyCode::T),
+            (_, 21) => Some(VirtualKeyCode::Y),
+            (_, 22) => Some(VirtualKeyCode::U),
+            (_, 23) => Some(VirtualKeyCode::I),
+            (_, 24) => Some(VirtualKeyCode::O),
+            (_, 25) => Some(VirtualKeyCode::P),
+            (_, 26) => Some(VirtualKeyCode::LBracket),
+            (_, 27) => Some(VirtualKeyCode::RBracket),
+            (_, 43) => Some(VirtualKeyCode::Backslash),
 
-            // => Some(VirtualKeyCode::Capital), // ?
-            30 => Some(VirtualKeyCode::A),
-            31 => Some(VirtualKeyCode::S),
-            32 => Some(VirtualKeyCode::D),
-            33 => Some(VirtualKeyCode::F),
-            34 => Some(VirtualKeyCode::G),
-            35 => Some(VirtualKeyCode::H),
-            36 => Some(VirtualKeyCode::J),
-            37 => Some(VirtualKeyCode::K),
-            38 => Some(VirtualKeyCode::L),
-            39 => Some(VirtualKeyCode::Semicolon),
-            40 => Some(VirtualKeyCode::Apostrophe),
-            28 => Some(VirtualKeyCode::Return),
+            // (_, ) => Some(VirtualKeyCode::Capital), // ?
+            (_, 30) => Some(VirtualKeyCode::A),
+            (_, 31) => Some(VirtualKeyCode::S),
+            (_, 32) => Some(VirtualKeyCode::D),
+            (_, 33) => Some(VirtualKeyCode::F),
+            (_, 34) => Some(VirtualKeyCode::G),
+            (_, 35) => Some(VirtualKeyCode::H),
+            (_, 36) => Some(VirtualKeyCode::J),
+            (_, 37) => Some(VirtualKeyCode::K),
+            (_, 38) => Some(VirtualKeyCode::L),
+            (_, 39) => Some(VirtualKeyCode::Semicolon),
+            (_, 40) => Some(VirtualKeyCode::Apostrophe),
+            (_, 28) => Some(VirtualKeyCode::Return),
 
-            42 => Some(VirtualKeyCode::LShift),
-            44 => Some(VirtualKeyCode::Z),
-            45 => Some(VirtualKeyCode::X),
-            46 => Some(VirtualKeyCode::C),
-            47 => Some(VirtualKeyCode::V),
-            48 => Some(VirtualKeyCode::B),
-            49 => Some(VirtualKeyCode::N),
-            50 => Some(VirtualKeyCode::M),
-            51 => Some(VirtualKeyCode::Comma),
-            52 => Some(VirtualKeyCode::Period),
-            53 => Some(VirtualKeyCode::Slash),
-            54 => Some(VirtualKeyCode::RShift),
+            (_, 42) => Some(VirtualKeyCode::LShift),
+            (_, 44) => Some(VirtualKeyCode::Z),
+            (_, 45) => Some(VirtualKeyCode::X),
+            (_, 46) => Some(VirtualKeyCode::C),
+            (_, 47) => Some(VirtualKeyCode::V),
+            (_, 48) => Some(VirtualKeyCode::B),
+            (_, 49) => Some(VirtualKeyCode::N),
+            (_, 50) => Some(VirtualKeyCode::M),
+            (_, 51) => Some(VirtualKeyCode::Comma),
+            (_, 52) => Some(VirtualKeyCode::Period),
+            (_, 53) => Some(VirtualKeyCode::Slash),
+            (_, 54) => Some(VirtualKeyCode::RShift),
 
-            29 => Some(VirtualKeyCode::LControl),
-            56 => Some(VirtualKeyCode::LAlt),
-            57 => Some(VirtualKeyCode::Space),
-            100 => Some(VirtualKeyCode::RAlt),
-            97 => Some(VirtualKeyCode::RControl),
+            (_, 29) => Some(VirtualKeyCode::LControl),
+            (_, 56) => Some(VirtualKeyCode::LAlt),
+            (_, 57) => Some(VirtualKeyCode::Space),
+            (_, 100) => Some(VirtualKeyCode::RAlt),
+            (_, 97) => Some(VirtualKeyCode::RControl),
 
-            102 => Some(VirtualKeyCode::Home),
-            103 => Some(VirtualKeyCode::Up),
-            104 => Some(VirtualKeyCode::PageUp),
-            105 => Some(VirtualKeyCode::Left),
-            106 => Some(VirtualKeyCode::Right),
-            107 => Some(VirtualKeyCode::End),
-            108 => Some(VirtualKeyCode::Down),
-            109 => Some(VirtualKeyCode::PageDown),
-            110 => Some(VirtualKeyCode::Insert),
-            111 => Some(VirtualKeyCode::Delete),
+            (_, 102) => Some(VirtualKeyCode::Home),
+            (_, 103) => Some(VirtualKeyCode::Up),
+            (_, 104) => Some(VirtualKeyCode::PageUp),
+            (_, 105) => Some(VirtualKeyCode::Left),
+            (_, 106) => Some(VirtualKeyCode::Right),
+            (_, 107) => Some(VirtualKeyCode::End),
+            (_, 108) => Some(VirtualKeyCode::Down),
+            (_, 109) => Some(VirtualKeyCode::PageDown),
+            (_, 110) => Some(VirtualKeyCode::Insert),
+            (_, 111) => Some(VirtualKeyCode::Delete),
 
             //=> Some(VirtualKeyCode::),
             _ => None,

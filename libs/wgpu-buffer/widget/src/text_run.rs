@@ -20,9 +20,9 @@ use crate::{
 };
 use failure::Fallible;
 use gpu::GPU;
+use input::ModifiersState;
 use smallvec::{smallvec, SmallVec};
 use std::{cmp::Ordering, ops::Range};
-use winit::event::ModifiersState;
 
 #[derive(Debug)]
 pub struct TextSpan {
