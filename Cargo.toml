@@ -28,6 +28,8 @@ members = [
     "libs/system/commandable",
     "libs/system/gpu",
     "libs/system/input",
+    "libs/system/nitrous",
+    "libs/system/nitrous_injector",
     "libs/system/packed_struct",
 
     "libs/wgpu-buffer/atlas",
@@ -53,6 +55,7 @@ image = "^ 0.23"
 legion = "^ 0.3"
 log = "^ 0.4"
 nalgebra = "^ 0.24"
+parking_lot = "^ 0.11"
 structopt = "^ 0.3"
 tokio = { version = "^ 1.0", features = ["rt-multi-thread", "macros", "io-util", "fs", "sync"] }
 winit = { version = "^ 0.24", features = ["web-sys"] }
@@ -67,6 +70,7 @@ geodesy = { path = "libs/sim/geodesy" }
 global_data = { path = "libs/wgpu-buffer/global_data" }
 gpu = { path = "libs/system/gpu" }
 input = { path = "libs/system/input" }
+nitrous = { path = "libs/system/nitrous" }
 orrery = { path = "libs/sim/orrery" }
 stars = { path = "libs/wgpu-buffer/stars" }
 terrain_geo = { path = "libs/wgpu-buffer/terrain_geo" }

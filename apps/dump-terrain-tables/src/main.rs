@@ -12,7 +12,6 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use failure::Fallible;
 use nalgebra::Vector2;
 use std::{
     cmp::Ordering,
@@ -187,7 +186,7 @@ impl PatchWinding {
 }
 
 // Note: this only has to line up with whatever we do in subdivide, not patch_tree, thankfully.
-fn main() -> Fallible<()> {
+fn main() {
     let opt = Opt::from_args();
 
     if opt.dump_triangle_strips {
@@ -201,8 +200,6 @@ fn main() -> Fallible<()> {
     if opt.dump_index_dependency_luts {
         make_index_dependency_luts(opt.max_level);
     }
-
-    Ok(())
 }
 
 fn make_wireframe_list(max_level: usize) {

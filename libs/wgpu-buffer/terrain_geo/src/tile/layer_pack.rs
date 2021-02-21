@@ -72,7 +72,7 @@ impl LayerPack {
     pub fn new(layer_pack_fid: FileId, catalog: &Catalog) -> Fallible<Self> {
         let header_raw =
             catalog.read_slice_sync(layer_pack_fid, 0..mem::size_of::<LayerPackHeader>())?;
-        let header = LayerPackHeader::overlay(&header_raw);
+        let header = LayerPackHeader::overlay(&header_raw)?;
         ensure!(header.magic() == HEADER_MAGIC);
         ensure!(header.version() == HEADER_VERSION);
         ensure!(

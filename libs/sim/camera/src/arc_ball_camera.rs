@@ -17,11 +17,15 @@ use absolute_unit::{
     degrees, meters, radians, Angle, Degrees, Kilometers, Length, LengthUnit, Meters,
 };
 use command::{Bindings, Command};
-use failure::{ensure, Fallible};
+use failure::{bail, ensure, Fallible};
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
-use std::f64::consts::PI;
+use nitrous::{Module, Value};
+use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use parking_lot::RwLock;
+use std::{f64::consts::PI, sync::Arc};
 
+#[derive(Debug, NitrousModule)]
 pub struct ArcBallCamera {
     camera: Camera,
 
@@ -32,6 +36,7 @@ pub struct ArcBallCamera {
     eye: Graticule<Target>,
 }
 
+#[inject_nitrous_module]
 impl ArcBallCamera {
     // FIXME: push camera in from outside
     pub fn new(aspect_ratio: f64, z_near: Length<Meters>) -> Self {
@@ -199,6 +204,12 @@ impl ArcBallCamera {
         let cart_eye_rel_target_framed =
             Cartesian::<Target, Unit>::from(r_lat * r_lon * cart_eye_rel_target_flat.vec64());
         cart_target + cart_eye_rel_target_framed
+    }
+
+    #[method]
+    fn test(&self) -> Fallible<Value> {
+        println!("GOT METHOD CALL");
+        Ok(Value::Integer(0))
     }
 }
 
