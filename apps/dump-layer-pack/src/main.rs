@@ -43,7 +43,7 @@ fn main() -> Fallible<()> {
 
     let fp = File::open(&opt.input)?;
     let mmap = unsafe { MmapOptions::new().map(&fp)? };
-    let header = LayerPackHeader::overlay(&mmap[0..mem::size_of::<LayerPackHeader>()]);
+    let header = LayerPackHeader::overlay(&mmap[0..mem::size_of::<LayerPackHeader>()])?;
 
     println!("version: {}", header.version());
     println!("level: {}", header.tile_level());
@@ -57,7 +57,8 @@ fn main() -> Fallible<()> {
         "index: {} bytes",
         header.tile_start() - header.index_start()
     );
-    let items = LayerPackIndexItem::overlay_slice(&mmap[header.index_start()..header.tile_start()]);
+    let items =
+        LayerPackIndexItem::overlay_slice(&mmap[header.index_start()..header.tile_start()])?;
     for item in items {
         if let Some(latitude) = opt.latitude {
             if item.base_lat_as() != latitude {

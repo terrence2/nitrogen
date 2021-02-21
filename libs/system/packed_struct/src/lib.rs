@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with packed_struct.  If not, see <http://www.gnu.org/licenses/>.
-pub use failure::{ensure, Error};
+pub use failure::{ensure, err_msg, Error};
 pub use zerocopy::{AsBytes, FromBytes, LayoutVerified};
 
 #[macro_export]
@@ -49,13 +49,17 @@ macro_rules! packed_struct {
             )+
 
             #[allow(unused)]
-            pub fn overlay(buf: &[u8]) -> &$name {
-                $crate::LayoutVerified::<&[u8], $name>::new(buf).unwrap().into_ref()
+            pub fn overlay(buf: &[u8]) -> ::failure::Fallible<&$name> {
+                $crate::LayoutVerified::<&[u8], $name>::new(buf)
+                    .map(|v| v.into_ref())
+                    .ok_or_else(|| ::failure::err_msg("cannot overlay"))
             }
 
             #[allow(unused)]
-            pub fn overlay_slice(buf: &[u8]) -> &[$name] {
-                $crate::LayoutVerified::<&[u8], [$name]>::new_slice(buf).unwrap().into_slice()
+            pub fn overlay_slice(buf: &[u8]) -> ::failure::Fallible<&[$name]> {
+                $crate::LayoutVerified::<&[u8], [$name]>::new_slice(buf)
+                    .map(|v| v.into_slice())
+                    .ok_or_else(|| ::failure::err_msg("cannot overlay slice"))
             }
 
             #[allow(clippy::too_many_arguments)]
@@ -96,7 +100,7 @@ mod tests {
     #[test]
     fn it_has_accessors() -> Fallible<()> {
         let buf: &[u8] = &[42, 1, 0, 0, 0, 0, 1];
-        let ts = TestStruct::overlay(buf);
+        let ts = TestStruct::overlay(buf)?;
         assert_eq!(ts.a(), 42usize);
         assert_eq!(ts.b(), 1u32);
         assert_eq!(ts.c(), 0u8);
@@ -106,7 +110,7 @@ mod tests {
     #[test]
     fn it_can_debug() -> Fallible<()> {
         let buf: &[u8] = &[42, 1, 0, 0, 0, 0, 1];
-        let ts = TestStruct::overlay(buf);
+        let ts = TestStruct::overlay(buf)?;
         format!("{:?}", ts);
         Ok(())
     }

@@ -208,6 +208,7 @@ mod test {
         fn update(&mut self, _tracker: &mut UploadTracker) {
             self.update_count += 1;
         }
+        #[allow(clippy::unnecessary_wraps)]
         fn example_compute_pass<'a>(
             &self,
             cpass: wgpu::ComputePass<'a>,
@@ -215,6 +216,7 @@ mod test {
             *self.compute_count.borrow_mut() += 1;
             Ok(cpass)
         }
+        #[allow(clippy::unnecessary_wraps)]
         fn example_render_pass<'a>(
             &self,
             rpass: wgpu::RenderPass<'a>,
@@ -240,6 +242,7 @@ mod test {
                 None,
             )
         }
+        #[allow(clippy::unnecessary_wraps)]
         fn example_any_pass(
             &self,
             encoder: wgpu::CommandEncoder,
@@ -255,11 +258,14 @@ mod test {
     }
     #[commandable]
     impl TestRenderer {
+        #[allow(clippy::unnecessary_wraps)]
         fn new(_gpu: &GPU, _foo: &TestBuffer) -> Fallible<Self> {
             Ok(Self {
                 render_count: RefCell::new(0),
             })
         }
+
+        #[allow(clippy::unnecessary_wraps)]
         fn draw<'a>(
             &self,
             rpass: wgpu::RenderPass<'a>,
