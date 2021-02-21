@@ -129,7 +129,7 @@ fn window_loop(
             _ => {}
         }
     }
-    let _ = input_controller.poll_keyboard()?;
+    let _ = input_controller.poll_events()?;
     app.arcball.think();
 
     // Sim

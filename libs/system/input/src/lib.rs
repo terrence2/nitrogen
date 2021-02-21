@@ -47,7 +47,6 @@ pub struct InputState {
 pub struct InputController {
     proxy: EventLoopProxy<MetaEvent>,
     event_source: Receiver<GenericEvent>,
-    raw_keyboard_source: Receiver<(KeyboardInput, ModifiersState)>,
     command_source: Receiver<Command>,
 }
 
@@ -55,13 +54,11 @@ impl InputController {
     fn new(
         proxy: EventLoopProxy<MetaEvent>,
         event_source: Receiver<GenericEvent>,
-        raw_keyboard_source: Receiver<(KeyboardInput, ModifiersState)>,
         command_source: Receiver<Command>,
     ) -> Self {
         Self {
             proxy,
             event_source,
-            raw_keyboard_source,
             command_source,
         }
     }
@@ -92,19 +89,6 @@ impl InputController {
             command = self.command_source.try_recv();
         }
         match command.err().unwrap() {
-            TryRecvError::Empty => Ok(out),
-            TryRecvError::Disconnected => bail!("input system stopped"),
-        }
-    }
-
-    pub fn poll_keyboard(&self) -> Fallible<SmallVec<[(KeyboardInput, ModifiersState); 8]>> {
-        let mut out = SmallVec::new();
-        let mut kb_input = self.raw_keyboard_source.try_recv();
-        while kb_input.is_ok() {
-            out.push(kb_input?);
-            kb_input = self.raw_keyboard_source.try_recv();
-        }
-        match kb_input.err().unwrap() {
             TryRecvError::Empty => Ok(out),
             TryRecvError::Disconnected => bail!("input system stopped"),
         }
@@ -186,10 +170,9 @@ impl InputSystem {
             .with_title("Nitrogen")
             .build(&event_loop)?;
         let (tx_event, rx_event) = channel();
-        let (tx_kb, rx_kb) = channel();
         let (tx_command, rx_command) = channel();
         let input_controller =
-            InputController::new(event_loop.create_proxy(), rx_event, rx_kb, rx_command);
+            InputController::new(event_loop.create_proxy(), rx_event, rx_command);
 
         // Spawn the game thread.
         std::thread::spawn(move || {
@@ -225,19 +208,6 @@ impl InputSystem {
             for command in &commands {
                 log::trace!("send command: {}", command);
                 if let Err(e) = tx_command.send(command.to_owned()) {
-                    println!("Game loop hung up ({}), exiting...", e);
-                    *control_flow = ControlFlow::Exit;
-                    return;
-                }
-            }
-
-            // Send any raw keyboard events.
-            if let Event::WindowEvent {
-                event: WindowEvent::KeyboardInput { input, .. },
-                ..
-            } = event
-            {
-                if let Err(e) = tx_kb.send((input, state.modifiers_state)) {
                     println!("Game loop hung up ({}), exiting...", e);
                     *control_flow = ControlFlow::Exit;
                     return;
