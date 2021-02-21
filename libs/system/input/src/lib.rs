@@ -211,7 +211,7 @@ impl InputSystem {
             // TODO: poll receive queue for bindings changes?
 
             let mut generic_events = SmallVec::new();
-            Self::wrap_event(&event, &mut input_state, &mut generic_events).expect("event wrapped");
+            Self::wrap_event(&event, &mut input_state, &mut generic_events);
             for evt in generic_events.drain(..) {
                 if let Err(e) = tx_event.send(evt) {
                     println!("Game loop hung up ({}), exiting...", e);
@@ -250,11 +250,11 @@ impl InputSystem {
         e: &Event<MetaEvent>,
         input_state: &mut InputState,
         out: &mut SmallVec<[GenericEvent; 2]>,
-    ) -> Fallible<()> {
-        Ok(match e {
-            Event::WindowEvent { event, .. } => Self::wrap_window_event(event, input_state, out)?,
+    ) {
+        match e {
+            Event::WindowEvent { event, .. } => Self::wrap_window_event(event, input_state, out),
             Event::DeviceEvent { device_id, event } => {
-                Self::wrap_device_event(device_id, event, input_state, out)?
+                Self::wrap_device_event(device_id, event, input_state, out)
             }
             Event::MainEventsCleared => {}
             Event::RedrawRequested(_window_id) => {}
@@ -263,15 +263,15 @@ impl InputSystem {
             unhandled => {
                 log::warn!("don't know how to handle: {:?}", unhandled);
             }
-        })
+        }
     }
 
     fn wrap_window_event(
         event: &WindowEvent,
         input_state: &mut InputState,
         out: &mut SmallVec<[GenericEvent; 2]>,
-    ) -> Fallible<()> {
-        Ok(match event {
+    ) {
+        match event {
             WindowEvent::Resized(s) => {
                 out.push(GenericEvent::Window(GenericWindowEvent::Resized {
                     width: s.width,
@@ -366,7 +366,7 @@ impl InputSystem {
             }
 
             WindowEvent::ThemeChanged(_) => {}
-        })
+        }
     }
 
     fn wrap_device_event(
@@ -374,8 +374,8 @@ impl InputSystem {
         event: &DeviceEvent,
         input_state: &mut InputState,
         out: &mut SmallVec<[GenericEvent; 2]>,
-    ) -> Fallible<()> {
-        Ok(match event {
+    ) {
+        match event {
             // Device change events
             DeviceEvent::Added => {
                 out.push(GenericEvent::System(GenericSystemEvent::DeviceAdded {
@@ -509,7 +509,7 @@ impl InputSystem {
 
             // I'm not sure what this does?
             DeviceEvent::Text { .. } => {}
-        })
+        }
     }
 
     pub fn is_close_command(command: &Command) -> bool {
