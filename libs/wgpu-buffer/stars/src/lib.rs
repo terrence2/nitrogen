@@ -410,7 +410,7 @@ mod tests {
     use approx::assert_relative_eq;
 
     #[test]
-    fn ra_d_to_bin_transform() -> Fallible<()> {
+    fn ra_d_to_bin_transform() {
         for i in 0..32 {
             assert_eq!(SB::bin_for_ra_d(i as f32 / 32f32, -PI_2), 0);
             assert_eq!(SB::bin_for_ra_d(i as f32 / 32f32, PI_2 - 0.0001), 5433);
@@ -428,7 +428,6 @@ mod tests {
                 assert_eq!(bin_idx as u32, band.base_index + j);
             }
         }
-        Ok(())
     }
 
     #[test]
@@ -468,7 +467,7 @@ mod tests {
     }
 
     #[test]
-    fn fast_taps() -> Fallible<()> {
+    fn fast_taps() {
         let v = Vector3::new(0f32, 0f32, 1f32);
         let perp = get_perpendicular(&v) * 0.001;
         let vn = nalgebra::Unit::new_normalize(v);
@@ -479,7 +478,5 @@ mod tests {
             let sample = v + rot * perp;
             println!("PERP: {}", sample);
         }
-
-        Ok(())
     }
 }

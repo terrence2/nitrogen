@@ -289,13 +289,8 @@ mod test {
     #[test]
     fn test_interpret_basic() -> Fallible<()> {
         let interpreter = Interpreter::boot();
-        let script = Script::parse_expr("2 + 2")?;
+        let script = Script::compile_expr("2 + 2")?;
         assert_eq!(interpreter.interpret(&script)?, Value::Integer(4));
-        Ok(())
-    }
-
-    #[test]
-    fn test_interpret_call() -> Fallible<()> {
         Ok(())
     }
 }

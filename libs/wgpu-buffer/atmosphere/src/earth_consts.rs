@@ -394,7 +394,6 @@ impl EarthParameters {
 #[cfg(test)]
 mod test {
     use super::*;
-    use failure::Fallible;
     use spirv_reflect::ShaderModule;
 
     macro_rules! offsetof {
@@ -404,7 +403,7 @@ mod test {
     }
 
     #[test]
-    fn test_layout() -> Fallible<()> {
+    fn test_layout() {
         let earth = EarthParameters::new();
         let a = earth.sample(RGB_LAMBDAS);
 
@@ -441,7 +440,5 @@ mod test {
                 }
             }
         }
-
-        Ok(())
     }
 }

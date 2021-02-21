@@ -116,7 +116,7 @@ impl QuadTree {
 
         let mut acc = FxHashMap::default();
         for i in 0..obj.layer_packs.len() {
-            obj.link_layer(&mut acc, i, catalog);
+            obj.link_layer(&mut acc, i, catalog)?;
         }
 
         trace!("loaded quad-tree with {} nodes", obj.nodes.len());
@@ -128,7 +128,7 @@ impl QuadTree {
         acc: &mut FxHashMap<(i32, i32), QuadTreeId>,
         layer_num: usize,
         catalog: &Catalog,
-    ) {
+    ) -> Fallible<()> {
         // Create a node for each item at level i, given we have created nodes for i-1 and that
         // the base of those nodes are in `acc`.
         let extent = self.layer_packs[layer_num].angular_extent_as();
@@ -136,7 +136,7 @@ impl QuadTree {
         // Note: we have to overlay manually because the data may not be mapped if the item was a raw file.
         let mut id_update_cursor = self.nodes.len();
         let index_bytes = self.layer_packs[layer_num].index_bytes(catalog).unwrap();
-        let raw_index = LayerPackIndexItem::overlay_slice(&index_bytes);
+        let raw_index = LayerPackIndexItem::overlay_slice(&index_bytes)?;
         for item in raw_index {
             let base = (item.base_lat_as(), item.base_lon_as());
             // FIXME: are we making a decision to not support 32bit here?
@@ -178,6 +178,8 @@ impl QuadTree {
 
         #[cfg(debug_assertions)]
         self.sanity_check_tree(&self.nodes[self.root.offset()]);
+
+        Ok(())
     }
 
     #[cfg(debug_assertions)]
