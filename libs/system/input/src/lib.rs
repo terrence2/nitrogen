@@ -15,6 +15,7 @@
 mod generic;
 
 pub use generic::{GenericEvent, GenericSystemEvent, GenericWindowEvent, MouseAxis};
+pub use winit::event::{ElementState, ModifiersState, VirtualKeyCode};
 
 use command::{BindingState, Bindings, Command, Key};
 use failure::{bail, Fallible};
@@ -25,8 +26,7 @@ use std::{
 };
 use winit::{
     event::{
-        DeviceEvent, DeviceId, ElementState, Event, KeyboardInput, ModifiersState,
-        MouseScrollDelta, StartCause, VirtualKeyCode, WindowEvent,
+        DeviceEvent, DeviceId, Event, KeyboardInput, MouseScrollDelta, StartCause, WindowEvent,
     },
     event_loop::{ControlFlow, EventLoop, EventLoopProxy},
     window::{Window, WindowBuilder},

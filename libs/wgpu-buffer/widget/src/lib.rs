@@ -41,10 +41,11 @@ use failure::{ensure, Fallible};
 use font_common::FontInterface;
 use font_ttf::TtfFont;
 use gpu::{UploadTracker, GPU};
+use input::GenericEvent;
 use log::trace;
+use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::{borrow::Borrow, mem, num::NonZeroU64, ops::Range, sync::Arc};
-use winit::event::{KeyboardInput, ModifiersState};
 
 // Drawing UI efficiently:
 //
@@ -214,8 +215,12 @@ impl WidgetBuffer {
         &self.paint_context.font_context
     }
 
-    pub fn handle_keyboard(&mut self, inputs: &[(KeyboardInput, ModifiersState)]) -> Fallible<()> {
-        self.root().write().handle_keyboard(inputs)
+    pub fn handle_events(
+        &mut self,
+        events: &[GenericEvent],
+        interpreter: Arc<RwLock<Interpreter>>,
+    ) -> Fallible<()> {
+        self.root().write().handle_events(events, interpreter)
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {

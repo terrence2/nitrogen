@@ -15,7 +15,10 @@
 use crate::paint_context::PaintContext;
 use failure::Fallible;
 use gpu::GPU;
-use winit::event::{KeyboardInput, ModifiersState};
+use input::GenericEvent;
+use nitrous::Interpreter;
+use parking_lot::RwLock;
+use std::sync::Arc;
 
 #[derive(Clone, Debug, Default)]
 pub struct UploadMetrics {
@@ -26,5 +29,9 @@ pub struct UploadMetrics {
 
 pub trait Widget {
     fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Fallible<UploadMetrics>;
-    fn handle_keyboard(&mut self, events: &[(KeyboardInput, ModifiersState)]) -> Fallible<()>;
+    fn handle_events(
+        &mut self,
+        events: &[GenericEvent],
+        interpreter: Arc<RwLock<Interpreter>>,
+    ) -> Fallible<()>;
 }

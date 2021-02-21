@@ -21,9 +21,10 @@ use crate::{
 };
 use failure::Fallible;
 use gpu::GPU;
+use input::GenericEvent;
+use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::sync::Arc;
-use winit::event::{KeyboardInput, ModifiersState};
 
 // Items packed from top to bottom.
 pub struct Terminal {
@@ -82,9 +83,13 @@ impl Widget for Terminal {
         }
     }
 
-    fn handle_keyboard(&mut self, events: &[(KeyboardInput, ModifiersState)]) -> Fallible<()> {
+    fn handle_events(
+        &mut self,
+        events: &[GenericEvent],
+        interpreter: Arc<RwLock<Interpreter>>,
+    ) -> Fallible<()> {
         if self.visible {
-            self.edit.write().handle_keyboard(events)
+            self.edit.write().handle_events(events, interpreter)
         } else {
             Ok(())
         }
