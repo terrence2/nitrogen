@@ -42,6 +42,19 @@ pub struct EventMapper {
     state: State,
 }
 
+impl EventMapper {
+    pub fn with_bindings(bindings: Vec<Bindings>) -> Self {
+        Self {
+            bindings,
+            state: Default::default(),
+        }
+    }
+
+    pub fn wrapped(self) -> Arc<RwLock<Self>> {
+        Arc::new(RwLock::new(self))
+    }
+}
+
 impl Widget for EventMapper {
     fn upload(&self, _gpu: &GPU, _context: &mut PaintContext) -> Fallible<UploadMetrics> {
         Ok(UploadMetrics {
@@ -73,6 +86,11 @@ impl Widget for EventMapper {
                         panic!("event has a press state, but is not a key or button kind of event")
                     }
                 };
+
+                self.state.key_states.insert(key, key_state);
+                self.state.modifiers_state =
+                    event.modifiers_state().expect("modifiers on key press");
+
                 for bindings in &self.bindings {
                     bindings.match_key(key, key_state, &mut self.state, interpreter.clone())?;
                 }

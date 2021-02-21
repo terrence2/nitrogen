@@ -17,7 +17,7 @@ use atmosphere::AtmosphereBuffer;
 use camera::ArcBallCamera;
 use catalog::{Catalog, DirectoryDrawer};
 use chrono::{TimeZone, Utc};
-use command::{Bindings, CommandHandler};
+use command::{Bindings as LegacyBindings, CommandHandler};
 use composite::CompositeRenderPass;
 use failure::Fallible;
 use fullscreen::FullscreenBuffer;
@@ -37,7 +37,7 @@ use structopt::StructOpt;
 use terrain_geo::{CpuDetailLevel, GpuDetailLevel, TerrainGeoBuffer};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use ui::UiRenderPass;
-use widget::{Color, Label, PositionH, PositionV, Terminal, WidgetBuffer};
+use widget::{Bindings, Color, EventMapper, Label, PositionH, PositionV, Terminal, WidgetBuffer};
 use winit::window::Window;
 use world::WorldRenderPass;
 
@@ -101,7 +101,7 @@ make_frame_graph!(
 fn main() -> Fallible<()> {
     env_logger::init();
 
-    let system_bindings = Bindings::new("map")
+    let system_bindings = LegacyBindings::new("map")
         .bind("world.toggle_wireframe", "w")?
         .bind("world.toggle_debug_mode", "r")?
         .bind("demo.+target_up_fast", "Shift+Up")?
@@ -180,6 +180,25 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         composite,
     )?;
     ///////////////////////////////////////////////////////////
+
+    let test_bindings = Bindings::new("test").bind("camera.test(pressed)", "k")?;
+    // let system_bindings = Bindings::new("map")
+    //     .bind("world.toggle_wireframe", "w")?
+    //     .bind("world.toggle_debug_mode", "r")?
+    //     .bind("demo.+target_up_fast", "Shift+Up")?
+    //     .bind("demo.+target_down_fast", "Shift+Down")?
+    //     .bind("demo.+target_up", "Up")?
+    //     .bind("demo.+target_down", "Down")?
+    //     .bind("demo.decrease_gamma", "LBracket")?
+    //     .bind("demo.increase_gamma", "RBracket")?
+    //     .bind("demo.decrease_exposure", "Shift+LBracket")?
+    //     .bind("demo.increase_exposure", "Shift+RBracket")?
+    //     .bind("demo.pin_view", "p")?
+    //     .bind("demo.toggle_terminal", "Shift+Grave")?
+    //     .bind("demo.exit", "Escape")?
+    //     .bind("demo.exit", "q")?;
+    let mapper = EventMapper::with_bindings(vec![test_bindings]).wrapped();
+    frame_graph.widgets.root().write().add_child(mapper);
 
     let version_label = Label::new("Nitrogen v0.1")
         .with_color(Color::Green)

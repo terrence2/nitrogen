@@ -97,6 +97,30 @@ impl GenericEvent {
         }
     }
 
+    pub fn modifiers_state(&self) -> Option<ModifiersState> {
+        match self {
+            Self::KeyboardKey {
+                modifiers_state, ..
+            } => Some(*modifiers_state),
+            Self::MouseButton {
+                modifiers_state, ..
+            } => Some(*modifiers_state),
+            Self::MouseMotion {
+                modifiers_state, ..
+            } => Some(*modifiers_state),
+            Self::CursorMove {
+                modifiers_state, ..
+            } => Some(*modifiers_state),
+            Self::JoystickAxis {
+                modifiers_state, ..
+            } => Some(*modifiers_state),
+            Self::JoystickButton {
+                modifiers_state, ..
+            } => Some(*modifiers_state),
+            _ => None,
+        }
+    }
+
     pub fn is_window_focused(&self) -> bool {
         matches!(
             self,
