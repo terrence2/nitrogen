@@ -30,7 +30,7 @@ pub(crate) fn make_derive_nitrous_module(item: DeriveInput) -> TokenStream2 {
                 stringify!(#ident).to_owned()
             }
 
-            fn call_method(&self, name: &str, args: &[Value]) -> Fallible<Value> {
+            fn call_method(&mut self, name: &str, args: &[Value]) -> Fallible<Value> {
                 self.__call_method_inner__(name, args)
             }
 

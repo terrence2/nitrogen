@@ -26,7 +26,7 @@ use std::{collections::HashMap, fmt::Debug, ops, sync::Arc};
 // Note: manually passing the module until we have arbitrary self.
 pub trait Module: Debug {
     fn module_name(&self) -> String;
-    fn call_method(&self, name: &str, args: &[Value]) -> Fallible<Value>;
+    fn call_method(&mut self, name: &str, args: &[Value]) -> Fallible<Value>;
     fn put(&mut self, module: Arc<RwLock<dyn Module>>, name: &str, value: Value) -> Fallible<()>;
     fn get(&self, module: Arc<RwLock<dyn Module>>, name: &str) -> Fallible<Value>;
 }
@@ -194,13 +194,29 @@ impl ops::BitOrAssign for InterpreterStatus {
 #[derive(Debug)]
 pub struct Interpreter {
     memory: HashMap<String, Value>,
+    locals: HashMap<String, Value>,
 }
 
 impl Interpreter {
     pub fn boot() -> Self {
         Self {
             memory: HashMap::new(),
+            locals: HashMap::new(),
         }
+    }
+
+    pub fn wrapped(self) -> Arc<RwLock<Self>> {
+        Arc::new(RwLock::new(self))
+    }
+
+    pub fn with_local<F>(&mut self, name: &str, value: Value, callback: F) -> Fallible<Value>
+    where
+        F: Fn(&Interpreter) -> Fallible<Value>,
+    {
+        self.locals.insert(name.to_owned(), value);
+        let result = callback(self);
+        self.locals.remove(name);
+        result
     }
 
     pub fn interpret(&self, script: &Script) -> Fallible<Value> {
@@ -214,7 +230,9 @@ impl Interpreter {
                 Term::Integer(i) => Value::Integer(*i),
                 Term::String(s) => Value::String(s.to_owned()),
                 Term::Symbol(sym) => {
-                    if let Some(v) = self.memory.get(sym) {
+                    if let Some(v) = self.locals.get(sym) {
+                        v.clone()
+                    } else if let Some(v) = self.memory.get(sym) {
                         v.clone()
                     } else {
                         bail!("Unknown symbol '{}'", sym)
@@ -246,7 +264,7 @@ impl Interpreter {
                 }
                 match base {
                     Value::Method(module, method_name) => {
-                        module.read().call_method(&method_name, &argvec)?
+                        module.write().call_method(&method_name, &argvec)?
                     }
                     _ => bail!("call must be on a method value"),
                 }
@@ -261,7 +279,7 @@ impl Module for Interpreter {
         "Interpreter".to_owned()
     }
 
-    fn call_method(&self, _name: &str, _args: &[Value]) -> Fallible<Value> {
+    fn call_method(&mut self, _name: &str, _args: &[Value]) -> Fallible<Value> {
         bail!("no methods are defined on the interpreter")
     }
 

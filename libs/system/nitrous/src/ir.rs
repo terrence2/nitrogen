@@ -13,8 +13,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use ordered_float::OrderedFloat;
+use std::fmt;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Expr {
     BinOp(Box<Expr>, Operator, Box<Expr>),
     Term(Term),
@@ -23,7 +24,27 @@ pub enum Expr {
     Call(Box<Expr>, Vec<Box<Expr>>),
 }
 
-#[derive(Debug, Eq, PartialEq, Copy, Clone)]
+impl fmt::Display for Expr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::BinOp(a, op, b) => write!(f, "{} {} {}", a, op, b),
+            Self::Term(t) => write!(f, "{}", t),
+            Self::Attr(b, n) => write!(f, "{}.{}", b, n),
+            Self::Call(func, args) => {
+                write!(f, "{}(", func)?;
+                for (i, a) in args.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", a)?;
+                }
+                write!(f, ")")
+            }
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Operator {
     Add,
     Subtract,
@@ -31,10 +52,33 @@ pub enum Operator {
     Divide,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+impl fmt::Display for Operator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            Self::Add => "+",
+            Self::Subtract => "-",
+            Self::Multiply => "*",
+            Self::Divide => "/",
+        };
+        write!(f, "{}", s)
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Term {
     Symbol(String),
     Integer(i64),
     Float(OrderedFloat<f64>),
     String(String),
+}
+
+impl fmt::Display for Term {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Symbol(v) => write!(f, "{}", v),
+            Self::Integer(v) => write!(f, "{}", v),
+            Self::Float(v) => write!(f, "{}", v),
+            Self::String(v) => write!(f, "\"{}\"", v),
+        }
+    }
 }

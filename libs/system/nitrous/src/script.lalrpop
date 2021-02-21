@@ -38,7 +38,7 @@ MulOp: Operator = {
     "/" => Operator::Divide,
 };
 
-Symbol: Term = r"[a-zA-Z][a-zA-Z0-9]*" => Term::Symbol(<>.to_owned());
+Symbol: Term = r"[_a-zA-Z][_a-zA-Z0-9]*" => Term::Symbol(<>.to_owned());
 DoubleQuotedString: Term = r#""[^"]*""# => Term::String(<>[1..<>.len() - 1].to_owned());
 SingleQuotedString: Term = r"'[^']*'" => Term::String(<>[1..<>.len() - 1].to_owned());
 Integer: Term = r"[0-9]+" => Term::Integer(i64::from_str(<>).unwrap());

@@ -30,8 +30,13 @@ pub use crate::{
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
     widgets::{
-        float_box::FloatBox, label::Label, line_edit::LineEdit, terminal::Terminal,
-        text_edit::TextEdit, vertical_box::VerticalBox,
+        event_mapper::{Bindings, EventMapper},
+        float_box::FloatBox,
+        label::Label,
+        line_edit::LineEdit,
+        terminal::Terminal,
+        text_edit::TextEdit,
+        vertical_box::VerticalBox,
     },
 };
 

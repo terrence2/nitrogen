@@ -15,7 +15,7 @@
 mod generic;
 
 pub use generic::{GenericEvent, GenericSystemEvent, GenericWindowEvent, MouseAxis};
-pub use winit::event::{ElementState, ModifiersState, VirtualKeyCode};
+pub use winit::event::{ButtonId, ElementState, ModifiersState, VirtualKeyCode};
 
 use command::{BindingState, Bindings, Command, Key};
 use failure::{bail, Fallible};

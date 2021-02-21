@@ -12,10 +12,10 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-pub(crate) mod event_mapper;
-pub(crate) mod float_box;
-pub(crate) mod label;
-pub(crate) mod line_edit;
-pub(crate) mod terminal;
-pub(crate) mod text_edit;
-pub(crate) mod vertical_box;
+mod bindings;
+mod keyset;
+mod widget;
+
+pub use bindings::Bindings;
+pub use widget::EventMapper;
+pub(crate) use widget::State;
