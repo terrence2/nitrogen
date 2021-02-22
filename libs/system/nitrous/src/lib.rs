@@ -21,7 +21,7 @@ use crate::ir::{Expr, Operator, Term};
 use failure::{bail, Fallible};
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
-use std::{collections::HashMap, fmt::Debug, ops, sync::Arc};
+use std::{collections::HashMap, fmt, fmt::Debug, ops, sync::Arc};
 
 // Note: manually passing the module until we have arbitrary self.
 pub trait Module: Debug {
@@ -33,6 +33,7 @@ pub trait Module: Debug {
 
 #[derive(Clone, Debug)]
 pub enum Value {
+    Boolean(bool),
     Integer(i64),
     Float(OrderedFloat<f64>),
     String(String),
@@ -40,9 +41,38 @@ pub enum Value {
     Method(Arc<RwLock<dyn Module>>, String), // TODO: atoms
 }
 
+impl Value {
+    #[allow(non_snake_case)]
+    pub fn True() -> Self {
+        Self::Boolean(true)
+    }
+
+    #[allow(non_snake_case)]
+    pub fn False() -> Self {
+        Self::Boolean(false)
+    }
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Boolean(v) => write!(f, "{}", v),
+            Self::Integer(v) => write!(f, "{}", v),
+            Self::Float(v) => write!(f, "{}", v),
+            Self::String(v) => write!(f, "\"{}\"", v),
+            Self::Module(v) => write!(f, "{}", v.read().module_name()),
+            Self::Method(v, name) => write!(f, "{}.{}", v.read().module_name(), name),
+        }
+    }
+}
+
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match self {
+            Self::Boolean(a) => match other {
+                Self::Boolean(b) => a == b,
+                _ => false,
+            },
             Self::Integer(a) => match other {
                 Self::Integer(b) => a == b,
                 _ => false,
@@ -70,6 +100,7 @@ impl Value {
                 Value::Integer(rhs) => Value::Integer(lhs * rhs),
                 Value::Float(rhs) => Value::Float(OrderedFloat(lhs as f64) * rhs),
                 Value::String(_) => bail!("cannot multiply a number by a string"),
+                Value::Boolean(_) => bail!("cannot multiply a number to a boolean"),
                 Value::Module(_) => bail!("cannot multiply a number by a module"),
                 Value::Method(_, _) => bail!("cannot multiply a number by a method"),
             },
@@ -77,6 +108,7 @@ impl Value {
                 Value::Integer(rhs) => Value::Float(lhs * OrderedFloat(rhs as f64)),
                 Value::Float(rhs) => Value::Float(lhs * rhs),
                 Value::String(_) => bail!("cannot multiply a number by a string"),
+                Value::Boolean(_) => bail!("cannot multiply a number to a boolean"),
                 Value::Module(_) => bail!("cannot multiply a number by a module"),
                 Value::Method(_, _) => bail!("cannot multiply a number by a method"),
             },
@@ -84,9 +116,11 @@ impl Value {
                 Value::Integer(rhs) => Value::String(lhs.repeat(rhs.max(0) as usize)),
                 Value::Float(rhs) => Value::String(lhs.repeat(rhs.floor().max(0f64) as usize)),
                 Value::String(_) => bail!("cannot multiply a string by a string"),
+                Value::Boolean(_) => bail!("cannot multiply a number to a boolean"),
                 Value::Module(_) => bail!("cannot multiply a string by a module"),
                 Value::Method(_, _) => bail!("cannot multiply a string by a method"),
             },
+            Value::Boolean(_) => bail!("cannot do arithmetic on a boolean"),
             Value::Module(_) => bail!("cannot do arithmetic on a module"),
             Value::Method(_, _) => bail!("cannot do arithmetic on a method"),
         })
@@ -98,6 +132,7 @@ impl Value {
                 Value::Integer(rhs) => Value::Integer(lhs / rhs),
                 Value::Float(rhs) => Value::Float(OrderedFloat(lhs as f64) / rhs),
                 Value::String(_) => bail!("cannot divide a number by a string"),
+                Value::Boolean(_) => bail!("cannot divide a number by a boolean"),
                 Value::Module(_) => bail!("cannot divide a number by a module"),
                 Value::Method(_, _) => bail!("cannot divide a number by a method"),
             },
@@ -105,10 +140,12 @@ impl Value {
                 Value::Integer(rhs) => Value::Float(lhs / OrderedFloat(rhs as f64)),
                 Value::Float(rhs) => Value::Float(lhs / rhs),
                 Value::String(_) => bail!("cannot divide a number by a string"),
+                Value::Boolean(_) => bail!("cannot divide a number by a boolean"),
                 Value::Module(_) => bail!("cannot divide a number by a module"),
                 Value::Method(_, _) => bail!("cannot divide a number by a method"),
             },
             Value::String(_) => bail!("cannot divide a string by anything"),
+            Value::Boolean(_) => bail!("cannot do arithmetic on a boolean"),
             Value::Module(_) => bail!("cannot do arithmetic on a module"),
             Value::Method(_, _) => bail!("cannot do arithmetic on a method"),
         })
@@ -120,6 +157,7 @@ impl Value {
                 Value::Integer(rhs) => Value::Integer(lhs + rhs),
                 Value::Float(rhs) => Value::Float(OrderedFloat(lhs as f64) + rhs),
                 Value::String(_) => bail!("cannot add a string to a number"),
+                Value::Boolean(_) => bail!("cannot add a number to a boolean"),
                 Value::Module(_) => bail!("cannot add a module to a number"),
                 Value::Method(_, _) => bail!("cannot add a method to a number"),
             },
@@ -127,6 +165,7 @@ impl Value {
                 Value::Integer(rhs) => Value::Float(lhs + OrderedFloat(rhs as f64)),
                 Value::Float(rhs) => Value::Float(lhs + rhs),
                 Value::String(_) => bail!("cannot add a string to a number"),
+                Value::Boolean(_) => bail!("cannot add a number to a boolean"),
                 Value::Module(_) => bail!("cannot add a module to a number"),
                 Value::Method(_, _) => bail!("cannot add a method to a number"),
             },
@@ -134,9 +173,11 @@ impl Value {
                 Value::Integer(_) => bail!("cannot add a number to a string"),
                 Value::Float(_) => bail!("cannot add a number to a string"),
                 Value::String(rhs) => Value::String(lhs + &rhs),
+                Value::Boolean(_) => bail!("cannot add a number to a boolean"),
                 Value::Module(_) => bail!("cannot add a module to a string"),
                 Value::Method(_, _) => bail!("cannot add a method to a string"),
             },
+            Value::Boolean(_) => bail!("cannot do arithmetic on a boolean"),
             Value::Module(_) => bail!("cannot do arithmetic on a module"),
             Value::Method(_, _) => bail!("cannot do arithmetic on a method"),
         })
@@ -148,6 +189,7 @@ impl Value {
                 Value::Integer(rhs) => Value::Integer(lhs - rhs),
                 Value::Float(rhs) => Value::Float(OrderedFloat(lhs as f64) - rhs),
                 Value::String(_) => bail!("cannot subtract a string from a number"),
+                Value::Boolean(_) => bail!("cannot subtract a boolean from a number"),
                 Value::Module(_) => bail!("cannot subtract a module from a number"),
                 Value::Method(_, _) => bail!("cannot subtract a method from a number"),
             },
@@ -155,10 +197,12 @@ impl Value {
                 Value::Integer(rhs) => Value::Float(lhs - OrderedFloat(rhs as f64)),
                 Value::Float(rhs) => Value::Float(lhs - rhs),
                 Value::String(_) => bail!("cannot subtract a string from a number"),
+                Value::Boolean(_) => bail!("cannot subtract a boolean from a number"),
                 Value::Module(_) => bail!("cannot subtract a module from a number"),
                 Value::Method(_, _) => bail!("cannot subtract a method from a number"),
             },
-            Value::String(_) => bail!("cannot subtract a string by anything"),
+            Value::String(_) => bail!("cannot subtract with a string"),
+            Value::Boolean(_) => bail!("cannot do arithmetic on a boolean"),
             Value::Module(_) => bail!("cannot do arithmetic on a module"),
             Value::Method(_, _) => bail!("cannot do arithmetic on a method"),
         })

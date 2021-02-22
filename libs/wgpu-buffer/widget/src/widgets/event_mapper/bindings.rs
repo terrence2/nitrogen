@@ -128,21 +128,17 @@ impl Bindings {
         for masked in &masked_chords {
             state.active_chords.remove(masked);
             if let Some(script) = self.script_map.get(masked) {
-                // FIXME: use boolean
                 interpreter
                     .write()
-                    .with_local("pressed", Value::Integer(0), |inner| {
-                        inner.interpret(script)
-                    })?;
+                    .with_local("pressed", Value::False(), |inner| inner.interpret(script))?;
             }
         }
 
         // Activate the chord and run the command.
         state.active_chords.insert(chord.to_owned());
-        // FIXME: use boolean
         interpreter
             .write()
-            .with_local("pressed", Value::Integer(1), |inner| {
+            .with_local("pressed", Value::True(), |inner| {
                 inner.interpret(&self.script_map[chord])
             })?;
 
@@ -162,12 +158,9 @@ impl Bindings {
                 // Note: unlike with press, we do not implicitly filter out keys we don't care about.
                 if let Some(script) = self.script_map.get(active_chord) {
                     released_chords.push(active_chord.to_owned());
-                    // FIXME: use boolean
                     interpreter
                         .write()
-                        .with_local("pressed", Value::Integer(0), |inner| {
-                            inner.interpret(script)
-                        })?;
+                        .with_local("pressed", Value::False(), |inner| inner.interpret(script))?;
                 }
             }
         }
@@ -181,12 +174,9 @@ impl Bindings {
             for (chord, script) in &self.script_map {
                 if chord.is_subset_of(released_chord) && chord.is_pressed(&state) {
                     state.active_chords.insert(chord.to_owned());
-                    // FIXME: use boolean
                     interpreter
                         .write()
-                        .with_local("pressed", Value::Integer(1), |inner| {
-                            inner.interpret(script)
-                        })?;
+                        .with_local("pressed", Value::True(), |inner| inner.interpret(script))?;
                 }
             }
         }
@@ -214,13 +204,14 @@ mod test {
         }
 
         fn call_method(&mut self, name: &str, args: &[Value]) -> Fallible<Value> {
+            println!("Call: {}({})", name, args[0]);
             Ok(match name {
                 "walk" => {
-                    self.walking = args[0] == Value::Integer(1);
+                    self.walking = args[0] == Value::True();
                     Value::Integer(0)
                 }
                 "run" => {
-                    self.running = args[0] == Value::Integer(1);
+                    self.running = args[0] == Value::True();
                     Value::Integer(0)
                 }
                 _ => unimplemented!(),

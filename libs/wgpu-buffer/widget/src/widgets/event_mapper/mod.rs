@@ -16,6 +16,5 @@ mod bindings;
 mod keyset;
 mod widget;
 
-pub use bindings::Bindings;
-pub use widget::EventMapper;
-pub(crate) use widget::State;
+pub(crate) use crate::widgets::event_mapper::widget::State;
+pub use crate::widgets::event_mapper::{bindings::Bindings, widget::EventMapper};
