@@ -75,7 +75,7 @@ fn test_it_works() -> Fallible<()> {
     let inj = Arc::new(RwLock::new(TestInjector {}));
     interpreter
         .write()
-        .put(interpreter.clone(), "test", Value::Module(inj.clone()))?;
+        .put(interpreter.clone(), "test", Value::Module(inj))?;
 
     assert_eq!(
         interpreter

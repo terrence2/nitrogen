@@ -152,7 +152,7 @@ impl Bindings {
 
         // Activate the chord and run the command.
         state.active_chords.insert(chord.to_owned());
-        self.activate_chord(&self.script_map[chord], interpreter.clone())?;
+        self.activate_chord(&self.script_map[chord], interpreter)?;
 
         Ok(())
     }
