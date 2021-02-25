@@ -38,16 +38,22 @@ MulOp: Operator = {
     "/" => Operator::Divide,
 };
 
-Symbol: Term = r"[_a-zA-Z][_a-zA-Z0-9]*" => Term::Symbol(<>.to_owned());
+SymbolOrBool: Term = r"[_a-zA-Z][_a-zA-Z0-9]*" => {
+    if <> == "True" {
+        Term::Boolean(true)
+    } else if <> == "False" {
+        Term::Boolean(false)
+    } else {
+        Term::Symbol(<>.to_owned())
+    }
+};
 DoubleQuotedString: Term = r#""[^"]*""# => Term::String(<>[1..<>.len() - 1].to_owned());
 SingleQuotedString: Term = r"'[^']*'" => Term::String(<>[1..<>.len() - 1].to_owned());
 Integer: Term = r"[0-9]+" => Term::Integer(i64::from_str(<>).unwrap());
 Float: Term = r"[+-]?[0-9]+[.]([0-9]*)?" => Term::Float(f64::from_str(<>).unwrap().into());
-// BooleanTrue: Term = r"True" => Term::Boolean(true);
-// BooleanFalse: Term = r"False" => Term::Boolean(false);
 
 Term: Term = {
-    Symbol,
+    SymbolOrBool,
     DoubleQuotedString,
     SingleQuotedString,
     Float,
@@ -65,7 +71,7 @@ CallExpr: Box<Expr> = {
 }
 
 AttrExpr: Box<Expr> = {
-    <AttrExpr> "." <Symbol> => Box::new(Expr::Attr(<>)),
+    <AttrExpr> "." <SymbolOrBool> => Box::new(Expr::Attr(<>)),
     MulExpr
 }
 
