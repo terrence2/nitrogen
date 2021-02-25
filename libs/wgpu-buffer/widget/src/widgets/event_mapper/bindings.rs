@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::widgets::event_mapper::{
+    axis::AxisKind,
     keyset::{Key, KeySet},
     State,
 };
@@ -30,6 +31,7 @@ pub struct Bindings {
     pub name: String,
     press_chords: HashMap<Key, Vec<KeySet>>,
     script_map: HashMap<KeySet, Script>,
+    axis_map: HashMap<AxisKind, Script>,
 }
 
 impl Bindings {
@@ -38,10 +40,26 @@ impl Bindings {
             name: name.to_owned(),
             press_chords: HashMap::new(),
             script_map: HashMap::new(),
+            axis_map: HashMap::new(),
         }
     }
 
-    pub fn bind(mut self, expr_raw: &str, keyset: &str) -> Fallible<Self> {
+    pub fn bind_axis(mut self, axis: &str, expr_raw: &str) -> Fallible<Self> {
+        let script = Script::compile_expr(expr_raw)?;
+        let axis = AxisKind::from_virtual(axis)?;
+        trace!("binding {:?} => {}", axis, script);
+        self.axis_map.insert(axis, script);
+        Ok(self)
+    }
+
+    pub fn match_axis(&self, axis: AxisKind, interpreter: &Interpreter) -> Fallible<()> {
+        if let Some(script) = self.axis_map.get(&axis) {
+            interpreter.interpret(script)?;
+        }
+        Ok(())
+    }
+
+    pub fn bind(mut self, keyset: &str, expr_raw: &str) -> Fallible<Self> {
         let script = Script::compile_expr(expr_raw)?;
         for ks in KeySet::from_virtual(keyset)?.drain(..) {
             trace!("binding {} => {}", ks, script);
@@ -128,19 +146,13 @@ impl Bindings {
         for masked in &masked_chords {
             state.active_chords.remove(masked);
             if let Some(script) = self.script_map.get(masked) {
-                interpreter
-                    .write()
-                    .with_local("pressed", Value::False(), |inner| inner.interpret(script))?;
+                self.deactiveate_chord(script, interpreter.clone())?;
             }
         }
 
         // Activate the chord and run the command.
         state.active_chords.insert(chord.to_owned());
-        interpreter
-            .write()
-            .with_local("pressed", Value::True(), |inner| {
-                inner.interpret(&self.script_map[chord])
-            })?;
+        self.activate_chord(&self.script_map[chord], interpreter.clone())?;
 
         Ok(())
     }
@@ -158,9 +170,7 @@ impl Bindings {
                 // Note: unlike with press, we do not implicitly filter out keys we don't care about.
                 if let Some(script) = self.script_map.get(active_chord) {
                     released_chords.push(active_chord.to_owned());
-                    interpreter
-                        .write()
-                        .with_local("pressed", Value::False(), |inner| inner.interpret(script))?;
+                    self.deactiveate_chord(script, interpreter.clone())?;
                 }
             }
         }
@@ -174,13 +184,37 @@ impl Bindings {
             for (chord, script) in &self.script_map {
                 if chord.is_subset_of(released_chord) && chord.is_pressed(&state) {
                     state.active_chords.insert(chord.to_owned());
-                    interpreter
-                        .write()
-                        .with_local("pressed", Value::True(), |inner| inner.interpret(script))?;
+                    self.activate_chord(script, interpreter.clone())?;
                 }
             }
         }
 
+        Ok(())
+    }
+
+    fn activate_chord(
+        &self,
+        script: &Script,
+        interpreter: Arc<RwLock<Interpreter>>,
+    ) -> Fallible<()> {
+        interpreter
+            .write()
+            .with_locals(&[("pressed", Value::True())], |inner| {
+                inner.interpret(script)
+            })?;
+        Ok(())
+    }
+
+    fn deactiveate_chord(
+        &self,
+        script: &Script,
+        interpreter: Arc<RwLock<Interpreter>>,
+    ) -> Fallible<()> {
+        interpreter
+            .write()
+            .with_locals(&[("pressed", Value::False())], |inner| {
+                inner.interpret(script)
+            })?;
         Ok(())
     }
 }
@@ -248,7 +282,7 @@ mod test {
         let shift_key = Key::KeyboardKey(VirtualKeyCode::LShift);
 
         let mut state: State = Default::default();
-        let bindings = Bindings::new("test").bind("player.never_executed()", "w")?;
+        let bindings = Bindings::new("test").bind("w", "player.never_executed()")?;
 
         state.key_states.insert(shift_key, ElementState::Pressed);
         state.modifiers_state |= ModifiersState::SHIFT;
@@ -280,7 +314,7 @@ mod test {
         let ctrl_key = Key::KeyboardKey(VirtualKeyCode::RControl);
 
         let mut state: State = Default::default();
-        let bindings = Bindings::new("test").bind("player.never_executed()", "Shift+w")?;
+        let bindings = Bindings::new("test").bind("Shift+w", "player.never_executed()")?;
 
         state.key_states.insert(ctrl_key, ElementState::Pressed);
         state.key_states.insert(shift_key, ElementState::Pressed);
@@ -306,8 +340,8 @@ mod test {
 
         let mut state: State = Default::default();
         let bindings = Bindings::new("test")
-            .bind("player.walk(pressed)", "w")?
-            .bind("player.run(pressed)", "shift+w")?;
+            .bind("w", "player.walk(pressed)")?
+            .bind("shift+w", "player.run(pressed)")?;
 
         state.key_states.insert(w_key, ElementState::Pressed);
         bindings.match_key(

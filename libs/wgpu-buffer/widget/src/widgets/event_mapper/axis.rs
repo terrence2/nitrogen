@@ -12,10 +12,24 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-mod axis;
-mod bindings;
-mod keyset;
-mod widget;
+use failure::{bail, Fallible};
+use unicase::eq_ascii;
 
-pub(crate) use crate::widgets::event_mapper::widget::State;
-pub use crate::widgets::event_mapper::{bindings::Bindings, widget::EventMapper};
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub enum AxisKind {
+    MouseMotion,
+    MouseWheel,
+    // JoystickAxis(i64),
+}
+
+impl AxisKind {
+    pub fn from_virtual(v: &str) -> Fallible<Self> {
+        Ok(if eq_ascii(v, "mousemotion") {
+            AxisKind::MouseMotion
+        } else if eq_ascii(v, "mousewheel") {
+            AxisKind::MouseWheel
+        } else {
+            bail!("unrecognized axis identifier: {}", v)
+        })
+    }
+}

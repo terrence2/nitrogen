@@ -28,10 +28,7 @@ fn main() -> Fallible<()> {
     let system_bindings = Bindings::new("system")
         .bind("demo.exit", "Escape")?
         .bind("demo.exit", "q")?;
-    InputSystem::run_forever(
-        vec![ArcBallCamera::default_bindings()?, system_bindings],
-        window_main,
-    )
+    InputSystem::run_forever(vec![system_bindings], window_main)
 }
 
 fn window_main(window: Window, input_controller: &InputController) -> Fallible<()> {
@@ -116,6 +113,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         });
 
     let mut arcball = ArcBallCamera::new(gpu.aspect_ratio(), meters!(0.1));
+    arcball.pan_view(true);
     arcball.set_eye_relative(Graticule::<Target>::new(
         degrees!(0),
         degrees!(0),
@@ -130,7 +128,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
 
     loop {
         for command in input_controller.poll_commands()? {
-            arcball.handle_command(&command)?;
             match command.command() {
                 "window-close" | "window-destroy" | "exit" => return Ok(()),
                 "window-resize" => {
@@ -145,6 +142,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                 _ => {}
             }
         }
+        arcball.handle_mousemotion(-0.5f64, 0f64);
         arcball.think();
 
         // Prepare new camera parameters.

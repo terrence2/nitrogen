@@ -43,6 +43,8 @@ DoubleQuotedString: Term = r#""[^"]*""# => Term::String(<>[1..<>.len() - 1].to_o
 SingleQuotedString: Term = r"'[^']*'" => Term::String(<>[1..<>.len() - 1].to_owned());
 Integer: Term = r"[0-9]+" => Term::Integer(i64::from_str(<>).unwrap());
 Float: Term = r"[+-]?[0-9]+[.]([0-9]*)?" => Term::Float(f64::from_str(<>).unwrap().into());
+// BooleanTrue: Term = r"True" => Term::Boolean(true);
+// BooleanFalse: Term = r"False" => Term::Boolean(false);
 
 Term: Term = {
     Symbol,

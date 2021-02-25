@@ -365,15 +365,8 @@ impl InputSystem {
                     .get(device_id)
                     .unwrap_or(&false);
                 out.push(GenericEvent::MouseMotion {
-                    axis: MouseAxis::X,
-                    amount: *dx as f32,
-                    modifiers_state: input_state.modifiers_state,
-                    in_window,
-                    window_focused: input_state.window_focused,
-                });
-                out.push(GenericEvent::MouseMotion {
-                    axis: MouseAxis::Y,
-                    amount: *dy as f32,
+                    dx: *dx,
+                    dy: *dy,
                     modifiers_state: input_state.modifiers_state,
                     in_window,
                     window_focused: input_state.window_focused,
@@ -382,22 +375,15 @@ impl InputSystem {
 
             // Mouse Wheel
             DeviceEvent::MouseWheel {
-                delta: MouseScrollDelta::LineDelta(dx, dy),
+                delta: MouseScrollDelta::LineDelta(dh, dv),
             } => {
                 let in_window = *input_state
                     .cursor_in_window
                     .get(device_id)
                     .unwrap_or(&false);
-                out.push(GenericEvent::MouseMotion {
-                    axis: MouseAxis::ScrollH,
-                    amount: *dx,
-                    modifiers_state: input_state.modifiers_state,
-                    in_window,
-                    window_focused: input_state.window_focused,
-                });
-                out.push(GenericEvent::MouseMotion {
-                    axis: MouseAxis::ScrollV,
-                    amount: *dy,
+                out.push(GenericEvent::MouseWheel {
+                    horizontal_delta: *dh as f64,
+                    vertical_delta: *dv as f64,
                     modifiers_state: input_state.modifiers_state,
                     in_window,
                     window_focused: input_state.window_focused,
@@ -410,16 +396,9 @@ impl InputSystem {
                     .cursor_in_window
                     .get(device_id)
                     .unwrap_or(&false);
-                out.push(GenericEvent::MouseMotion {
-                    axis: MouseAxis::ScrollH,
-                    amount: s.x as f32,
-                    modifiers_state: input_state.modifiers_state,
-                    in_window,
-                    window_focused: input_state.window_focused,
-                });
-                out.push(GenericEvent::MouseMotion {
-                    axis: MouseAxis::ScrollV,
-                    amount: s.y as f32,
+                out.push(GenericEvent::MouseWheel {
+                    horizontal_delta: s.x,
+                    vertical_delta: s.y,
                     modifiers_state: input_state.modifiers_state,
                     in_window,
                     window_focused: input_state.window_focused,

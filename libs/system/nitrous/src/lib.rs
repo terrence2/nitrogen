@@ -51,6 +51,34 @@ impl Value {
     pub fn False() -> Self {
         Self::Boolean(false)
     }
+
+    pub fn to_bool(&self) -> Fallible<bool> {
+        if let Self::Boolean(b) = self {
+            return Ok(*b);
+        }
+        bail!("not a boolean value: {}", self)
+    }
+
+    pub fn to_int(&self) -> Fallible<i64> {
+        if let Self::Integer(i) = self {
+            return Ok(*i);
+        }
+        bail!("not an integer value: {}", self)
+    }
+
+    pub fn to_float(&self) -> Fallible<f64> {
+        if let Self::Float(f) = self {
+            return Ok(f.0);
+        }
+        bail!("not a float value: {}", self)
+    }
+
+    pub fn to_str(&self) -> Fallible<&str> {
+        if let Self::String(s) = self {
+            return Ok(s);
+        }
+        bail!("not a string value: {}", self)
+    }
 }
 
 impl fmt::Display for Value {
@@ -253,13 +281,17 @@ impl Interpreter {
         Arc::new(RwLock::new(self))
     }
 
-    pub fn with_local<F>(&mut self, name: &str, value: Value, callback: F) -> Fallible<Value>
+    pub fn with_locals<F>(&mut self, locals: &[(&str, Value)], callback: F) -> Fallible<Value>
     where
         F: Fn(&Interpreter) -> Fallible<Value>,
     {
-        self.locals.insert(name.to_owned(), value);
+        for (name, value) in locals {
+            self.locals.insert((*name).to_owned(), value.to_owned());
+        }
         let result = callback(self);
-        self.locals.remove(name);
+        for (name, _) in locals {
+            self.locals.remove(*name);
+        }
         result
     }
 

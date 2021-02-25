@@ -122,7 +122,6 @@ fn window_loop(
 ) -> Fallible<()> {
     for command in input_controller.poll_commands()? {
         console::log_1(&format!("COMMAND: {:?}", command).into());
-        app.arcball.handle_command(&command)?;
         match command.command() {
             "bail" => bail!("soft crash"),
             "panic" => bail!("hard panic"),

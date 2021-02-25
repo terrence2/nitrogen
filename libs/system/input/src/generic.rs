@@ -54,11 +54,10 @@ pub enum GenericEvent {
         window_focused: bool,
     },
 
-    MouseMotion {
-        axis: MouseAxis,
-        amount: f32,
+    JoystickButton {
+        dummy: u32,
+        press_state: ElementState,
         modifiers_state: ModifiersState,
-        in_window: bool,
         window_focused: bool,
     },
 
@@ -69,16 +68,25 @@ pub enum GenericEvent {
         window_focused: bool,
     },
 
-    JoystickAxis {
-        id: u32,
-        value: f64,
+    MouseWheel {
+        horizontal_delta: f64,
+        vertical_delta: f64,
         modifiers_state: ModifiersState,
+        in_window: bool,
         window_focused: bool,
     },
 
-    JoystickButton {
-        dummy: u32,
-        press_state: ElementState,
+    MouseMotion {
+        dx: f64,
+        dy: f64,
+        modifiers_state: ModifiersState,
+        in_window: bool,
+        window_focused: bool,
+    },
+
+    JoystickAxis {
+        id: u32,
+        value: f64,
         modifiers_state: ModifiersState,
         window_focused: bool,
     },
@@ -108,6 +116,9 @@ impl GenericEvent {
             Self::MouseMotion {
                 modifiers_state, ..
             } => Some(*modifiers_state),
+            Self::MouseWheel {
+                modifiers_state, ..
+            } => Some(*modifiers_state),
             Self::CursorMove {
                 modifiers_state, ..
             } => Some(*modifiers_state),
@@ -127,19 +138,22 @@ impl GenericEvent {
             Self::KeyboardKey {
                 window_focused: true,
                 ..
+            } | Self::MouseButton {
+                window_focused: true,
+                ..
+            } | Self::JoystickButton {
+                window_focused: true,
+                ..
             } | Self::MouseMotion {
                 window_focused: true,
                 ..
-            } | Self::MouseButton {
+            } | Self::MouseWheel {
                 window_focused: true,
                 ..
             } | Self::CursorMove {
                 window_focused: true,
                 ..
             } | Self::JoystickAxis {
-                window_focused: true,
-                ..
-            } | Self::JoystickButton {
                 window_focused: true,
                 ..
             }

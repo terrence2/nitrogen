@@ -15,6 +15,7 @@
 use crate::{
     widget::{UploadMetrics, Widget},
     widgets::event_mapper::{
+        axis::AxisKind,
         bindings::Bindings,
         keyset::{Key, KeySet},
     },
@@ -23,7 +24,8 @@ use crate::{
 use failure::Fallible;
 use gpu::GPU;
 use input::{ElementState, GenericEvent, ModifiersState};
-use nitrous::Interpreter;
+use nitrous::{Interpreter, Value};
+use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
 use std::{
     collections::{HashMap, HashSet},
@@ -94,6 +96,72 @@ impl Widget for EventMapper {
                 for bindings in &self.bindings {
                     bindings.match_key(key, key_state, &mut self.state, interpreter.clone())?;
                 }
+            } else {
+                match event {
+                    GenericEvent::MouseMotion {
+                        dx,
+                        dy,
+                        modifiers_state,
+                        in_window,
+                        window_focused,
+                    } => {
+                        interpreter.write().with_locals(
+                            &[
+                                ("dx", Value::Float(OrderedFloat(*dx))),
+                                ("dy", Value::Float(OrderedFloat(*dy))),
+                                ("shift_pressed", Value::Boolean(modifiers_state.shift())),
+                                ("alt_pressed", Value::Boolean(modifiers_state.alt())),
+                                ("ctrl_pressed", Value::Boolean(modifiers_state.ctrl())),
+                                ("logo_pressed", Value::Boolean(modifiers_state.logo())),
+                                ("in_window", Value::Boolean(*in_window)),
+                                ("window_focused", Value::Boolean(*window_focused)),
+                            ],
+                            |inner| {
+                                for bindings in &self.bindings {
+                                    bindings.match_axis(AxisKind::MouseMotion, inner)?;
+                                }
+                                Ok(Value::True())
+                            },
+                        )?;
+                    }
+
+                    GenericEvent::MouseWheel {
+                        horizontal_delta,
+                        vertical_delta,
+                        modifiers_state,
+                        in_window,
+                        window_focused,
+                    } => {
+                        interpreter.write().with_locals(
+                            &[
+                                (
+                                    "horizontal_delta",
+                                    Value::Float(OrderedFloat(*horizontal_delta)),
+                                ),
+                                (
+                                    "vertical_delta",
+                                    Value::Float(OrderedFloat(*vertical_delta)),
+                                ),
+                                ("shift_pressed", Value::Boolean(modifiers_state.shift())),
+                                ("alt_pressed", Value::Boolean(modifiers_state.alt())),
+                                ("ctrl_pressed", Value::Boolean(modifiers_state.ctrl())),
+                                ("logo_pressed", Value::Boolean(modifiers_state.logo())),
+                                ("in_window", Value::Boolean(*in_window)),
+                                ("window_focused", Value::Boolean(*window_focused)),
+                            ],
+                            |inner| {
+                                for bindings in &self.bindings {
+                                    bindings.match_axis(AxisKind::MouseWheel, inner)?;
+                                }
+                                Ok(Value::True())
+                            },
+                        )?;
+                    }
+
+                    _ => {
+                        //println!("unexpected event: {:?}", event);
+                    }
+                };
             }
         }
         Ok(())

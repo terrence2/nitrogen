@@ -117,11 +117,7 @@ fn main() -> Fallible<()> {
         .bind("demo.exit", "Escape")?
         .bind("demo.exit", "q")?;
     InputSystem::run_forever(
-        vec![
-            Orrery::debug_bindings()?,
-            ArcBallCamera::default_bindings()?,
-            system_bindings,
-        ],
+        vec![Orrery::debug_bindings()?, system_bindings],
         window_main,
     )
 }
@@ -181,7 +177,14 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     )?;
     ///////////////////////////////////////////////////////////
 
-    let test_bindings = Bindings::new("test").bind("camera.test(pressed)", "k")?;
+    let test_bindings = Bindings::new("arcball-camera")
+        .bind("mouse1", "camera.pan_view(pressed)")?
+        .bind("mouse3", "camera.move_view(pressed)")?
+        .bind("PageUp", "camera.increase_fov(pressed)")?
+        .bind("PageDown", "camera.decrease_fov(pressed)")?
+        .bind_axis("mouseMotion", "camera.handle_mousemotion(dx, dy)")?
+        .bind_axis("mouseWheel", "camera.handle_mousewheel(vertical_delta)")?;
+
     // let system_bindings = Bindings::new("map")
     //     .bind("world.toggle_wireframe", "w")?
     //     .bind("world.toggle_debug_mode", "r")?
@@ -293,7 +296,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                 return Ok(());
             }
             frame_graph.handle_command(&command);
-            arcball.write().handle_command(&command)?;
             orrery.handle_command(&command)?;
             match command.full() {
                 "demo.+target_up" => target_vec = meters!(1),
