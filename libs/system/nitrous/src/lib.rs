@@ -302,6 +302,7 @@ impl Interpreter {
     fn interpret_expr(&self, expr: &Expr) -> Fallible<Value> {
         Ok(match expr {
             Expr::Term(term) => match term {
+                Term::Boolean(b) => Value::Boolean(*b),
                 Term::Float(f) => Value::Float(*f),
                 Term::Integer(i) => Value::Integer(*i),
                 Term::String(s) => Value::String(s.to_owned()),

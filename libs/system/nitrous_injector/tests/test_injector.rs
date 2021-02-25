@@ -83,12 +83,12 @@ fn test_it_works() -> Fallible<()> {
             .interpret(&Script::compile_expr("test.plain()")?)?,
         Value::True()
     );
-    // assert_eq!(
-    //     interpreter
-    //         .read()
-    //         .interpret(&Script::compile_expr("test.boolean(True)")?)?,
-    //     Value::True()
-    // );
+    assert_eq!(
+        interpreter
+            .read()
+            .interpret(&Script::compile_expr("test.boolean(True)")?)?,
+        Value::True()
+    );
     assert_eq!(
         interpreter
             .read()
@@ -109,6 +109,12 @@ fn test_it_works() -> Fallible<()> {
     );
 
     // Fallible versions
+    assert_eq!(
+        interpreter
+            .read()
+            .interpret(&Script::compile_expr("test.fail_boolean(True)")?)?,
+        Value::True()
+    );
     assert_eq!(
         interpreter
             .read()

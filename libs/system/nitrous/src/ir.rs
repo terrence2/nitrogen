@@ -67,6 +67,7 @@ impl fmt::Display for Operator {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Term {
     Symbol(String),
+    Boolean(bool),
     Integer(i64),
     Float(OrderedFloat<f64>),
     String(String),
@@ -76,6 +77,13 @@ impl fmt::Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Symbol(v) => write!(f, "{}", v),
+            Self::Boolean(b) => {
+                if *b {
+                    write!(f, "True")
+                } else {
+                    write!(f, "False")
+                }
+            }
             Self::Integer(v) => write!(f, "{}", v),
             Self::Float(v) => write!(f, "{}", v),
             Self::String(v) => write!(f, "\"{}\"", v),
