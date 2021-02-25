@@ -43,8 +43,8 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         .device()
         .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("main-pipeline-layout"),
-            bind_group_layouts: &[globals_buffer.bind_group_layout()],
             push_constant_ranges: &[],
+            bind_group_layouts: &[globals_buffer.bind_group_layout()],
         });
     let pipeline = gpu
         .device()
@@ -62,10 +62,10 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
             rasterization_state: Some(wgpu::RasterizationStateDescriptor {
                 front_face: wgpu::FrontFace::Cw,
                 cull_mode: wgpu::CullMode::Back,
-                clamp_depth: false,
                 depth_bias: 0,
                 depth_bias_slope_scale: 0.0,
                 depth_bias_clamp: 0.0,
+                clamp_depth: false,
             }),
             primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
             color_states: &[wgpu::ColorStateDescriptor {
@@ -77,7 +77,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
             depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
                 format: GPU::DEPTH_FORMAT,
                 depth_write_enabled: false,
-                depth_compare: wgpu::CompareFunction::Less,
+                depth_compare: wgpu::CompareFunction::Always,
                 stencil: wgpu::StencilStateDescriptor {
                     front: wgpu::StencilStateFaceDescriptor::IGNORE,
                     back: wgpu::StencilStateFaceDescriptor::IGNORE,
