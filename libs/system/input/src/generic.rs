@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use winit::event::{ElementState, ModifiersState, VirtualKeyCode};
+use winit::event::{ButtonId, ElementState, ModifiersState, VirtualKeyCode};
 
 #[derive(Debug, Copy, Clone)]
 pub enum MouseAxis {
@@ -47,23 +47,38 @@ pub enum GenericEvent {
     },
 
     MouseButton {
-        button: u32,
+        button: ButtonId,
         press_state: ElementState,
         modifiers_state: ModifiersState,
         in_window: bool,
         window_focused: bool,
     },
 
-    MouseMotion {
-        axis: MouseAxis,
-        amount: f32,
+    JoystickButton {
+        dummy: u32,
+        press_state: ElementState,
         modifiers_state: ModifiersState,
-        in_window: bool,
         window_focused: bool,
     },
 
     CursorMove {
         pixel_position: (f64, f64),
+        modifiers_state: ModifiersState,
+        in_window: bool,
+        window_focused: bool,
+    },
+
+    MouseWheel {
+        horizontal_delta: f64,
+        vertical_delta: f64,
+        modifiers_state: ModifiersState,
+        in_window: bool,
+        window_focused: bool,
+    },
+
+    MouseMotion {
+        dx: f64,
+        dy: f64,
         modifiers_state: ModifiersState,
         in_window: bool,
         window_focused: bool,
@@ -76,15 +91,74 @@ pub enum GenericEvent {
         window_focused: bool,
     },
 
-    JoystickButton {
-        dummy: u32,
-        press_state: ElementState,
-        modifiers_state: ModifiersState,
-        window_focused: bool,
-    },
-
     Window(GenericWindowEvent),
     System(GenericSystemEvent),
+}
+
+impl GenericEvent {
+    pub fn press_state(&self) -> Option<ElementState> {
+        match self {
+            Self::KeyboardKey { press_state, .. } => Some(*press_state),
+            Self::MouseButton { press_state, .. } => Some(*press_state),
+            Self::JoystickButton { press_state, .. } => Some(*press_state),
+            _ => None,
+        }
+    }
+
+    pub fn modifiers_state(&self) -> Option<ModifiersState> {
+        match self {
+            Self::KeyboardKey {
+                modifiers_state, ..
+            } => Some(*modifiers_state),
+            Self::MouseButton {
+                modifiers_state, ..
+            } => Some(*modifiers_state),
+            Self::MouseMotion {
+                modifiers_state, ..
+            } => Some(*modifiers_state),
+            Self::MouseWheel {
+                modifiers_state, ..
+            } => Some(*modifiers_state),
+            Self::CursorMove {
+                modifiers_state, ..
+            } => Some(*modifiers_state),
+            Self::JoystickAxis {
+                modifiers_state, ..
+            } => Some(*modifiers_state),
+            Self::JoystickButton {
+                modifiers_state, ..
+            } => Some(*modifiers_state),
+            _ => None,
+        }
+    }
+
+    pub fn is_window_focused(&self) -> bool {
+        matches!(
+            self,
+            Self::KeyboardKey {
+                window_focused: true,
+                ..
+            } | Self::MouseButton {
+                window_focused: true,
+                ..
+            } | Self::JoystickButton {
+                window_focused: true,
+                ..
+            } | Self::MouseMotion {
+                window_focused: true,
+                ..
+            } | Self::MouseWheel {
+                window_focused: true,
+                ..
+            } | Self::CursorMove {
+                window_focused: true,
+                ..
+            } | Self::JoystickAxis {
+                window_focused: true,
+                ..
+            }
+        )
+    }
 }
 
 #[derive(Debug, Clone)]

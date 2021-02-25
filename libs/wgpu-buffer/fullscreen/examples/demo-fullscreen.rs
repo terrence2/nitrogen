@@ -27,10 +27,7 @@ fn main() -> Fallible<()> {
     let system_bindings = Bindings::new("system")
         .bind("demo.exit", "Escape")?
         .bind("demo.exit", "q")?;
-    InputSystem::run_forever(
-        vec![ArcBallCamera::default_bindings()?, system_bindings],
-        window_main,
-    )
+    InputSystem::run_forever(vec![system_bindings], window_main)
 }
 
 fn window_main(window: Window, input_controller: &InputController) -> Fallible<()> {
@@ -46,8 +43,8 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         .device()
         .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("main-pipeline-layout"),
-            bind_group_layouts: &[globals_buffer.bind_group_layout()],
             push_constant_ranges: &[],
+            bind_group_layouts: &[globals_buffer.bind_group_layout()],
         });
     let pipeline = gpu
         .device()
@@ -65,10 +62,10 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
             rasterization_state: Some(wgpu::RasterizationStateDescriptor {
                 front_face: wgpu::FrontFace::Cw,
                 cull_mode: wgpu::CullMode::Back,
-                clamp_depth: false,
                 depth_bias: 0,
                 depth_bias_slope_scale: 0.0,
                 depth_bias_clamp: 0.0,
+                clamp_depth: false,
             }),
             primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
             color_states: &[wgpu::ColorStateDescriptor {
@@ -80,7 +77,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
             depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
                 format: GPU::DEPTH_FORMAT,
                 depth_write_enabled: false,
-                depth_compare: wgpu::CompareFunction::Less,
+                depth_compare: wgpu::CompareFunction::Always,
                 stencil: wgpu::StencilStateDescriptor {
                     front: wgpu::StencilStateFaceDescriptor::IGNORE,
                     back: wgpu::StencilStateFaceDescriptor::IGNORE,
@@ -98,6 +95,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         });
 
     let mut arcball = ArcBallCamera::new(gpu.aspect_ratio(), meters!(0.1));
+    arcball.pan_view(true);
     arcball.set_eye_relative(Graticule::<Target>::new(
         degrees!(0),
         degrees!(0),
@@ -112,7 +110,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
 
     loop {
         for command in input_controller.poll_commands()? {
-            arcball.handle_command(&command)?;
             match command.command() {
                 "window-close" | "window-destroy" | "exit" => return Ok(()),
                 "window-resize" => {
@@ -127,6 +124,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                 _ => {}
             }
         }
+        arcball.handle_mousemotion(-0.5f64, 0f64);
         arcball.think();
 
         // Prepare new camera parameters.

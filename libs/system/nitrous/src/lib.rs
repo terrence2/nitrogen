@@ -21,18 +21,19 @@ use crate::ir::{Expr, Operator, Term};
 use failure::{bail, Fallible};
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
-use std::{collections::HashMap, fmt::Debug, ops, sync::Arc};
+use std::{collections::HashMap, fmt, fmt::Debug, ops, sync::Arc};
 
 // Note: manually passing the module until we have arbitrary self.
 pub trait Module: Debug {
     fn module_name(&self) -> String;
-    fn call_method(&self, name: &str, args: &[Value]) -> Fallible<Value>;
+    fn call_method(&mut self, name: &str, args: &[Value]) -> Fallible<Value>;
     fn put(&mut self, module: Arc<RwLock<dyn Module>>, name: &str, value: Value) -> Fallible<()>;
     fn get(&self, module: Arc<RwLock<dyn Module>>, name: &str) -> Fallible<Value>;
 }
 
 #[derive(Clone, Debug)]
 pub enum Value {
+    Boolean(bool),
     Integer(i64),
     Float(OrderedFloat<f64>),
     String(String),
@@ -40,9 +41,66 @@ pub enum Value {
     Method(Arc<RwLock<dyn Module>>, String), // TODO: atoms
 }
 
+impl Value {
+    #[allow(non_snake_case)]
+    pub fn True() -> Self {
+        Self::Boolean(true)
+    }
+
+    #[allow(non_snake_case)]
+    pub fn False() -> Self {
+        Self::Boolean(false)
+    }
+
+    pub fn to_bool(&self) -> Fallible<bool> {
+        if let Self::Boolean(b) = self {
+            return Ok(*b);
+        }
+        bail!("not a boolean value: {}", self)
+    }
+
+    pub fn to_int(&self) -> Fallible<i64> {
+        if let Self::Integer(i) = self {
+            return Ok(*i);
+        }
+        bail!("not an integer value: {}", self)
+    }
+
+    pub fn to_float(&self) -> Fallible<f64> {
+        if let Self::Float(f) = self {
+            return Ok(f.0);
+        }
+        bail!("not a float value: {}", self)
+    }
+
+    pub fn to_str(&self) -> Fallible<&str> {
+        if let Self::String(s) = self {
+            return Ok(s);
+        }
+        bail!("not a string value: {}", self)
+    }
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Boolean(v) => write!(f, "{}", v),
+            Self::Integer(v) => write!(f, "{}", v),
+            Self::Float(v) => write!(f, "{}", v),
+            Self::String(v) => write!(f, "\"{}\"", v),
+            Self::Module(v) => write!(f, "{}", v.read().module_name()),
+            Self::Method(v, name) => write!(f, "{}.{}", v.read().module_name(), name),
+        }
+    }
+}
+
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         match self {
+            Self::Boolean(a) => match other {
+                Self::Boolean(b) => a == b,
+                _ => false,
+            },
             Self::Integer(a) => match other {
                 Self::Integer(b) => a == b,
                 _ => false,
@@ -70,6 +128,7 @@ impl Value {
                 Value::Integer(rhs) => Value::Integer(lhs * rhs),
                 Value::Float(rhs) => Value::Float(OrderedFloat(lhs as f64) * rhs),
                 Value::String(_) => bail!("cannot multiply a number by a string"),
+                Value::Boolean(_) => bail!("cannot multiply a number to a boolean"),
                 Value::Module(_) => bail!("cannot multiply a number by a module"),
                 Value::Method(_, _) => bail!("cannot multiply a number by a method"),
             },
@@ -77,6 +136,7 @@ impl Value {
                 Value::Integer(rhs) => Value::Float(lhs * OrderedFloat(rhs as f64)),
                 Value::Float(rhs) => Value::Float(lhs * rhs),
                 Value::String(_) => bail!("cannot multiply a number by a string"),
+                Value::Boolean(_) => bail!("cannot multiply a number to a boolean"),
                 Value::Module(_) => bail!("cannot multiply a number by a module"),
                 Value::Method(_, _) => bail!("cannot multiply a number by a method"),
             },
@@ -84,9 +144,11 @@ impl Value {
                 Value::Integer(rhs) => Value::String(lhs.repeat(rhs.max(0) as usize)),
                 Value::Float(rhs) => Value::String(lhs.repeat(rhs.floor().max(0f64) as usize)),
                 Value::String(_) => bail!("cannot multiply a string by a string"),
+                Value::Boolean(_) => bail!("cannot multiply a number to a boolean"),
                 Value::Module(_) => bail!("cannot multiply a string by a module"),
                 Value::Method(_, _) => bail!("cannot multiply a string by a method"),
             },
+            Value::Boolean(_) => bail!("cannot do arithmetic on a boolean"),
             Value::Module(_) => bail!("cannot do arithmetic on a module"),
             Value::Method(_, _) => bail!("cannot do arithmetic on a method"),
         })
@@ -98,6 +160,7 @@ impl Value {
                 Value::Integer(rhs) => Value::Integer(lhs / rhs),
                 Value::Float(rhs) => Value::Float(OrderedFloat(lhs as f64) / rhs),
                 Value::String(_) => bail!("cannot divide a number by a string"),
+                Value::Boolean(_) => bail!("cannot divide a number by a boolean"),
                 Value::Module(_) => bail!("cannot divide a number by a module"),
                 Value::Method(_, _) => bail!("cannot divide a number by a method"),
             },
@@ -105,10 +168,12 @@ impl Value {
                 Value::Integer(rhs) => Value::Float(lhs / OrderedFloat(rhs as f64)),
                 Value::Float(rhs) => Value::Float(lhs / rhs),
                 Value::String(_) => bail!("cannot divide a number by a string"),
+                Value::Boolean(_) => bail!("cannot divide a number by a boolean"),
                 Value::Module(_) => bail!("cannot divide a number by a module"),
                 Value::Method(_, _) => bail!("cannot divide a number by a method"),
             },
             Value::String(_) => bail!("cannot divide a string by anything"),
+            Value::Boolean(_) => bail!("cannot do arithmetic on a boolean"),
             Value::Module(_) => bail!("cannot do arithmetic on a module"),
             Value::Method(_, _) => bail!("cannot do arithmetic on a method"),
         })
@@ -120,6 +185,7 @@ impl Value {
                 Value::Integer(rhs) => Value::Integer(lhs + rhs),
                 Value::Float(rhs) => Value::Float(OrderedFloat(lhs as f64) + rhs),
                 Value::String(_) => bail!("cannot add a string to a number"),
+                Value::Boolean(_) => bail!("cannot add a number to a boolean"),
                 Value::Module(_) => bail!("cannot add a module to a number"),
                 Value::Method(_, _) => bail!("cannot add a method to a number"),
             },
@@ -127,6 +193,7 @@ impl Value {
                 Value::Integer(rhs) => Value::Float(lhs + OrderedFloat(rhs as f64)),
                 Value::Float(rhs) => Value::Float(lhs + rhs),
                 Value::String(_) => bail!("cannot add a string to a number"),
+                Value::Boolean(_) => bail!("cannot add a number to a boolean"),
                 Value::Module(_) => bail!("cannot add a module to a number"),
                 Value::Method(_, _) => bail!("cannot add a method to a number"),
             },
@@ -134,9 +201,11 @@ impl Value {
                 Value::Integer(_) => bail!("cannot add a number to a string"),
                 Value::Float(_) => bail!("cannot add a number to a string"),
                 Value::String(rhs) => Value::String(lhs + &rhs),
+                Value::Boolean(_) => bail!("cannot add a number to a boolean"),
                 Value::Module(_) => bail!("cannot add a module to a string"),
                 Value::Method(_, _) => bail!("cannot add a method to a string"),
             },
+            Value::Boolean(_) => bail!("cannot do arithmetic on a boolean"),
             Value::Module(_) => bail!("cannot do arithmetic on a module"),
             Value::Method(_, _) => bail!("cannot do arithmetic on a method"),
         })
@@ -148,6 +217,7 @@ impl Value {
                 Value::Integer(rhs) => Value::Integer(lhs - rhs),
                 Value::Float(rhs) => Value::Float(OrderedFloat(lhs as f64) - rhs),
                 Value::String(_) => bail!("cannot subtract a string from a number"),
+                Value::Boolean(_) => bail!("cannot subtract a boolean from a number"),
                 Value::Module(_) => bail!("cannot subtract a module from a number"),
                 Value::Method(_, _) => bail!("cannot subtract a method from a number"),
             },
@@ -155,10 +225,12 @@ impl Value {
                 Value::Integer(rhs) => Value::Float(lhs - OrderedFloat(rhs as f64)),
                 Value::Float(rhs) => Value::Float(lhs - rhs),
                 Value::String(_) => bail!("cannot subtract a string from a number"),
+                Value::Boolean(_) => bail!("cannot subtract a boolean from a number"),
                 Value::Module(_) => bail!("cannot subtract a module from a number"),
                 Value::Method(_, _) => bail!("cannot subtract a method from a number"),
             },
-            Value::String(_) => bail!("cannot subtract a string by anything"),
+            Value::String(_) => bail!("cannot subtract with a string"),
+            Value::Boolean(_) => bail!("cannot do arithmetic on a boolean"),
             Value::Module(_) => bail!("cannot do arithmetic on a module"),
             Value::Method(_, _) => bail!("cannot do arithmetic on a method"),
         })
@@ -194,13 +266,33 @@ impl ops::BitOrAssign for InterpreterStatus {
 #[derive(Debug)]
 pub struct Interpreter {
     memory: HashMap<String, Value>,
+    locals: HashMap<String, Value>,
 }
 
 impl Interpreter {
     pub fn boot() -> Self {
         Self {
             memory: HashMap::new(),
+            locals: HashMap::new(),
         }
+    }
+
+    pub fn wrapped(self) -> Arc<RwLock<Self>> {
+        Arc::new(RwLock::new(self))
+    }
+
+    pub fn with_locals<F>(&mut self, locals: &[(&str, Value)], callback: F) -> Fallible<Value>
+    where
+        F: Fn(&Interpreter) -> Fallible<Value>,
+    {
+        for (name, value) in locals {
+            self.locals.insert((*name).to_owned(), value.to_owned());
+        }
+        let result = callback(self);
+        for (name, _) in locals {
+            self.locals.remove(*name);
+        }
+        result
     }
 
     pub fn interpret(&self, script: &Script) -> Fallible<Value> {
@@ -214,7 +306,9 @@ impl Interpreter {
                 Term::Integer(i) => Value::Integer(*i),
                 Term::String(s) => Value::String(s.to_owned()),
                 Term::Symbol(sym) => {
-                    if let Some(v) = self.memory.get(sym) {
+                    if let Some(v) = self.locals.get(sym) {
+                        v.clone()
+                    } else if let Some(v) = self.memory.get(sym) {
                         v.clone()
                     } else {
                         bail!("Unknown symbol '{}'", sym)
@@ -246,7 +340,7 @@ impl Interpreter {
                 }
                 match base {
                     Value::Method(module, method_name) => {
-                        module.read().call_method(&method_name, &argvec)?
+                        module.write().call_method(&method_name, &argvec)?
                     }
                     _ => bail!("call must be on a method value"),
                 }
@@ -261,7 +355,7 @@ impl Module for Interpreter {
         "Interpreter".to_owned()
     }
 
-    fn call_method(&self, _name: &str, _args: &[Value]) -> Fallible<Value> {
+    fn call_method(&mut self, _name: &str, _args: &[Value]) -> Fallible<Value> {
         bail!("no methods are defined on the interpreter")
     }
 

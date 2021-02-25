@@ -13,3 +13,7 @@ proc-macro2 = "^ 1"
 syn = "^ 1"
 quote = "^ 1"
 nitrous  = { path = "../../system/nitrous" }
+
+[dev-dependencies]
+log = "^ 0.4"
+parking_lot = "^ 0.11"

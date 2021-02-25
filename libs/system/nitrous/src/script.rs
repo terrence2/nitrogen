@@ -18,7 +18,9 @@ use script::ExprParser;
 
 use crate::ir::Expr;
 use failure::{bail, Fallible};
+use std::fmt;
 
+#[derive(Debug, Clone)]
 pub struct Script {
     pub(crate) expr: Box<Expr>,
 }
@@ -32,6 +34,12 @@ impl Script {
                 bail!(format!("parse failure: {}", e))
             }
         })
+    }
+}
+
+impl fmt::Display for Script {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.expr)
     }
 }
 

@@ -16,14 +16,11 @@ use crate::Camera;
 use absolute_unit::{
     degrees, meters, radians, Angle, Degrees, Kilometers, Length, LengthUnit, Meters,
 };
-use command::{Bindings, Command};
-use failure::{bail, ensure, Fallible};
+use failure::{ensure, Fallible};
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
-use nitrous::{Module, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
-use parking_lot::RwLock;
-use std::{f64::consts::PI, sync::Arc};
+use std::f64::consts::PI;
 
 #[derive(Debug, NitrousModule)]
 pub struct ArcBallCamera {
@@ -92,9 +89,8 @@ impl ArcBallCamera {
         self.eye.distance = meters!(distance);
     }
 
-    pub fn on_mousemove(&mut self, command: &Command) -> Fallible<()> {
-        let (x, y) = command.displacement(0)?;
-
+    #[method]
+    pub fn handle_mousemotion(&mut self, x: f64, y: f64) {
         if self.in_rotate {
             self.eye.longitude -= degrees!(x * 0.5);
 
@@ -121,21 +117,16 @@ impl ArcBallCamera {
             self.target.latitude = radians!(degrees!(lat));
             self.target.longitude = radians!(degrees!(lon));
         }
-
-        Ok(())
     }
 
-    pub fn on_mousescroll(&mut self, command: &Command) -> Fallible<()> {
-        let y = command.displacement(0)?.1;
-
+    #[method]
+    pub fn handle_mousewheel(&mut self, vertical: f64) {
         // up/down is y
         //   Up is negative
         //   Down is positive
         //   Works in steps of 15 for my mouse.
-        self.eye.distance *= if y > 0f64 { 1.1f64 } else { 0.9f64 };
+        self.eye.distance *= if vertical > 0f64 { 1.1f64 } else { 0.9f64 };
         self.eye.distance = self.eye.distance.max(meters!(0.01));
-
-        Ok(())
     }
 
     pub fn think(&mut self) {
@@ -161,29 +152,38 @@ impl ArcBallCamera {
         );
     }
 
-    pub fn default_bindings() -> Fallible<Bindings> {
-        Ok(Bindings::new("arc_ball_camera")
-            .bind("arcball.+pan-view", "mouse1")?
-            .bind("arcball.+move-view", "mouse3")?
-            .bind("arcball.+fov_up", "PageUp")?
-            .bind("arcball.+fov_down", "PageDown")?)
+    // pub fn initialize_bindings(interpreter: Arc<RwLock<Interpreter>>) -> Fallible<()> {
+    //     let script = Script::compile_expr(
+    //         r#"
+    //         event_mapper.bind("mouse1", "camera.pan_view(pressed)")
+    //     "#,
+    //     )?;
+    //     // event_mapper.bind("mouse3", "camera.move_view(pressed)")
+    //     interpreter.read().interpret(&script)
+    // .bind("mouse1", "camera.pan_view(pressed)")?
+    // .bind("mouse3", "camera.move_view(pressed)")?
+    // .bind("PageUp", "camera.increase_fov(pressed)")?
+    // .bind("PageDown", "camera.decrease_fov(pressed)")?;
+    // }
+
+    #[method]
+    pub fn pan_view(&mut self, pressed: bool) {
+        self.in_rotate = pressed;
     }
 
-    pub fn handle_command(&mut self, command: &Command) -> Fallible<()> {
-        match command.command() {
-            "+pan-view" => self.in_rotate = true,
-            "-pan-view" => self.in_rotate = false,
-            "+move-view" => self.in_move = true,
-            "-move-view" => self.in_move = false,
-            "+fov_up" => self.fov_delta = degrees!(1),
-            "-fov_up" => self.fov_delta = degrees!(0),
-            "+fov_down" => self.fov_delta = degrees!(-1),
-            "-fov_down" => self.fov_delta = degrees!(0),
-            "mouse-move" => self.on_mousemove(command)?,
-            "mouse-wheel" => self.on_mousescroll(command)?,
-            _ => {}
-        }
-        Ok(())
+    #[method]
+    pub fn move_view(&mut self, pressed: bool) {
+        self.in_move = pressed;
+    }
+
+    #[method]
+    pub fn increase_fov(&mut self, pressed: bool) {
+        self.fov_delta = degrees!(if pressed { 1 } else { 0 });
+    }
+
+    #[method]
+    pub fn decrease_fov(&mut self, pressed: bool) {
+        self.fov_delta = degrees!(if pressed { -1 } else { 0 });
     }
 
     fn cartesian_target_position<Unit: LengthUnit>(&self) -> Cartesian<GeoCenter, Unit> {
@@ -204,12 +204,6 @@ impl ArcBallCamera {
         let cart_eye_rel_target_framed =
             Cartesian::<Target, Unit>::from(r_lat * r_lon * cart_eye_rel_target_flat.vec64());
         cart_target + cart_eye_rel_target_framed
-    }
-
-    #[method]
-    fn test(&self) -> Fallible<Value> {
-        println!("GOT METHOD CALL");
-        Ok(Value::Integer(0))
     }
 }
 
