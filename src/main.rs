@@ -17,7 +17,7 @@ use atmosphere::AtmosphereBuffer;
 use camera::ArcBallCamera;
 use catalog::{Catalog, DirectoryDrawer};
 use chrono::{TimeZone, Utc};
-use command::{Bindings as LegacyBindings, CommandHandler};
+use command::Bindings as LegacyBindings;
 use composite::CompositeRenderPass;
 use failure::Fallible;
 use fullscreen::FullscreenBuffer;
@@ -28,7 +28,7 @@ use input::{InputController, InputSystem};
 use legion::world::World;
 use log::trace;
 use nalgebra::convert;
-use nitrous::{Interpreter, Module, Value};
+use nitrous::Interpreter;
 use orrery::Orrery;
 use parking_lot::RwLock;
 use stars::StarsBuffer;
@@ -138,29 +138,27 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         (CpuDetailLevel::Medium, GpuDetailLevel::High)
     };
 
-    let interpreter = Arc::new(RwLock::new(Interpreter::boot()));
+    let interpreter = Interpreter::boot().init()?;
+    let mapper = EventMapper::default().init(interpreter.clone())?;
 
     ///////////////////////////////////////////////////////////
     let atmosphere_buffer = Arc::new(RwLock::new(AtmosphereBuffer::new(opt.no_cache, &mut gpu)?));
-    let fullscreen_buffer = Arc::new(RwLock::new(FullscreenBuffer::new(&gpu)?));
+    let fullscreen_buffer = FullscreenBuffer::new(&gpu)?.init(interpreter.clone())?;
     let globals = Arc::new(RwLock::new(GlobalParametersBuffer::new(gpu.device())?));
     let stars_buffer = Arc::new(RwLock::new(StarsBuffer::new(&gpu)?));
-    let terrain_geo_buffer = Arc::new(RwLock::new(TerrainGeoBuffer::new(
-        &catalog,
-        cpu_detail,
-        gpu_detail,
-        &globals.read(),
-        &mut gpu,
-    )?));
+    let terrain_geo_buffer =
+        TerrainGeoBuffer::new(&catalog, cpu_detail, gpu_detail, &globals.read(), &mut gpu)?
+            .init(interpreter.clone())?;
     let widget_buffer = WidgetBuffer::new(&mut gpu)?.init(interpreter.clone())?;
     let catalog = Arc::new(AsyncRwLock::new(catalog));
-    let world = Arc::new(RwLock::new(WorldRenderPass::new(
+    let world = WorldRenderPass::new(
         &mut gpu,
         &globals.read(),
         &atmosphere_buffer.read(),
         &stars_buffer.read(),
         &terrain_geo_buffer.read(),
-    )?));
+    )?
+    .init(interpreter.clone())?;
     let ui = Arc::new(RwLock::new(UiRenderPass::new(
         &mut gpu,
         &globals.read(),
@@ -188,11 +186,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         composite,
     )?;
     ///////////////////////////////////////////////////////////
-
-    let mapper = EventMapper::default().into_module();
-    interpreter
-        .write()
-        .put(interpreter.clone(), "mapper", Value::Module(mapper.clone()))?;
 
     // let system_bindings = Bindings::new("map")
     //     .bind("world.toggle_wireframe", "w")?
@@ -304,7 +297,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
             if InputSystem::is_close_command(&command) || command.full() == "demo.exit" {
                 return Ok(());
             }
-            frame_graph.handle_command(&command);
             match command.full() {
                 "demo.+target_up" => target_vec = meters!(1),
                 "demo.-target_up" => target_vec = meters!(0),

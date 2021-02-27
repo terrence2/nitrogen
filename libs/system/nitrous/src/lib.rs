@@ -45,8 +45,8 @@ impl Interpreter {
         }
     }
 
-    pub fn wrapped(self) -> Arc<RwLock<Self>> {
-        Arc::new(RwLock::new(self))
+    pub fn init(self) -> Fallible<Arc<RwLock<Self>>> {
+        Ok(Arc::new(RwLock::new(self)))
     }
 
     pub fn with_locals<F>(&mut self, locals: &[(&str, Value)], callback: F) -> Fallible<Value>

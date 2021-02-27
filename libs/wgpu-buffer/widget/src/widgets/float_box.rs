@@ -76,14 +76,16 @@ impl FloatBox {
         self.packing_mut(name).unwrap()
     }
 
-    pub fn packing(&self, name: &str) -> &FloatPacking {
-        &self.children[name]
+    pub fn packing(&self, name: &str) -> Fallible<&FloatPacking> {
+        self.children
+            .get(name)
+            .ok_or_else(|| err_msg("request for unknown widget in float"))
     }
 
     pub fn packing_mut(&mut self, name: &str) -> Fallible<&mut FloatPacking> {
         self.children
             .get_mut(name)
-            .ok_or(err_msg("unknown widget in float"))
+            .ok_or_else(|| err_msg("mut request for unknown widget in float"))
     }
 }
 

@@ -56,6 +56,7 @@ use std::{mem, num::NonZeroU64, sync::Arc};
 use tokio::{runtime::Runtime, sync::RwLock};
 
 // A collection of TileSet, potentially more than one per kind.
+#[derive(Debug)]
 pub(crate) struct TileManager {
     // TODO: we will probably need some way of finding the right ones efficiently.
     tile_sets: Vec<TileSet>,

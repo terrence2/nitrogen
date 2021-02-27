@@ -41,7 +41,6 @@ pub use crate::{
 };
 
 use crate::font_context::FontContext;
-use commandable::{commandable, Commandable};
 use failure::{ensure, Fallible};
 use font_common::FontInterface;
 use font_ttf::TtfFont;
@@ -49,7 +48,7 @@ use gpu::{UploadTracker, GPU};
 use input::GenericEvent;
 use log::trace;
 use nitrous::{Interpreter, Module, Value};
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use nitrous_injector::{inject_nitrous_module, NitrousModule};
 use parking_lot::RwLock;
 use std::{borrow::Borrow, mem, num::NonZeroU64, ops::Range, sync::Arc};
 
@@ -78,7 +77,7 @@ const FIRA_SANS_REGULAR_TTF_DATA: &[u8] =
 const FIRA_MONO_REGULAR_TTF_DATA: &[u8] =
     include_bytes!("../../../../assets/font/FiraMono-Regular.ttf");
 
-#[derive(Commandable, Debug, NitrousModule)]
+#[derive(Debug, NitrousModule)]
 pub struct WidgetBuffer {
     // Widget state.
     root: Arc<RwLock<FloatBox>>,
@@ -96,7 +95,6 @@ pub struct WidgetBuffer {
 }
 
 #[inject_nitrous_module]
-#[commandable]
 impl WidgetBuffer {
     const MAX_WIDGETS: usize = 512;
     const MAX_TEXT_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6;
@@ -215,12 +213,6 @@ impl WidgetBuffer {
         )?;
         Ok(widgets)
     }
-
-    // #[method]
-    // pub fn get(&self, name: &str) -> Value {
-    //     let fp = self.root.read().packing(name);
-    //     Value::Module(fp.widget())
-    // }
 
     pub fn root(&self) -> Arc<RwLock<FloatBox>> {
         self.root.clone()

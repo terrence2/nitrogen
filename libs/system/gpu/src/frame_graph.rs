@@ -147,16 +147,6 @@ macro_rules! make_frame_graph {
                     Ok(!_need_rebuild)
                 }
             }
-
-            impl ::command::CommandHandler for $name {
-                fn handle_command(&mut self, command: &::command::Command) {
-                    $(
-                        if command.target() == stringify!($buffer_name) {
-                            self.$buffer_name.write().handle_command(command);
-                        }
-                    )*
-                }
-            }
         }
     };
 }
@@ -164,14 +154,12 @@ macro_rules! make_frame_graph {
 #[cfg(test)]
 mod test {
     use crate::{UploadTracker, GPU};
-    use commandable::{commandable, Commandable};
     use failure::Fallible;
     use legion::*;
     use parking_lot::RwLock;
     use std::{cell::RefCell, sync::Arc};
     use winit::{event_loop::EventLoop, window::Window};
 
-    #[derive(Commandable)]
     pub struct TestBuffer {
         render_target: wgpu::TextureView,
         update_count: usize,
@@ -180,7 +168,6 @@ mod test {
         screen_count: RefCell<usize>,
         any_count: RefCell<usize>,
     }
-    #[commandable]
     impl TestBuffer {
         fn new(gpu: &GPU) -> Self {
             let texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
@@ -262,11 +249,9 @@ mod test {
         }
     }
 
-    #[derive(Commandable)]
     pub struct TestRenderer {
         render_count: RefCell<usize>,
     }
-    #[commandable]
     impl TestRenderer {
         #[allow(clippy::unnecessary_wraps)]
         fn new(_gpu: &GPU, _foo: &TestBuffer) -> Fallible<Self> {

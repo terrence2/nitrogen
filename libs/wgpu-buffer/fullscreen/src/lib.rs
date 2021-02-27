@@ -12,10 +12,12 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use commandable::{commandable, Commandable};
 use failure::Fallible;
 use gpu::GPU;
-use std::{mem, ops::Range};
+use nitrous::Interpreter;
+use nitrous_injector::{inject_nitrous_module, NitrousModule};
+use parking_lot::RwLock;
+use std::{mem, ops::Range, sync::Arc};
 use zerocopy::{AsBytes, FromBytes};
 
 #[repr(C)]
@@ -58,17 +60,21 @@ impl FullscreenVertex {
     }
 }
 
-#[derive(Commandable)]
+#[derive(Debug, NitrousModule)]
 pub struct FullscreenBuffer {
     vertex_buffer: wgpu::Buffer,
 }
 
-#[commandable]
+#[inject_nitrous_module]
 impl FullscreenBuffer {
     pub fn new(gpu: &GPU) -> Fallible<Self> {
         Ok(Self {
             vertex_buffer: FullscreenVertex::buffer(gpu),
         })
+    }
+
+    pub fn init(self, _interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Arc<RwLock<Self>>> {
+        Ok(Arc::new(RwLock::new(self)))
     }
 
     pub fn vertex_buffer(&self) -> wgpu::BufferSlice {

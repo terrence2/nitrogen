@@ -23,12 +23,13 @@ use crate::{patch::PatchManager, tile::TileManager};
 use absolute_unit::{Length, Meters};
 use camera::Camera;
 use catalog::Catalog;
-use command::Command;
-use commandable::{command, commandable, Commandable};
 use failure::Fallible;
 use geodesy::{GeoCenter, Graticule};
 use global_data::GlobalParametersBuffer;
 use gpu::{UploadTracker, GPU};
+use nitrous::{Interpreter, Module, Value};
+use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use parking_lot::RwLock;
 use shader_shared::Group;
 use std::{ops::Range, sync::Arc};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
@@ -131,6 +132,7 @@ impl GpuDetailLevel {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct VisiblePatch {
     g0: Graticule<GeoCenter>,
     g1: Graticule<GeoCenter>,
@@ -138,7 +140,7 @@ pub(crate) struct VisiblePatch {
     edge_length: Length<Meters>,
 }
 
-#[derive(Commandable)]
+#[derive(Debug, NitrousModule)]
 pub struct TerrainGeoBuffer {
     patch_manager: PatchManager,
     tile_manager: TileManager,
@@ -164,7 +166,7 @@ pub struct TerrainGeoBuffer {
     accumulate_spherical_colors_pipeline: wgpu::ComputePipeline,
 }
 
-#[commandable]
+#[inject_nitrous_module]
 impl TerrainGeoBuffer {
     const DEFERRED_TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
     const DEFERRED_TEXTURE_DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -866,8 +868,18 @@ impl TerrainGeoBuffer {
         Ok(cpass)
     }
 
-    #[command]
-    pub fn snapshot_index(&mut self, _command: &Command) {
+    pub fn init(self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Arc<RwLock<Self>>> {
+        let terrain = Arc::new(RwLock::new(self));
+        interpreter.write().put(
+            interpreter.clone(),
+            "terrain",
+            Value::Module(terrain.clone()),
+        )?;
+        Ok(terrain)
+    }
+
+    #[method]
+    pub fn capture_index_snapshot(&mut self) {
         self.tile_manager.snapshot_index();
     }
 

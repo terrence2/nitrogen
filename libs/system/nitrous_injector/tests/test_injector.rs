@@ -77,7 +77,7 @@ impl TestInjector {
 
 #[test]
 fn test_it_works() -> Fallible<()> {
-    let interpreter = Interpreter::boot().wrapped();
+    let interpreter = Interpreter::boot().init()?;
     let inj = Arc::new(RwLock::new(TestInjector {}));
     interpreter
         .write()

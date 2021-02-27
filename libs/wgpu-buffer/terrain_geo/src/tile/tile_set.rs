@@ -33,6 +33,7 @@ use image::{ImageBuffer, Rgb};
 use log::trace;
 use std::{
     collections::{BTreeMap, BinaryHeap},
+    fmt,
     io::Read,
     num::NonZeroU32,
     ops::Range,
@@ -153,6 +154,12 @@ pub(crate) struct TileSet {
 
     // Set to true to take a snapshot at the start of the next frame.
     take_index_snapshot: bool,
+}
+
+impl fmt::Debug for TileSet {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "TileSet")
+    }
 }
 
 impl TileSet {

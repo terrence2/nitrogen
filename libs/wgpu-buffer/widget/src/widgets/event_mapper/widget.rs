@@ -24,7 +24,7 @@ use crate::{
 use failure::Fallible;
 use gpu::GPU;
 use input::{ElementState, GenericEvent, ModifiersState};
-use nitrous::{Interpreter, Value};
+use nitrous::{Interpreter, Module, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
@@ -48,8 +48,12 @@ pub struct EventMapper {
 
 #[inject_nitrous_module]
 impl EventMapper {
-    pub fn into_module(self) -> Arc<RwLock<Self>> {
-        Arc::new(RwLock::new(self))
+    pub fn init(self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Arc<RwLock<Self>>> {
+        let mapper = Arc::new(RwLock::new(self));
+        interpreter
+            .write()
+            .put(interpreter.clone(), "mapper", Value::Module(mapper.clone()))?;
+        Ok(mapper)
     }
 
     #[method]

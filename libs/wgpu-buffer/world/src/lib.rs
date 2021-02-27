@@ -13,17 +13,20 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use atmosphere::AtmosphereBuffer;
-use command::Command;
-use commandable::{command, commandable, Commandable};
 use failure::Fallible;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::GlobalParametersBuffer;
 use gpu::{texture_format_component_type, GPU};
 use log::trace;
+use nitrous::{Interpreter, Module, Value};
+use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use parking_lot::RwLock;
 use shader_shared::Group;
 use stars::StarsBuffer;
+use std::sync::Arc;
 use terrain_geo::{TerrainGeoBuffer, TerrainVertex};
 
+#[derive(Debug)]
 enum DebugMode {
     None,
     Deferred,
@@ -33,7 +36,7 @@ enum DebugMode {
     NormalGlobal,
 }
 
-#[derive(Commandable)]
+#[derive(Debug, NitrousModule)]
 pub struct WorldRenderPass {
     // Offscreen render targets
     deferred_texture: (wgpu::Texture, wgpu::TextureView),
@@ -61,7 +64,7 @@ pub struct WorldRenderPass {
 // 3) For each layer, for each pixel of the offscreen buffer, accumulate the color and normal
 // 4) For each pixel of the accumulator and depth, compute lighting, skybox, stars, etc.
 
-#[commandable]
+#[inject_nitrous_module]
 impl WorldRenderPass {
     pub fn new(
         gpu: &mut GPU,
@@ -390,21 +393,40 @@ impl WorldRenderPass {
         })
     }
 
-    #[command]
-    pub fn toggle_wireframe(&mut self, _command: &Command) {
-        self.show_wireframe = !self.show_wireframe;
+    pub fn init(self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Arc<RwLock<Self>>> {
+        let world = Arc::new(RwLock::new(self));
+        interpreter
+            .write()
+            .put(interpreter.clone(), "world", Value::Module(world.clone()))?;
+        interpreter.write().interpret_once(
+            r#"
+                let bindings := mapper.create_bindings("world");
+                bindings.bind("w", "world.toggle_wireframe_mode(pressed)");
+                bindings.bind("r", "world.change_debug_mode(pressed)");
+            "#,
+        )?;
+        Ok(world)
     }
 
-    #[command]
-    pub fn toggle_debug_mode(&mut self, _command: &Command) {
-        self.debug_mode = match self.debug_mode {
-            DebugMode::None => DebugMode::Deferred,
-            DebugMode::Deferred => DebugMode::Depth,
-            DebugMode::Depth => DebugMode::Color,
-            DebugMode::Color => DebugMode::NormalLocal,
-            DebugMode::NormalLocal => DebugMode::NormalGlobal,
-            DebugMode::NormalGlobal => DebugMode::None,
-        };
+    #[method]
+    pub fn toggle_wireframe_mode(&mut self, pressed: bool) {
+        if pressed {
+            self.show_wireframe = !self.show_wireframe;
+        }
+    }
+
+    #[method]
+    pub fn change_debug_mode(&mut self, pressed: bool) {
+        if pressed {
+            self.debug_mode = match self.debug_mode {
+                DebugMode::None => DebugMode::Deferred,
+                DebugMode::Deferred => DebugMode::Depth,
+                DebugMode::Depth => DebugMode::Color,
+                DebugMode::Color => DebugMode::NormalLocal,
+                DebugMode::NormalLocal => DebugMode::NormalGlobal,
+                DebugMode::NormalGlobal => DebugMode::None,
+            };
+        }
     }
 
     pub fn note_resize(&mut self, gpu: &GPU) {
@@ -501,45 +523,5 @@ impl WorldRenderPass {
         }
 
         Ok(rpass)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use command::{Command, CommandHandler};
-    use commandable::{command, commandable, Commandable};
-    use failure::Fallible;
-
-    #[derive(Commandable)]
-    struct Buffer {
-        value: u32,
-    }
-
-    #[commandable]
-    impl Buffer {
-        fn new() -> Self {
-            Self { value: 0 }
-        }
-
-        #[command]
-        fn make_good(&mut self, _command: &Command) {
-            self.value = 42;
-        }
-
-        #[command]
-        fn make_bad(&mut self, _command: &Command) {
-            self.value = 13;
-        }
-    }
-
-    #[test]
-    fn test_create() -> Fallible<()> {
-        let mut buf = Buffer::new();
-        assert_eq!(buf.value, 0);
-        buf.handle_command(&Command::parse("test.make_good")?);
-        assert_eq!(buf.value, 42);
-        buf.handle_command(&Command::parse("test.make_bad")?);
-        assert_eq!(buf.value, 13);
-        Ok(())
     }
 }
