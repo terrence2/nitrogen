@@ -87,66 +87,75 @@ macro_rules! make_frame_graph {
             ];
         }
     ) => {
-        pub struct $name {
-            $(
-                $buffer_name: $buffer_type
-            ),*,
-        }
+        ::paste::paste! {
 
-        impl $name {
-            #[allow(clippy::too_many_arguments)]
-            pub fn new(
-                _legion: &mut ::legion::world::World,
-                _gpu: &mut $crate::GPU,
+            pub struct $name {
                 $(
-                    $buffer_name: $buffer_type
-                ),*
-            ) -> ::failure::Fallible<Self> {
-                Ok(Self {
+                    $buffer_name: ::std::sync::Arc<::parking_lot::RwLock<$buffer_type>>
+                ),*,
+            }
+
+            impl $name {
+                #[allow(clippy::too_many_arguments)]
+                pub fn new(
+                    _legion: &mut ::legion::world::World,
+                    _gpu: &mut $crate::GPU,
                     $(
-                        $buffer_name
+                        $buffer_name: ::std::sync::Arc<::parking_lot::RwLock<$buffer_type>>
                     ),*
-                })
-            }
-
-            $(
-                pub fn $buffer_name(&mut self) -> &mut $buffer_type {
-                    &mut self.$buffer_name
-                }
-            )*
-
-            pub fn run(&mut self, gpu: &mut $crate::GPU, tracker: $crate::UploadTracker) -> ::failure::Fallible<bool> {
-                $(
-                    let $buffer_name = &self.$buffer_name;
-                )*
-
-                let mut encoder = gpu
-                    .device()
-                    .create_command_encoder(&$crate::wgpu::CommandEncoderDescriptor {
-                        label: Some("frame-encoder"),
-                    });
-                tracker.dispatch_uploads(&mut encoder);
-                $(
-                    let mut _need_rebuild = false;
-                    $crate::make_frame_graph_pass!($pass_type($($pass_args),*) {
-                        self, gpu, encoder, _need_rebuild, $pass_name, $($pass_item_name ( $($pass_item_input_name),* )),*
-                    });
-                )*
-                if !_need_rebuild {
-                    gpu.queue_mut().submit(vec![encoder.finish()]);
+                ) -> ::failure::Fallible<Self> {
+                    Ok(Self {
+                        $(
+                            $buffer_name
+                        ),*
+                    })
                 }
 
-                Ok(!_need_rebuild)
-            }
-        }
-
-        impl ::command::CommandHandler for $name {
-            fn handle_command(&mut self, command: &::command::Command) {
                 $(
-                    if command.target() == stringify!($buffer_name) {
-                        self.$buffer_name.handle_command(command);
+                    #[allow(unused)]
+                    pub fn $buffer_name(&self) -> ::parking_lot::RwLockReadGuard<$buffer_type> {
+                        self.$buffer_name.read()
+                    }
+
+                    #[allow(unused)]
+                    pub fn [< $buffer_name _mut >] (&mut self) -> ::parking_lot::RwLockWriteGuard<$buffer_type> {
+                        self.$buffer_name.write()
                     }
                 )*
+
+                pub fn run(&mut self, gpu: &mut $crate::GPU, tracker: $crate::UploadTracker) -> ::failure::Fallible<bool> {
+                    $(
+                        let $buffer_name = &self.$buffer_name.read();
+                    )*
+
+                    let mut encoder = gpu
+                        .device()
+                        .create_command_encoder(&$crate::wgpu::CommandEncoderDescriptor {
+                            label: Some("frame-encoder"),
+                        });
+                    tracker.dispatch_uploads(&mut encoder);
+                    $(
+                        let mut _need_rebuild = false;
+                        $crate::make_frame_graph_pass!($pass_type($($pass_args),*) {
+                            self, gpu, encoder, _need_rebuild, $pass_name, $($pass_item_name ( $($pass_item_input_name),* )),*
+                        });
+                    )*
+                    if !_need_rebuild {
+                        gpu.queue_mut().submit(vec![encoder.finish()]);
+                    }
+
+                    Ok(!_need_rebuild)
+                }
+            }
+
+            impl ::command::CommandHandler for $name {
+                fn handle_command(&mut self, command: &::command::Command) {
+                    $(
+                        if command.target() == stringify!($buffer_name) {
+                            self.$buffer_name.write().handle_command(command);
+                        }
+                    )*
+                }
             }
         }
     };
@@ -158,7 +167,8 @@ mod test {
     use commandable::{commandable, Commandable};
     use failure::Fallible;
     use legion::*;
-    use std::cell::RefCell;
+    use parking_lot::RwLock;
+    use std::{cell::RefCell, sync::Arc};
     use winit::{event_loop::EventLoop, window::Window};
 
     #[derive(Commandable)]
@@ -307,13 +317,13 @@ mod test {
         let window = Window::new(&event_loop)?;
         let mut legion = World::default();
         let mut gpu = GPU::new(&window, Default::default())?;
-        let test_buffer = TestBuffer::new(&gpu);
-        let test_renderer = TestRenderer::new(&gpu, &test_buffer)?;
+        let test_buffer = Arc::new(RwLock::new(TestBuffer::new(&gpu)));
+        let test_renderer = Arc::new(RwLock::new(TestRenderer::new(&gpu, &test_buffer.read())?));
         let mut frame_graph = FrameGraph::new(&mut legion, &mut gpu, test_buffer, test_renderer)?;
 
         for _ in 0..3 {
             let mut upload_tracker = Default::default();
-            frame_graph.test_buffer().update(&mut upload_tracker);
+            frame_graph.test_buffer_mut().update(&mut upload_tracker);
             frame_graph.run(&mut gpu, upload_tracker)?;
         }
 

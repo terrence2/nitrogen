@@ -27,6 +27,7 @@ use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
 use std::{borrow::Borrow, collections::HashMap, sync::Arc};
 
+#[derive(Debug)]
 pub struct GlyphTracker {
     font: Arc<RwLock<dyn FontInterface>>,
     glyphs: HashMap<(char, OrderedFloat<f32>), Frame>,
@@ -45,6 +46,7 @@ impl GlyphTracker {
     }
 }
 
+#[derive(Debug)]
 pub struct TextSpanMetrics {
     // The width of the span.
     pub width: f32,
@@ -64,6 +66,7 @@ pub struct TextSpanMetrics {
     pub initial_background_offset: usize,
 }
 
+#[derive(Debug)]
 pub struct FontContext {
     glyph_sheet: AtlasPacker<Luma<u8>>,
     trackers: HashMap<FontId, GlyphTracker>,
@@ -340,7 +343,7 @@ pub const SANS_FONT_ID: FontId = FontId(0);
 /// Enables tracking of font information without leaking lifetimes everywhere or taking String
 /// allocations everywhere. Generally the top-level widget system will hand this out with
 /// any operation that deals with fonts.
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default)]
 struct FontNameManager {
     last_id: usize,
     id_to_name: HashMap<FontId, String>,

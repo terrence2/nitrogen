@@ -225,17 +225,15 @@ fn build_tree(
                 }
             }
         }
-        for maybe_child in tile_ref.read().maybe_children() {
-            if let Some(child) = maybe_child {
-                build_tree(
-                    current_level + 1,
-                    source.clone(),
-                    data_set.clone(),
-                    child.to_owned(),
-                    node_count,
-                    leaf_count,
-                )?;
-            }
+        for child in tile_ref.read().maybe_children().iter().flatten() {
+            build_tree(
+                current_level + 1,
+                source.clone(),
+                data_set.clone(),
+                child.to_owned(),
+                node_count,
+                leaf_count,
+            )?;
         }
         return Ok(());
     }
@@ -252,16 +250,14 @@ fn collect_tiles_at_level(
     level_tiles: &mut Vec<(Arc<RwLock<MipTile>>, usize)>,
 ) -> Fallible<()> {
     if current_level < target_level {
-        for maybe_child in node.read().maybe_children() {
-            if let Some(child) = maybe_child {
-                collect_tiles_at_level(
-                    target_level,
-                    current_level + 1,
-                    child.to_owned(),
-                    offset,
-                    level_tiles,
-                )?;
-            }
+        for child in node.read().maybe_children().iter().flatten() {
+            collect_tiles_at_level(
+                target_level,
+                current_level + 1,
+                child.to_owned(),
+                offset,
+                level_tiles,
+            )?;
         }
         return Ok(());
     }

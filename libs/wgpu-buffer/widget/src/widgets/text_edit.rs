@@ -27,6 +27,7 @@ use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::sync::Arc;
 
+#[derive(Debug)]
 pub struct TextEdit {
     lines: Vec<TextRun>,
     width: f32,

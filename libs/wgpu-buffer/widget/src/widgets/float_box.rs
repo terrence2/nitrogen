@@ -17,26 +17,27 @@ use crate::{
     paint_context::PaintContext,
     widget::{UploadMetrics, Widget},
 };
-use failure::Fallible;
+use failure::{err_msg, Fallible};
 use gpu::GPU;
 use input::GenericEvent;
 use nitrous::Interpreter;
 use parking_lot::RwLock;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 // Pack boxes at an edge.
+#[derive(Debug)]
 pub struct FloatPacking {
+    name: String,
     widget: Arc<RwLock<dyn Widget>>,
-    offset: usize,
     float_h: PositionH,
     float_v: PositionV,
 }
 
 impl FloatPacking {
-    pub fn new(widget: Arc<RwLock<dyn Widget>>, offset: usize) -> Self {
+    pub fn new(name: &str, widget: Arc<RwLock<dyn Widget>>) -> Self {
         Self {
+            name: name.to_owned(),
             widget,
-            offset,
             float_h: PositionH::Start,
             float_v: PositionV::Top,
         }
@@ -46,8 +47,8 @@ impl FloatPacking {
         self.widget.clone()
     }
 
-    pub fn offset(&self) -> usize {
-        self.offset
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     pub fn set_float(&mut self, float_h: PositionH, float_v: PositionV) {
@@ -57,29 +58,32 @@ impl FloatPacking {
 }
 
 // Items packed from top to bottom.
+#[derive(Debug)]
 pub struct FloatBox {
-    children: Vec<FloatPacking>,
+    children: HashMap<String, FloatPacking>,
 }
 
 impl FloatBox {
     pub fn new() -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(Self {
-            children: Vec::new(),
+            children: HashMap::new(),
         }))
     }
 
-    pub fn add_child(&mut self, child: Arc<RwLock<dyn Widget>>) -> &mut FloatPacking {
-        let offset = self.children.len();
-        self.children.push(FloatPacking::new(child, offset));
-        self.packing_mut(offset)
+    pub fn add_child(&mut self, name: &str, child: Arc<RwLock<dyn Widget>>) -> &mut FloatPacking {
+        self.children
+            .insert(name.to_owned(), FloatPacking::new(name, child));
+        self.packing_mut(name).unwrap()
     }
 
-    pub fn packing(&self, offset: usize) -> &FloatPacking {
-        &self.children[offset]
+    pub fn packing(&self, name: &str) -> &FloatPacking {
+        &self.children[name]
     }
 
-    pub fn packing_mut(&mut self, offset: usize) -> &mut FloatPacking {
-        &mut self.children[offset]
+    pub fn packing_mut(&mut self, name: &str) -> Fallible<&mut FloatPacking> {
+        self.children
+            .get_mut(name)
+            .ok_or(err_msg("unknown widget in float"))
     }
 }
 
@@ -88,7 +92,7 @@ impl Widget for FloatBox {
     // Widget: (0, 0) maps to the top-left of the widget.
     fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Fallible<UploadMetrics> {
         let mut widget_info_indexes = Vec::with_capacity(self.children.len());
-        for pack in &self.children {
+        for pack in self.children.values() {
             let widget = pack.widget.read();
             let mut child_metrics = widget.upload(gpu, context)?;
 
@@ -122,7 +126,7 @@ impl Widget for FloatBox {
         events: &[GenericEvent],
         interpreter: Arc<RwLock<Interpreter>>,
     ) -> Fallible<()> {
-        for child in &self.children {
+        for child in self.children.values() {
             child
                 .widget
                 .write()

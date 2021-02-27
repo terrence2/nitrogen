@@ -336,11 +336,11 @@ impl Shelf {
     }
 
     pub fn read_sync(&self, fid: FileId) -> Fallible<Cow<[u8]>> {
-        Ok(self.drawers[&fid.drawer_id].read_sync(fid.drawer_file_id)?)
+        self.drawers[&fid.drawer_id].read_sync(fid.drawer_file_id)
     }
 
     pub fn read_slice_sync(&self, fid: FileId, extent: Range<usize>) -> Fallible<Cow<[u8]>> {
-        Ok(self.drawers[&fid.drawer_id].read_slice_sync(fid.drawer_file_id, extent)?)
+        self.drawers[&fid.drawer_id].read_slice_sync(fid.drawer_file_id, extent)
     }
 
     pub async fn read(&self, fid: FileId) -> Fallible<Vec<u8>> {

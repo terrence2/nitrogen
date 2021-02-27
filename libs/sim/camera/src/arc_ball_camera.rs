@@ -19,9 +19,10 @@ use absolute_unit::{
 use failure::{ensure, Fallible};
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
-use nitrous::Interpreter;
+use nitrous::{Interpreter, Module, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
-use std::f64::consts::PI;
+use parking_lot::RwLock;
+use std::{f64::consts::PI, sync::Arc};
 
 #[derive(Debug, NitrousModule)]
 pub struct ArcBallCamera {
@@ -51,6 +52,27 @@ impl ArcBallCamera {
             in_rotate: false,
             in_move: false,
         }
+    }
+
+    pub fn init(self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Arc<RwLock<Self>>> {
+        let arcball = Arc::new(RwLock::new(self));
+        interpreter.write().put(
+            interpreter.clone(),
+            "camera",
+            Value::Module(arcball.clone()),
+        )?;
+        interpreter.write().interpret_once(
+            r#"
+                let bindings := mapper.create_bindings("arc_ball_camera");
+                bindings.bind("mouse1", "camera.pan_view(pressed)");
+                bindings.bind("mouse3", "camera.move_view(pressed)");
+                bindings.bind("mouseMotion", "camera.handle_mousemotion(dx, dy)");
+                bindings.bind("mouseWheel", "camera.handle_mousewheel(vertical_delta)");
+                bindings.bind("PageUp", "camera.increase_fov(pressed)");
+                bindings.bind("PageDown", "camera.decrease_fov(pressed)");
+            "#,
+        )?;
+        Ok(arcball)
     }
 
     pub fn camera(&self) -> &Camera {
@@ -108,21 +130,6 @@ impl ArcBallCamera {
         let cart_eye_rel_target_framed =
             Cartesian::<Target, Unit>::from(r_lat * r_lon * cart_eye_rel_target_flat.vec64());
         cart_target + cart_eye_rel_target_framed
-    }
-
-    pub fn init(&self, interpreter: &mut Interpreter) -> Fallible<()> {
-        interpreter.interpret_once(
-            r#"
-                let bindings := mapper.create_bindings("arc_ball_camera");
-                bindings.bind("mouse1", "camera.pan_view(pressed)");
-                bindings.bind("mouse3", "camera.move_view(pressed)");
-                bindings.bind("mouseMotion", "camera.handle_mousemotion(dx, dy)");
-                bindings.bind("mouseWheel", "camera.handle_mousewheel(vertical_delta)");
-                bindings.bind("PageUp", "camera.increase_fov(pressed)");
-                bindings.bind("PageDown", "camera.decrease_fov(pressed)");
-            "#,
-        )?;
-        Ok(())
     }
 
     #[method]

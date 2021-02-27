@@ -48,7 +48,8 @@ use font_ttf::TtfFont;
 use gpu::{UploadTracker, GPU};
 use input::GenericEvent;
 use log::trace;
-use nitrous::Interpreter;
+use nitrous::{Interpreter, Module, Value};
+use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use std::{borrow::Borrow, mem, num::NonZeroU64, ops::Range, sync::Arc};
 
@@ -77,7 +78,7 @@ const FIRA_SANS_REGULAR_TTF_DATA: &[u8] =
 const FIRA_MONO_REGULAR_TTF_DATA: &[u8] =
     include_bytes!("../../../../assets/font/FiraMono-Regular.ttf");
 
-#[derive(Commandable)]
+#[derive(Commandable, Debug, NitrousModule)]
 pub struct WidgetBuffer {
     // Widget state.
     root: Arc<RwLock<FloatBox>>,
@@ -94,6 +95,7 @@ pub struct WidgetBuffer {
     bind_group: Option<wgpu::BindGroup>,
 }
 
+#[inject_nitrous_module]
 #[commandable]
 impl WidgetBuffer {
     const MAX_WIDGETS: usize = 512;
@@ -203,6 +205,22 @@ impl WidgetBuffer {
             bind_group: None,
         })
     }
+
+    pub fn init(self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Arc<RwLock<Self>>> {
+        let widgets = Arc::new(RwLock::new(self));
+        interpreter.write().put(
+            interpreter.clone(),
+            "widgets",
+            Value::Module(widgets.clone()),
+        )?;
+        Ok(widgets)
+    }
+
+    // #[method]
+    // pub fn get(&self, name: &str) -> Value {
+    //     let fp = self.root.read().packing(name);
+    //     Value::Module(fp.widget())
+    // }
 
     pub fn root(&self) -> Arc<RwLock<FloatBox>> {
         self.root.clone()
@@ -354,7 +372,7 @@ mod test {
             Y [ˈʏpsilɔn], Yen [jɛn], Yoga [ˈjoːgɑ]",
         )
         .wrapped();
-        widgets.root().write().add_child(label);
+        widgets.root().write().add_child("label", label);
 
         let mut tracker = Default::default();
         widgets.make_upload_buffer(&gpu, &mut tracker)?;

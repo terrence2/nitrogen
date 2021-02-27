@@ -28,7 +28,7 @@ use parking_lot::RwLock;
 use std::sync::Arc;
 
 // Items packed from top to bottom.
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct VerticalBox {
     info: WidgetInfo,
     background_color: Color,

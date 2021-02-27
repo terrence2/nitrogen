@@ -27,6 +27,7 @@ use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::{ops::Range, sync::Arc};
 
+#[derive(Debug)]
 pub struct LineEdit {
     line: TextRun,
     override_width: Option<f32>,

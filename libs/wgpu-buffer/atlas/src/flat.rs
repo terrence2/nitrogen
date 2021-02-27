@@ -33,6 +33,7 @@ impl Column {
     }
 }
 
+#[derive(Debug)]
 enum DirtyState {
     Clean,
     Dirty(((u32, u32), (u32, u32))),
@@ -79,6 +80,7 @@ impl Frame {
 // usage, so tries to be faster to pack at the cost of potentially loosing out on easy space wins
 // in cases where subsequent items are differently sized or shaped. Most common uses will only
 // feed similarly shaped items, so will generally be fine.
+#[derive(Debug)]
 pub struct AtlasPacker<P: Pixel + 'static> {
     // Constant storage info
     fill_color: P,

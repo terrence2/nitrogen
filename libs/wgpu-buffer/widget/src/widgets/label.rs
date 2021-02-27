@@ -27,6 +27,7 @@ use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::sync::Arc;
 
+#[derive(Debug)]
 pub struct Label {
     line: TextRun,
     width: Option<f32>,

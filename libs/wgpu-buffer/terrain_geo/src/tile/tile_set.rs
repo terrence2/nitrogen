@@ -722,14 +722,14 @@ impl TileSet {
             img.save("__dump__/terrain_geo_index_texture.png")
                 .expect("wrote file");
         }
-        Ok(GPU::dump_texture(
+        GPU::dump_texture(
             &self.index_texture,
             self.index_texture_extent,
             self.index_texture_format,
             async_rt,
             gpu,
             Box::new(write_image),
-        )?)
+        )
     }
 
     fn allocate_atlas_slot(&mut self, votes: u32, qtid: QuadTreeId) {

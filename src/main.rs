@@ -116,10 +116,7 @@ fn main() -> Fallible<()> {
         .bind("demo.toggle_terminal", "Shift+Grave")?
         .bind("demo.exit", "Escape")?
         .bind("demo.exit", "q")?;
-    InputSystem::run_forever(
-        vec![Orrery::debug_bindings()?, system_bindings],
-        window_main,
-    )
+    InputSystem::run_forever(vec![system_bindings], window_main)
 }
 
 fn window_main(window: Window, input_controller: &InputController) -> Fallible<()> {
@@ -141,26 +138,41 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         (CpuDetailLevel::Medium, GpuDetailLevel::High)
     };
 
-    ///////////////////////////////////////////////////////////
-    let atmosphere_buffer = AtmosphereBuffer::new(opt.no_cache, &mut gpu)?;
-    let fullscreen_buffer = FullscreenBuffer::new(&gpu)?;
-    let globals = GlobalParametersBuffer::new(gpu.device())?;
-    let stars_buffer = StarsBuffer::new(&gpu)?;
-    let terrain_geo_buffer =
-        TerrainGeoBuffer::new(&catalog, cpu_detail, gpu_detail, &globals, &mut gpu)?;
-    let widget_buffer = WidgetBuffer::new(&mut gpu)?;
-    let catalog = Arc::new(AsyncRwLock::new(catalog));
-    let world = WorldRenderPass::new(
-        &mut gpu,
-        &globals,
-        &atmosphere_buffer,
-        &stars_buffer,
-        &terrain_geo_buffer,
-    )?;
-    let ui = UiRenderPass::new(&mut gpu, &globals, &widget_buffer, &world)?;
-    let composite = CompositeRenderPass::new(&mut gpu, &globals, &world, &ui)?;
-
     let interpreter = Arc::new(RwLock::new(Interpreter::boot()));
+
+    ///////////////////////////////////////////////////////////
+    let atmosphere_buffer = Arc::new(RwLock::new(AtmosphereBuffer::new(opt.no_cache, &mut gpu)?));
+    let fullscreen_buffer = Arc::new(RwLock::new(FullscreenBuffer::new(&gpu)?));
+    let globals = Arc::new(RwLock::new(GlobalParametersBuffer::new(gpu.device())?));
+    let stars_buffer = Arc::new(RwLock::new(StarsBuffer::new(&gpu)?));
+    let terrain_geo_buffer = Arc::new(RwLock::new(TerrainGeoBuffer::new(
+        &catalog,
+        cpu_detail,
+        gpu_detail,
+        &globals.read(),
+        &mut gpu,
+    )?));
+    let widget_buffer = WidgetBuffer::new(&mut gpu)?.init(interpreter.clone())?;
+    let catalog = Arc::new(AsyncRwLock::new(catalog));
+    let world = Arc::new(RwLock::new(WorldRenderPass::new(
+        &mut gpu,
+        &globals.read(),
+        &atmosphere_buffer.read(),
+        &stars_buffer.read(),
+        &terrain_geo_buffer.read(),
+    )?));
+    let ui = Arc::new(RwLock::new(UiRenderPass::new(
+        &mut gpu,
+        &globals.read(),
+        &widget_buffer.read(),
+        &world.read(),
+    )?));
+    let composite = Arc::new(RwLock::new(CompositeRenderPass::new(
+        &mut gpu,
+        &globals.read(),
+        &world.read(),
+        &ui.read(),
+    )?));
 
     let mut frame_graph = FrameGraph::new(
         &mut legion,
@@ -198,7 +210,12 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     //     .bind("demo.exit", "Escape")?
     //     .bind("demo.exit", "q")?;
 
-    frame_graph.widgets.root().write().add_child(mapper);
+    frame_graph
+        .widgets
+        .read()
+        .root()
+        .write()
+        .add_child("mapper", mapper);
 
     let version_label = Label::new("Nitrogen v0.1")
         .with_color(Color::Green)
@@ -207,9 +224,10 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         .wrapped();
     frame_graph
         .widgets
+        .read()
         .root()
         .write()
-        .add_child(version_label)
+        .add_child("version", version_label)
         .set_float(PositionH::End, PositionV::Top);
 
     let fps_label = Label::new("fps")
@@ -219,22 +237,25 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         .wrapped();
     frame_graph
         .widgets
+        .read()
         .root()
         .write()
-        .add_child(fps_label.clone())
+        .add_child("fps", fps_label.clone())
         .set_float(PositionH::Start, PositionV::Bottom);
 
-    let terminal = Terminal::new(frame_graph.widgets.font_context())
+    let terminal = Terminal::new(frame_graph.widgets.read().font_context())
         .with_visible(false)
         .wrapped();
     frame_graph
         .widgets
+        .read()
         .root()
         .write()
-        .add_child(terminal.clone())
+        .add_child("terminal", terminal.clone())
         .set_float(PositionH::Start, PositionV::Top);
 
-    let mut orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0));
+    let orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0)).init(interpreter.clone())?;
+    let arcball = ArcBallCamera::new(gpu.aspect_ratio(), meters!(0.5)).init(interpreter.clone())?;
 
     /*
     let mut camera = UfoCamera::new(gpu.aspect_ratio(), 0.1f64, 3.4e+38f64);
@@ -242,17 +263,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     camera.set_rotation(&Vector3::new(0.0, 0.0, 1.0), PI / 2.0);
     camera.apply_rotation(&Vector3::new(0.0, 1.0, 0.0), PI);
     */
-
-    let arcball = Arc::new(RwLock::new(ArcBallCamera::new(
-        gpu.aspect_ratio(),
-        meters!(0.5),
-    )));
-    arcball.read().init(&mut interpreter.write())?;
-    interpreter.write().put(
-        interpreter.clone(),
-        "camera",
-        Value::Module(arcball.clone()),
-    )?;
 
     // everest: 27.9880704,86.9245623
     arcball.write().set_target(Graticule::<GeoSurface>::new(
@@ -286,7 +296,8 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         let loop_start = Instant::now();
 
         frame_graph
-            .widgets()
+            .widgets
+            .write()
             .handle_events(&input_controller.poll_events()?, interpreter.clone())?;
 
         for command in input_controller.poll_commands()? {
@@ -294,7 +305,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                 return Ok(());
             }
             frame_graph.handle_command(&command);
-            orrery.handle_command(&command)?;
             match command.full() {
                 "demo.+target_up" => target_vec = meters!(1),
                 "demo.-target_up" => target_vec = meters!(0),
@@ -326,9 +336,9 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                 // system bindings
                 "window.resize" => {
                     gpu.note_resize(None, &window);
-                    frame_graph.terrain_geo.note_resize(&gpu);
-                    frame_graph.world.note_resize(&gpu);
-                    frame_graph.ui.note_resize(&gpu);
+                    frame_graph.terrain_geo_mut().note_resize(&gpu);
+                    frame_graph.world_mut().note_resize(&gpu);
+                    frame_graph.ui_mut().note_resize(&gpu);
                     arcball
                         .write()
                         .camera_mut()
@@ -336,9 +346,9 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                 }
                 "window.dpi-change" => {
                     gpu.note_resize(Some(command.float(0)?), &window);
-                    frame_graph.terrain_geo.note_resize(&gpu);
-                    frame_graph.world.note_resize(&gpu);
-                    frame_graph.ui.note_resize(&gpu);
+                    frame_graph.terrain_geo_mut().note_resize(&gpu);
+                    frame_graph.world_mut().note_resize(&gpu);
+                    frame_graph.ui_mut().note_resize(&gpu);
                     arcball
                         .write()
                         .camera_mut()
@@ -371,11 +381,11 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
             &mut tracker,
         )?;
         frame_graph.atmosphere().make_upload_buffer(
-            convert(orrery.sun_direction()),
+            convert(orrery.read().sun_direction()),
             &gpu,
             &mut tracker,
         )?;
-        frame_graph.terrain_geo().make_upload_buffer(
+        frame_graph.terrain_geo_mut().make_upload_buffer(
             arcball.read().camera(),
             &camera_double,
             catalog.clone(),
@@ -384,13 +394,14 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
             &mut tracker,
         )?;
         frame_graph
-            .widgets()
+            .widgets
+            .write()
             .make_upload_buffer(&gpu, &mut tracker)?;
         if !frame_graph.run(&mut gpu, tracker)? {
             gpu.note_resize(None, &window);
-            frame_graph.terrain_geo.note_resize(&gpu);
-            frame_graph.world.note_resize(&gpu);
-            frame_graph.ui.note_resize(&gpu);
+            frame_graph.terrain_geo_mut().note_resize(&gpu);
+            frame_graph.world_mut().note_resize(&gpu);
+            frame_graph.ui_mut().note_resize(&gpu);
             arcball
                 .write()
                 .camera_mut()
@@ -404,7 +415,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
             arcball.read().get_target(),
             g.distance,
             degrees!(arcball.read().camera().fov_y()),
-            orrery.get_time(),
+            orrery.read().get_time(),
             frame_time.as_secs() * 1000 + u64::from(frame_time.subsec_millis()),
             frame_time.subsec_micros(),
         );

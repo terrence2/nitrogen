@@ -244,7 +244,7 @@ impl UfoCamera {
     }
 
     pub fn default_bindings() -> Fallible<Bindings> {
-        Ok(Bindings::new("shape")
+        Bindings::new("ufo_camera")
             .bind("ufocamera.zoom-in", "Equals")?
             .bind("ufocamera.zoom-out", "Subtract")?
             .bind("ufocamera.+rotate-right", "c")?
@@ -254,7 +254,7 @@ impl UfoCamera {
             .bind("ufocamera.+move-forward", "w")?
             .bind("ufocamera.+move-backward", "s")?
             .bind("ufocamera.+move-up", "space")?
-            .bind("ufocamera.+move-down", "Control")?)
+            .bind("ufocamera.+move-down", "Control")
     }
 
     pub fn handle_command(&mut self, command: &Command) -> Fallible<()> {

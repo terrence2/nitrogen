@@ -18,7 +18,7 @@ use gpu::GPU;
 use input::GenericEvent;
 use nitrous::Interpreter;
 use parking_lot::RwLock;
-use std::sync::Arc;
+use std::{fmt::Debug, sync::Arc};
 
 #[derive(Clone, Debug, Default)]
 pub struct UploadMetrics {
@@ -27,7 +27,7 @@ pub struct UploadMetrics {
     pub height: f32,
 }
 
-pub trait Widget {
+pub trait Widget: Debug {
     fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Fallible<UploadMetrics>;
     fn handle_events(
         &mut self,

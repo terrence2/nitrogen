@@ -19,6 +19,7 @@ use parking_lot::RwLock;
 use rusttype::{Font, Point, Scale};
 use std::sync::Arc;
 
+#[derive(Debug)]
 pub struct TtfFont {
     font: Font<'static>,
 }
