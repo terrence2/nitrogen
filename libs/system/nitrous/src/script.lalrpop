@@ -12,13 +12,24 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::ir::{Term, Expr, Operator};
+use crate::ir::{Term, Expr, Operator, Stmt};
 use std::str::FromStr;
 
 grammar;
 
 Comma<T>: Vec<T> = { // (1)
     <v:(<T> ",")*> <e:T?> => match e { // (2)
+        None => v,
+        Some(e) => {
+            let mut v = v;
+            v.push(e);
+            v
+        }
+    }
+};
+
+Semicolon<T>: Vec<T> = {
+    <v:(<T> ";")*> <e:T?> => match e {
         None => v,
         Some(e) => {
             let mut v = v;
@@ -61,7 +72,20 @@ Term: Term = {
     "(" <Term> ")",
 };
 
-pub Expr: Box<Expr> = {
+pub Statements: Vec<Box<Stmt>> = {
+    Semicolon<Statement>
+}
+
+Statement: Box<Stmt> = {
+    LetAssignStmt,
+    Expr => Box::new(Stmt::Expr(<>)),
+}
+
+LetAssignStmt: Box<Stmt> = {
+    "let" <SymbolOrBool> ":=" <Expr> => Box::new(Stmt::LetAssign(<>)),
+}
+
+Expr: Box<Expr> = {
     CallExpr
 };
 

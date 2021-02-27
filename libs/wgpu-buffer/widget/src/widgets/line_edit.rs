@@ -23,7 +23,7 @@ use crate::{
 use failure::Fallible;
 use gpu::GPU;
 use input::{ElementState, GenericEvent, ModifiersState, VirtualKeyCode};
-use nitrous::{Interpreter, Script};
+use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::{ops::Range, sync::Arc};
 
@@ -92,9 +92,7 @@ impl LineEdit {
             VirtualKeyCode::Left => self.line.move_left(modifiers),
             VirtualKeyCode::Right => self.line.move_right(modifiers),
             VirtualKeyCode::Return | VirtualKeyCode::NumpadEnter => {
-                let raw_cmd = self.line.flatten();
-                let script = Script::compile_expr(&raw_cmd)?;
-                interpreter.read().interpret(&script)?;
+                interpreter.write().interpret_once(&self.line.flatten())?;
             }
             _ => {}
         }

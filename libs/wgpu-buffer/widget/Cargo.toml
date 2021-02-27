@@ -24,6 +24,7 @@ font_ttf = { path = "../../wgpu-buffer/font_ttf" }
 gpu = { path = "../../system/gpu" }
 input = { path = "../../system/input" }
 nitrous = { path = "../../system/nitrous" }
+nitrous_injector = { path = "../../system/nitrous_injector" }
 shader_shared = { path = "../../wgpu-buffer/shader_shared" }
 
 [dev-dependencies]

@@ -20,13 +20,14 @@ use crate::widgets::event_mapper::{
 use failure::Fallible;
 use input::ElementState;
 use log::trace;
-use nitrous::{Interpreter, Script, Value};
+use nitrous::{Interpreter, Module, Script, Value};
+use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use smallvec::{smallvec, SmallVec};
 use std::{collections::HashMap, sync::Arc};
 
 // Map from key, buttons, and axes to commands.
-#[derive(Debug)]
+#[derive(Debug, NitrousModule)]
 pub struct Bindings {
     pub name: String,
     press_chords: HashMap<Key, Vec<KeySet>>,
@@ -34,6 +35,7 @@ pub struct Bindings {
     axis_map: HashMap<AxisKind, Script>,
 }
 
+#[inject_nitrous_module]
 impl Bindings {
     pub fn new(name: &str) -> Self {
         Self {
@@ -44,24 +46,25 @@ impl Bindings {
         }
     }
 
-    pub fn bind_axis(mut self, axis: &str, expr_raw: &str) -> Fallible<Self> {
-        let script = Script::compile_expr(expr_raw)?;
-        let axis = AxisKind::from_virtual(axis)?;
-        trace!("binding {:?} => {}", axis, script);
-        self.axis_map.insert(axis, script);
+    pub fn with_bind(mut self, keyset_or_axis: &str, script_raw: &str) -> Fallible<Self> {
+        self.bind(keyset_or_axis, script_raw)?;
         Ok(self)
     }
 
-    pub fn match_axis(&self, axis: AxisKind, interpreter: &Interpreter) -> Fallible<()> {
-        if let Some(script) = self.axis_map.get(&axis) {
-            interpreter.interpret(script)?;
-        }
-        Ok(())
+    pub fn into_module(self) -> Arc<RwLock<dyn Module>> {
+        Arc::new(RwLock::new(self))
     }
 
-    pub fn bind(mut self, keyset: &str, expr_raw: &str) -> Fallible<Self> {
-        let script = Script::compile_expr(expr_raw)?;
-        for ks in KeySet::from_virtual(keyset)?.drain(..) {
+    #[method]
+    pub fn bind(&mut self, keyset_or_axis: &str, script_raw: &str) -> Fallible<()> {
+        let script = Script::compile(script_raw)?;
+
+        if let Ok(axis) = AxisKind::from_virtual(keyset_or_axis) {
+            self.axis_map.insert(axis, script);
+            return Ok(());
+        }
+
+        for ks in KeySet::from_virtual(keyset_or_axis)?.drain(..) {
             trace!("binding {} => {}", ks, script);
             self.script_map.insert(ks.clone(), script.clone());
 
@@ -72,7 +75,14 @@ impl Bindings {
                 sets.sort_by_key(|ks| usize::max_value() - ks.keys.len());
             }
         }
-        Ok(self)
+        Ok(())
+    }
+
+    pub fn match_axis(&self, axis: AxisKind, interpreter: &mut Interpreter) -> Fallible<()> {
+        if let Some(script) = self.axis_map.get(&axis) {
+            interpreter.interpret(script)?;
+        }
+        Ok(())
     }
 
     pub fn match_key(
@@ -282,7 +292,7 @@ mod test {
         let shift_key = Key::KeyboardKey(VirtualKeyCode::LShift);
 
         let mut state: State = Default::default();
-        let bindings = Bindings::new("test").bind("w", "player.never_executed()")?;
+        let bindings = Bindings::new("test").with_bind("w", "player.never_executed()")?;
 
         state.key_states.insert(shift_key, ElementState::Pressed);
         state.modifiers_state |= ModifiersState::SHIFT;
@@ -314,7 +324,7 @@ mod test {
         let ctrl_key = Key::KeyboardKey(VirtualKeyCode::RControl);
 
         let mut state: State = Default::default();
-        let bindings = Bindings::new("test").bind("Shift+w", "player.never_executed()")?;
+        let bindings = Bindings::new("test").with_bind("Shift+w", "player.never_executed()")?;
 
         state.key_states.insert(ctrl_key, ElementState::Pressed);
         state.key_states.insert(shift_key, ElementState::Pressed);
@@ -340,8 +350,8 @@ mod test {
 
         let mut state: State = Default::default();
         let bindings = Bindings::new("test")
-            .bind("w", "player.walk(pressed)")?
-            .bind("shift+w", "player.run(pressed)")?;
+            .with_bind("w", "player.walk(pressed)")?
+            .with_bind("shift+w", "player.run(pressed)")?;
 
         state.key_states.insert(w_key, ElementState::Pressed);
         bindings.match_key(

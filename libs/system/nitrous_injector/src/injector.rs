@@ -77,6 +77,7 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
                 LLType::StrRef => parse2(quote! { args[#i].to_str()? }).unwrap(),
                 LLType::String => parse2(quote! { args[#i].to_str()?.to_owned() }).unwrap(),
                 LLType::Value => parse2(quote! { args[#i].clone() }).unwrap(),
+                LLType::Unit => parse2(quote! { Value::True() }).unwrap(),
             };
             arg_items.push(expr);
         }
@@ -104,6 +105,9 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
                 LLType::Value => {
                     quote! { #name => { Ok(self.#item( #(#arg_items),* )) } }
                 }
+                LLType::Unit => {
+                    quote! { #name => { self.#item( #(#arg_items),* ); Ok(::nitrous::Value::True()) } }
+                }
             },
             LLRetType::FallibleRaw(llty) => match llty {
                 LLType::Boolean => {
@@ -123,6 +127,9 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
                 }
                 LLType::Value => {
                     quote! { #name => { self.#item( #(#arg_items),* ) } }
+                }
+                LLType::Unit => {
+                    quote! { #name => { self.#item( #(#arg_items),* )?; Ok(::nitrous::Value::True()) } }
                 }
             },
         };
@@ -210,6 +217,7 @@ enum LLType {
     String,
     StrRef,
     Value,
+    Unit,
 }
 
 impl LLType {
@@ -223,6 +231,12 @@ impl LLType {
                     "nitrous LLType only support references to str, not: {:#?}",
                     v
                 ),
+            }
+        } else if let Type::Tuple(tt) = ty {
+            if tt.elems.is_empty() {
+                LLType::Unit
+            } else {
+                panic!("nitrous LLType only supports the unit tuple type")
             }
         } else {
             panic!(

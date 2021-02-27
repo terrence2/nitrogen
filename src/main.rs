@@ -37,7 +37,7 @@ use structopt::StructOpt;
 use terrain_geo::{CpuDetailLevel, GpuDetailLevel, TerrainGeoBuffer};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use ui::UiRenderPass;
-use widget::{Bindings, Color, EventMapper, Label, PositionH, PositionV, Terminal, WidgetBuffer};
+use widget::{Color, EventMapper, Label, PositionH, PositionV, Terminal, WidgetBuffer};
 use winit::window::Window;
 use world::WorldRenderPass;
 
@@ -177,13 +177,10 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     )?;
     ///////////////////////////////////////////////////////////
 
-    let test_bindings = Bindings::new("arcball-camera")
-        .bind("mouse1", "camera.pan_view(pressed)")?
-        .bind("mouse3", "camera.move_view(pressed)")?
-        .bind("PageUp", "camera.increase_fov(pressed)")?
-        .bind("PageDown", "camera.decrease_fov(pressed)")?
-        .bind_axis("mouseMotion", "camera.handle_mousemotion(dx, dy)")?
-        .bind_axis("mouseWheel", "camera.handle_mousewheel(vertical_delta)")?;
+    let mapper = EventMapper::default().into_module();
+    interpreter
+        .write()
+        .put(interpreter.clone(), "mapper", Value::Module(mapper.clone()))?;
 
     // let system_bindings = Bindings::new("map")
     //     .bind("world.toggle_wireframe", "w")?
@@ -200,7 +197,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     //     .bind("demo.toggle_terminal", "Shift+Grave")?
     //     .bind("demo.exit", "Escape")?
     //     .bind("demo.exit", "q")?;
-    let mapper = EventMapper::with_bindings(vec![test_bindings]).wrapped();
+
     frame_graph.widgets.root().write().add_child(mapper);
 
     let version_label = Label::new("Nitrogen v0.1")
@@ -250,6 +247,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         gpu.aspect_ratio(),
         meters!(0.5),
     )));
+    arcball.read().init(&mut interpreter.write())?;
     interpreter.write().put(
         interpreter.clone(),
         "camera",

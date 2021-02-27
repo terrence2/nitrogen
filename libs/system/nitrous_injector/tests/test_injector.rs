@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use failure::Fallible;
-use nitrous::{Interpreter, Module, Script, Value};
+use nitrous::{Interpreter, Module, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use std::sync::Arc;
@@ -49,6 +49,12 @@ impl TestInjector {
     }
 
     #[method]
+    fn fail_plain(&self) -> Fallible<()> {
+        println!("Called Fail Plain");
+        Ok(())
+    }
+
+    #[method]
     fn fail_boolean(&self, b: bool) -> Fallible<bool> {
         Ok(b)
     }
@@ -78,59 +84,51 @@ fn test_it_works() -> Fallible<()> {
         .put(interpreter.clone(), "test", Value::Module(inj))?;
 
     assert_eq!(
-        interpreter
-            .read()
-            .interpret(&Script::compile_expr("test.plain()")?)?,
+        interpreter.write().interpret_once("test.plain()")?,
         Value::True()
     );
     assert_eq!(
-        interpreter
-            .read()
-            .interpret(&Script::compile_expr("test.boolean(True)")?)?,
+        interpreter.write().interpret_once("test.boolean(True)")?,
         Value::True()
     );
     assert_eq!(
-        interpreter
-            .read()
-            .interpret(&Script::compile_expr("test.integer(42)")?)?,
+        interpreter.write().interpret_once("test.integer(42)")?,
         Value::Integer(84)
     );
     assert_eq!(
         interpreter
-            .read()
-            .interpret(&Script::compile_expr(r#"test.string("hello")"#)?)?,
+            .write()
+            .interpret_once(r#"test.string("hello")"#)?,
         Value::String("hello, world!".to_string())
     );
     assert_eq!(
-        interpreter
-            .read()
-            .interpret(&Script::compile_expr(r#"test.value(2)"#)?)?,
+        interpreter.write().interpret_once(r#"test.value(2)"#)?,
         Value::Integer(2)
     );
 
     // Fallible versions
     assert_eq!(
         interpreter
-            .read()
-            .interpret(&Script::compile_expr("test.fail_boolean(True)")?)?,
+            .write()
+            .interpret_once("test.fail_boolean(True)")?,
         Value::True()
     );
     assert_eq!(
         interpreter
-            .read()
-            .interpret(&Script::compile_expr("test.fail_integer(42)")?)?,
+            .write()
+            .interpret_once("test.fail_integer(42)")?,
         Value::Integer(84)
     );
     assert_eq!(
         interpreter
-            .read()
-            .interpret(&Script::compile_expr(r#"test.fail_string("hello")"#)?)?,
+            .write()
+            .interpret_once(r#"test.fail_string("hello")"#)?,
         Value::String("hello, world!".to_string())
     );
     assert_eq!(
         interpreter
-            .read()
-            .interpret(&Script::compile_expr(r#"test.fail_value(2)"#)?)?,
+            .write()
+            .interpret_once(r#"test.fail_value(2)"#)?,
         Value::Integer(2)
     );
 

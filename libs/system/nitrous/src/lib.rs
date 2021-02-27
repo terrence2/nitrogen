@@ -14,14 +14,14 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 mod ir;
 mod script;
+mod value;
 
-pub use crate::script::Script;
+pub use crate::{script::Script, value::Value};
 
-use crate::ir::{Expr, Operator, Term};
+use crate::ir::{Expr, Operator, Stmt, Term};
 use failure::{bail, Fallible};
-use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
-use std::{collections::HashMap, fmt, fmt::Debug, ops, sync::Arc};
+use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
 // Note: manually passing the module until we have arbitrary self.
 pub trait Module: Debug {
@@ -29,238 +29,6 @@ pub trait Module: Debug {
     fn call_method(&mut self, name: &str, args: &[Value]) -> Fallible<Value>;
     fn put(&mut self, module: Arc<RwLock<dyn Module>>, name: &str, value: Value) -> Fallible<()>;
     fn get(&self, module: Arc<RwLock<dyn Module>>, name: &str) -> Fallible<Value>;
-}
-
-#[derive(Clone, Debug)]
-pub enum Value {
-    Boolean(bool),
-    Integer(i64),
-    Float(OrderedFloat<f64>),
-    String(String),
-    Module(Arc<RwLock<dyn Module>>),
-    Method(Arc<RwLock<dyn Module>>, String), // TODO: atoms
-}
-
-impl Value {
-    #[allow(non_snake_case)]
-    pub fn True() -> Self {
-        Self::Boolean(true)
-    }
-
-    #[allow(non_snake_case)]
-    pub fn False() -> Self {
-        Self::Boolean(false)
-    }
-
-    pub fn to_bool(&self) -> Fallible<bool> {
-        if let Self::Boolean(b) = self {
-            return Ok(*b);
-        }
-        bail!("not a boolean value: {}", self)
-    }
-
-    pub fn to_int(&self) -> Fallible<i64> {
-        if let Self::Integer(i) = self {
-            return Ok(*i);
-        }
-        bail!("not an integer value: {}", self)
-    }
-
-    pub fn to_float(&self) -> Fallible<f64> {
-        if let Self::Float(f) = self {
-            return Ok(f.0);
-        }
-        bail!("not a float value: {}", self)
-    }
-
-    pub fn to_str(&self) -> Fallible<&str> {
-        if let Self::String(s) = self {
-            return Ok(s);
-        }
-        bail!("not a string value: {}", self)
-    }
-}
-
-impl fmt::Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Boolean(v) => write!(f, "{}", v),
-            Self::Integer(v) => write!(f, "{}", v),
-            Self::Float(v) => write!(f, "{}", v),
-            Self::String(v) => write!(f, "\"{}\"", v),
-            Self::Module(v) => write!(f, "{}", v.read().module_name()),
-            Self::Method(v, name) => write!(f, "{}.{}", v.read().module_name(), name),
-        }
-    }
-}
-
-impl PartialEq for Value {
-    fn eq(&self, other: &Self) -> bool {
-        match self {
-            Self::Boolean(a) => match other {
-                Self::Boolean(b) => a == b,
-                _ => false,
-            },
-            Self::Integer(a) => match other {
-                Self::Integer(b) => a == b,
-                _ => false,
-            },
-            Self::Float(a) => match other {
-                Self::Float(b) => a == b,
-                _ => false,
-            },
-            Self::String(a) => match other {
-                Self::String(b) => a == b,
-                _ => false,
-            },
-            Self::Module(_) => false,
-            Self::Method(_, _) => false,
-        }
-    }
-}
-
-impl Eq for Value {}
-
-impl Value {
-    pub fn impl_multiply(self, other: Self) -> Fallible<Self> {
-        Ok(match self {
-            Value::Integer(lhs) => match other {
-                Value::Integer(rhs) => Value::Integer(lhs * rhs),
-                Value::Float(rhs) => Value::Float(OrderedFloat(lhs as f64) * rhs),
-                Value::String(_) => bail!("cannot multiply a number by a string"),
-                Value::Boolean(_) => bail!("cannot multiply a number to a boolean"),
-                Value::Module(_) => bail!("cannot multiply a number by a module"),
-                Value::Method(_, _) => bail!("cannot multiply a number by a method"),
-            },
-            Value::Float(lhs) => match other {
-                Value::Integer(rhs) => Value::Float(lhs * OrderedFloat(rhs as f64)),
-                Value::Float(rhs) => Value::Float(lhs * rhs),
-                Value::String(_) => bail!("cannot multiply a number by a string"),
-                Value::Boolean(_) => bail!("cannot multiply a number to a boolean"),
-                Value::Module(_) => bail!("cannot multiply a number by a module"),
-                Value::Method(_, _) => bail!("cannot multiply a number by a method"),
-            },
-            Value::String(lhs) => match other {
-                Value::Integer(rhs) => Value::String(lhs.repeat(rhs.max(0) as usize)),
-                Value::Float(rhs) => Value::String(lhs.repeat(rhs.floor().max(0f64) as usize)),
-                Value::String(_) => bail!("cannot multiply a string by a string"),
-                Value::Boolean(_) => bail!("cannot multiply a number to a boolean"),
-                Value::Module(_) => bail!("cannot multiply a string by a module"),
-                Value::Method(_, _) => bail!("cannot multiply a string by a method"),
-            },
-            Value::Boolean(_) => bail!("cannot do arithmetic on a boolean"),
-            Value::Module(_) => bail!("cannot do arithmetic on a module"),
-            Value::Method(_, _) => bail!("cannot do arithmetic on a method"),
-        })
-    }
-
-    pub fn impl_divide(self, other: Self) -> Fallible<Self> {
-        Ok(match self {
-            Value::Integer(lhs) => match other {
-                Value::Integer(rhs) => Value::Integer(lhs / rhs),
-                Value::Float(rhs) => Value::Float(OrderedFloat(lhs as f64) / rhs),
-                Value::String(_) => bail!("cannot divide a number by a string"),
-                Value::Boolean(_) => bail!("cannot divide a number by a boolean"),
-                Value::Module(_) => bail!("cannot divide a number by a module"),
-                Value::Method(_, _) => bail!("cannot divide a number by a method"),
-            },
-            Value::Float(lhs) => match other {
-                Value::Integer(rhs) => Value::Float(lhs / OrderedFloat(rhs as f64)),
-                Value::Float(rhs) => Value::Float(lhs / rhs),
-                Value::String(_) => bail!("cannot divide a number by a string"),
-                Value::Boolean(_) => bail!("cannot divide a number by a boolean"),
-                Value::Module(_) => bail!("cannot divide a number by a module"),
-                Value::Method(_, _) => bail!("cannot divide a number by a method"),
-            },
-            Value::String(_) => bail!("cannot divide a string by anything"),
-            Value::Boolean(_) => bail!("cannot do arithmetic on a boolean"),
-            Value::Module(_) => bail!("cannot do arithmetic on a module"),
-            Value::Method(_, _) => bail!("cannot do arithmetic on a method"),
-        })
-    }
-
-    pub fn impl_add(self, other: Self) -> Fallible<Self> {
-        Ok(match self {
-            Value::Integer(lhs) => match other {
-                Value::Integer(rhs) => Value::Integer(lhs + rhs),
-                Value::Float(rhs) => Value::Float(OrderedFloat(lhs as f64) + rhs),
-                Value::String(_) => bail!("cannot add a string to a number"),
-                Value::Boolean(_) => bail!("cannot add a number to a boolean"),
-                Value::Module(_) => bail!("cannot add a module to a number"),
-                Value::Method(_, _) => bail!("cannot add a method to a number"),
-            },
-            Value::Float(lhs) => match other {
-                Value::Integer(rhs) => Value::Float(lhs + OrderedFloat(rhs as f64)),
-                Value::Float(rhs) => Value::Float(lhs + rhs),
-                Value::String(_) => bail!("cannot add a string to a number"),
-                Value::Boolean(_) => bail!("cannot add a number to a boolean"),
-                Value::Module(_) => bail!("cannot add a module to a number"),
-                Value::Method(_, _) => bail!("cannot add a method to a number"),
-            },
-            Value::String(lhs) => match other {
-                Value::Integer(_) => bail!("cannot add a number to a string"),
-                Value::Float(_) => bail!("cannot add a number to a string"),
-                Value::String(rhs) => Value::String(lhs + &rhs),
-                Value::Boolean(_) => bail!("cannot add a number to a boolean"),
-                Value::Module(_) => bail!("cannot add a module to a string"),
-                Value::Method(_, _) => bail!("cannot add a method to a string"),
-            },
-            Value::Boolean(_) => bail!("cannot do arithmetic on a boolean"),
-            Value::Module(_) => bail!("cannot do arithmetic on a module"),
-            Value::Method(_, _) => bail!("cannot do arithmetic on a method"),
-        })
-    }
-
-    pub fn impl_subtract(self, other: Self) -> Fallible<Self> {
-        Ok(match self {
-            Value::Integer(lhs) => match other {
-                Value::Integer(rhs) => Value::Integer(lhs - rhs),
-                Value::Float(rhs) => Value::Float(OrderedFloat(lhs as f64) - rhs),
-                Value::String(_) => bail!("cannot subtract a string from a number"),
-                Value::Boolean(_) => bail!("cannot subtract a boolean from a number"),
-                Value::Module(_) => bail!("cannot subtract a module from a number"),
-                Value::Method(_, _) => bail!("cannot subtract a method from a number"),
-            },
-            Value::Float(lhs) => match other {
-                Value::Integer(rhs) => Value::Float(lhs - OrderedFloat(rhs as f64)),
-                Value::Float(rhs) => Value::Float(lhs - rhs),
-                Value::String(_) => bail!("cannot subtract a string from a number"),
-                Value::Boolean(_) => bail!("cannot subtract a boolean from a number"),
-                Value::Module(_) => bail!("cannot subtract a module from a number"),
-                Value::Method(_, _) => bail!("cannot subtract a method from a number"),
-            },
-            Value::String(_) => bail!("cannot subtract with a string"),
-            Value::Boolean(_) => bail!("cannot do arithmetic on a boolean"),
-            Value::Module(_) => bail!("cannot do arithmetic on a module"),
-            Value::Method(_, _) => bail!("cannot do arithmetic on a method"),
-        })
-    }
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum InterpreterStatus {
-    Continue,
-    Exit,
-}
-
-impl InterpreterStatus {
-    pub fn should_exit(&self) -> bool {
-        matches!(self, Self::Exit)
-    }
-}
-
-impl Default for InterpreterStatus {
-    fn default() -> Self {
-        Self::Continue
-    }
-}
-
-impl ops::BitOrAssign for InterpreterStatus {
-    fn bitor_assign(&mut self, rhs: Self) {
-        if rhs == Self::Exit {
-            *self = Self::Exit;
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -283,7 +51,7 @@ impl Interpreter {
 
     pub fn with_locals<F>(&mut self, locals: &[(&str, Value)], callback: F) -> Fallible<Value>
     where
-        F: Fn(&Interpreter) -> Fallible<Value>,
+        F: Fn(&mut Interpreter) -> Fallible<Value>,
     {
         for (name, value) in locals {
             self.locals.insert((*name).to_owned(), value.to_owned());
@@ -295,8 +63,27 @@ impl Interpreter {
         result
     }
 
-    pub fn interpret(&self, script: &Script) -> Fallible<Value> {
-        self.interpret_expr(&script.expr)
+    pub fn interpret_once(&mut self, raw_script: &str) -> Fallible<Value> {
+        self.interpret(&Script::compile(raw_script)?)
+    }
+
+    pub fn interpret(&mut self, script: &Script) -> Fallible<Value> {
+        use std::borrow::Borrow;
+        let mut out = Value::True();
+        for stmt in script.statements() {
+            match stmt.borrow() {
+                Stmt::LetAssign(target, expr) => {
+                    let result = self.interpret_expr(expr)?;
+                    if let Term::Symbol(name) = target {
+                        self.locals.insert(name.to_owned(), result);
+                    }
+                }
+                Stmt::Expr(expr) => {
+                    out = self.interpret_expr(expr)?;
+                }
+            }
+        }
+        Ok(out)
     }
 
     fn interpret_expr(&self, expr: &Expr) -> Fallible<Value> {
@@ -383,8 +170,8 @@ mod test {
 
     #[test]
     fn test_interpret_basic() -> Fallible<()> {
-        let interpreter = Interpreter::boot();
-        let script = Script::compile_expr("2 + 2")?;
+        let mut interpreter = Interpreter::boot();
+        let script = Script::compile("2 + 2")?;
         assert_eq!(interpreter.interpret(&script)?, Value::Integer(4));
         Ok(())
     }
