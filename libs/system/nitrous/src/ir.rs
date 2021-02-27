@@ -16,6 +16,21 @@ use ordered_float::OrderedFloat;
 use std::fmt;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Stmt {
+    LetAssign(Term, Box<Expr>),
+    Expr(Box<Expr>),
+}
+
+impl fmt::Display for Stmt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::LetAssign(term, expr) => write!(f, "let {} := {};", term, expr),
+            Self::Expr(expr) => write!(f, "{};", expr),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Expr {
     BinOp(Box<Expr>, Operator, Box<Expr>),
     Term(Term),

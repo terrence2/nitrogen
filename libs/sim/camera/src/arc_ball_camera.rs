@@ -19,6 +19,7 @@ use absolute_unit::{
 use failure::{ensure, Fallible};
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
+use nitrous::Interpreter;
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use std::f64::consts::PI;
 
@@ -89,6 +90,61 @@ impl ArcBallCamera {
         self.eye.distance = meters!(distance);
     }
 
+    fn cartesian_target_position<Unit: LengthUnit>(&self) -> Cartesian<GeoCenter, Unit> {
+        Cartesian::<GeoCenter, Unit>::from(Graticule::<GeoCenter>::from(self.target))
+    }
+
+    fn cartesian_eye_position<Unit: LengthUnit>(&self) -> Cartesian<GeoCenter, Unit> {
+        let r_lon = UnitQuaternion::from_axis_angle(
+            &NUnit::new_unchecked(Vector3::new(0f64, 1f64, 0f64)),
+            -f64::from(self.target.longitude),
+        );
+        let r_lat = UnitQuaternion::from_axis_angle(
+            &NUnit::new_normalize(r_lon * Vector3::new(1f64, 0f64, 0f64)),
+            PI / 2.0 - f64::from(self.target.latitude),
+        );
+        let cart_target = self.cartesian_target_position::<Unit>();
+        let cart_eye_rel_target_flat = Cartesian::<Target, Unit>::from(self.eye);
+        let cart_eye_rel_target_framed =
+            Cartesian::<Target, Unit>::from(r_lat * r_lon * cart_eye_rel_target_flat.vec64());
+        cart_target + cart_eye_rel_target_framed
+    }
+
+    pub fn init(&self, interpreter: &mut Interpreter) -> Fallible<()> {
+        interpreter.interpret_once(
+            r#"
+                let bindings := mapper.create_bindings("arc_ball_camera");
+                bindings.bind("mouse1", "camera.pan_view(pressed)");
+                bindings.bind("mouse3", "camera.move_view(pressed)");
+                bindings.bind("mouseMotion", "camera.handle_mousemotion(dx, dy)");
+                bindings.bind("mouseWheel", "camera.handle_mousewheel(vertical_delta)");
+                bindings.bind("PageUp", "camera.increase_fov(pressed)");
+                bindings.bind("PageDown", "camera.decrease_fov(pressed)");
+            "#,
+        )?;
+        Ok(())
+    }
+
+    #[method]
+    pub fn pan_view(&mut self, pressed: bool) {
+        self.in_rotate = pressed;
+    }
+
+    #[method]
+    pub fn move_view(&mut self, pressed: bool) {
+        self.in_move = pressed;
+    }
+
+    #[method]
+    pub fn increase_fov(&mut self, pressed: bool) {
+        self.fov_delta = degrees!(if pressed { 1 } else { 0 });
+    }
+
+    #[method]
+    pub fn decrease_fov(&mut self, pressed: bool) {
+        self.fov_delta = degrees!(if pressed { -1 } else { 0 });
+    }
+
     #[method]
     pub fn handle_mousemotion(&mut self, x: f64, y: f64) {
         if self.in_rotate {
@@ -150,60 +206,6 @@ impl ArcBallCamera {
             up.normalize(),
             right.normalize(),
         );
-    }
-
-    // pub fn initialize_bindings(interpreter: Arc<RwLock<Interpreter>>) -> Fallible<()> {
-    //     let script = Script::compile_expr(
-    //         r#"
-    //         event_mapper.bind("mouse1", "camera.pan_view(pressed)")
-    //     "#,
-    //     )?;
-    //     // event_mapper.bind("mouse3", "camera.move_view(pressed)")
-    //     interpreter.read().interpret(&script)
-    // .bind("mouse1", "camera.pan_view(pressed)")?
-    // .bind("mouse3", "camera.move_view(pressed)")?
-    // .bind("PageUp", "camera.increase_fov(pressed)")?
-    // .bind("PageDown", "camera.decrease_fov(pressed)")?;
-    // }
-
-    #[method]
-    pub fn pan_view(&mut self, pressed: bool) {
-        self.in_rotate = pressed;
-    }
-
-    #[method]
-    pub fn move_view(&mut self, pressed: bool) {
-        self.in_move = pressed;
-    }
-
-    #[method]
-    pub fn increase_fov(&mut self, pressed: bool) {
-        self.fov_delta = degrees!(if pressed { 1 } else { 0 });
-    }
-
-    #[method]
-    pub fn decrease_fov(&mut self, pressed: bool) {
-        self.fov_delta = degrees!(if pressed { -1 } else { 0 });
-    }
-
-    fn cartesian_target_position<Unit: LengthUnit>(&self) -> Cartesian<GeoCenter, Unit> {
-        Cartesian::<GeoCenter, Unit>::from(Graticule::<GeoCenter>::from(self.target))
-    }
-
-    fn cartesian_eye_position<Unit: LengthUnit>(&self) -> Cartesian<GeoCenter, Unit> {
-        let r_lon = UnitQuaternion::from_axis_angle(
-            &NUnit::new_unchecked(Vector3::new(0f64, 1f64, 0f64)),
-            -f64::from(self.target.longitude),
-        );
-        let r_lat = UnitQuaternion::from_axis_angle(
-            &NUnit::new_normalize(r_lon * Vector3::new(1f64, 0f64, 0f64)),
-            PI / 2.0 - f64::from(self.target.latitude),
-        );
-        let cart_target = self.cartesian_target_position::<Unit>();
-        let cart_eye_rel_target_flat = Cartesian::<Target, Unit>::from(self.eye);
-        let cart_eye_rel_target_framed =
-            Cartesian::<Target, Unit>::from(r_lat * r_lon * cart_eye_rel_target_flat.vec64());
-        cart_target + cart_eye_rel_target_framed
     }
 }
 

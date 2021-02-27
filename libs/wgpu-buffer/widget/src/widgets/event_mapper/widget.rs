@@ -25,6 +25,7 @@ use failure::Fallible;
 use gpu::GPU;
 use input::{ElementState, GenericEvent, ModifiersState};
 use nitrous::{Interpreter, Value};
+use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
 use std::{
@@ -39,21 +40,23 @@ pub struct State {
     pub active_chords: HashSet<KeySet>,
 }
 
+#[derive(Default, Debug, NitrousModule)]
 pub struct EventMapper {
-    bindings: Vec<Bindings>,
+    bindings: HashMap<String, Arc<RwLock<Bindings>>>,
     state: State,
 }
 
+#[inject_nitrous_module]
 impl EventMapper {
-    pub fn with_bindings(bindings: Vec<Bindings>) -> Self {
-        Self {
-            bindings,
-            state: Default::default(),
-        }
+    pub fn into_module(self) -> Arc<RwLock<Self>> {
+        Arc::new(RwLock::new(self))
     }
 
-    pub fn wrapped(self) -> Arc<RwLock<Self>> {
-        Arc::new(RwLock::new(self))
+    #[method]
+    pub fn create_bindings(&mut self, name: &str) -> Fallible<Value> {
+        let bindings = Arc::new(RwLock::new(Bindings::new(name)));
+        self.bindings.insert(name.to_owned(), bindings.clone());
+        Ok(Value::Module(bindings))
     }
 }
 
@@ -76,7 +79,6 @@ impl Widget for EventMapper {
                 continue;
             }
 
-            // FIXME: key-like elements are not the only elements we can bind.
             if let Some(key_state) = event.press_state() {
                 let key = match event {
                     GenericEvent::KeyboardKey {
@@ -93,8 +95,13 @@ impl Widget for EventMapper {
                 self.state.modifiers_state =
                     event.modifiers_state().expect("modifiers on key press");
 
-                for bindings in &self.bindings {
-                    bindings.match_key(key, key_state, &mut self.state, interpreter.clone())?;
+                for bindings in self.bindings.values() {
+                    bindings.read().match_key(
+                        key,
+                        key_state,
+                        &mut self.state,
+                        interpreter.clone(),
+                    )?;
                 }
             } else {
                 match event {
@@ -117,8 +124,8 @@ impl Widget for EventMapper {
                                 ("window_focused", Value::Boolean(*window_focused)),
                             ],
                             |inner| {
-                                for bindings in &self.bindings {
-                                    bindings.match_axis(AxisKind::MouseMotion, inner)?;
+                                for bindings in self.bindings.values() {
+                                    bindings.read().match_axis(AxisKind::MouseMotion, inner)?;
                                 }
                                 Ok(Value::True())
                             },
@@ -150,8 +157,8 @@ impl Widget for EventMapper {
                                 ("window_focused", Value::Boolean(*window_focused)),
                             ],
                             |inner| {
-                                for bindings in &self.bindings {
-                                    bindings.match_axis(AxisKind::MouseWheel, inner)?;
+                                for bindings in self.bindings.values() {
+                                    bindings.read().match_axis(AxisKind::MouseWheel, inner)?;
                                 }
                                 Ok(Value::True())
                             },
