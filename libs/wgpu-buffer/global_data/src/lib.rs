@@ -14,7 +14,6 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{Kilometers, Meters};
 use camera::Camera;
-use commandable::{commandable, Commandable};
 use core::num::NonZeroU64;
 use failure::Fallible;
 use gpu::{UploadTracker, GPU};
@@ -145,7 +144,7 @@ impl Globals {
     }
 }
 
-#[derive(Commandable)]
+#[derive(Debug)]
 pub struct GlobalParametersBuffer {
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
@@ -153,7 +152,6 @@ pub struct GlobalParametersBuffer {
     parameters_buffer: Arc<Box<wgpu::Buffer>>,
 }
 
-#[commandable]
 impl GlobalParametersBuffer {
     pub fn new(device: &wgpu::Device) -> Fallible<Self> {
         let buffer_size = mem::size_of::<Globals>() as wgpu::BufferAddress;

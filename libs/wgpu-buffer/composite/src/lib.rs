@@ -12,7 +12,6 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use commandable::{commandable, Commandable};
 use failure::Fallible;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::GlobalParametersBuffer;
@@ -22,12 +21,11 @@ use shader_shared::Group;
 use ui::UiRenderPass;
 use world::WorldRenderPass;
 
-#[derive(Commandable)]
+#[derive(Debug)]
 pub struct CompositeRenderPass {
     pipeline: wgpu::RenderPipeline,
 }
 
-#[commandable]
 impl CompositeRenderPass {
     pub fn new(
         gpu: &mut GPU,

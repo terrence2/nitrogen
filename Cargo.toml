@@ -25,7 +25,6 @@ members = [
     "libs/system/build_shaders",
     "libs/system/catalog",
     "libs/system/command",
-    "libs/system/commandable",
     "libs/system/gpu",
     "libs/system/input",
     "libs/system/nitrous",

@@ -32,16 +32,7 @@ use winit::{
     dpi::{LogicalSize, PhysicalSize},
     window::Window,
 };
-use zerocopy::{AsBytes, FromBytes};
-
-#[repr(C)]
-#[derive(AsBytes, FromBytes, Copy, Clone, Debug)]
-pub struct DrawIndirectCommand {
-    pub vertex_count: u32,
-    pub instance_count: u32,
-    pub first_vertex: u32,
-    pub first_instance: u32,
-}
+use zerocopy::AsBytes;
 
 pub struct GPUConfig {
     present_mode: wgpu::PresentMode,

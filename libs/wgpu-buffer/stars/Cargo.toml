@@ -15,14 +15,11 @@ static_assertions = "^ 1"
 wgpu = "^ 0.6"
 zerocopy = "^ 0.3"
 camera = { path = "../../sim/camera" }
-command = { path = "../../system/command" }
-commandable = { path = "../../system/commandable" }
 star_catalog = { path = "../../sim/star_catalog" }
 gpu = { path = "../../system/gpu" }
 
 [dev-dependencies]
 absolute_unit = { path = "../../sim/absolute_unit" }
-command = { path = "../../system/command" }
 fullscreen = { path = "../../wgpu-buffer/fullscreen" }
 geodesy = { path = "../../sim/geodesy" }
 global_data = { path = "../../wgpu-buffer/global_data" }

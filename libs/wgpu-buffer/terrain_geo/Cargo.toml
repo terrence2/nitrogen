@@ -28,8 +28,6 @@ zerocopy = "^ 0.3"
 absolute_unit = { path = "../../sim/absolute_unit" }
 camera = { path = "../../sim/camera" }
 catalog = { path = "../../system/catalog" }
-command = { path = "../../system/command" }
-commandable = { path = "../../system/commandable" }
 geodesy = { path = "../../sim/geodesy" }
 geometry = { path = "../../sim/geometry" }
 global_data = { path = "../../wgpu-buffer/global_data" }

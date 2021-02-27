@@ -13,7 +13,6 @@ parking_lot = "^ 0.11"
 absolute_unit = { path = "../../sim/absolute_unit" }
 geometry = { path = "../../sim/geometry" }
 geodesy = { path = "../../sim/geodesy" }
-command = { path = "../../system/command" }
 nitrous = { path = "../../system/nitrous" }
 nitrous_injector = { path = "../../system/nitrous_injector" }
 

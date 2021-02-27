@@ -12,7 +12,6 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use commandable::{commandable, Commandable};
 use failure::Fallible;
 use global_data::GlobalParametersBuffer;
 use gpu::{texture_format_component_type, GPU};
@@ -21,7 +20,7 @@ use shader_shared::Group;
 use widget::{WidgetBuffer, WidgetVertex};
 use world::WorldRenderPass;
 
-#[derive(Commandable)]
+#[derive(Debug)]
 pub struct UiRenderPass {
     // Offscreen render targets
     deferred_texture: (wgpu::Texture, wgpu::TextureView),
@@ -35,7 +34,6 @@ pub struct UiRenderPass {
     text_pipeline: wgpu::RenderPipeline,
 }
 
-#[commandable]
 impl UiRenderPass {
     pub fn new(
         gpu: &mut GPU,

@@ -14,21 +14,20 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{degrees, meters};
 use camera::ArcBallCamera;
-use command::Bindings;
 use failure::Fallible;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
 use gpu::GPU;
-use input::{InputController, InputSystem};
+use input::{
+    GenericEvent, GenericSystemEvent, GenericWindowEvent, InputController, InputSystem,
+    VirtualKeyCode,
+};
 use stars::StarsBuffer;
 use winit::window::Window;
 
 fn main() -> Fallible<()> {
-    let system_bindings = Bindings::new("system")
-        .bind("demo.exit", "Escape")?
-        .bind("demo.exit", "q")?;
-    InputSystem::run_forever(vec![system_bindings], window_main)
+    InputSystem::run_forever(vec![], window_main)
 }
 
 fn window_main(window: Window, input_controller: &InputController) -> Fallible<()> {
@@ -127,18 +126,28 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     arcball.set_distance(meters!(40.0));
 
     loop {
-        for command in input_controller.poll_commands()? {
-            match command.command() {
-                "window-close" | "window-destroy" | "exit" => return Ok(()),
-                "window-resize" => {
+        for event in input_controller.poll_events()? {
+            match event {
+                GenericEvent::KeyboardKey {
+                    virtual_keycode, ..
+                } => {
+                    if virtual_keycode == VirtualKeyCode::Q
+                        || virtual_keycode == VirtualKeyCode::Escape
+                    {
+                        return Ok(());
+                    }
+                }
+                GenericEvent::Window(GenericWindowEvent::Resized { .. }) => {
                     gpu.note_resize(None, &window);
                     arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
                 }
-                "window.dpi-change" => {
-                    gpu.note_resize(Some(command.float(0)?), &window);
+                GenericEvent::Window(GenericWindowEvent::ScaleFactorChanged { scale }) => {
+                    gpu.note_resize(Some(scale), &window);
                     arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
                 }
-                "window-cursor-move" => {}
+                GenericEvent::System(GenericSystemEvent::Quit) => {
+                    return Ok(());
+                }
                 _ => {}
             }
         }

@@ -18,8 +18,6 @@ static_assertions = "^ 1"
 wgpu = "^ 0.6"
 zerocopy = "^ 0.3"
 camera = { path = "../../sim/camera" }
-command = { path = "../../system/command" }
-commandable = { path = "../../system/commandable" }
 gpu = { path = "../../system/gpu" }
 
 [target.'cfg(not(target_arch="wasm32"))'.dependencies]

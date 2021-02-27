@@ -11,8 +11,6 @@ parking_lot = "^ 0.11"
 wgpu = "^ 0.6"
 zerocopy = "^ 0.3"
 camera = { path = "../../sim/camera" }
-command = { path = "../../system/command" }
-commandable = { path = "../../system/commandable" }
 gpu = { path = "../../system/gpu" }
 nitrous = { path = "../../system/nitrous" }
 nitrous_injector = { path = "../../system/nitrous_injector" }
