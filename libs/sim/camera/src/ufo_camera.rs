@@ -64,6 +64,10 @@ impl UfoCamera {
         interpreter
             .write()
             .put(interpreter.clone(), "camera", Value::Module(ufo.clone()))?;
+        Ok(ufo)
+    }
+
+    pub fn with_default_bindings(self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Self> {
         interpreter.write().interpret_once(
             r#"
                 let bindings := mapper.create_bindings("arc_ball_camera");
@@ -81,7 +85,7 @@ impl UfoCamera {
                 bindings.bind("Control", "camera.move_down(pressed)");
             "#,
         )?;
-        Ok(ufo)
+        Ok(self)
     }
 
     pub fn set_position(&mut self, x: f64, y: f64, z: f64) {

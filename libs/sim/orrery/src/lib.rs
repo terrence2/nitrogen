@@ -332,6 +332,10 @@ impl Orrery {
         interpreter
             .write()
             .put(interpreter.clone(), "orrery", Value::Module(orrery.clone()))?;
+        Ok(orrery)
+    }
+
+    pub fn with_default_bindings(self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Self> {
         interpreter.write().interpret_once(
             r#"
                 let bindings := mapper.create_bindings("orrery");
@@ -339,7 +343,7 @@ impl Orrery {
                 bindings.bind("mouseMotion", "orrery.handle_mousemove(dx)");
             "#,
         )?;
-        Ok(orrery)
+        Ok(self)
     }
 
     pub fn get_time(&self) -> DateTime<Utc> {

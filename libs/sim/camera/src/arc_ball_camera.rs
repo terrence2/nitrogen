@@ -31,6 +31,7 @@ pub struct ArcBallCamera {
     in_rotate: bool,
     in_move: bool,
     fov_delta: Angle<Degrees>,
+    target_height_delta: Length<Meters>,
     target: Graticule<GeoSurface>,
     eye: Graticule<Target>,
 }
@@ -43,6 +44,7 @@ impl ArcBallCamera {
         Self {
             camera: Camera::from_parameters(fov_y, aspect_ratio, z_near),
             target: Graticule::<GeoSurface>::new(radians!(0), radians!(0), meters!(0)),
+            target_height_delta: meters!(0),
             eye: Graticule::<Target>::new(
                 radians!(PI / 2.0),
                 radians!(3f64 * PI / 4.0),
@@ -61,6 +63,10 @@ impl ArcBallCamera {
             "camera",
             Value::Module(arcball.clone()),
         )?;
+        Ok(arcball)
+    }
+
+    pub fn with_default_bindings(self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Self> {
         interpreter.write().interpret_once(
             r#"
                 let bindings := mapper.create_bindings("arc_ball_camera");
@@ -70,9 +76,13 @@ impl ArcBallCamera {
                 bindings.bind("mouseWheel", "camera.handle_mousewheel(vertical_delta)");
                 bindings.bind("PageUp", "camera.increase_fov(pressed)");
                 bindings.bind("PageDown", "camera.decrease_fov(pressed)");
+                bindings.bind("Shift+Up", "camera.target_up_fast(pressed)");
+                bindings.bind("Shift+Down", "camera.target_down_fast(pressed)");
+                bindings.bind("Up", "camera.target_up(pressed)");
+                bindings.bind("Down", "camera.target_down(pressed)");
             "#,
         )?;
-        Ok(arcball)
+        Ok(self)
     }
 
     pub fn camera(&self) -> &Camera {
@@ -192,11 +202,52 @@ impl ArcBallCamera {
         self.eye.distance = self.eye.distance.max(meters!(0.01));
     }
 
+    #[method]
+    pub fn target_up(&mut self, pressed: bool) {
+        if pressed {
+            self.target_height_delta = meters!(1);
+        } else {
+            self.target_height_delta = meters!(0);
+        }
+    }
+
+    #[method]
+    pub fn target_down(&mut self, pressed: bool) {
+        if pressed {
+            self.target_height_delta = meters!(-1);
+        } else {
+            self.target_height_delta = meters!(0);
+        }
+    }
+
+    #[method]
+    pub fn target_up_fast(&mut self, pressed: bool) {
+        if pressed {
+            self.target_height_delta = meters!(100);
+        } else {
+            self.target_height_delta = meters!(0);
+        }
+    }
+
+    #[method]
+    pub fn target_down_fast(&mut self, pressed: bool) {
+        if pressed {
+            self.target_height_delta = meters!(-100);
+        } else {
+            self.target_height_delta = meters!(0);
+        }
+    }
+
     pub fn think(&mut self) {
         let mut fov = degrees!(self.camera.fov_y());
         fov += self.fov_delta;
         fov = fov.min(degrees!(90)).max(degrees!(1));
         self.camera.set_fov_y(fov);
+
+        self.target.distance += self.target_height_delta;
+        if self.target.distance < meters!(0f64) {
+            self.target.distance = meters!(0f64);
+        }
 
         let target = self.cartesian_target_position::<Kilometers>();
         let eye = self.cartesian_eye_position::<Kilometers>();

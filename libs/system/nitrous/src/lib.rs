@@ -31,20 +31,13 @@ pub trait Module: Debug {
     fn get(&self, module: Arc<RwLock<dyn Module>>, name: &str) -> Fallible<Value>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Interpreter {
     memory: HashMap<String, Value>,
     locals: HashMap<String, Value>,
 }
 
 impl Interpreter {
-    pub fn boot() -> Self {
-        Self {
-            memory: HashMap::new(),
-            locals: HashMap::new(),
-        }
-    }
-
     pub fn init(self) -> Fallible<Arc<RwLock<Self>>> {
         Ok(Arc::new(RwLock::new(self)))
     }
@@ -170,7 +163,7 @@ mod test {
 
     #[test]
     fn test_interpret_basic() -> Fallible<()> {
-        let mut interpreter = Interpreter::boot();
+        let mut interpreter = Interpreter::default();
         let script = Script::compile("2 + 2")?;
         assert_eq!(interpreter.interpret(&script)?, Value::Integer(4));
         Ok(())

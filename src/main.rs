@@ -102,8 +102,6 @@ fn main() -> Fallible<()> {
     env_logger::init();
 
     let system_bindings = LegacyBindings::new("map")
-        .bind("world.toggle_wireframe", "w")?
-        .bind("world.toggle_debug_mode", "r")?
         .bind("demo.+target_up_fast", "Shift+Up")?
         .bind("demo.+target_down_fast", "Shift+Down")?
         .bind("demo.+target_up", "Up")?
@@ -138,7 +136,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         (CpuDetailLevel::Medium, GpuDetailLevel::High)
     };
 
-    let interpreter = Interpreter::boot().init()?;
+    let interpreter = Interpreter::default().init()?;
     let mapper = EventMapper::default().init(interpreter.clone())?;
 
     ///////////////////////////////////////////////////////////
@@ -158,6 +156,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         &stars_buffer.read(),
         &terrain_geo_buffer.read(),
     )?
+    .with_default_bindings(interpreter.clone())?
     .init(interpreter.clone())?;
     let ui = Arc::new(RwLock::new(UiRenderPass::new(
         &mut gpu,
@@ -188,12 +187,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     ///////////////////////////////////////////////////////////
 
     // let system_bindings = Bindings::new("map")
-    //     .bind("world.toggle_wireframe", "w")?
-    //     .bind("world.toggle_debug_mode", "r")?
-    //     .bind("demo.+target_up_fast", "Shift+Up")?
-    //     .bind("demo.+target_down_fast", "Shift+Down")?
-    //     .bind("demo.+target_up", "Up")?
-    //     .bind("demo.+target_down", "Down")?
     //     .bind("demo.decrease_gamma", "LBracket")?
     //     .bind("demo.increase_gamma", "RBracket")?
     //     .bind("demo.decrease_exposure", "Shift+LBracket")?
@@ -247,8 +240,12 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         .add_child("terminal", terminal.clone())
         .set_float(PositionH::Start, PositionV::Top);
 
-    let orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0)).init(interpreter.clone())?;
-    let arcball = ArcBallCamera::new(gpu.aspect_ratio(), meters!(0.5)).init(interpreter.clone())?;
+    let orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0))
+        .with_default_bindings(interpreter.clone())?
+        .init(interpreter.clone())?;
+    let arcball = ArcBallCamera::new(gpu.aspect_ratio(), meters!(0.5))
+        .with_default_bindings(interpreter.clone())?
+        .init(interpreter.clone())?;
 
     /*
     let mut camera = UfoCamera::new(gpu.aspect_ratio(), 0.1f64, 3.4e+38f64);
@@ -283,7 +280,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     let mut tone_gamma = 2.2f32;
     let mut is_camera_pinned = false;
     let mut camera_double = arcball.read().camera().to_owned();
-    let mut target_vec = meters!(0f64);
     let mut show_terminal = false;
     loop {
         let loop_start = Instant::now();
@@ -298,14 +294,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                 return Ok(());
             }
             match command.full() {
-                "demo.+target_up" => target_vec = meters!(1),
-                "demo.-target_up" => target_vec = meters!(0),
-                "demo.+target_down" => target_vec = meters!(-1),
-                "demo.-target_down" => target_vec = meters!(0),
-                "demo.+target_up_fast" => target_vec = meters!(100),
-                "demo.-target_up_fast" => target_vec = meters!(0),
-                "demo.+target_down_fast" => target_vec = meters!(-100),
-                "demo.-target_down_fast" => target_vec = meters!(0),
                 "demo.decrease_gamma" => tone_gamma /= 1.1,
                 "demo.increase_gamma" => tone_gamma *= 1.1,
                 "demo.decrease_exposure" => {
@@ -353,13 +341,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         // let script = Script::compile_expr("camera.test()")?;
         // interpreter.read().interpret(&script)?;
 
-        let mut g = arcball.read().get_target();
-        g.distance += target_vec;
-        if g.distance < meters!(0f64) {
-            g.distance = meters!(0f64);
-        }
-        arcball.write().set_target(g);
-
         arcball.write().think();
         if !is_camera_pinned {
             camera_double = arcball.read().camera().to_owned();
@@ -405,7 +386,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
             "eye_rel: {} | tgt: {} | asl: {}, fov: {} || Date: {:?} || frame: {}.{}ms",
             arcball.read().get_eye_relative(),
             arcball.read().get_target(),
-            g.distance,
+            arcball.read().get_target().distance,
             degrees!(arcball.read().camera().fov_y()),
             orrery.read().get_time(),
             frame_time.as_secs() * 1000 + u64::from(frame_time.subsec_millis()),

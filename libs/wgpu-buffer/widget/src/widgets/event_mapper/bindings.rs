@@ -282,7 +282,7 @@ mod test {
 
     #[test]
     fn test_modifier_planes_disable_bare() -> Fallible<()> {
-        let interpreter = Interpreter::boot().init()?;
+        let interpreter = Interpreter::default().init()?;
         let player = Arc::new(RwLock::new(Player::default()));
         interpreter
             .write()
@@ -313,7 +313,7 @@ mod test {
 
     #[test]
     fn test_matches_exact_modifier_plane() -> Fallible<()> {
-        let interpreter = Interpreter::boot().init()?;
+        let interpreter = Interpreter::default().init()?;
         let player = Arc::new(RwLock::new(Player::default()));
         interpreter
             .write()
@@ -339,7 +339,7 @@ mod test {
 
     #[test]
     fn test_masking() -> Fallible<()> {
-        let interpreter = Interpreter::boot().init()?;
+        let interpreter = Interpreter::default().init()?;
         let player = Arc::new(RwLock::new(Player::default()));
         interpreter
             .write()

@@ -398,6 +398,10 @@ impl WorldRenderPass {
         interpreter
             .write()
             .put(interpreter.clone(), "world", Value::Module(world.clone()))?;
+        Ok(world)
+    }
+
+    pub fn with_default_bindings(self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Self> {
         interpreter.write().interpret_once(
             r#"
                 let bindings := mapper.create_bindings("world");
@@ -405,7 +409,7 @@ impl WorldRenderPass {
                 bindings.bind("r", "world.change_debug_mode(pressed)");
             "#,
         )?;
-        Ok(world)
+        Ok(self)
     }
 
     #[method]
