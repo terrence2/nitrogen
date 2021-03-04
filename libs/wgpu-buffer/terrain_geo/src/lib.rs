@@ -26,7 +26,7 @@ use catalog::Catalog;
 use failure::Fallible;
 use geodesy::{GeoCenter, Graticule};
 use global_data::GlobalParametersBuffer;
-use gpu::{UploadTracker, GPU};
+use gpu::{ResizeHint, UploadTracker, GPU};
 use nitrous::{Interpreter, Module, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
@@ -179,7 +179,8 @@ impl TerrainGeoBuffer {
         gpu_detail_level: GpuDetailLevel,
         globals_buffer: &GlobalParametersBuffer,
         gpu: &mut GPU,
-    ) -> Fallible<Self> {
+        interpreter: Arc<RwLock<Interpreter>>,
+    ) -> Fallible<Arc<RwLock<Self>>> {
         let cpu_detail = cpu_detail_level.parameters();
         let gpu_detail = gpu_detail_level.parameters();
 
@@ -480,7 +481,7 @@ impl TerrainGeoBuffer {
             &sampler,
         );
 
-        Ok(Self {
+        let terrain = Arc::new(RwLock::new(Self {
             patch_manager,
             tile_manager,
             visible_regions: Vec::new(),
@@ -498,7 +499,22 @@ impl TerrainGeoBuffer {
             accumulate_clear_pipeline,
             accumulate_spherical_normals_pipeline,
             accumulate_spherical_colors_pipeline,
-        })
+        }));
+
+        gpu.add_resize_observer(terrain.clone());
+
+        interpreter.write().put(
+            interpreter.clone(),
+            "terrain",
+            Value::Module(terrain.clone()),
+        )?;
+
+        Ok(terrain)
+    }
+
+    pub fn init(self) -> Fallible<Arc<RwLock<Self>>> {
+        let terrain = Arc::new(RwLock::new(self));
+        Ok(terrain)
     }
 
     fn _make_deferred_texture_targets(gpu: &GPU) -> (wgpu::Texture, wgpu::TextureView) {
@@ -700,32 +716,6 @@ impl TerrainGeoBuffer {
         })
     }
 
-    pub fn note_resize(&mut self, gpu: &GPU) {
-        self.acc_extent = gpu.attachment_extent();
-        self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
-        self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
-        self.color_acc = Self::_make_color_accumulator_targets(gpu);
-        self.normal_acc = Self::_make_normal_accumulator_targets(gpu);
-        self.composite_bind_group = Self::_make_composite_bind_group(
-            gpu.device(),
-            &self.composite_bind_group_layout,
-            &self.deferred_texture.1,
-            &self.deferred_depth.1,
-            &self.color_acc.1,
-            &self.normal_acc.1,
-            &self.sampler,
-        );
-        self.accumulate_common_bind_group = Self::_make_accumulate_common_bind_group(
-            gpu.device(),
-            &self.accumulate_common_bind_group_layout,
-            &self.deferred_texture.1,
-            &self.deferred_depth.1,
-            &self.color_acc.1,
-            &self.normal_acc.1,
-            &self.sampler,
-        );
-    }
-
     pub fn make_upload_buffer(
         &mut self,
         camera: &Camera,
@@ -868,16 +858,6 @@ impl TerrainGeoBuffer {
         Ok(cpass)
     }
 
-    pub fn init(self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Arc<RwLock<Self>>> {
-        let terrain = Arc::new(RwLock::new(self));
-        interpreter.write().put(
-            interpreter.clone(),
-            "terrain",
-            Value::Module(terrain.clone()),
-        )?;
-        Ok(terrain)
-    }
-
     #[method]
     pub fn capture_index_snapshot(&mut self) {
         self.tile_manager.snapshot_index();
@@ -922,6 +902,35 @@ impl TerrainGeoBuffer {
     // pub fn tristrip_index_range(&self, winding: PatchWinding) -> Range<u32> {
     //     self.patch_manager.tristrip_index_range(winding)
     // }
+}
+
+impl ResizeHint for TerrainGeoBuffer {
+    fn note_resize(&mut self, gpu: &GPU) -> Fallible<()> {
+        self.acc_extent = gpu.attachment_extent();
+        self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
+        self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
+        self.color_acc = Self::_make_color_accumulator_targets(gpu);
+        self.normal_acc = Self::_make_normal_accumulator_targets(gpu);
+        self.composite_bind_group = Self::_make_composite_bind_group(
+            gpu.device(),
+            &self.composite_bind_group_layout,
+            &self.deferred_texture.1,
+            &self.deferred_depth.1,
+            &self.color_acc.1,
+            &self.normal_acc.1,
+            &self.sampler,
+        );
+        self.accumulate_common_bind_group = Self::_make_accumulate_common_bind_group(
+            gpu.device(),
+            &self.accumulate_common_bind_group_layout,
+            &self.deferred_texture.1,
+            &self.deferred_depth.1,
+            &self.color_acc.1,
+            &self.normal_acc.1,
+            &self.sampler,
+        );
+        Ok(())
+    }
 }
 
 #[cfg(test)]

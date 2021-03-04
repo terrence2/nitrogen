@@ -16,7 +16,7 @@ use atmosphere::AtmosphereBuffer;
 use failure::Fallible;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::GlobalParametersBuffer;
-use gpu::{texture_format_component_type, GPU};
+use gpu::{texture_format_component_type, ResizeHint, GPU};
 use log::trace;
 use nitrous::{Interpreter, Module, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -68,11 +68,12 @@ pub struct WorldRenderPass {
 impl WorldRenderPass {
     pub fn new(
         gpu: &mut GPU,
+        interpreter: Arc<RwLock<Interpreter>>,
         globals_buffer: &GlobalParametersBuffer,
         atmosphere_buffer: &AtmosphereBuffer,
         stars_buffer: &StarsBuffer,
         terrain_geo_buffer: &TerrainGeoBuffer,
-    ) -> Fallible<Self> {
+    ) -> Fallible<Arc<RwLock<Self>>> {
         trace!("WorldRenderPass::new");
 
         let deferred_bind_group_layout =
@@ -238,7 +239,7 @@ impl WorldRenderPass {
                     alpha_to_coverage_enabled: false,
                 });
 
-        Ok(Self {
+        let world = Arc::new(RwLock::new(Self {
             deferred_texture,
             deferred_depth,
             deferred_sampler,
@@ -255,7 +256,15 @@ impl WorldRenderPass {
 
             show_wireframe: false,
             debug_mode: DebugMode::None,
-        })
+        }));
+
+        gpu.add_resize_observer(world.clone());
+
+        interpreter
+            .write()
+            .put(interpreter.clone(), "world", Value::Module(world.clone()))?;
+
+        Ok(world)
     }
 
     fn _make_deferred_texture_targets(gpu: &GPU) -> (wgpu::Texture, wgpu::TextureView) {
@@ -393,15 +402,7 @@ impl WorldRenderPass {
         })
     }
 
-    pub fn init(self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Arc<RwLock<Self>>> {
-        let world = Arc::new(RwLock::new(self));
-        interpreter
-            .write()
-            .put(interpreter.clone(), "world", Value::Module(world.clone()))?;
-        Ok(world)
-    }
-
-    pub fn with_default_bindings(self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Self> {
+    pub fn add_default_bindings(&mut self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<()> {
         interpreter.write().interpret_once(
             r#"
                 let bindings := mapper.create_bindings("world");
@@ -409,7 +410,7 @@ impl WorldRenderPass {
                 bindings.bind("r", "world.change_debug_mode(pressed)");
             "#,
         )?;
-        Ok(self)
+        Ok(())
     }
 
     #[method]
@@ -431,17 +432,6 @@ impl WorldRenderPass {
                 DebugMode::NormalGlobal => DebugMode::None,
             };
         }
-    }
-
-    pub fn note_resize(&mut self, gpu: &GPU) {
-        self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
-        self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
-        self.deferred_bind_group = Self::_make_deferred_bind_group(
-            gpu,
-            &self.deferred_bind_group_layout,
-            &self.deferred_texture.1,
-            &self.deferred_sampler,
-        );
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
@@ -527,5 +517,19 @@ impl WorldRenderPass {
         }
 
         Ok(rpass)
+    }
+}
+
+impl ResizeHint for WorldRenderPass {
+    fn note_resize(&mut self, gpu: &GPU) -> Fallible<()> {
+        self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
+        self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
+        self.deferred_bind_group = Self::_make_deferred_bind_group(
+            gpu,
+            &self.deferred_bind_group_layout,
+            &self.deferred_texture.1,
+            &self.deferred_sampler,
+        );
+        Ok(())
     }
 }

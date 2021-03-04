@@ -94,7 +94,7 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
                     quote! { #name => { Ok(::nitrous::Value::Integer(self.#item( #(#arg_items),* ))) } }
                 }
                 Scalar::Float => {
-                    quote! { #name => { Ok(::nitrous::Value::Float(self.#item( #(#arg_items),* ))) } }
+                    quote! { #name => { Ok(::nitrous::Value::Float(::ordered_float::OrderedFloat(self.#item( #(#arg_items),* )))) } }
                 }
                 Scalar::String => {
                     quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_items),* ))) } }
@@ -117,7 +117,7 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
                     quote! { #name => { Ok(::nitrous::Value::Integer(self.#item( #(#arg_items),* )?)) } }
                 }
                 Scalar::Float => {
-                    quote! { #name => { Ok(::nitrous::Value::Float(self.#item( #(#arg_items),* )?)) } }
+                    quote! { #name => { Ok(::nitrous::Value::Float(::ordered_float::OrderedFloat(self.#item( #(#arg_items),* )?))) } }
                 }
                 Scalar::String => {
                     quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_items),* )?)) } }

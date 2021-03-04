@@ -47,8 +47,7 @@ use font_ttf::TtfFont;
 use gpu::{UploadTracker, GPU};
 use input::GenericEvent;
 use log::trace;
-use nitrous::{Interpreter, Module, Value};
-use nitrous_injector::{inject_nitrous_module, NitrousModule};
+use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::{borrow::Borrow, mem, num::NonZeroU64, ops::Range, sync::Arc};
 
@@ -77,7 +76,7 @@ const FIRA_SANS_REGULAR_TTF_DATA: &[u8] =
 const FIRA_MONO_REGULAR_TTF_DATA: &[u8] =
     include_bytes!("../../../../assets/font/FiraMono-Regular.ttf");
 
-#[derive(Debug, NitrousModule)]
+#[derive(Debug)]
 pub struct WidgetBuffer {
     // Widget state.
     root: Arc<RwLock<FloatBox>>,
@@ -94,14 +93,13 @@ pub struct WidgetBuffer {
     bind_group: Option<wgpu::BindGroup>,
 }
 
-#[inject_nitrous_module]
 impl WidgetBuffer {
     const MAX_WIDGETS: usize = 512;
     const MAX_TEXT_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6;
     const MAX_BACKGROUND_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6; // note: rounded corners
     const MAX_IMAGE_VERTICES: usize = Self::MAX_WIDGETS * 4 * 6;
 
-    pub fn new(gpu: &mut GPU) -> Fallible<Self> {
+    pub fn new(gpu: &mut GPU) -> Fallible<Arc<RwLock<Self>>> {
         trace!("WidgetBuffer::new");
 
         let mut paint_context = PaintContext::new(gpu.device());
@@ -190,7 +188,7 @@ impl WidgetBuffer {
                     ],
                 });
 
-        Ok(Self {
+        Ok(Arc::new(RwLock::new(Self {
             root: FloatBox::new(),
             paint_context,
 
@@ -201,17 +199,7 @@ impl WidgetBuffer {
 
             bind_group_layout,
             bind_group: None,
-        })
-    }
-
-    pub fn init(self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Arc<RwLock<Self>>> {
-        let widgets = Arc::new(RwLock::new(self));
-        interpreter.write().put(
-            interpreter.clone(),
-            "widgets",
-            Value::Module(widgets.clone()),
-        )?;
-        Ok(widgets)
+        })))
     }
 
     pub fn root(&self) -> Arc<RwLock<FloatBox>> {

@@ -38,8 +38,8 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
-    pub fn init(self) -> Fallible<Arc<RwLock<Self>>> {
-        Ok(Arc::new(RwLock::new(self)))
+    pub fn new() -> Fallible<Arc<RwLock<Self>>> {
+        Ok(Arc::new(RwLock::new(Self::default())))
     }
 
     pub fn with_locals<F>(&mut self, locals: &[(&str, Value)], callback: F) -> Fallible<Value>

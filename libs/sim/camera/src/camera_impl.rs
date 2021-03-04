@@ -76,6 +76,14 @@ impl Camera {
         self.exposure = exposure;
     }
 
+    pub fn increase_exposure(&mut self) {
+        self.exposure *= 1.1;
+    }
+
+    pub fn decrease_exposure(&mut self) {
+        self.exposure /= 1.1;
+    }
+
     pub fn fov_y(&self) -> Angle<Radians> {
         self.fov_y
     }

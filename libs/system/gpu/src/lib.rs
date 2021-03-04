@@ -25,7 +25,10 @@ pub use wgpu;
 use failure::{bail, err_msg, Fallible};
 use futures::executor::block_on;
 use log::{info, trace};
-use std::{fs, mem, path::PathBuf, sync::Arc};
+use nitrous::{Interpreter, Module, Value};
+use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use parking_lot::RwLock;
+use std::{fmt::Debug, fs, mem, path::PathBuf, sync::Arc};
 use tokio::runtime::Runtime;
 use wgpu::util::DeviceExt;
 use winit::{
@@ -34,6 +37,7 @@ use winit::{
 };
 use zerocopy::AsBytes;
 
+#[derive(Debug)]
 pub struct GPUConfig {
     present_mode: wgpu::PresentMode,
 }
@@ -45,6 +49,12 @@ impl Default for GPUConfig {
     }
 }
 
+/// Implement this and register with the gpu instance to get resize notifications.
+pub trait ResizeHint: Debug + 'static {
+    fn note_resize(&mut self, gpu: &GPU) -> Fallible<()>;
+}
+
+#[derive(Debug, NitrousModule)]
 pub struct GPU {
     surface: wgpu::Surface,
     _adapter: wgpu::Adapter,
@@ -53,6 +63,8 @@ pub struct GPU {
     swap_chain: wgpu::SwapChain,
     depth_texture: wgpu::TextureView,
 
+    resize_observers: Vec<Arc<RwLock<dyn ResizeHint>>>,
+
     config: GPUConfig,
     scale_factor: f64,
     physical_size: PhysicalSize<u32>,
@@ -60,10 +72,16 @@ pub struct GPU {
     frame_count: usize,
 }
 
+#[inject_nitrous_module]
 impl GPU {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
     pub const SCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 
+    pub fn add_resize_observer<T: ResizeHint>(&mut self, observer: Arc<RwLock<T>>) {
+        self.resize_observers.push(observer);
+    }
+
+    #[method]
     pub fn aspect_ratio(&self) -> f64 {
         self.logical_size.height.floor() / self.logical_size.width.floor()
     }
@@ -72,6 +90,7 @@ impl GPU {
         (self.logical_size.height.floor() / self.logical_size.width.floor()) as f32
     }
 
+    #[method]
     pub fn scale_factor(&self) -> f64 {
         self.scale_factor
     }
@@ -88,11 +107,19 @@ impl GPU {
         self.frame_count
     }
 
-    pub fn new(window: &Window, config: GPUConfig) -> Fallible<Self> {
-        block_on(Self::new_async(window, config))
+    pub fn new(
+        window: &Window,
+        config: GPUConfig,
+        interpreter: Arc<RwLock<Interpreter>>,
+    ) -> Fallible<Arc<RwLock<Self>>> {
+        block_on(Self::new_async(window, config, interpreter))
     }
 
-    pub async fn new_async(window: &Window, config: GPUConfig) -> Fallible<Self> {
+    pub async fn new_async(
+        window: &Window,
+        config: GPUConfig,
+        interpreter: Arc<RwLock<Interpreter>>,
+    ) -> Fallible<Arc<RwLock<Self>>> {
         window.set_title("Nitrogen");
         let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
 
@@ -132,19 +159,66 @@ impl GPU {
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
         let depth_texture = Self::create_depth_texture(&device, &sc_desc);
 
-        Ok(Self {
+        let gpu = Arc::new(RwLock::new(Self {
             surface,
             _adapter: adapter,
             device,
             queue,
             swap_chain,
             depth_texture,
+            resize_observers: Vec::new(),
             config,
             scale_factor,
             physical_size,
             logical_size,
             frame_count: 0,
-        })
+        }));
+
+        interpreter
+            .write()
+            .put(interpreter.clone(), "gpu", Value::Module(gpu.clone()))?;
+
+        // The GPU requires some non-optional bindings for various system events.
+        interpreter.write().interpret_once(
+            r#"
+            let bindings := mapper.create_bindings("gpu");
+            bindings.bind("windowResize", "gpu.on_resize(width, height)");
+            bindings.bind("windowDpiChange", "gpu.on_dpi_change(scale)");
+            "#,
+        )?;
+
+        Ok(gpu)
+    }
+
+    #[method]
+    pub fn on_resize(&mut self, width: i64, height: i64) -> Fallible<()> {
+        self.physical_size = PhysicalSize {
+            width: width as u32,
+            height: height as u32,
+        };
+        self.logical_size = self.physical_size.to_logical(self.scale_factor);
+        let sc_desc = wgpu::SwapChainDescriptor {
+            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
+            format: Self::SCREEN_FORMAT,
+            width: self.physical_size.width,
+            height: self.physical_size.height,
+            present_mode: self.config.present_mode,
+        };
+        self.swap_chain = self.device.create_swap_chain(&self.surface, &sc_desc);
+        self.depth_texture = Self::create_depth_texture(&self.device, &sc_desc);
+
+        for module in &self.resize_observers {
+            module.write().note_resize(self)?;
+        }
+
+        Ok(())
+    }
+
+    #[method]
+    pub fn on_dpi_change(&mut self, scale: f64) -> Fallible<()> {
+        self.scale_factor = scale;
+        self.logical_size = self.physical_size.to_logical(self.scale_factor);
+        Ok(())
     }
 
     fn create_depth_texture(
@@ -184,21 +258,6 @@ impl GPU {
         }
     }
 
-    pub fn note_resize(&mut self, override_scale: Option<f64>, window: &Window) {
-        self.scale_factor = override_scale.unwrap_or_else(|| window.scale_factor());
-        self.physical_size = window.inner_size();
-        self.logical_size = self.physical_size.to_logical(self.scale_factor);
-        let sc_desc = wgpu::SwapChainDescriptor {
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
-            format: Self::SCREEN_FORMAT,
-            width: self.physical_size.width,
-            height: self.physical_size.height,
-            present_mode: self.config.present_mode,
-        };
-        self.swap_chain = self.device.create_swap_chain(&self.surface, &sc_desc);
-        self.depth_texture = Self::create_depth_texture(&self.device, &sc_desc);
-    }
-
     pub fn get_next_framebuffer(&mut self) -> Fallible<Option<wgpu::SwapChainFrame>> {
         self.frame_count += 1;
         match self.swap_chain.get_current_frame() {
@@ -211,7 +270,6 @@ impl GPU {
                 Ok(None)
             }
         }
-        //.map_err(|e| err_msg(format!("failed to get next swap chain image: {}", e)))?)
     }
 
     pub fn depth_attachment(&self) -> &wgpu::TextureView {

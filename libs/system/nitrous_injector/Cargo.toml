@@ -16,4 +16,5 @@ nitrous  = { path = "../../system/nitrous" }
 
 [dev-dependencies]
 log = "^ 0.4"
+ordered-float = "^ 2"
 parking_lot = "^ 0.11"

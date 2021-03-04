@@ -14,9 +14,11 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use failure::Fallible;
 use global_data::GlobalParametersBuffer;
-use gpu::{texture_format_component_type, GPU};
+use gpu::{texture_format_component_type, ResizeHint, GPU};
 use log::trace;
+use parking_lot::RwLock;
 use shader_shared::Group;
+use std::sync::Arc;
 use widget::{WidgetBuffer, WidgetVertex};
 use world::WorldRenderPass;
 
@@ -40,7 +42,7 @@ impl UiRenderPass {
         global_data: &GlobalParametersBuffer,
         widget_buffer: &WidgetBuffer,
         world_render_pass: &WorldRenderPass,
-    ) -> Fallible<Self> {
+    ) -> Fallible<Arc<RwLock<Self>>> {
         trace!("UiRenderPass::new");
 
         let deferred_bind_group_layout =
@@ -218,7 +220,7 @@ impl UiRenderPass {
                 alpha_to_coverage_enabled: false,
             });
 
-        Ok(Self {
+        let ui = Arc::new(RwLock::new(Self {
             deferred_texture,
             deferred_depth,
             deferred_sampler,
@@ -227,7 +229,11 @@ impl UiRenderPass {
 
             background_pipeline,
             text_pipeline,
-        })
+        }));
+
+        gpu.add_resize_observer(ui.clone());
+
+        Ok(ui)
     }
 
     fn _make_deferred_texture_targets(gpu: &GPU) -> (wgpu::Texture, wgpu::TextureView) {
@@ -312,17 +318,6 @@ impl UiRenderPass {
         })
     }
 
-    pub fn note_resize(&mut self, gpu: &GPU) {
-        self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
-        self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
-        self.deferred_bind_group = Self::_make_deferred_bind_group(
-            gpu,
-            &self.deferred_bind_group_layout,
-            &self.deferred_texture.1,
-            &self.deferred_sampler,
-        );
-    }
-
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.deferred_bind_group_layout
     }
@@ -380,5 +375,19 @@ impl UiRenderPass {
         rpass.draw(widget_buffer.text_vertex_range(), 0..1);
 
         Ok(rpass)
+    }
+}
+
+impl ResizeHint for UiRenderPass {
+    fn note_resize(&mut self, gpu: &GPU) -> Fallible<()> {
+        self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
+        self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
+        self.deferred_bind_group = Self::_make_deferred_bind_group(
+            gpu,
+            &self.deferred_bind_group_layout,
+            &self.deferred_texture.1,
+            &self.deferred_sampler,
+        );
+        Ok(())
     }
 }

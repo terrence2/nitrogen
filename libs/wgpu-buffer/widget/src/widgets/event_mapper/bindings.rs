@@ -15,12 +15,13 @@
 use crate::widgets::event_mapper::{
     axis::AxisKind,
     keyset::{Key, KeySet},
+    window::WindowEventKind,
     State,
 };
 use failure::Fallible;
 use input::ElementState;
 use log::trace;
-use nitrous::{Interpreter, Module, Script, Value};
+use nitrous::{Interpreter, Script, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use smallvec::{smallvec, SmallVec};
@@ -33,6 +34,7 @@ pub struct Bindings {
     press_chords: HashMap<Key, Vec<KeySet>>,
     script_map: HashMap<KeySet, Script>,
     axis_map: HashMap<AxisKind, Script>,
+    windows_event_map: HashMap<WindowEventKind, Script>,
 }
 
 #[inject_nitrous_module]
@@ -43,6 +45,7 @@ impl Bindings {
             press_chords: HashMap::new(),
             script_map: HashMap::new(),
             axis_map: HashMap::new(),
+            windows_event_map: HashMap::new(),
         }
     }
 
@@ -51,20 +54,23 @@ impl Bindings {
         Ok(self)
     }
 
-    pub fn into_module(self) -> Arc<RwLock<dyn Module>> {
-        Arc::new(RwLock::new(self))
-    }
-
     #[method]
-    pub fn bind(&mut self, keyset_or_axis: &str, script_raw: &str) -> Fallible<()> {
+    pub fn bind(&mut self, event_name: &str, script_raw: &str) -> Fallible<()> {
         let script = Script::compile(script_raw)?;
 
-        if let Ok(axis) = AxisKind::from_virtual(keyset_or_axis) {
+        if let Ok(kind) = WindowEventKind::from_virtual(event_name) {
+            trace!("binding {:?} => {}", kind, script);
+            self.windows_event_map.insert(kind, script);
+            return Ok(());
+        }
+
+        if let Ok(axis) = AxisKind::from_virtual(event_name) {
+            trace!("binding {:?} => {}", axis, script);
             self.axis_map.insert(axis, script);
             return Ok(());
         }
 
-        for ks in KeySet::from_virtual(keyset_or_axis)?.drain(..) {
+        for ks in KeySet::from_virtual(event_name)?.drain(..) {
             trace!("binding {} => {}", ks, script);
             self.script_map.insert(ks.clone(), script.clone());
 
@@ -74,6 +80,17 @@ impl Bindings {
                 sets.push(ks.to_owned());
                 sets.sort_by_key(|ks| usize::max_value() - ks.keys.len());
             }
+        }
+        Ok(())
+    }
+
+    pub fn match_window_event(
+        &self,
+        event: WindowEventKind,
+        interpreter: &mut Interpreter,
+    ) -> Fallible<()> {
+        if let Some(script) = self.windows_event_map.get(&event) {
+            interpreter.interpret(script)?;
         }
         Ok(())
     }

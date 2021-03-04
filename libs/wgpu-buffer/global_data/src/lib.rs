@@ -18,6 +18,9 @@ use core::num::NonZeroU64;
 use failure::Fallible;
 use gpu::{UploadTracker, GPU};
 use nalgebra::{convert, Matrix3, Matrix4, Point3, Vector3, Vector4};
+use nitrous::{Interpreter, Module, Value};
+use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use parking_lot::RwLock;
 use std::{mem, sync::Arc};
 use zerocopy::{AsBytes, FromBytes};
 
@@ -144,16 +147,23 @@ impl Globals {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, NitrousModule)]
 pub struct GlobalParametersBuffer {
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
     buffer_size: wgpu::BufferAddress,
     parameters_buffer: Arc<Box<wgpu::Buffer>>,
+    tone_gamma: f32,
 }
 
+#[inject_nitrous_module]
 impl GlobalParametersBuffer {
-    pub fn new(device: &wgpu::Device) -> Fallible<Self> {
+    const INITIAL_GAMMA: f32 = 2.2f32;
+
+    pub fn new(
+        device: &wgpu::Device,
+        interpreter: Arc<RwLock<Interpreter>>,
+    ) -> Fallible<Arc<RwLock<Self>>> {
         let buffer_size = mem::size_of::<Globals>() as wgpu::BufferAddress;
         let parameters_buffer = Arc::new(Box::new(device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("globals-buffer"),
@@ -185,12 +195,46 @@ impl GlobalParametersBuffer {
             }],
         });
 
-        Ok(Self {
+        let globals = Arc::new(RwLock::new(Self {
             bind_group_layout,
             bind_group,
             buffer_size,
             parameters_buffer,
-        })
+            tone_gamma: Self::INITIAL_GAMMA,
+        }));
+
+        interpreter.write().put(
+            interpreter.clone(),
+            "globals",
+            Value::Module(globals.clone()),
+        )?;
+
+        Ok(globals)
+    }
+
+    pub fn add_default_bindings(&mut self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<()> {
+        interpreter.write().interpret_once(
+            r#"
+                let bindings := mapper.create_bindings("globals");
+                bindings.bind("LBracket", "globals.decrease_gamma(pressed)");
+                bindings.bind("RBracket", "globals.increase_gamma(pressed)");
+            "#,
+        )?;
+        Ok(())
+    }
+
+    #[method]
+    pub fn increase_gamma(&mut self, pressed: bool) {
+        if pressed {
+            self.tone_gamma *= 1.1;
+        }
+    }
+
+    #[method]
+    pub fn decrease_gamma(&mut self, pressed: bool) {
+        if pressed {
+            self.tone_gamma /= 1.1;
+        }
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
@@ -204,7 +248,6 @@ impl GlobalParametersBuffer {
     pub fn make_upload_buffer(
         &self,
         camera: &Camera,
-        tone_gamma: f32,
         gpu: &GPU,
         tracker: &mut UploadTracker,
     ) -> Fallible<()> {
@@ -212,7 +255,7 @@ impl GlobalParametersBuffer {
         let globals = globals
             .with_screen_overlay_projection(gpu)
             .with_camera(camera)
-            .with_tone(tone_gamma);
+            .with_tone(self.tone_gamma);
         let buffer = gpu.push_data(
             "global-upload-buffer",
             &globals,

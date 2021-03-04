@@ -156,7 +156,8 @@ impl GenericEvent {
             } | Self::JoystickAxis {
                 window_focused: true,
                 ..
-            }
+            } | Self::Window(_)
+                | Self::System(_)
         )
     }
 }

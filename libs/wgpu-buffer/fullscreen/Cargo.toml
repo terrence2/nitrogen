@@ -12,8 +12,6 @@ wgpu = "^ 0.6"
 zerocopy = "^ 0.3"
 camera = { path = "../../sim/camera" }
 gpu = { path = "../../system/gpu" }
-nitrous = { path = "../../system/nitrous" }
-nitrous_injector = { path = "../../system/nitrous_injector" }
 
 [dev-dependencies]
 absolute_unit = { path = "../../sim/absolute_unit" }

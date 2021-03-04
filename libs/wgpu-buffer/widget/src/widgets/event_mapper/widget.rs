@@ -18,12 +18,13 @@ use crate::{
         axis::AxisKind,
         bindings::Bindings,
         keyset::{Key, KeySet},
+        window::WindowEventKind,
     },
     PaintContext,
 };
 use failure::Fallible;
 use gpu::GPU;
-use input::{ElementState, GenericEvent, ModifiersState};
+use input::{ElementState, GenericEvent, GenericWindowEvent, ModifiersState};
 use nitrous::{Interpreter, Module, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use ordered_float::OrderedFloat;
@@ -48,8 +49,8 @@ pub struct EventMapper {
 
 #[inject_nitrous_module]
 impl EventMapper {
-    pub fn init(self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Arc<RwLock<Self>>> {
-        let mapper = Arc::new(RwLock::new(self));
+    pub fn new(interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Arc<RwLock<Self>>> {
+        let mapper = Arc::new(RwLock::new(Default::default()));
         interpreter
             .write()
             .put(interpreter.clone(), "mapper", Value::Module(mapper.clone()))?;
@@ -168,6 +169,40 @@ impl Widget for EventMapper {
                             },
                         )?;
                     }
+
+                    GenericEvent::Window(evt) => match evt {
+                        GenericWindowEvent::Resized { width, height } => {
+                            interpreter.write().with_locals(
+                                &[
+                                    ("width", Value::Integer(*width as i64)),
+                                    ("height", Value::Integer(*height as i64)),
+                                ],
+                                |inner| {
+                                    for bindings in self.bindings.values() {
+                                        bindings
+                                            .read()
+                                            .match_window_event(WindowEventKind::Resize, inner)?;
+                                    }
+                                    Ok(Value::True())
+                                },
+                            )?;
+                        }
+
+                        GenericWindowEvent::ScaleFactorChanged { scale } => {
+                            interpreter.write().with_locals(
+                                &[("scale", Value::Float(OrderedFloat(*scale)))],
+                                |inner| {
+                                    for bindings in self.bindings.values() {
+                                        bindings.read().match_window_event(
+                                            WindowEventKind::DpiChange,
+                                            inner,
+                                        )?;
+                                    }
+                                    Ok(Value::True())
+                                },
+                            )?;
+                        }
+                    },
 
                     _ => {
                         //println!("unexpected event: {:?}", event);

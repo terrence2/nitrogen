@@ -8,12 +8,15 @@ edition = "2018"
 failure = "^ 0.1.2"
 log = "^ 0.4"
 nalgebra = "^ 0.24"
+parking_lot = "^ 0.11"
 wgpu = "^ 0.6"
 zerocopy = "^ 0.3"
 absolute_unit = { path = "../../sim/absolute_unit" }
 geodesy = { path = "../../sim/geodesy" }
 camera = { path = "../../sim/camera" }
 gpu = { path = "../../system/gpu" }
+nitrous = { path = "../../system/nitrous" }
+nitrous_injector = { path = "../../system/nitrous_injector" }
 
 [dev-dependencies]
 winit = { version = "^ 0.24", features = ["web-sys"] }

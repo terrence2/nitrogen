@@ -18,6 +18,7 @@ use absolute_unit::{
 };
 use failure::{ensure, Fallible};
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
+use gpu::{ResizeHint, GPU};
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
 use nitrous::{Interpreter, Module, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -39,9 +40,14 @@ pub struct ArcBallCamera {
 #[inject_nitrous_module]
 impl ArcBallCamera {
     // FIXME: push camera in from outside
-    pub fn new(aspect_ratio: f64, z_near: Length<Meters>) -> Self {
+    pub fn new(
+        aspect_ratio: f64,
+        z_near: Length<Meters>,
+        gpu: &mut GPU,
+        interpreter: Arc<RwLock<Interpreter>>,
+    ) -> Fallible<Arc<RwLock<Self>>> {
         let fov_y = radians!(PI / 2f64);
-        Self {
+        let arcball = Arc::new(RwLock::new(Self {
             camera: Camera::from_parameters(fov_y, aspect_ratio, z_near),
             target: Graticule::<GeoSurface>::new(radians!(0), radians!(0), meters!(0)),
             target_height_delta: meters!(0),
@@ -53,20 +59,20 @@ impl ArcBallCamera {
             fov_delta: degrees!(0),
             in_rotate: false,
             in_move: false,
-        }
-    }
+        }));
 
-    pub fn init(self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Arc<RwLock<Self>>> {
-        let arcball = Arc::new(RwLock::new(self));
+        gpu.add_resize_observer(arcball.clone());
+
         interpreter.write().put(
             interpreter.clone(),
             "camera",
             Value::Module(arcball.clone()),
         )?;
+
         Ok(arcball)
     }
 
-    pub fn with_default_bindings(self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Self> {
+    pub fn add_default_bindings(&mut self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<()> {
         interpreter.write().interpret_once(
             r#"
                 let bindings := mapper.create_bindings("arc_ball_camera");
@@ -80,9 +86,11 @@ impl ArcBallCamera {
                 bindings.bind("Shift+Down", "camera.target_down_fast(pressed)");
                 bindings.bind("Up", "camera.target_up(pressed)");
                 bindings.bind("Down", "camera.target_down(pressed)");
+                bindings.bind("Shift+LBracket", "camera.decrease_exposure(pressed)");
+                bindings.bind("Shift+RBracket", "camera.increase_exposure(pressed)");
             "#,
         )?;
-        Ok(self)
+        Ok(())
     }
 
     pub fn camera(&self) -> &Camera {
@@ -160,6 +168,20 @@ impl ArcBallCamera {
     #[method]
     pub fn decrease_fov(&mut self, pressed: bool) {
         self.fov_delta = degrees!(if pressed { -1 } else { 0 });
+    }
+
+    #[method]
+    pub fn increase_exposure(&mut self, pressed: bool) {
+        if pressed {
+            self.camera.increase_exposure();
+        }
+    }
+
+    #[method]
+    pub fn decrease_exposure(&mut self, pressed: bool) {
+        if pressed {
+            self.camera.decrease_exposure();
+        }
     }
 
     #[method]
@@ -264,6 +286,13 @@ impl ArcBallCamera {
             up.normalize(),
             right.normalize(),
         );
+    }
+}
+
+impl ResizeHint for ArcBallCamera {
+    fn note_resize(&mut self, gpu: &GPU) -> Fallible<()> {
+        self.camera.set_aspect_ratio(gpu.aspect_ratio());
+        Ok(())
     }
 }
 

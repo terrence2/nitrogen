@@ -7,9 +7,10 @@ edition = "2018"
 [dependencies]
 failure = "^ 0.1.2"
 log = "^ 0.4"
+parking_lot =  "^ 0.11"
 wgpu = "^ 0.6"
-gpu = { path = "../../system/gpu" }
 global_data = { path = "../../wgpu-buffer/global_data" }
+gpu = { path = "../../system/gpu" }
 shader_shared = { path = "../../wgpu-buffer/shader_shared" }
 widget = { path = "../../wgpu-buffer/widget" }
 world = { path = "../../wgpu-buffer/world" }

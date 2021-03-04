@@ -15,6 +15,7 @@
 use failure::Fallible;
 use nitrous::{Interpreter, Module, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
 use std::sync::Arc;
 
@@ -36,6 +37,11 @@ impl TestInjector {
     #[method]
     fn integer(&self, i: i64) -> i64 {
         i * 2
+    }
+
+    #[method]
+    fn float(&self, f: f64) -> f64 {
+        f * 2.
     }
 
     #[method]
@@ -62,6 +68,11 @@ impl TestInjector {
     #[method]
     fn fail_integer(&self, i: i64) -> Fallible<i64> {
         Ok(i * 2)
+    }
+
+    #[method]
+    fn fail_float(&self, f: f64) -> Fallible<f64> {
+        Ok(f * 2.)
     }
 
     #[method]
@@ -94,6 +105,10 @@ fn test_it_works() -> Fallible<()> {
     assert_eq!(
         interpreter.write().interpret_once("test.integer(42)")?,
         Value::Integer(84)
+    );
+    assert_eq!(
+        interpreter.write().interpret_once("test.float(42.0)")?,
+        Value::Float(OrderedFloat(84.0))
     );
     assert_eq!(
         interpreter
