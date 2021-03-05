@@ -16,7 +16,7 @@ nalgebra = "^ 0.24"
 num-traits = "^ 0.2"
 static_assertions = "^ 1"
 wgpu = "^ 0.6"
-zerocopy = "^ 0.3"
+zerocopy = "= 0.3.0"
 camera = { path = "../../sim/camera" }
 gpu = { path = "../../system/gpu" }
 
