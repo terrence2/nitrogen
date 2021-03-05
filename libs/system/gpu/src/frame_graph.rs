@@ -156,6 +156,7 @@ mod test {
     use crate::{UploadTracker, GPU};
     use failure::Fallible;
     use legion::*;
+    use nitrous::Interpreter;
     use parking_lot::RwLock;
     use std::{cell::RefCell, sync::Arc};
     use winit::{event_loop::EventLoop, window::Window};
@@ -300,16 +301,21 @@ mod test {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;
+        let interpreter = Interpreter::new();
         let mut legion = World::default();
-        let mut gpu = GPU::new(&window, Default::default())?;
-        let test_buffer = Arc::new(RwLock::new(TestBuffer::new(&gpu)));
-        let test_renderer = Arc::new(RwLock::new(TestRenderer::new(&gpu, &test_buffer.read())?));
-        let mut frame_graph = FrameGraph::new(&mut legion, &mut gpu, test_buffer, test_renderer)?;
+        let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
+        let test_buffer = Arc::new(RwLock::new(TestBuffer::new(&gpu.read())));
+        let test_renderer = Arc::new(RwLock::new(TestRenderer::new(
+            &gpu.read(),
+            &test_buffer.read(),
+        )?));
+        let mut frame_graph =
+            FrameGraph::new(&mut legion, &mut gpu.write(), test_buffer, test_renderer)?;
 
         for _ in 0..3 {
             let mut upload_tracker = Default::default();
             frame_graph.test_buffer_mut().update(&mut upload_tracker);
-            frame_graph.run(&mut gpu, upload_tracker)?;
+            frame_graph.run(&mut gpu.write(), upload_tracker)?;
         }
 
         assert_eq!(frame_graph.test_buffer().update_count, 3);

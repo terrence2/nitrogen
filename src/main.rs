@@ -28,7 +28,8 @@ use input::{InputController, InputSystem};
 use legion::world::World;
 use log::trace;
 use nalgebra::convert;
-use nitrous::Interpreter;
+use nitrous::{Interpreter, Value};
+use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use orrery::Orrery;
 use parking_lot::RwLock;
 use stars::StarsBuffer;
@@ -51,6 +52,37 @@ struct Opt {
     /// Regenerate instead of loading cached items on startup
     #[structopt(long = "no-cache")]
     no_cache: bool,
+}
+
+#[derive(Debug, Default, NitrousModule)]
+struct Demo {
+    exit: bool,
+}
+
+#[inject_nitrous_module]
+impl Demo {
+    pub fn new(interpreter: &mut Interpreter) -> Arc<RwLock<Self>> {
+        let demo = Arc::new(RwLock::new(Self::default()));
+        interpreter.put_global("demo", Value::Module(demo.clone()));
+        demo
+    }
+
+    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Fallible<()> {
+        interpreter.interpret_once(
+            r#"
+                let bindings := mapper.create_bindings("demo");
+                bindings.bind("quit", "demo.exit()");
+                bindings.bind("Escape", "demo.exit()");
+                bindings.bind("q", "demo.exit()");
+            "#,
+        )?;
+        Ok(())
+    }
+
+    #[method]
+    pub fn exit(&mut self) {
+        self.exit = true;
+    }
 }
 
 make_frame_graph!(
@@ -103,9 +135,9 @@ fn main() -> Fallible<()> {
 
     let system_bindings = LegacyBindings::new("map")
         .bind("demo.pin_view", "p")?
-        .bind("demo.toggle_terminal", "Shift+Grave")?
-        .bind("demo.exit", "Escape")?
-        .bind("demo.exit", "q")?;
+        .bind("demo.toggle_terminal", "Shift+Grave")?;
+    // .bind("demo.exit", "Escape")?
+    // .bind("demo.exit", "q")?;
     InputSystem::run_forever(vec![system_bindings], window_main)
 }
 
@@ -125,27 +157,24 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         catalog.add_drawer(DirectoryDrawer::from_directory(100 + i as i64, d)?)?;
     }
 
-    let interpreter = Interpreter::new()?;
-    let mapper = EventMapper::new(interpreter.clone())?;
+    let interpreter = Interpreter::new();
+    let mapper = EventMapper::new(&mut interpreter.write());
 
-    let gpu = GPU::new(&window, Default::default(), interpreter.clone())?;
-    let init_aspect_ratio = gpu.read().aspect_ratio();
+    let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
 
-    let orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0), interpreter.clone())?;
-    let arcball = ArcBallCamera::new(
-        init_aspect_ratio,
-        meters!(0.5),
-        &mut gpu.write(),
-        interpreter.clone(),
-    )?;
+    let orrery = Orrery::new(
+        Utc.ymd(1964, 2, 24).and_hms(12, 0, 0),
+        &mut interpreter.write(),
+    );
+    let arcball = ArcBallCamera::new(meters!(0.5), &mut gpu.write(), &mut interpreter.write());
 
     ///////////////////////////////////////////////////////////
     let atmosphere_buffer = Arc::new(RwLock::new(AtmosphereBuffer::new(
         opt.no_cache,
         &mut gpu.write(),
     )?));
-    let fullscreen_buffer = FullscreenBuffer::new(&gpu.read())?;
-    let globals = GlobalParametersBuffer::new(gpu.read().device(), interpreter.clone())?;
+    let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
+    let globals = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter.write());
     let stars_buffer = Arc::new(RwLock::new(StarsBuffer::new(&gpu.read())?));
     let terrain_geo_buffer = TerrainGeoBuffer::new(
         &catalog,
@@ -153,13 +182,13 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         gpu_detail,
         &globals.read(),
         &mut gpu.write(),
-        interpreter.clone(),
+        &mut interpreter.write(),
     )?;
-    let widget_buffer = WidgetBuffer::new(&mut gpu.write())?;
+    let widgets = WidgetBuffer::new(&mut gpu.write())?;
     let catalog = Arc::new(AsyncRwLock::new(catalog));
     let world = WorldRenderPass::new(
         &mut gpu.write(),
-        interpreter.clone(),
+        &mut interpreter.write(),
         &globals.read(),
         &atmosphere_buffer.read(),
         &stars_buffer.read(),
@@ -168,7 +197,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     let ui = UiRenderPass::new(
         &mut gpu.write(),
         &globals.read(),
-        &widget_buffer.read(),
+        &widgets.read(),
         &world.read(),
     )?;
     let composite = Arc::new(RwLock::new(CompositeRenderPass::new(
@@ -186,37 +215,21 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         globals.clone(),
         stars_buffer,
         terrain_geo_buffer,
-        widget_buffer,
+        widgets.clone(),
         world.clone(),
         ui,
         composite,
     )?;
     ///////////////////////////////////////////////////////////
 
-    // let system_bindings = Bindings::new("map")
-    //     .bind("demo.pin_view", "p")?
-    //     .bind("demo.toggle_terminal", "Shift+Grave")?
-    //     .bind("demo.exit", "Escape")?
-    //     .bind("demo.exit", "q")?;
-    orrery.write().add_default_bindings(interpreter.clone())?;
-    arcball.write().add_default_bindings(interpreter.clone())?;
-    globals.write().add_default_bindings(interpreter.clone())?;
-    world.write().add_default_bindings(interpreter.clone())?;
-
-    frame_graph
-        .widgets
-        .read()
-        .root()
-        .write()
-        .add_child("mapper", mapper);
+    widgets.read().root().write().add_child("mapper", mapper);
 
     let version_label = Label::new("Nitrogen v0.1")
         .with_color(Color::Green)
         .with_size(8.0)
         .with_pre_blended_text()
         .wrapped();
-    frame_graph
-        .widgets
+    widgets
         .read()
         .root()
         .write()
@@ -228,8 +241,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         .with_size(13.0)
         .with_pre_blended_text()
         .wrapped();
-    frame_graph
-        .widgets
+    widgets
         .read()
         .root()
         .write()
@@ -239,8 +251,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     let terminal = Terminal::new(frame_graph.widgets.read().font_context())
         .with_visible(false)
         .wrapped();
-    frame_graph
-        .widgets
+    widgets
         .read()
         .root()
         .write()
@@ -277,21 +288,31 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     //     meters!(1308.7262),
     // ))?;
 
+    let demo = Demo::new(&mut interpreter.write());
+
+    // let system_bindings = Bindings::new("map")
+    //     .bind("demo.pin_view", "p")?
+    //     .bind("demo.toggle_terminal", "Shift+Grave")?
+    {
+        let interp = &mut interpreter.write();
+        orrery.write().add_default_bindings(interp)?;
+        arcball.write().add_default_bindings(interp)?;
+        globals.write().add_default_bindings(interp)?;
+        world.write().add_default_bindings(interp)?;
+        demo.write().add_default_bindings(interp)?;
+    }
+
     let mut is_camera_pinned = false;
     let mut camera_double = arcball.read().camera().to_owned();
     let mut show_terminal = false;
-    loop {
+    while !demo.read().exit {
         let loop_start = Instant::now();
 
-        frame_graph
-            .widgets
+        widgets
             .write()
-            .handle_events(&input_controller.poll_events()?, interpreter.clone())?;
+            .handle_events(&input_controller.poll_events()?, &mut interpreter.write())?;
 
         for command in input_controller.poll_commands()? {
-            if InputSystem::is_close_command(&command) || command.full() == "demo.exit" {
-                return Ok(());
-            }
             match command.full() {
                 "demo.pin_view" => {
                     println!("eye_rel: {}", arcball.read().get_eye_relative());
@@ -352,4 +373,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         );
         fps_label.write().set_text(ts);
     }
+
+    Ok(())
 }

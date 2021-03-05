@@ -87,7 +87,7 @@ impl Widget for Terminal {
     fn handle_events(
         &mut self,
         events: &[GenericEvent],
-        interpreter: Arc<RwLock<Interpreter>>,
+        interpreter: &mut Interpreter,
     ) -> Fallible<()> {
         if self.visible {
             self.edit.write().handle_events(events, interpreter)

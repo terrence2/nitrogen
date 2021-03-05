@@ -23,6 +23,7 @@ use input::{
     GenericEvent, GenericSystemEvent, GenericWindowEvent, InputController, InputSystem,
     VirtualKeyCode,
 };
+use nitrous::Interpreter;
 use winit::window::Window;
 
 fn main() -> Fallible<()> {
@@ -30,22 +31,29 @@ fn main() -> Fallible<()> {
 }
 
 fn window_main(window: Window, input_controller: &InputController) -> Fallible<()> {
-    let mut gpu = GPU::new(&window, Default::default())?;
+    let interpreter = Interpreter::new();
+    let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
 
-    let globals_buffer = GlobalParametersBuffer::new(gpu.device())?;
-    let fullscreen_buffer = FullscreenBuffer::new(&gpu)?;
+    let globals_buffer = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter.write());
+    let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
 
-    let vert_shader = gpu.create_shader_module(include_bytes!("../target/example.vert.spirv"))?;
-    let frag_shader = gpu.create_shader_module(include_bytes!("../target/example.frag.spirv"))?;
+    let vert_shader = gpu
+        .read()
+        .create_shader_module(include_bytes!("../target/example.vert.spirv"))?;
+    let frag_shader = gpu
+        .read()
+        .create_shader_module(include_bytes!("../target/example.frag.spirv"))?;
 
-    let pipeline_layout = gpu
-        .device()
-        .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("main-pipeline-layout"),
-            push_constant_ranges: &[],
-            bind_group_layouts: &[globals_buffer.bind_group_layout()],
-        });
+    let pipeline_layout =
+        gpu.read()
+            .device()
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("main-pipeline-layout"),
+                push_constant_ranges: &[],
+                bind_group_layouts: &[globals_buffer.read().bind_group_layout()],
+            });
     let pipeline = gpu
+        .read()
         .device()
         .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("main-pipeline"),
@@ -93,19 +101,19 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
             alpha_to_coverage_enabled: false,
         });
 
-    let mut arcball = ArcBallCamera::new(gpu.aspect_ratio(), meters!(0.1));
-    arcball.pan_view(true);
-    arcball.set_eye_relative(Graticule::<Target>::new(
+    let arcball = ArcBallCamera::new(meters!(0.1), &mut gpu.write(), &mut interpreter.write());
+    arcball.write().pan_view(true);
+    arcball.write().set_eye_relative(Graticule::<Target>::new(
         degrees!(0),
         degrees!(0),
         meters!(10),
     ))?;
-    arcball.set_target(Graticule::<GeoSurface>::new(
+    arcball.write().set_target(Graticule::<GeoSurface>::new(
         degrees!(0),
         degrees!(0),
         meters!(10),
     ));
-    arcball.set_distance(meters!(40.0));
+    arcball.write().set_distance(meters!(40.0));
 
     loop {
         for event in input_controller.poll_events()? {
@@ -119,13 +127,11 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                         return Ok(());
                     }
                 }
-                GenericEvent::Window(GenericWindowEvent::Resized { .. }) => {
-                    gpu.note_resize(None, &window);
-                    arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
+                GenericEvent::Window(GenericWindowEvent::Resized { width, height }) => {
+                    gpu.write().on_resize(width as i64, height as i64)?;
                 }
                 GenericEvent::Window(GenericWindowEvent::ScaleFactorChanged { scale }) => {
-                    gpu.note_resize(Some(scale), &window);
-                    arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
+                    gpu.write().on_dpi_change(scale)?;
                 }
                 GenericEvent::System(GenericSystemEvent::Quit) => {
                     return Ok(());
@@ -133,15 +139,20 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                 _ => {}
             }
         }
-        arcball.handle_mousemotion(-0.5f64, 0f64);
-        arcball.think();
+        arcball.write().handle_mousemotion(-0.5f64, 0f64);
+        arcball.write().think();
 
         // Prepare new camera parameters.
         let mut tracker = Default::default();
-        globals_buffer.make_upload_buffer(arcball.camera(), 2.2, &gpu, &mut tracker)?;
+        globals_buffer.read().make_upload_buffer(
+            arcball.read().camera(),
+            &gpu.read(),
+            &mut tracker,
+        )?;
 
-        let gb_borrow = &globals_buffer;
-        let fs_borrow = &fullscreen_buffer;
+        let gpu = &mut gpu.write();
+        let gb_borrow = &globals_buffer.read();
+        let fs_borrow = &fullscreen_buffer.read();
         let framebuffer = gpu.get_next_framebuffer()?.unwrap();
         let mut encoder = gpu
             .device()

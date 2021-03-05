@@ -20,7 +20,7 @@ use failure::{ensure, Fallible};
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
 use gpu::{ResizeHint, GPU};
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
-use nitrous::{Interpreter, Module, Value};
+use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use std::{f64::consts::PI, sync::Arc};
@@ -39,15 +39,20 @@ pub struct ArcBallCamera {
 
 #[inject_nitrous_module]
 impl ArcBallCamera {
-    // FIXME: push camera in from outside
     pub fn new(
-        aspect_ratio: f64,
         z_near: Length<Meters>,
         gpu: &mut GPU,
-        interpreter: Arc<RwLock<Interpreter>>,
-    ) -> Fallible<Arc<RwLock<Self>>> {
+        interpreter: &mut Interpreter,
+    ) -> Arc<RwLock<Self>> {
+        let arcball = Arc::new(RwLock::new(Self::detached(gpu.aspect_ratio(), z_near)));
+        gpu.add_resize_observer(arcball.clone());
+        interpreter.put_global("camera", Value::Module(arcball.clone()));
+        arcball
+    }
+
+    pub fn detached(aspect_ratio: f64, z_near: Length<Meters>) -> Self {
         let fov_y = radians!(PI / 2f64);
-        let arcball = Arc::new(RwLock::new(Self {
+        Self {
             camera: Camera::from_parameters(fov_y, aspect_ratio, z_near),
             target: Graticule::<GeoSurface>::new(radians!(0), radians!(0), meters!(0)),
             target_height_delta: meters!(0),
@@ -59,21 +64,11 @@ impl ArcBallCamera {
             fov_delta: degrees!(0),
             in_rotate: false,
             in_move: false,
-        }));
-
-        gpu.add_resize_observer(arcball.clone());
-
-        interpreter.write().put(
-            interpreter.clone(),
-            "camera",
-            Value::Module(arcball.clone()),
-        )?;
-
-        Ok(arcball)
+        }
     }
 
-    pub fn add_default_bindings(&mut self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<()> {
-        interpreter.write().interpret_once(
+    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Fallible<()> {
+        interpreter.interpret_once(
             r#"
                 let bindings := mapper.create_bindings("arc_ball_camera");
                 bindings.bind("mouse1", "camera.pan_view(pressed)");
@@ -305,7 +300,7 @@ mod tests {
 
     #[test]
     fn it_can_compute_eye_positions_at_origin() -> Fallible<()> {
-        let mut c = ArcBallCamera::new(1f64, meters!(0.1f64));
+        let mut c = ArcBallCamera::detached(1f64, meters!(0.1f64));
 
         // Verify base target position.
         let t = c.cartesian_target_position::<Kilometers>();
@@ -363,7 +358,7 @@ mod tests {
 
     #[test]
     fn it_can_compute_eye_positions_with_offset_latitude() -> Fallible<()> {
-        let mut c = ArcBallCamera::new(1f64, meters!(0.1f64));
+        let mut c = ArcBallCamera::detached(1f64, meters!(0.1f64));
 
         // Verify base target position.
         let t = c.cartesian_target_position::<Kilometers>();
@@ -405,7 +400,7 @@ mod tests {
 
     #[test]
     fn it_can_compute_eye_positions_with_offset_longitude() -> Fallible<()> {
-        let mut c = ArcBallCamera::new(1f64, meters!(0.1f64));
+        let mut c = ArcBallCamera::detached(1f64, meters!(0.1f64));
 
         // Verify base target position.
         let t = c.cartesian_target_position::<Kilometers>();

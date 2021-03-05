@@ -18,7 +18,7 @@ use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::GlobalParametersBuffer;
 use gpu::{texture_format_component_type, ResizeHint, GPU};
 use log::trace;
-use nitrous::{Interpreter, Module, Value};
+use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use shader_shared::Group;
@@ -68,7 +68,7 @@ pub struct WorldRenderPass {
 impl WorldRenderPass {
     pub fn new(
         gpu: &mut GPU,
-        interpreter: Arc<RwLock<Interpreter>>,
+        interpreter: &mut Interpreter,
         globals_buffer: &GlobalParametersBuffer,
         atmosphere_buffer: &AtmosphereBuffer,
         stars_buffer: &StarsBuffer,
@@ -260,9 +260,7 @@ impl WorldRenderPass {
 
         gpu.add_resize_observer(world.clone());
 
-        interpreter
-            .write()
-            .put(interpreter.clone(), "world", Value::Module(world.clone()))?;
+        interpreter.put_global("world", Value::Module(world.clone()));
 
         Ok(world)
     }
@@ -402,8 +400,8 @@ impl WorldRenderPass {
         })
     }
 
-    pub fn add_default_bindings(&mut self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<()> {
-        interpreter.write().interpret_once(
+    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Fallible<()> {
+        interpreter.interpret_once(
             r#"
                 let bindings := mapper.create_bindings("world");
                 bindings.bind("w", "world.toggle_wireframe_mode(pressed)");

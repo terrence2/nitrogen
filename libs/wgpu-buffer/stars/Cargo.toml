@@ -24,6 +24,7 @@ fullscreen = { path = "../../wgpu-buffer/fullscreen" }
 geodesy = { path = "../../sim/geodesy" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 input = { path = "../../system/input" }
+nitrous = { path = "../../system/nitrous" }
 winit = { version = "^ 0.24", features = ["web-sys"] }
 
 [build-dependencies]

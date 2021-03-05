@@ -18,7 +18,7 @@ use core::num::NonZeroU64;
 use failure::Fallible;
 use gpu::{UploadTracker, GPU};
 use nalgebra::{convert, Matrix3, Matrix4, Point3, Vector3, Vector4};
-use nitrous::{Interpreter, Module, Value};
+use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use std::{mem, sync::Arc};
@@ -160,10 +160,7 @@ pub struct GlobalParametersBuffer {
 impl GlobalParametersBuffer {
     const INITIAL_GAMMA: f32 = 2.2f32;
 
-    pub fn new(
-        device: &wgpu::Device,
-        interpreter: Arc<RwLock<Interpreter>>,
-    ) -> Fallible<Arc<RwLock<Self>>> {
+    pub fn new(device: &wgpu::Device, interpreter: &mut Interpreter) -> Arc<RwLock<Self>> {
         let buffer_size = mem::size_of::<Globals>() as wgpu::BufferAddress;
         let parameters_buffer = Arc::new(Box::new(device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("globals-buffer"),
@@ -203,17 +200,13 @@ impl GlobalParametersBuffer {
             tone_gamma: Self::INITIAL_GAMMA,
         }));
 
-        interpreter.write().put(
-            interpreter.clone(),
-            "globals",
-            Value::Module(globals.clone()),
-        )?;
+        interpreter.put_global("globals", Value::Module(globals.clone()));
 
-        Ok(globals)
+        globals
     }
 
-    pub fn add_default_bindings(&mut self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<()> {
-        interpreter.write().interpret_once(
+    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Fallible<()> {
+        interpreter.interpret_once(
             r#"
                 let bindings := mapper.create_bindings("globals");
                 bindings.bind("LBracket", "globals.decrease_gamma(pressed)");
@@ -225,6 +218,7 @@ impl GlobalParametersBuffer {
 
     #[method]
     pub fn increase_gamma(&mut self, pressed: bool) {
+        println!("GAMMA INCREASE");
         if pressed {
             self.tone_gamma *= 1.1;
         }
@@ -232,6 +226,7 @@ impl GlobalParametersBuffer {
 
     #[method]
     pub fn decrease_gamma(&mut self, pressed: bool) {
+        println!("GAMMA DECREASE");
         if pressed {
             self.tone_gamma /= 1.1;
         }
@@ -388,8 +383,10 @@ mod tests {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;
-        let gpu = GPU::new(&window, Default::default())?;
-        let _globals_buffer = GlobalParametersBuffer::new(gpu.device())?;
+        let interpreter = Interpreter::new();
+        let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
+        let _globals_buffer =
+            GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter.write());
         Ok(())
     }
 }

@@ -38,8 +38,8 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
-    pub fn new() -> Fallible<Arc<RwLock<Self>>> {
-        Ok(Arc::new(RwLock::new(Self::default())))
+    pub fn new() -> Arc<RwLock<Self>> {
+        Arc::new(RwLock::new(Self::default()))
     }
 
     pub fn with_locals<F>(&mut self, locals: &[(&str, Value)], callback: F) -> Fallible<Value>
@@ -54,6 +54,14 @@ impl Interpreter {
             self.locals.remove(*name);
         }
         result
+    }
+
+    pub fn put_global(&mut self, name: &str, value: Value) {
+        self.memory.insert(name.to_owned(), value);
+    }
+
+    pub fn get_global(&self, name: &str) -> Option<&Value> {
+        self.memory.get(name)
     }
 
     pub fn interpret_once(&mut self, raw_script: &str) -> Fallible<Value> {

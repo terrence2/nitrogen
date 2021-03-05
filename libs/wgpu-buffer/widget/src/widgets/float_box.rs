@@ -126,13 +126,10 @@ impl Widget for FloatBox {
     fn handle_events(
         &mut self,
         events: &[GenericEvent],
-        interpreter: Arc<RwLock<Interpreter>>,
+        interpreter: &mut Interpreter,
     ) -> Fallible<()> {
         for child in self.children.values() {
-            child
-                .widget
-                .write()
-                .handle_events(events, interpreter.clone())?;
+            child.widget.write().handle_events(events, interpreter)?;
         }
         Ok(())
     }

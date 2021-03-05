@@ -139,14 +139,11 @@ impl Widget for VerticalBox {
     fn handle_events(
         &mut self,
         events: &[GenericEvent],
-        interpreter: Arc<RwLock<Interpreter>>,
+        interpreter: &mut Interpreter,
     ) -> Fallible<()> {
         // TODO: track keyboard focus
         for child in &self.children {
-            child
-                .widget
-                .write()
-                .handle_events(events, interpreter.clone())?;
+            child.widget.write().handle_events(events, interpreter)?;
         }
         Ok(())
     }

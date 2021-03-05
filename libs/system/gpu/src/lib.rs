@@ -25,7 +25,7 @@ pub use wgpu;
 use failure::{bail, err_msg, Fallible};
 use futures::executor::block_on;
 use log::{info, trace};
-use nitrous::{Interpreter, Module, Value};
+use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use std::{fmt::Debug, fs, mem, path::PathBuf, sync::Arc};
@@ -110,7 +110,7 @@ impl GPU {
     pub fn new(
         window: &Window,
         config: GPUConfig,
-        interpreter: Arc<RwLock<Interpreter>>,
+        interpreter: &mut Interpreter,
     ) -> Fallible<Arc<RwLock<Self>>> {
         block_on(Self::new_async(window, config, interpreter))
     }
@@ -118,7 +118,7 @@ impl GPU {
     pub async fn new_async(
         window: &Window,
         config: GPUConfig,
-        interpreter: Arc<RwLock<Interpreter>>,
+        interpreter: &mut Interpreter,
     ) -> Fallible<Arc<RwLock<Self>>> {
         window.set_title("Nitrogen");
         let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
@@ -174,18 +174,18 @@ impl GPU {
             frame_count: 0,
         }));
 
-        interpreter
-            .write()
-            .put(interpreter.clone(), "gpu", Value::Module(gpu.clone()))?;
+        interpreter.put_global("gpu", Value::Module(gpu.clone()));
 
         // The GPU requires some non-optional bindings for various system events.
-        interpreter.write().interpret_once(
-            r#"
-            let bindings := mapper.create_bindings("gpu");
-            bindings.bind("windowResize", "gpu.on_resize(width, height)");
-            bindings.bind("windowDpiChange", "gpu.on_dpi_change(scale)");
+        if interpreter.get_global("mapper").is_some() {
+            interpreter.interpret_once(
+                r#"
+                let bindings := mapper.create_bindings("gpu");
+                bindings.bind("windowResize", "gpu.on_resize(width, height)");
+                bindings.bind("windowDpiChange", "gpu.on_dpi_change(scale)");
             "#,
-        )?;
+            )?;
+        }
 
         Ok(gpu)
     }
@@ -492,7 +492,8 @@ mod tests {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;
-        let _gpu = GPU::new(&window, Default::default())?;
+        let interpreter = Interpreter::new();
+        let _gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
         Ok(())
     }
 }

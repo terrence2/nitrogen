@@ -18,14 +18,15 @@ use crate::{
         axis::AxisKind,
         bindings::Bindings,
         keyset::{Key, KeySet},
+        system::SystemEventKind,
         window::WindowEventKind,
     },
     PaintContext,
 };
-use failure::Fallible;
+use failure::{ensure, Fallible};
 use gpu::GPU;
-use input::{ElementState, GenericEvent, GenericWindowEvent, ModifiersState};
-use nitrous::{Interpreter, Module, Value};
+use input::{ElementState, GenericEvent, GenericSystemEvent, GenericWindowEvent, ModifiersState};
+use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
@@ -49,16 +50,18 @@ pub struct EventMapper {
 
 #[inject_nitrous_module]
 impl EventMapper {
-    pub fn new(interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Arc<RwLock<Self>>> {
+    pub fn new(interpreter: &mut Interpreter) -> Arc<RwLock<Self>> {
         let mapper = Arc::new(RwLock::new(Default::default()));
-        interpreter
-            .write()
-            .put(interpreter.clone(), "mapper", Value::Module(mapper.clone()))?;
-        Ok(mapper)
+        interpreter.put_global("mapper", Value::Module(mapper.clone()));
+        mapper
     }
 
     #[method]
     pub fn create_bindings(&mut self, name: &str) -> Fallible<Value> {
+        ensure!(
+            !self.bindings.contains_key(name),
+            format!("already have a bindings set named {}", name)
+        );
         let bindings = Arc::new(RwLock::new(Bindings::new(name)));
         self.bindings.insert(name.to_owned(), bindings.clone());
         Ok(Value::Module(bindings))
@@ -77,7 +80,7 @@ impl Widget for EventMapper {
     fn handle_events(
         &mut self,
         events: &[GenericEvent],
-        interpreter: Arc<RwLock<Interpreter>>,
+        interpreter: &mut Interpreter,
     ) -> Fallible<()> {
         for event in events {
             if !event.is_window_focused() {
@@ -101,12 +104,9 @@ impl Widget for EventMapper {
                     event.modifiers_state().expect("modifiers on key press");
 
                 for bindings in self.bindings.values() {
-                    bindings.read().match_key(
-                        key,
-                        key_state,
-                        &mut self.state,
-                        interpreter.clone(),
-                    )?;
+                    bindings
+                        .read()
+                        .match_key(key, key_state, &mut self.state, interpreter)?;
                 }
             } else {
                 match event {
@@ -117,7 +117,7 @@ impl Widget for EventMapper {
                         in_window,
                         window_focused,
                     } => {
-                        interpreter.write().with_locals(
+                        interpreter.with_locals(
                             &[
                                 ("dx", Value::Float(OrderedFloat(*dx))),
                                 ("dy", Value::Float(OrderedFloat(*dy))),
@@ -144,7 +144,7 @@ impl Widget for EventMapper {
                         in_window,
                         window_focused,
                     } => {
-                        interpreter.write().with_locals(
+                        interpreter.with_locals(
                             &[
                                 (
                                     "horizontal_delta",
@@ -172,7 +172,7 @@ impl Widget for EventMapper {
 
                     GenericEvent::Window(evt) => match evt {
                         GenericWindowEvent::Resized { width, height } => {
-                            interpreter.write().with_locals(
+                            interpreter.with_locals(
                                 &[
                                     ("width", Value::Integer(*width as i64)),
                                     ("height", Value::Integer(*height as i64)),
@@ -189,12 +189,52 @@ impl Widget for EventMapper {
                         }
 
                         GenericWindowEvent::ScaleFactorChanged { scale } => {
-                            interpreter.write().with_locals(
+                            interpreter.with_locals(
                                 &[("scale", Value::Float(OrderedFloat(*scale)))],
                                 |inner| {
                                     for bindings in self.bindings.values() {
                                         bindings.read().match_window_event(
                                             WindowEventKind::DpiChange,
+                                            inner,
+                                        )?;
+                                    }
+                                    Ok(Value::True())
+                                },
+                            )?;
+                        }
+                    },
+
+                    GenericEvent::System(evt) => match evt {
+                        GenericSystemEvent::Quit => {
+                            for bindings in self.bindings.values() {
+                                bindings
+                                    .read()
+                                    .match_system_event(SystemEventKind::Quit, interpreter)?;
+                            }
+                        }
+
+                        GenericSystemEvent::DeviceAdded { dummy } => {
+                            interpreter.with_locals(
+                                &[("device_id", Value::Integer(*dummy as i64))],
+                                |inner| {
+                                    for bindings in self.bindings.values() {
+                                        bindings.read().match_system_event(
+                                            SystemEventKind::DeviceAdded,
+                                            inner,
+                                        )?;
+                                    }
+                                    Ok(Value::True())
+                                },
+                            )?;
+                        }
+
+                        GenericSystemEvent::DeviceRemoved { dummy } => {
+                            interpreter.with_locals(
+                                &[("device_id", Value::Integer(*dummy as i64))],
+                                |inner| {
+                                    for bindings in self.bindings.values() {
+                                        bindings.read().match_system_event(
+                                            SystemEventKind::DeviceRemoved,
                                             inner,
                                         )?;
                                     }

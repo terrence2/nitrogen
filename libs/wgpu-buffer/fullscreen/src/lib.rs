@@ -12,7 +12,6 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use failure::Fallible;
 use gpu::GPU;
 use parking_lot::RwLock;
 use std::{mem, ops::Range, sync::Arc};
@@ -64,10 +63,10 @@ pub struct FullscreenBuffer {
 }
 
 impl FullscreenBuffer {
-    pub fn new(gpu: &GPU) -> Fallible<Arc<RwLock<Self>>> {
-        Ok(Arc::new(RwLock::new(Self {
+    pub fn new(gpu: &GPU) -> Arc<RwLock<Self>> {
+        Arc::new(RwLock::new(Self {
             vertex_buffer: FullscreenVertex::buffer(gpu),
-        })))
+        }))
     }
 
     pub fn vertex_buffer(&self) -> wgpu::BufferSlice {
@@ -82,7 +81,9 @@ impl FullscreenBuffer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use failure::Fallible;
     use gpu::GPU;
+    use nitrous::Interpreter;
     use winit::{event_loop::EventLoop, window::Window};
 
     #[cfg(unix)]
@@ -91,8 +92,9 @@ mod tests {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;
-        let gpu = GPU::new(&window, Default::default())?;
-        let _fullscreen_buffer = FullscreenBuffer::new(&gpu)?;
+        let interpreter = Interpreter::new();
+        let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
+        let _fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
         Ok(())
     }
 }

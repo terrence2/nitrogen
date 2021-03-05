@@ -14,7 +14,6 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{degrees, meters};
 use camera::ArcBallCamera;
-use command::Bindings;
 use failure::{bail, Fallible};
 use fullscreen::FullscreenBuffer;
 use geodesy::{GeoSurface, Graticule, Target};
@@ -23,6 +22,9 @@ use gpu::GPU;
 use input::{InputController, InputSystem};
 use legion::*;
 // use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
+use nitrous::Interpreter;
+use parking_lot::RwLock;
+use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::console;
@@ -45,13 +47,13 @@ async fn async_trampoline() {
 
 #[allow(unused)]
 struct AppContext {
-    gpu: GPU,
+    gpu: Arc<RwLock<GPU>>,
     //async_rt: Runtime,
     legion: World,
-    arcball: ArcBallCamera,
+    arcball: Arc<RwLock<ArcBallCamera>>,
 
-    globals_buffer: GlobalParametersBuffer,
-    fullscreen_buffer: FullscreenBuffer,
+    globals_buffer: Arc<RwLock<GlobalParametersBuffer>>,
+    fullscreen_buffer: Arc<RwLock<FullscreenBuffer>>,
 }
 
 async fn async_main() -> Fallible<()> {
@@ -69,25 +71,26 @@ async fn async_main() -> Fallible<()> {
         js_body.append_child(&canvas).unwrap();
     }
 
-    let gpu = GPU::new_async(&window, Default::default()).await?;
+    let interpreter = Interpreter::new();
+    let gpu = GPU::new_async(&window, Default::default(), &mut interpreter.write()).await?;
     //let mut async_rt = Runtime::new()?;
     let legion = World::default();
 
-    let globals_buffer = GlobalParametersBuffer::new(gpu.device())?;
-    let fullscreen_buffer = FullscreenBuffer::new(&gpu)?;
+    let globals_buffer = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter.write());
+    let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
 
-    let mut arcball = ArcBallCamera::new(gpu.aspect_ratio(), meters!(0.1));
-    arcball.set_eye_relative(Graticule::<Target>::new(
+    let arcball = ArcBallCamera::new(meters!(0.1), &mut gpu.write(), &mut interpreter.write());
+    arcball.write().set_eye_relative(Graticule::<Target>::new(
         degrees!(0),
         degrees!(0),
         meters!(10),
     ))?;
-    arcball.set_target(Graticule::<GeoSurface>::new(
+    arcball.write().set_target(Graticule::<GeoSurface>::new(
         degrees!(0),
         degrees!(0),
         meters!(10),
     ));
-    arcball.set_distance(meters!(40.0));
+    arcball.write().set_distance(meters!(40.0));
 
     let _ctx = AppContext {
         gpu,
@@ -98,19 +101,8 @@ async fn async_main() -> Fallible<()> {
         fullscreen_buffer,
     };
 
-    let _system_bindings = Bindings::new("map")
-        .bind("demo.bail", "b")?
-        .bind("demo.panic", "p")?;
-
     #[cfg(target_arch = "wasm32")]
-    InputSystem::run_forever(
-        vec![_system_bindings],
-        event_loop,
-        window,
-        window_loop,
-        _ctx,
-    )
-    .await?;
+    InputSystem::run_forever(vec![], event_loop, window, window_loop, _ctx).await?;
     Ok(())
 }
 
@@ -129,21 +121,25 @@ fn window_loop(
         }
     }
     let _ = input_controller.poll_events()?;
-    app.arcball.think();
+    app.arcball.write().think();
 
     // Sim
     let mut tracker = Default::default();
-    app.globals_buffer
-        .make_upload_buffer(app.arcball.camera(), 2.2, &app.gpu, &mut tracker)?;
+    app.globals_buffer.write().make_upload_buffer(
+        app.arcball.read().camera(),
+        &app.gpu.read(),
+        &mut tracker,
+    )?;
 
     // Render
-    let framebuffer = app.gpu.get_next_framebuffer()?.unwrap();
-    let mut encoder = app
-        .gpu
-        .device()
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("frame-encoder"),
-        });
+    let framebuffer = app.gpu.write().get_next_framebuffer()?.unwrap();
+    let mut encoder =
+        app.gpu
+            .read()
+            .device()
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("frame-encoder"),
+            });
     tracker.dispatch_uploads(&mut encoder);
     {
         // let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -155,7 +151,7 @@ fn window_loop(
         // rpass.set_vertex_buffer(0, fs_borrow.vertex_buffer());
         // rpass.draw(0..4, 0..1);
     }
-    app.gpu.queue_mut().submit(vec![encoder.finish()]);
+    app.gpu.write().queue_mut().submit(vec![encoder.finish()]);
 
     window.request_redraw();
     Ok(())

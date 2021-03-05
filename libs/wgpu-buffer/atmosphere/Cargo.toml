@@ -26,6 +26,7 @@ memmap = "^ 0.7"
 [dev-dependencies]
 spirv-reflect = "^ 0.2"
 winit = { version = "^ 0.24", features = ["web-sys"] }
+nitrous = { path = "../../system/nitrous" }
 
 [build-dependencies]
 build_shaders = { path = "../../system/build_shaders" }

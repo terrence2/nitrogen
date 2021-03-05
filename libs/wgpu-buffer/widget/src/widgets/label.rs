@@ -96,7 +96,7 @@ impl Widget for Label {
     fn handle_events(
         &mut self,
         _events: &[GenericEvent],
-        _interpreter: Arc<RwLock<Interpreter>>,
+        _interpreter: &mut Interpreter,
     ) -> Fallible<()> {
         Ok(())
     }

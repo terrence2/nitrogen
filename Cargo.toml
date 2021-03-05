@@ -71,6 +71,7 @@ global_data = { path = "libs/wgpu-buffer/global_data" }
 gpu = { path = "libs/system/gpu" }
 input = { path = "libs/system/input" }
 nitrous = { path = "libs/system/nitrous" }
+nitrous_injector = { path = "libs/system/nitrous_injector" }
 orrery = { path = "libs/sim/orrery" }
 stars = { path = "libs/wgpu-buffer/stars" }
 terrain_geo = { path = "libs/wgpu-buffer/terrain_geo" }

@@ -221,7 +221,7 @@ impl WidgetBuffer {
     pub fn handle_events(
         &mut self,
         events: &[GenericEvent],
-        interpreter: Arc<RwLock<Interpreter>>,
+        interpreter: &mut Interpreter,
     ) -> Fallible<()> {
         self.root().write().handle_events(events, interpreter)
     }
@@ -338,9 +338,10 @@ mod test {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;
-        let mut gpu = GPU::new(&window, Default::default())?;
+        let interpreter = Interpreter::new();
+        let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
 
-        let mut widgets = WidgetBuffer::new(&mut gpu)?;
+        let widgets = WidgetBuffer::new(&mut gpu.write())?;
         let label = Label::new(
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\
             สิบสองกษัตริย์ก่อนหน้าแลถัดไป       สององค์ไซร้โง่เขลาเบาปัญญา\
@@ -352,10 +353,12 @@ mod test {
             Y [ˈʏpsilɔn], Yen [jɛn], Yoga [ˈjoːgɑ]",
         )
         .wrapped();
-        widgets.root().write().add_child("label", label);
+        widgets.read().root().write().add_child("label", label);
 
         let mut tracker = Default::default();
-        widgets.make_upload_buffer(&gpu, &mut tracker)?;
+        widgets
+            .write()
+            .make_upload_buffer(&gpu.read(), &mut tracker)?;
 
         Ok(())
     }

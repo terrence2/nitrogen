@@ -27,7 +27,7 @@ use failure::Fallible;
 use geodesy::{GeoCenter, Graticule};
 use global_data::GlobalParametersBuffer;
 use gpu::{ResizeHint, UploadTracker, GPU};
-use nitrous::{Interpreter, Module, Value};
+use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use shader_shared::Group;
@@ -179,7 +179,7 @@ impl TerrainGeoBuffer {
         gpu_detail_level: GpuDetailLevel,
         globals_buffer: &GlobalParametersBuffer,
         gpu: &mut GPU,
-        interpreter: Arc<RwLock<Interpreter>>,
+        interpreter: &mut Interpreter,
     ) -> Fallible<Arc<RwLock<Self>>> {
         let cpu_detail = cpu_detail_level.parameters();
         let gpu_detail = gpu_detail_level.parameters();
@@ -503,11 +503,7 @@ impl TerrainGeoBuffer {
 
         gpu.add_resize_observer(terrain.clone());
 
-        interpreter.write().put(
-            interpreter.clone(),
-            "terrain",
-            Value::Module(terrain.clone()),
-        )?;
+        interpreter.put_global("terrain", Value::Module(terrain.clone()));
 
         Ok(terrain)
     }

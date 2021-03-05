@@ -128,7 +128,7 @@ impl Widget for TextEdit {
     fn handle_events(
         &mut self,
         _events: &[GenericEvent],
-        _interpreter: Arc<RwLock<Interpreter>>,
+        _interpreter: &mut Interpreter,
     ) -> Fallible<()> {
         assert!(self.read_only);
         Ok(())

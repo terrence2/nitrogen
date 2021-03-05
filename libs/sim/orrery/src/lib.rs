@@ -16,7 +16,7 @@ use chrono::{prelude::*, Duration};
 use failure::Fallible;
 use lazy_static::lazy_static;
 use nalgebra::{Point3, Unit, UnitQuaternion, Vector3, Vector4};
-use nitrous::{Interpreter, Module, Value};
+use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use std::{f64::consts::PI, sync::Arc};
@@ -306,7 +306,7 @@ pub struct Orrery {
 
 #[inject_nitrous_module]
 impl Orrery {
-    pub fn now(interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Arc<RwLock<Self>>> {
+    pub fn now(interpreter: &mut Interpreter) -> Arc<RwLock<Self>> {
         Self::new(Utc::now(), interpreter)
     }
 
@@ -314,8 +314,8 @@ impl Orrery {
     #[rustfmt::skip]
     pub fn new(
         initial_time: DateTime<Utc>,
-        interpreter: Arc<RwLock<Interpreter>>
-    ) -> Fallible<Arc<RwLock<Self>>> {
+        interpreter: &mut Interpreter
+    ) -> Arc<RwLock<Self>> {
         let orrery = Arc::new(RwLock::new(
         Self {
             //EM Bary   1.00000018      0.01673163     -0.00054346      100.46691572    102.93005885     -5.11260389
@@ -330,15 +330,13 @@ impl Orrery {
             in_debug_override: false,
         }));
 
-        interpreter
-            .write()
-            .put(interpreter.clone(), "orrery", Value::Module(orrery.clone()))?;
+        interpreter.put_global("orrery", Value::Module(orrery.clone()));
 
-        Ok(orrery)
+        orrery
     }
 
-    pub fn add_default_bindings(&mut self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<()> {
-        interpreter.write().interpret_once(
+    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Fallible<()> {
+        interpreter.interpret_once(
             r#"
                 let bindings := mapper.create_bindings("orrery");
                 bindings.bind("mouse2", "orrery.move_sun(pressed)");
@@ -435,22 +433,39 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let orrery = Orrery::new(Utc::now());
-        orrery.sun_direction();
+        let interpreter = Interpreter::new();
+        let orrery = Orrery::new(Utc::now(), &mut interpreter.write());
+        orrery.read().sun_direction();
     }
 
     #[test]
     fn test_leap_seconds() {
+        let interpreter = Interpreter::new();
         assert_eq!(
-            Orrery::new(Utc.ymd(2020, 1, 1).and_hms(12, 0, 0)).num_leap_seconds(),
+            Orrery::new(
+                Utc.ymd(2020, 1, 1).and_hms(12, 0, 0),
+                &mut interpreter.write()
+            )
+            .read()
+            .num_leap_seconds(),
             Duration::seconds(27)
         );
         assert_eq!(
-            Orrery::new(Utc.ymd(2010, 1, 1).and_hms(12, 0, 0)).num_leap_seconds(),
+            Orrery::new(
+                Utc.ymd(2010, 1, 1).and_hms(12, 0, 0),
+                &mut interpreter.write()
+            )
+            .read()
+            .num_leap_seconds(),
             Duration::seconds(24)
         );
         assert_eq!(
-            Orrery::new(Utc.ymd(1969, 1, 1).and_hms(12, 0, 0)).num_leap_seconds(),
+            Orrery::new(
+                Utc.ymd(1969, 1, 1).and_hms(12, 0, 0),
+                &mut interpreter.write()
+            )
+            .read()
+            .num_leap_seconds(),
             Duration::seconds(0)
         );
     }

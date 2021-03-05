@@ -5,7 +5,6 @@ authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-failure = "^ 0.1.2"
 log = "^ 0.4"
 parking_lot = "^ 0.11"
 wgpu = "^ 0.6"
@@ -15,9 +14,11 @@ gpu = { path = "../../system/gpu" }
 
 [dev-dependencies]
 absolute_unit = { path = "../../sim/absolute_unit" }
-global_data = { path = "../../wgpu-buffer/global_data" }
+failure = "^ 0.1.2"
 geodesy = { path = "../../sim/geodesy" }
+global_data = { path = "../../wgpu-buffer/global_data" }
 input = { path = "../../system/input" }
+nitrous = { path = "../../system/nitrous" }
 winit = { version = "^ 0.24", features = ["web-sys"] }
 
 [build-dependencies]
