@@ -1862,6 +1862,7 @@ impl Precompute {
 #[cfg(test)]
 mod test {
     use super::*;
+    use nitrous::Interpreter;
     use std::time::Instant;
     use winit::{event_loop::EventLoop, window::Window};
 
@@ -1871,7 +1872,8 @@ mod test {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;
-        let mut gpu = gpu::GPU::new(&window, Default::default())?;
+        let interpreter = Interpreter::new();
+        let gpu = gpu::GPU::new(&window, Default::default(), &mut interpreter.write())?;
         let precompute_start = Instant::now();
         let (
             _atmosphere_params_buffer,
@@ -1879,7 +1881,7 @@ mod test {
             _irradiance_texture,
             _scattering_texture,
             _single_mie_scattering_texture,
-        ) = Precompute::precompute(40, 4, true, &mut gpu)?;
+        ) = Precompute::precompute(40, 4, true, &mut gpu.write())?;
         let precompute_time = precompute_start.elapsed();
         println!(
             "AtmosphereBuffers::precompute timing: {}.{}ms",

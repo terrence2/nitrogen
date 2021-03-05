@@ -17,7 +17,7 @@ use atmosphere::AtmosphereBuffer;
 use camera::ArcBallCamera;
 use catalog::{Catalog, DirectoryDrawer};
 use chrono::{TimeZone, Utc};
-use command::{Bindings as LegacyBindings, CommandHandler};
+use command::Bindings as LegacyBindings;
 use composite::CompositeRenderPass;
 use failure::Fallible;
 use fullscreen::FullscreenBuffer;
@@ -28,7 +28,8 @@ use input::{InputController, InputSystem};
 use legion::world::World;
 use log::trace;
 use nalgebra::convert;
-use nitrous::{Interpreter, Module, Value};
+use nitrous::{Interpreter, Value};
+use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use orrery::Orrery;
 use parking_lot::RwLock;
 use stars::StarsBuffer;
@@ -51,6 +52,37 @@ struct Opt {
     /// Regenerate instead of loading cached items on startup
     #[structopt(long = "no-cache")]
     no_cache: bool,
+}
+
+#[derive(Debug, Default, NitrousModule)]
+struct Demo {
+    exit: bool,
+}
+
+#[inject_nitrous_module]
+impl Demo {
+    pub fn new(interpreter: &mut Interpreter) -> Arc<RwLock<Self>> {
+        let demo = Arc::new(RwLock::new(Self::default()));
+        interpreter.put_global("demo", Value::Module(demo.clone()));
+        demo
+    }
+
+    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Fallible<()> {
+        interpreter.interpret_once(
+            r#"
+                let bindings := mapper.create_bindings("demo");
+                bindings.bind("quit", "demo.exit()");
+                bindings.bind("Escape", "demo.exit()");
+                bindings.bind("q", "demo.exit()");
+            "#,
+        )?;
+        Ok(())
+    }
+
+    #[method]
+    pub fn exit(&mut self) {
+        self.exit = true;
+    }
 }
 
 make_frame_graph!(
@@ -102,28 +134,20 @@ fn main() -> Fallible<()> {
     env_logger::init();
 
     let system_bindings = LegacyBindings::new("map")
-        .bind("world.toggle_wireframe", "w")?
-        .bind("world.toggle_debug_mode", "r")?
-        .bind("demo.+target_up_fast", "Shift+Up")?
-        .bind("demo.+target_down_fast", "Shift+Down")?
-        .bind("demo.+target_up", "Up")?
-        .bind("demo.+target_down", "Down")?
-        .bind("demo.decrease_gamma", "LBracket")?
-        .bind("demo.increase_gamma", "RBracket")?
-        .bind("demo.decrease_exposure", "Shift+LBracket")?
-        .bind("demo.increase_exposure", "Shift+RBracket")?
         .bind("demo.pin_view", "p")?
-        .bind("demo.toggle_terminal", "Shift+Grave")?
-        .bind("demo.exit", "Escape")?
-        .bind("demo.exit", "q")?;
-    InputSystem::run_forever(
-        vec![Orrery::debug_bindings()?, system_bindings],
-        window_main,
-    )
+        .bind("demo.toggle_terminal", "Shift+Grave")?;
+    // .bind("demo.exit", "Escape")?
+    // .bind("demo.exit", "q")?;
+    InputSystem::run_forever(vec![system_bindings], window_main)
 }
 
 fn window_main(window: Window, input_controller: &InputController) -> Fallible<()> {
     let opt = Opt::from_args();
+    let (cpu_detail, gpu_detail) = if cfg!(debug_assertions) {
+        (CpuDetailLevel::Low, GpuDetailLevel::Low)
+    } else {
+        (CpuDetailLevel::Medium, GpuDetailLevel::High)
+    };
 
     let mut async_rt = Runtime::new()?;
     let mut legion = World::default();
@@ -133,83 +157,83 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         catalog.add_drawer(DirectoryDrawer::from_directory(100 + i as i64, d)?)?;
     }
 
-    let mut gpu = GPU::new(&window, Default::default())?;
+    let interpreter = Interpreter::new();
+    let mapper = EventMapper::new(&mut interpreter.write());
 
-    let (cpu_detail, gpu_detail) = if cfg!(debug_assertions) {
-        (CpuDetailLevel::Low, GpuDetailLevel::Low)
-    } else {
-        (CpuDetailLevel::Medium, GpuDetailLevel::High)
-    };
+    let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
+
+    let orrery = Orrery::new(
+        Utc.ymd(1964, 2, 24).and_hms(12, 0, 0),
+        &mut interpreter.write(),
+    );
+    let arcball = ArcBallCamera::new(meters!(0.5), &mut gpu.write(), &mut interpreter.write());
 
     ///////////////////////////////////////////////////////////
-    let atmosphere_buffer = AtmosphereBuffer::new(opt.no_cache, &mut gpu)?;
-    let fullscreen_buffer = FullscreenBuffer::new(&gpu)?;
-    let globals = GlobalParametersBuffer::new(gpu.device())?;
-    let stars_buffer = StarsBuffer::new(&gpu)?;
-    let terrain_geo_buffer =
-        TerrainGeoBuffer::new(&catalog, cpu_detail, gpu_detail, &globals, &mut gpu)?;
-    let widget_buffer = WidgetBuffer::new(&mut gpu)?;
+    let atmosphere_buffer = Arc::new(RwLock::new(AtmosphereBuffer::new(
+        opt.no_cache,
+        &mut gpu.write(),
+    )?));
+    let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
+    let globals = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter.write());
+    let stars_buffer = Arc::new(RwLock::new(StarsBuffer::new(&gpu.read())?));
+    let terrain_geo_buffer = TerrainGeoBuffer::new(
+        &catalog,
+        cpu_detail,
+        gpu_detail,
+        &globals.read(),
+        &mut gpu.write(),
+        &mut interpreter.write(),
+    )?;
+    let widgets = WidgetBuffer::new(&mut gpu.write())?;
     let catalog = Arc::new(AsyncRwLock::new(catalog));
     let world = WorldRenderPass::new(
-        &mut gpu,
-        &globals,
-        &atmosphere_buffer,
-        &stars_buffer,
-        &terrain_geo_buffer,
+        &mut gpu.write(),
+        &mut interpreter.write(),
+        &globals.read(),
+        &atmosphere_buffer.read(),
+        &stars_buffer.read(),
+        &terrain_geo_buffer.read(),
     )?;
-    let ui = UiRenderPass::new(&mut gpu, &globals, &widget_buffer, &world)?;
-    let composite = CompositeRenderPass::new(&mut gpu, &globals, &world, &ui)?;
-
-    let interpreter = Arc::new(RwLock::new(Interpreter::boot()));
+    let ui = UiRenderPass::new(
+        &mut gpu.write(),
+        &globals.read(),
+        &widgets.read(),
+        &world.read(),
+    )?;
+    let composite = Arc::new(RwLock::new(CompositeRenderPass::new(
+        &mut gpu.write(),
+        &globals.read(),
+        &world.read(),
+        &ui.read(),
+    )?));
 
     let mut frame_graph = FrameGraph::new(
         &mut legion,
-        &mut gpu,
+        &mut gpu.write(),
         atmosphere_buffer,
         fullscreen_buffer,
-        globals,
+        globals.clone(),
         stars_buffer,
         terrain_geo_buffer,
-        widget_buffer,
-        world,
+        widgets.clone(),
+        world.clone(),
         ui,
         composite,
     )?;
     ///////////////////////////////////////////////////////////
 
-    let mapper = EventMapper::default().into_module();
-    interpreter
-        .write()
-        .put(interpreter.clone(), "mapper", Value::Module(mapper.clone()))?;
-
-    // let system_bindings = Bindings::new("map")
-    //     .bind("world.toggle_wireframe", "w")?
-    //     .bind("world.toggle_debug_mode", "r")?
-    //     .bind("demo.+target_up_fast", "Shift+Up")?
-    //     .bind("demo.+target_down_fast", "Shift+Down")?
-    //     .bind("demo.+target_up", "Up")?
-    //     .bind("demo.+target_down", "Down")?
-    //     .bind("demo.decrease_gamma", "LBracket")?
-    //     .bind("demo.increase_gamma", "RBracket")?
-    //     .bind("demo.decrease_exposure", "Shift+LBracket")?
-    //     .bind("demo.increase_exposure", "Shift+RBracket")?
-    //     .bind("demo.pin_view", "p")?
-    //     .bind("demo.toggle_terminal", "Shift+Grave")?
-    //     .bind("demo.exit", "Escape")?
-    //     .bind("demo.exit", "q")?;
-
-    frame_graph.widgets.root().write().add_child(mapper);
+    widgets.read().root().write().add_child("mapper", mapper);
 
     let version_label = Label::new("Nitrogen v0.1")
         .with_color(Color::Green)
         .with_size(8.0)
         .with_pre_blended_text()
         .wrapped();
-    frame_graph
-        .widgets
+    widgets
+        .read()
         .root()
         .write()
-        .add_child(version_label)
+        .add_child("version", version_label)
         .set_float(PositionH::End, PositionV::Top);
 
     let fps_label = Label::new("fps")
@@ -217,42 +241,29 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         .with_size(13.0)
         .with_pre_blended_text()
         .wrapped();
-    frame_graph
-        .widgets
+    widgets
+        .read()
         .root()
         .write()
-        .add_child(fps_label.clone())
+        .add_child("fps", fps_label.clone())
         .set_float(PositionH::Start, PositionV::Bottom);
 
-    let terminal = Terminal::new(frame_graph.widgets.font_context())
+    let terminal = Terminal::new(frame_graph.widgets.read().font_context())
         .with_visible(false)
         .wrapped();
-    frame_graph
-        .widgets
+    widgets
+        .read()
         .root()
         .write()
-        .add_child(terminal.clone())
+        .add_child("terminal", terminal.clone())
         .set_float(PositionH::Start, PositionV::Top);
 
-    let mut orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0));
-
     /*
-    let mut camera = UfoCamera::new(gpu.aspect_ratio(), 0.1f64, 3.4e+38f64);
+    let mut camera = UfoCamera::new(gpu.read().aspect_ratio(), 0.1f64, 3.4e+38f64);
     camera.set_position(6_378.0, 0.0, 0.0);
     camera.set_rotation(&Vector3::new(0.0, 0.0, 1.0), PI / 2.0);
     camera.apply_rotation(&Vector3::new(0.0, 1.0, 0.0), PI);
     */
-
-    let arcball = Arc::new(RwLock::new(ArcBallCamera::new(
-        gpu.aspect_ratio(),
-        meters!(0.5),
-    )));
-    arcball.read().init(&mut interpreter.write())?;
-    interpreter.write().put(
-        interpreter.clone(),
-        "camera",
-        Value::Module(arcball.clone()),
-    )?;
 
     // everest: 27.9880704,86.9245623
     arcball.write().set_target(Graticule::<GeoSurface>::new(
@@ -277,43 +288,32 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     //     meters!(1308.7262),
     // ))?;
 
-    let mut tone_gamma = 2.2f32;
+    let demo = Demo::new(&mut interpreter.write());
+
+    // let system_bindings = Bindings::new("map")
+    //     .bind("demo.pin_view", "p")?
+    //     .bind("demo.toggle_terminal", "Shift+Grave")?
+    {
+        let interp = &mut interpreter.write();
+        orrery.write().add_default_bindings(interp)?;
+        arcball.write().add_default_bindings(interp)?;
+        globals.write().add_default_bindings(interp)?;
+        world.write().add_default_bindings(interp)?;
+        demo.write().add_default_bindings(interp)?;
+    }
+
     let mut is_camera_pinned = false;
     let mut camera_double = arcball.read().camera().to_owned();
-    let mut target_vec = meters!(0f64);
     let mut show_terminal = false;
-    loop {
+    while !demo.read().exit {
         let loop_start = Instant::now();
 
-        frame_graph
-            .widgets()
-            .handle_events(&input_controller.poll_events()?, interpreter.clone())?;
+        widgets
+            .write()
+            .handle_events(&input_controller.poll_events()?, &mut interpreter.write())?;
 
         for command in input_controller.poll_commands()? {
-            if InputSystem::is_close_command(&command) || command.full() == "demo.exit" {
-                return Ok(());
-            }
-            frame_graph.handle_command(&command);
-            orrery.handle_command(&command)?;
             match command.full() {
-                "demo.+target_up" => target_vec = meters!(1),
-                "demo.-target_up" => target_vec = meters!(0),
-                "demo.+target_down" => target_vec = meters!(-1),
-                "demo.-target_down" => target_vec = meters!(0),
-                "demo.+target_up_fast" => target_vec = meters!(100),
-                "demo.-target_up_fast" => target_vec = meters!(0),
-                "demo.+target_down_fast" => target_vec = meters!(-100),
-                "demo.-target_down_fast" => target_vec = meters!(0),
-                "demo.decrease_gamma" => tone_gamma /= 1.1,
-                "demo.increase_gamma" => tone_gamma *= 1.1,
-                "demo.decrease_exposure" => {
-                    let next_exposure = arcball.read().camera().exposure() / 1.1;
-                    arcball.write().camera_mut().set_exposure(next_exposure);
-                }
-                "demo.increase_exposure" => {
-                    let next_exposure = arcball.read().camera().exposure() * 1.1;
-                    arcball.write().camera_mut().set_exposure(next_exposure);
-                }
                 "demo.pin_view" => {
                     println!("eye_rel: {}", arcball.read().get_eye_relative());
                     println!("target:  {}", arcball.read().get_target());
@@ -323,40 +323,9 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
                     show_terminal = !show_terminal;
                     terminal.write().set_visible(show_terminal);
                 }
-                // system bindings
-                "window.resize" => {
-                    gpu.note_resize(None, &window);
-                    frame_graph.terrain_geo.note_resize(&gpu);
-                    frame_graph.world.note_resize(&gpu);
-                    frame_graph.ui.note_resize(&gpu);
-                    arcball
-                        .write()
-                        .camera_mut()
-                        .set_aspect_ratio(gpu.aspect_ratio());
-                }
-                "window.dpi-change" => {
-                    gpu.note_resize(Some(command.float(0)?), &window);
-                    frame_graph.terrain_geo.note_resize(&gpu);
-                    frame_graph.world.note_resize(&gpu);
-                    frame_graph.ui.note_resize(&gpu);
-                    arcball
-                        .write()
-                        .camera_mut()
-                        .set_aspect_ratio(gpu.aspect_ratio());
-                }
                 _ => trace!("unhandled command: {}", command.full(),),
             }
         }
-
-        // let script = Script::compile_expr("camera.test()")?;
-        // interpreter.read().interpret(&script)?;
-
-        let mut g = arcball.read().get_target();
-        g.distance += target_vec;
-        if g.distance < meters!(0f64) {
-            g.distance = meters!(0f64);
-        }
-        arcball.write().set_target(g);
 
         arcball.write().think();
         if !is_camera_pinned {
@@ -366,35 +335,29 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         let mut tracker = Default::default();
         frame_graph.globals().make_upload_buffer(
             arcball.read().camera(),
-            tone_gamma,
-            &gpu,
+            &gpu.read(),
             &mut tracker,
         )?;
         frame_graph.atmosphere().make_upload_buffer(
-            convert(orrery.sun_direction()),
-            &gpu,
+            convert(orrery.read().sun_direction()),
+            &gpu.read(),
             &mut tracker,
         )?;
-        frame_graph.terrain_geo().make_upload_buffer(
+        frame_graph.terrain_geo_mut().make_upload_buffer(
             arcball.read().camera(),
             &camera_double,
             catalog.clone(),
             &mut async_rt,
-            &mut gpu,
+            &mut gpu.write(),
             &mut tracker,
         )?;
         frame_graph
-            .widgets()
-            .make_upload_buffer(&gpu, &mut tracker)?;
-        if !frame_graph.run(&mut gpu, tracker)? {
-            gpu.note_resize(None, &window);
-            frame_graph.terrain_geo.note_resize(&gpu);
-            frame_graph.world.note_resize(&gpu);
-            frame_graph.ui.note_resize(&gpu);
-            arcball
-                .write()
-                .camera_mut()
-                .set_aspect_ratio(gpu.aspect_ratio());
+            .widgets
+            .write()
+            .make_upload_buffer(&gpu.read(), &mut tracker)?;
+        if !frame_graph.run(&mut gpu.write(), tracker)? {
+            let sz = gpu.read().physical_size();
+            gpu.write().on_resize(sz.width as i64, sz.height as i64)?;
         }
 
         let frame_time = loop_start.elapsed();
@@ -402,12 +365,14 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
             "eye_rel: {} | tgt: {} | asl: {}, fov: {} || Date: {:?} || frame: {}.{}ms",
             arcball.read().get_eye_relative(),
             arcball.read().get_target(),
-            g.distance,
+            arcball.read().get_target().distance,
             degrees!(arcball.read().camera().fov_y()),
-            orrery.get_time(),
+            orrery.read().get_time(),
             frame_time.as_secs() * 1000 + u64::from(frame_time.subsec_millis()),
             frame_time.subsec_micros(),
         );
         fps_label.write().set_text(ts);
     }
+
+    Ok(())
 }

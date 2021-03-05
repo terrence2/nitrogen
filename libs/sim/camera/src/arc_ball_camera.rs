@@ -18,10 +18,12 @@ use absolute_unit::{
 };
 use failure::{ensure, Fallible};
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
+use gpu::{ResizeHint, GPU};
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
-use nitrous::Interpreter;
+use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
-use std::f64::consts::PI;
+use parking_lot::RwLock;
+use std::{f64::consts::PI, sync::Arc};
 
 #[derive(Debug, NitrousModule)]
 pub struct ArcBallCamera {
@@ -30,18 +32,30 @@ pub struct ArcBallCamera {
     in_rotate: bool,
     in_move: bool,
     fov_delta: Angle<Degrees>,
+    target_height_delta: Length<Meters>,
     target: Graticule<GeoSurface>,
     eye: Graticule<Target>,
 }
 
 #[inject_nitrous_module]
 impl ArcBallCamera {
-    // FIXME: push camera in from outside
-    pub fn new(aspect_ratio: f64, z_near: Length<Meters>) -> Self {
+    pub fn new(
+        z_near: Length<Meters>,
+        gpu: &mut GPU,
+        interpreter: &mut Interpreter,
+    ) -> Arc<RwLock<Self>> {
+        let arcball = Arc::new(RwLock::new(Self::detached(gpu.aspect_ratio(), z_near)));
+        gpu.add_resize_observer(arcball.clone());
+        interpreter.put_global("camera", Value::Module(arcball.clone()));
+        arcball
+    }
+
+    pub fn detached(aspect_ratio: f64, z_near: Length<Meters>) -> Self {
         let fov_y = radians!(PI / 2f64);
         Self {
             camera: Camera::from_parameters(fov_y, aspect_ratio, z_near),
             target: Graticule::<GeoSurface>::new(radians!(0), radians!(0), meters!(0)),
+            target_height_delta: meters!(0),
             eye: Graticule::<Target>::new(
                 radians!(PI / 2.0),
                 radians!(3f64 * PI / 4.0),
@@ -51,6 +65,27 @@ impl ArcBallCamera {
             in_rotate: false,
             in_move: false,
         }
+    }
+
+    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Fallible<()> {
+        interpreter.interpret_once(
+            r#"
+                let bindings := mapper.create_bindings("arc_ball_camera");
+                bindings.bind("mouse1", "camera.pan_view(pressed)");
+                bindings.bind("mouse3", "camera.move_view(pressed)");
+                bindings.bind("mouseMotion", "camera.handle_mousemotion(dx, dy)");
+                bindings.bind("mouseWheel", "camera.handle_mousewheel(vertical_delta)");
+                bindings.bind("PageUp", "camera.increase_fov(pressed)");
+                bindings.bind("PageDown", "camera.decrease_fov(pressed)");
+                bindings.bind("Shift+Up", "camera.target_up_fast(pressed)");
+                bindings.bind("Shift+Down", "camera.target_down_fast(pressed)");
+                bindings.bind("Up", "camera.target_up(pressed)");
+                bindings.bind("Down", "camera.target_down(pressed)");
+                bindings.bind("Shift+LBracket", "camera.decrease_exposure(pressed)");
+                bindings.bind("Shift+RBracket", "camera.increase_exposure(pressed)");
+            "#,
+        )?;
+        Ok(())
     }
 
     pub fn camera(&self) -> &Camera {
@@ -110,21 +145,6 @@ impl ArcBallCamera {
         cart_target + cart_eye_rel_target_framed
     }
 
-    pub fn init(&self, interpreter: &mut Interpreter) -> Fallible<()> {
-        interpreter.interpret_once(
-            r#"
-                let bindings := mapper.create_bindings("arc_ball_camera");
-                bindings.bind("mouse1", "camera.pan_view(pressed)");
-                bindings.bind("mouse3", "camera.move_view(pressed)");
-                bindings.bind("mouseMotion", "camera.handle_mousemotion(dx, dy)");
-                bindings.bind("mouseWheel", "camera.handle_mousewheel(vertical_delta)");
-                bindings.bind("PageUp", "camera.increase_fov(pressed)");
-                bindings.bind("PageDown", "camera.decrease_fov(pressed)");
-            "#,
-        )?;
-        Ok(())
-    }
-
     #[method]
     pub fn pan_view(&mut self, pressed: bool) {
         self.in_rotate = pressed;
@@ -143,6 +163,20 @@ impl ArcBallCamera {
     #[method]
     pub fn decrease_fov(&mut self, pressed: bool) {
         self.fov_delta = degrees!(if pressed { -1 } else { 0 });
+    }
+
+    #[method]
+    pub fn increase_exposure(&mut self, pressed: bool) {
+        if pressed {
+            self.camera.increase_exposure();
+        }
+    }
+
+    #[method]
+    pub fn decrease_exposure(&mut self, pressed: bool) {
+        if pressed {
+            self.camera.decrease_exposure();
+        }
     }
 
     #[method]
@@ -185,11 +219,52 @@ impl ArcBallCamera {
         self.eye.distance = self.eye.distance.max(meters!(0.01));
     }
 
+    #[method]
+    pub fn target_up(&mut self, pressed: bool) {
+        if pressed {
+            self.target_height_delta = meters!(1);
+        } else {
+            self.target_height_delta = meters!(0);
+        }
+    }
+
+    #[method]
+    pub fn target_down(&mut self, pressed: bool) {
+        if pressed {
+            self.target_height_delta = meters!(-1);
+        } else {
+            self.target_height_delta = meters!(0);
+        }
+    }
+
+    #[method]
+    pub fn target_up_fast(&mut self, pressed: bool) {
+        if pressed {
+            self.target_height_delta = meters!(100);
+        } else {
+            self.target_height_delta = meters!(0);
+        }
+    }
+
+    #[method]
+    pub fn target_down_fast(&mut self, pressed: bool) {
+        if pressed {
+            self.target_height_delta = meters!(-100);
+        } else {
+            self.target_height_delta = meters!(0);
+        }
+    }
+
     pub fn think(&mut self) {
         let mut fov = degrees!(self.camera.fov_y());
         fov += self.fov_delta;
         fov = fov.min(degrees!(90)).max(degrees!(1));
         self.camera.set_fov_y(fov);
+
+        self.target.distance += self.target_height_delta;
+        if self.target.distance < meters!(0f64) {
+            self.target.distance = meters!(0f64);
+        }
 
         let target = self.cartesian_target_position::<Kilometers>();
         let eye = self.cartesian_eye_position::<Kilometers>();
@@ -209,6 +284,13 @@ impl ArcBallCamera {
     }
 }
 
+impl ResizeHint for ArcBallCamera {
+    fn note_resize(&mut self, gpu: &GPU) -> Fallible<()> {
+        self.camera.set_aspect_ratio(gpu.aspect_ratio());
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -218,7 +300,7 @@ mod tests {
 
     #[test]
     fn it_can_compute_eye_positions_at_origin() -> Fallible<()> {
-        let mut c = ArcBallCamera::new(1f64, meters!(0.1f64));
+        let mut c = ArcBallCamera::detached(1f64, meters!(0.1f64));
 
         // Verify base target position.
         let t = c.cartesian_target_position::<Kilometers>();
@@ -276,7 +358,7 @@ mod tests {
 
     #[test]
     fn it_can_compute_eye_positions_with_offset_latitude() -> Fallible<()> {
-        let mut c = ArcBallCamera::new(1f64, meters!(0.1f64));
+        let mut c = ArcBallCamera::detached(1f64, meters!(0.1f64));
 
         // Verify base target position.
         let t = c.cartesian_target_position::<Kilometers>();
@@ -318,7 +400,7 @@ mod tests {
 
     #[test]
     fn it_can_compute_eye_positions_with_offset_longitude() -> Fallible<()> {
-        let mut c = ArcBallCamera::new(1f64, meters!(0.1f64));
+        let mut c = ArcBallCamera::detached(1f64, meters!(0.1f64));
 
         // Verify base target position.
         let t = c.cartesian_target_position::<Kilometers>();

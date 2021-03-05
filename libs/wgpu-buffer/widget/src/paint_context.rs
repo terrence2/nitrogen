@@ -24,6 +24,7 @@ use gpu::GPU;
 use parking_lot::RwLock;
 use std::{borrow::Borrow, sync::Arc};
 
+#[derive(Debug)]
 pub struct PaintContext {
     pub current_depth: f32,
     pub font_context: FontContext,

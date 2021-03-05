@@ -33,6 +33,7 @@ impl Column {
     }
 }
 
+#[derive(Debug)]
 enum DirtyState {
     Clean,
     Dirty(((u32, u32), (u32, u32))),
@@ -79,6 +80,7 @@ impl Frame {
 // usage, so tries to be faster to pack at the cost of potentially loosing out on easy space wins
 // in cases where subsequent items are differently sized or shaped. Most common uses will only
 // feed similarly shaped items, so will generally be fine.
+#[derive(Debug)]
 pub struct AtlasPacker<P: Pixel + 'static> {
     // Constant storage info
     fill_color: P,
@@ -459,6 +461,7 @@ where
 mod test {
     use super::*;
     use image::{Rgba, RgbaImage};
+    use nitrous::Interpreter;
     use rand::prelude::*;
     use std::env;
     use winit::{event_loop::EventLoop, window::Window};
@@ -469,10 +472,11 @@ mod test {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
-        let gpu = GPU::new(&window, Default::default()).unwrap();
+        let interpreter = Interpreter::new();
+        let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
-            gpu.device(),
+            gpu.read().device(),
             GPU::stride_for_row_size((1024 + 8) * 4) / 4,
             2048,
             *Rgba::from_slice(&[random(), random(), random(), 255]),
@@ -520,10 +524,11 @@ mod test {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
-        let gpu = GPU::new(&window, Default::default()).unwrap();
+        let interpreter = Interpreter::new();
+        let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
-            gpu.device(),
+            gpu.read().device(),
             256,
             256,
             *Rgba::from_slice(&[0; 4]),
@@ -543,7 +548,7 @@ mod test {
                 .unwrap();
         }
 
-        let _ = packer.finish(&gpu, &mut Default::default());
+        let _ = packer.finish(&gpu.read(), &mut Default::default());
         Ok(())
     }
 
@@ -553,10 +558,11 @@ mod test {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
-        let gpu = GPU::new(&window, Default::default()).unwrap();
+        let interpreter = Interpreter::new();
+        let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
-            gpu.device(),
+            gpu.read().device(),
             256,
             256,
             *Rgba::from_slice(&[0; 4]),
@@ -571,7 +577,7 @@ mod test {
             254,
             *Rgba::from_slice(&[255, 0, 0, 255]),
         ))?;
-        packer.upload(&gpu, &mut Default::default());
+        packer.upload(&gpu.read(), &mut Default::default());
         let _ = packer.texture();
 
         // Grow
@@ -580,7 +586,7 @@ mod test {
             254,
             *Rgba::from_slice(&[255, 0, 0, 255]),
         ))?;
-        packer.upload(&gpu, &mut Default::default());
+        packer.upload(&gpu.read(), &mut Default::default());
         let _ = packer.texture();
 
         // Reuse
@@ -589,7 +595,7 @@ mod test {
             254,
             *Rgba::from_slice(&[255, 0, 0, 255]),
         ))?;
-        packer.upload(&gpu, &mut Default::default());
+        packer.upload(&gpu.read(), &mut Default::default());
         let _ = packer.texture();
         Ok(())
     }
@@ -601,10 +607,11 @@ mod test {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
-        let gpu = GPU::new(&window, Default::default()).unwrap();
+        let interpreter = Interpreter::new();
+        let gpu = GPU::new(&window, Default::default(), &mut interpreter.write()).unwrap();
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
-            gpu.device(),
+            gpu.read().device(),
             256,
             256,
             *Rgba::from_slice(&[0; 4]),
@@ -623,10 +630,11 @@ mod test {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
-        let gpu = GPU::new(&window, Default::default()).unwrap();
+        let interpreter = Interpreter::new();
+        let gpu = GPU::new(&window, Default::default(), &mut interpreter.write()).unwrap();
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
-            gpu.device(),
+            gpu.read().device(),
             256,
             256,
             *Rgba::from_slice(&[0; 4]),

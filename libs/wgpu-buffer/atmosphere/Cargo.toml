@@ -16,10 +16,8 @@ nalgebra = "^ 0.24"
 num-traits = "^ 0.2"
 static_assertions = "^ 1"
 wgpu = "^ 0.6"
-zerocopy = "^ 0.3"
+zerocopy = "= 0.3.0"
 camera = { path = "../../sim/camera" }
-command = { path = "../../system/command" }
-commandable = { path = "../../system/commandable" }
 gpu = { path = "../../system/gpu" }
 
 [target.'cfg(not(target_arch="wasm32"))'.dependencies]
@@ -28,6 +26,7 @@ memmap = "^ 0.7"
 [dev-dependencies]
 spirv-reflect = "^ 0.2"
 winit = { version = "^ 0.24", features = ["web-sys"] }
+nitrous = { path = "../../system/nitrous" }
 
 [build-dependencies]
 build_shaders = { path = "../../system/build_shaders" }

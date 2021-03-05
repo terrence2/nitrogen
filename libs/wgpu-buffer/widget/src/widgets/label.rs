@@ -27,6 +27,7 @@ use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::sync::Arc;
 
+#[derive(Debug)]
 pub struct Label {
     line: TextRun,
     width: Option<f32>,
@@ -95,7 +96,7 @@ impl Widget for Label {
     fn handle_events(
         &mut self,
         _events: &[GenericEvent],
-        _interpreter: Arc<RwLock<Interpreter>>,
+        _interpreter: &mut Interpreter,
     ) -> Fallible<()> {
         Ok(())
     }

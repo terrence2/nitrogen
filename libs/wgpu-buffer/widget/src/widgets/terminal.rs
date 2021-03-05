@@ -27,6 +27,7 @@ use parking_lot::RwLock;
 use std::sync::Arc;
 
 // Items packed from top to bottom.
+#[derive(Debug)]
 pub struct Terminal {
     edit: Arc<RwLock<LineEdit>>,
     container: Arc<RwLock<VerticalBox>>,
@@ -86,7 +87,7 @@ impl Widget for Terminal {
     fn handle_events(
         &mut self,
         events: &[GenericEvent],
-        interpreter: Arc<RwLock<Interpreter>>,
+        interpreter: &mut Interpreter,
     ) -> Fallible<()> {
         if self.visible {
             self.edit.write().handle_events(events, interpreter)

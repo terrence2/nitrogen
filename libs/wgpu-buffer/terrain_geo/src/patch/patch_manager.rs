@@ -24,7 +24,7 @@ use geodesy::{Cartesian, GeoCenter, Graticule};
 use gpu::{UploadTracker, GPU};
 use nalgebra::{Matrix4, Point3};
 use static_assertions::{assert_eq_align, assert_eq_size};
-use std::{f64::consts::FRAC_PI_2, mem, num::NonZeroU64, ops::Range, sync::Arc};
+use std::{f64::consts::FRAC_PI_2, fmt, mem, num::NonZeroU64, ops::Range, sync::Arc};
 use zerocopy::{AsBytes, FromBytes};
 
 #[repr(C)]
@@ -101,6 +101,12 @@ pub(crate) struct PatchManager {
     wireframe_index_ranges: Vec<Range<u32>>,
     tristrip_index_buffers: Vec<wgpu::Buffer>,
     tristrip_index_ranges: Vec<Range<u32>>,
+}
+
+impl fmt::Debug for PatchManager {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "PatchManger")
+    }
 }
 
 impl PatchManager {

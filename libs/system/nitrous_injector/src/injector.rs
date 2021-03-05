@@ -71,64 +71,64 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
         let mut arg_items = Vec::new();
         for (i, arg) in args.iter().enumerate() {
             let expr: Expr = match arg.ty {
-                LLType::Boolean => parse2(quote! { args[#i].to_bool()? }).unwrap(),
-                LLType::Integer => parse2(quote! { args[#i].to_int()? }).unwrap(),
-                LLType::Float => parse2(quote! { args[#i].to_float()? }).unwrap(),
-                LLType::StrRef => parse2(quote! { args[#i].to_str()? }).unwrap(),
-                LLType::String => parse2(quote! { args[#i].to_str()?.to_owned() }).unwrap(),
-                LLType::Value => parse2(quote! { args[#i].clone() }).unwrap(),
-                LLType::Unit => parse2(quote! { Value::True() }).unwrap(),
+                Scalar::Boolean => parse2(quote! { args[#i].to_bool()? }).unwrap(),
+                Scalar::Integer => parse2(quote! { args[#i].to_int()? }).unwrap(),
+                Scalar::Float => parse2(quote! { args[#i].to_float()? }).unwrap(),
+                Scalar::StrRef => parse2(quote! { args[#i].to_str()? }).unwrap(),
+                Scalar::String => parse2(quote! { args[#i].to_str()?.to_owned() }).unwrap(),
+                Scalar::Value => parse2(quote! { args[#i].clone() }).unwrap(),
+                Scalar::Unit => parse2(quote! { Value::True() }).unwrap(),
             };
             arg_items.push(expr);
         }
 
         let toks = match ret {
-            LLRetType::Nothing => {
+            RetType::Nothing => {
                 quote! { #name => { self.#item( #(#arg_items),* ); Ok(::nitrous::Value::True()) } }
             }
-            LLRetType::Raw(llty) => match llty {
-                LLType::Boolean => {
+            RetType::Raw(llty) => match llty {
+                Scalar::Boolean => {
                     quote! { #name => { Ok(::nitrous::Value::Boolean(self.#item( #(#arg_items),* ))) } }
                 }
-                LLType::Integer => {
+                Scalar::Integer => {
                     quote! { #name => { Ok(::nitrous::Value::Integer(self.#item( #(#arg_items),* ))) } }
                 }
-                LLType::Float => {
-                    quote! { #name => { Ok(::nitrous::Value::Float(self.#item( #(#arg_items),* ))) } }
+                Scalar::Float => {
+                    quote! { #name => { Ok(::nitrous::Value::Float(::ordered_float::OrderedFloat(self.#item( #(#arg_items),* )))) } }
                 }
-                LLType::String => {
+                Scalar::String => {
                     quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_items),* ))) } }
                 }
-                LLType::StrRef => {
+                Scalar::StrRef => {
                     quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_items),* ).to_owned())) } }
                 }
-                LLType::Value => {
+                Scalar::Value => {
                     quote! { #name => { Ok(self.#item( #(#arg_items),* )) } }
                 }
-                LLType::Unit => {
+                Scalar::Unit => {
                     quote! { #name => { self.#item( #(#arg_items),* ); Ok(::nitrous::Value::True()) } }
                 }
             },
-            LLRetType::FallibleRaw(llty) => match llty {
-                LLType::Boolean => {
+            RetType::FallibleRaw(llty) => match llty {
+                Scalar::Boolean => {
                     quote! { #name => { Ok(::nitrous::Value::Boolean(self.#item( #(#arg_items),* )?)) } }
                 }
-                LLType::Integer => {
+                Scalar::Integer => {
                     quote! { #name => { Ok(::nitrous::Value::Integer(self.#item( #(#arg_items),* )?)) } }
                 }
-                LLType::Float => {
-                    quote! { #name => { Ok(::nitrous::Value::Float(self.#item( #(#arg_items),* )?)) } }
+                Scalar::Float => {
+                    quote! { #name => { Ok(::nitrous::Value::Float(::ordered_float::OrderedFloat(self.#item( #(#arg_items),* )?))) } }
                 }
-                LLType::String => {
+                Scalar::String => {
                     quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_items),* )?)) } }
                 }
-                LLType::StrRef => {
+                Scalar::StrRef => {
                     quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_items),* )?.to_owned())) } }
                 }
-                LLType::Value => {
+                Scalar::Value => {
                     quote! { #name => { self.#item( #(#arg_items),* ) } }
                 }
-                LLType::Unit => {
+                Scalar::Unit => {
                     quote! { #name => { self.#item( #(#arg_items),* )?; Ok(::nitrous::Value::True()) } }
                 }
             },
@@ -138,19 +138,20 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
         method_arms.push(call_arm);
 
         let lookup_arm: Arm =
-            parse2(quote! { #name => ::nitrous::Value::Method(module, #name.to_owned()) }).unwrap();
+            parse2(quote! { #name => { Ok(::nitrous::Value::Method(module, #name.to_owned())) } })
+                .unwrap();
         get_arms.push(lookup_arm);
     }
 
     for item in visitor.getters {
         let name = format!("{}", item);
-        let arm: Arm = parse2(quote! { #name => self.#item() }).unwrap();
+        let arm: Arm = parse2(quote! { { #name => self.#item() } }).unwrap();
         get_arms.push(arm);
     }
 
     for item in visitor.setters {
         let name = format!("{}", item);
-        let arm: Arm = parse2(quote! { #name => self.#item(value) }).unwrap();
+        let arm: Arm = parse2(quote! { #name => { self.#item(value) } }).unwrap();
         put_arms.push(arm);
     }
 
@@ -158,13 +159,7 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
         impl #impl_generics #ty #ty_generics #where_clause {
             fn __call_method_inner__(&mut self, name: &str, args: &[::nitrous::Value]) -> ::failure::Fallible<::nitrous::Value> {
                 match name {
-                    // Note: this first case makes the trailing comma valid if there are no
-                    //       actual arms found above.
-                    "" => {
-                        log::warn!("Empty name passed to call_method on {}", stringify!(#ty));
-                        ::failure::bail!("Empty name passed to call_method on {}", stringify!(#ty))
-                    }
-                    #(#method_arms),*,
+                    #(#method_arms)*
                     _ => {
                         log::warn!("Unknown call_method '{}' passed to {}", name, stringify!(#ty));
                         ::failure::bail!("Unknown call_method '{}' passed to {}", name, stringify!(#ty))
@@ -173,33 +168,21 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
             }
 
             fn __get_inner__(&self, module: ::std::sync::Arc<::parking_lot::RwLock<dyn ::nitrous::Module>>, name: &str) -> ::failure::Fallible<::nitrous::Value> {
-                Ok(match name {
-                    // Note: this first case makes the trailing comma valid if there are no
-                    //       actual arms found above.
-                    "" => {
-                        log::warn!("Empty name passed to get on {}", stringify!(#ty));
-                        ::failure::bail!("Empty name passed to get on {}", stringify!(#ty))
-                    }
-                    #(#get_arms),*,
+                match name {
+                    #(#get_arms)*
                     _ => {
                         log::warn!("Unknown get '{}' passed to {}", name, stringify!(#ty));
-                        ::failure::bail!("Unknown get '{}' passed to {}", name, stringify!(#ty))
+                        ::failure::bail!("Unknown get '{}' passed to {}", name, stringify!(#ty));
                     }
-                })
+                }
             }
 
             fn __put_inner__(&mut self, module: ::std::sync::Arc<::parking_lot::RwLock<dyn ::nitrous::Module>>, name: &str, value: ::nitrous::Value) -> ::failure::Fallible<()> {
                 match name {
-                    // Note: this first case makes the trailing comma valid if there are no
-                    //       actual arms found above.
-                    "" => {
-                        log::warn!("Empty name passed to put on {}", stringify!(#ty));
-                        ::failure::bail!("Empty name passed to put on {}", stringify!(#ty))
-                    }
-                    #(#put_arms),*,
+                    #(#put_arms)*
                     _ => {
                         log::warn!("Unknown put '{}' passed to {}", name, stringify!(#ty));
-                        ::failure::bail!("Unknown put '{}' passed to {}", name, stringify!(#ty))
+                        ::failure::bail!("Unknown put '{}' passed to {}", name, stringify!(#ty));
                     }
                 }
             }
@@ -210,7 +193,7 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
 }
 
 #[derive(Debug)]
-enum LLType {
+enum Scalar {
     Boolean,
     Integer,
     Float,
@@ -220,27 +203,27 @@ enum LLType {
     Unit,
 }
 
-impl LLType {
+impl Scalar {
     fn from_type(ty: &Type) -> Self {
         if let Type::Path(p) = ty {
             Self::from_type_path(p)
         } else if let Type::Reference(r) = ty {
             match Self::from_type(&r.elem) {
-                LLType::StrRef => LLType::StrRef,
+                Scalar::StrRef => Scalar::StrRef,
                 v => panic!(
-                    "nitrous LLType only support references to str, not: {:#?}",
+                    "nitrous Scalar only support references to str, not: {:#?}",
                     v
                 ),
             }
         } else if let Type::Tuple(tt) = ty {
             if tt.elems.is_empty() {
-                LLType::Unit
+                Scalar::Unit
             } else {
-                panic!("nitrous LLType only supports the unit tuple type")
+                panic!("nitrous Scalar only supports the unit tuple type")
             }
         } else {
             panic!(
-                "nitrous LLType only supports path and ref types, not: {:#?}",
+                "nitrous Scalar only supports path and ref types, not: {:#?}",
                 ty
             );
         }
@@ -250,21 +233,21 @@ impl LLType {
         assert_eq!(
             p.path.segments.len(),
             1,
-            "nitrous LLType paths must have length 1 (e.g. builtins)"
+            "nitrous Scalar paths must have length 1 (e.g. builtins)"
         );
         p.path.segments.first().unwrap().ident.to_string()
     }
 
     fn from_type_path(p: &TypePath) -> Self {
         match Self::type_path_name(p).as_str() {
-            "bool" => LLType::Boolean,
-            "i64" => LLType::Integer,
-            "f64" => LLType::Float,
-            "str" => LLType::StrRef,
-            "String" => LLType::String,
-            "Value" => LLType::Value,
+            "bool" => Scalar::Boolean,
+            "i64" => Scalar::Integer,
+            "f64" => Scalar::Float,
+            "str" => Scalar::StrRef,
+            "String" => Scalar::String,
+            "Value" => Scalar::Value,
             _ => panic!(
-                "nitrous LLType only supports basic types, not: {:#?}",
+                "nitrous Scalar only supports basic types, not: {:#?}",
                 p.path.segments.first().unwrap()
             ),
         }
@@ -272,26 +255,26 @@ impl LLType {
 }
 
 #[derive(Debug)]
-enum LLRetType {
+enum RetType {
     Nothing,
-    Raw(LLType),
-    FallibleRaw(LLType),
+    Raw(Scalar),
+    FallibleRaw(Scalar),
 }
 
-impl LLRetType {
+impl RetType {
     fn from_return_type(ret_ty: &ReturnType) -> Self {
         match ret_ty {
-            ReturnType::Default => LLRetType::Nothing,
+            ReturnType::Default => RetType::Nothing,
             ReturnType::Type(_, ref ty) => {
                 if let Type::Path(p) = ty.borrow() {
-                    match LLType::type_path_name(p).as_str() {
+                    match Scalar::type_path_name(p).as_str() {
                         "Fallible" => {
                             if let PathArguments::AngleBracketed(ab_generic_args) =
                                 &p.path.segments.first().unwrap().arguments
                             {
                                 let fallible_arg = ab_generic_args.args.first().unwrap();
                                 if let GenericArgument::Type(ty_inner) = fallible_arg {
-                                    LLRetType::FallibleRaw(LLType::from_type(ty_inner))
+                                    RetType::FallibleRaw(Scalar::from_type(ty_inner))
                                 } else {
                                     panic!("Fallible parameter must be a type");
                                 }
@@ -299,10 +282,10 @@ impl LLRetType {
                                 panic!("Fallible must have an angle bracketed argument");
                             }
                         }
-                        _ => Self::Raw(LLType::from_type(ty.borrow())),
+                        _ => Self::Raw(Scalar::from_type(ty.borrow())),
                     }
                 } else {
-                    panic!("nitrous LLRetType only supports Fallible, None, Value, and basic types")
+                    panic!("nitrous RetType only supports Fallible, None, Value, and basic types")
                 }
             }
         }
@@ -312,11 +295,11 @@ impl LLRetType {
 #[derive(Debug)]
 struct ArgDef {
     name: Ident,
-    ty: LLType,
+    ty: Scalar,
 }
 
 struct CollectorVisitor {
-    methods: Vec<(Ident, Vec<ArgDef>, LLRetType)>,
+    methods: Vec<(Ident, Vec<ArgDef>, RetType)>,
     getters: Vec<Ident>,
     setters: Vec<Ident>,
 }
@@ -346,7 +329,7 @@ impl<'ast> Visit<'ast> for CollectorVisitor {
                             if let Pat::Ident(ident) = pat_type.pat.borrow() {
                                 ArgDef {
                                     name: ident.ident.clone(),
-                                    ty: LLType::from_type(pat_type.ty.borrow()),
+                                    ty: Scalar::from_type(pat_type.ty.borrow()),
                                 }
                             } else {
                                 panic!("only identifier patterns supported as nitrous method args")
@@ -354,7 +337,7 @@ impl<'ast> Visit<'ast> for CollectorVisitor {
                         }
                     })
                     .collect::<Vec<_>>();
-                let ret = LLRetType::from_return_type(&node.sig.output);
+                let ret = RetType::from_return_type(&node.sig.output);
                 self.methods.push((node.sig.ident.clone(), args, ret));
                 break;
             } else if attr.path.is_ident("getter") {

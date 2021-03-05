@@ -31,6 +31,7 @@ pub enum PositionV {
 }
 
 // Determine how the given widget should be packed into its box.
+#[derive(Debug)]
 pub struct BoxPacking {
     pub(crate) widget: Arc<RwLock<dyn Widget>>,
     offset: usize,

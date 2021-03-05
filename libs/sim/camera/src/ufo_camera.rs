@@ -12,14 +12,17 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use command::{Bindings, Command};
 use failure::Fallible;
 use nalgebra::{
     Isometry3, Matrix4, Perspective3, Point3, Similarity3, Translation3, Unit, UnitQuaternion,
     Vector3,
 };
-use std::f64::consts::PI;
+use nitrous::{Interpreter, Module, Value};
+use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use parking_lot::RwLock;
+use std::{f64::consts::PI, sync::Arc};
 
+#[derive(Debug, NitrousModule)]
 pub struct UfoCamera {
     position: Translation3<f64>,
     rotation: UnitQuaternion<f64>,
@@ -35,6 +38,7 @@ pub struct UfoCamera {
     rot_vector: Vector3<f64>,
 }
 
+#[inject_nitrous_module]
 impl UfoCamera {
     pub fn new(aspect_ratio: f64, z_near: f64, z_far: f64) -> Self {
         Self {
@@ -53,6 +57,35 @@ impl UfoCamera {
             move_vector: nalgebra::zero(),
             rot_vector: nalgebra::zero(),
         }
+    }
+
+    pub fn init(self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Arc<RwLock<Self>>> {
+        let ufo = Arc::new(RwLock::new(self));
+        interpreter
+            .write()
+            .put(interpreter.clone(), "camera", Value::Module(ufo.clone()))?;
+        Ok(ufo)
+    }
+
+    pub fn with_default_bindings(self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Self> {
+        interpreter.write().interpret_once(
+            r#"
+                let bindings := mapper.create_bindings("arc_ball_camera");
+                bindings.bind("mouseMotion", "camera.on_mousemove(dx, dy)");
+                bindings.bind("mouseWheel", "camera.on_mousewheel(delta_vertical)");
+                bindings.bind("Equals", "camera.zoom_in(pressed)");
+                bindings.bind("Subtract", "camera.zoom_out(pressed)");
+                bindings.bind("c", "camera.rotate_right(pressed)");
+                bindings.bind("z", "camera.rotate_left(pressed)");
+                bindings.bind("a", "camera.move_left(pressed)");
+                bindings.bind("d", "camera.move_right(pressed)");
+                bindings.bind("w", "camera.move_forward(pressed)");
+                bindings.bind("s", "camera.move_backward(pressed)");
+                bindings.bind("space", "camera.move_up(pressed)");
+                bindings.bind("Control", "camera.move_down(pressed)");
+            "#,
+        )?;
+        Ok(self)
     }
 
     pub fn set_position(&mut self, x: f64, y: f64, z: f64) {
@@ -87,26 +120,32 @@ impl UfoCamera {
         self.position.transform_point(&Point3::from(forward))
     }
 
-    pub fn zoom_in(&mut self) {
-        self.fov_y -= 5.0 * PI / 180.0;
-        self.fov_y = self.fov_y.min(10.0 * PI / 180.0);
-        self.projection = Perspective3::new(
-            1f64 / self.aspect_ratio,
-            self.fov_y,
-            self.z_near,
-            self.z_far,
-        )
+    #[method]
+    pub fn zoom_in(&mut self, pressed: bool) {
+        if pressed {
+            self.fov_y -= 5.0 * PI / 180.0;
+            self.fov_y = self.fov_y.min(10.0 * PI / 180.0);
+            self.projection = Perspective3::new(
+                1f64 / self.aspect_ratio,
+                self.fov_y,
+                self.z_near,
+                self.z_far,
+            )
+        }
     }
 
-    pub fn zoom_out(&mut self) {
-        self.fov_y += 5.0 * PI / 180.0;
-        self.fov_y = self.fov_y.max(90.0 * PI / 180.0);
-        self.projection = Perspective3::new(
-            1f64 / self.aspect_ratio,
-            self.fov_y,
-            self.z_near,
-            self.z_far,
-        )
+    #[method]
+    pub fn zoom_out(&mut self, pressed: bool) {
+        if pressed {
+            self.fov_y += 5.0 * PI / 180.0;
+            self.fov_y = self.fov_y.max(90.0 * PI / 180.0);
+            self.projection = Perspective3::new(
+                1f64 / self.aspect_ratio,
+                self.fov_y,
+                self.z_near,
+                self.z_far,
+            )
+        }
     }
 
     pub fn think(&mut self) {
@@ -141,74 +180,92 @@ impl UfoCamera {
         }
     }
 
+    #[method]
     pub fn on_mousemove(&mut self, x: f64, y: f64) {
         self.rot_vector.x = x;
         self.rot_vector.y = y;
     }
 
-    pub fn plus_rotate_right(&mut self) {
-        self.rot_vector.z = 1.0;
+    #[method]
+    pub fn on_mousewheel(&mut self, delta_vertical: f64) {
+        if delta_vertical > 0.0 {
+            self.speed *= 0.8;
+        } else {
+            self.speed *= 1.2;
+        }
     }
 
-    pub fn minus_rotate_right(&mut self) {
-        self.rot_vector.z = 0.0;
+    #[method]
+    pub fn rotate_right(&mut self, pressed: bool) {
+        if pressed {
+            self.rot_vector.z = 1.0;
+        } else {
+            self.rot_vector.z = 0.0;
+        }
     }
 
-    pub fn plus_rotate_left(&mut self) {
-        self.rot_vector.z = -1.0;
+    #[method]
+    pub fn rotate_left(&mut self, pressed: bool) {
+        if pressed {
+            self.rot_vector.z = -1.0;
+        } else {
+            self.rot_vector.z = 0.0;
+        }
     }
 
-    pub fn minus_rotate_left(&mut self) {
-        self.rot_vector.z = 0.0;
+    #[method]
+    pub fn move_up(&mut self, pressed: bool) {
+        if pressed {
+            self.move_vector.y = -1f64;
+        } else {
+            self.move_vector.y = 0f64;
+        }
     }
 
-    pub fn plus_move_up(&mut self) {
-        self.move_vector.y = -1f64;
+    #[method]
+    pub fn move_down(&mut self, pressed: bool) {
+        if pressed {
+            self.move_vector.y = 1f64;
+        } else {
+            self.move_vector.y = 0f64;
+        }
     }
 
-    pub fn minus_move_up(&mut self) {
-        self.move_vector.y = 0f64;
+    #[method]
+    pub fn move_right(&mut self, pressed: bool) {
+        if pressed {
+            self.move_vector.x = 1f64;
+        } else {
+            self.move_vector.x = 0f64;
+        }
     }
 
-    pub fn plus_move_down(&mut self) {
-        self.move_vector.y = 1f64;
+    #[method]
+    pub fn move_left(&mut self, pressed: bool) {
+        if pressed {
+            self.move_vector.x = -1f64;
+        } else {
+            self.move_vector.x = 0f64;
+        }
     }
 
-    pub fn minus_move_down(&mut self) {
-        self.move_vector.y = 0f64;
+    #[method]
+    pub fn move_forward(&mut self, pressed: bool) {
+        // n.b. -1 points forward
+        if pressed {
+            self.move_vector.z = -1f64;
+        } else {
+            self.move_vector.z = 0f64;
+        }
     }
 
-    pub fn plus_move_right(&mut self) {
-        self.move_vector.x = 1f64;
-    }
-
-    pub fn minus_move_right(&mut self) {
-        self.move_vector.x = 0f64;
-    }
-
-    pub fn plus_move_left(&mut self) {
-        self.move_vector.x = -1f64;
-    }
-
-    pub fn minus_move_left(&mut self) {
-        self.move_vector.x = 0f64;
-    }
-
-    pub fn plus_move_forward(&mut self) {
-        // n.b. flipped depth
-        self.move_vector.z = -1f64;
-    }
-
-    pub fn minus_move_forward(&mut self) {
-        self.move_vector.z = 0f64;
-    }
-
-    pub fn plus_move_backward(&mut self) {
-        self.move_vector.z = 1f64;
-    }
-
-    pub fn minus_move_backward(&mut self) {
-        self.move_vector.z = 0f64;
+    #[method]
+    pub fn move_backward(&mut self, pressed: bool) {
+        if pressed {
+            self.move_vector.z = 1f64;
+        } else {
+            self.move_vector.z = 0f64;
+        }
     }
 
     pub fn view(&self) -> Isometry3<f32> {
@@ -242,55 +299,6 @@ impl UfoCamera {
         let down: Translation3<f32> = nalgebra::convert(self.position);
         Point3::new(down.vector[0], down.vector[1], down.vector[2])
     }
-
-    pub fn default_bindings() -> Fallible<Bindings> {
-        Ok(Bindings::new("shape")
-            .bind("ufocamera.zoom-in", "Equals")?
-            .bind("ufocamera.zoom-out", "Subtract")?
-            .bind("ufocamera.+rotate-right", "c")?
-            .bind("ufocamera.+rotate-left", "z")?
-            .bind("ufocamera.+move-left", "a")?
-            .bind("ufocamera.+move-right", "d")?
-            .bind("ufocamera.+move-forward", "w")?
-            .bind("ufocamera.+move-backward", "s")?
-            .bind("ufocamera.+move-up", "space")?
-            .bind("ufocamera.+move-down", "Control")?)
-    }
-
-    pub fn handle_command(&mut self, command: &Command) -> Fallible<()> {
-        match command.command() {
-            "mouse-move" => {
-                self.on_mousemove(command.displacement(0)?.0, command.displacement(0)?.1)
-            }
-            "mouse-wheel" => {
-                if command.displacement(0)?.1 > 0.0 {
-                    self.speed *= 0.8;
-                } else {
-                    self.speed *= 1.2;
-                }
-            }
-            "zoom-in" => self.zoom_in(),
-            "zoom-out" => self.zoom_out(),
-            "+rotate-right" => self.plus_rotate_right(),
-            "-rotate-right" => self.minus_rotate_right(),
-            "+rotate-left" => self.plus_rotate_left(),
-            "-rotate-left" => self.minus_rotate_left(),
-            "+move-up" => self.plus_move_up(),
-            "-move-up" => self.minus_move_up(),
-            "+move-down" => self.plus_move_down(),
-            "-move-down" => self.minus_move_down(),
-            "+move-left" => self.plus_move_left(),
-            "-move-left" => self.minus_move_left(),
-            "+move-right" => self.plus_move_right(),
-            "-move-right" => self.minus_move_right(),
-            "+move-backward" => self.plus_move_backward(),
-            "-move-backward" => self.minus_move_backward(),
-            "+move-forward" => self.plus_move_forward(),
-            "-move-forward" => self.minus_move_forward(),
-            _ => {}
-        }
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -301,61 +309,15 @@ mod test {
     #[test]
     fn test_move() {
         let mut camera = UfoCamera::new(1.0, 1.0, 10.0);
-        camera.plus_move_right();
+        camera.move_right(true);
         camera.think();
         assert_relative_eq!(camera.position.x, camera.speed);
-        camera.minus_move_right();
-        camera.plus_move_left();
+        camera.move_right(false);
+        camera.move_left(true);
         camera.think();
         camera.think();
         assert_relative_eq!(camera.position.x, -camera.speed);
         assert_relative_eq!(camera.position.y, 0.0);
         assert_relative_eq!(camera.position.z, 0.0);
     }
-
-    /*
-    #[test]
-    fn test_rotate() {
-        let mut camera = UfoCamera::new(1.0, 1.0, 10.0);
-        camera.sensitivity = 1.0;
-        camera.rot_vector.x = 90.0;
-        camera.think();
-        camera.plus_move_right();
-        camera.think();
-        assert_relative_eq!(camera.position.z, -1.0);
-
-        let mut camera = UfoCamera::new(1.0, 1.0, 10.0);
-        camera.sensitivity = 1.0;
-        camera.rot_vector.x = -45.0;
-        camera.think();
-        camera.plus_move_right();
-        camera.think();
-        assert_relative_eq!(camera.position.x, 2f64.sqrt() / 2.0);
-        assert_relative_eq!(camera.position.z, 2f64.sqrt() / 2.0);
-        camera.minus_move_right();
-        camera.plus_move_up();
-        camera.think();
-        assert_relative_eq!(camera.position.x, 2f64.sqrt() / 2.0);
-        assert_relative_eq!(camera.position.y, -1.0);
-        assert_relative_eq!(camera.position.z, 2f64.sqrt() / 2.0);
-
-        let mut camera = UfoCamera::new(1.0, 1.0, 10.0);
-        camera.sensitivity = 1.0;
-        camera.rot_vector.y = 45.0;
-        camera.think();
-        camera.plus_move_up();
-        camera.think();
-        assert_relative_eq!(camera.position.y, -(2f64.sqrt()) / 2.0);
-        assert_relative_eq!(camera.position.z, 2f64.sqrt() / 2.0);
-
-        let mut camera = UfoCamera::new(1.0, 1.0, 10.0);
-        camera.sensitivity = 1.0;
-        camera.rot_vector.x = 45.0;
-        camera.think();
-        camera.plus_move_right();
-        camera.think();
-        assert_relative_eq!(camera.position.x, 2f64.sqrt() / 2.0);
-        assert_relative_eq!(camera.position.z, -(2f64.sqrt()) / 2.0);
-    }
-    */
 }

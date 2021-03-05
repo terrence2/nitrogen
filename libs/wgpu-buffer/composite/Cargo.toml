@@ -8,8 +8,6 @@ edition = "2018"
 failure = "^ 0.1.2"
 log = "^ 0.4"
 wgpu = "^ 0.6"
-command = { path = "../../system/command" }
-commandable = { path = "../../system/commandable" }
 fullscreen = { path = "../../wgpu-buffer/fullscreen" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 gpu = { path = "../../system/gpu" }

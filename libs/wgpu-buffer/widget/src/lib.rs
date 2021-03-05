@@ -41,7 +41,6 @@ pub use crate::{
 };
 
 use crate::font_context::FontContext;
-use commandable::{commandable, Commandable};
 use failure::{ensure, Fallible};
 use font_common::FontInterface;
 use font_ttf::TtfFont;
@@ -77,7 +76,7 @@ const FIRA_SANS_REGULAR_TTF_DATA: &[u8] =
 const FIRA_MONO_REGULAR_TTF_DATA: &[u8] =
     include_bytes!("../../../../assets/font/FiraMono-Regular.ttf");
 
-#[derive(Commandable)]
+#[derive(Debug)]
 pub struct WidgetBuffer {
     // Widget state.
     root: Arc<RwLock<FloatBox>>,
@@ -94,14 +93,13 @@ pub struct WidgetBuffer {
     bind_group: Option<wgpu::BindGroup>,
 }
 
-#[commandable]
 impl WidgetBuffer {
     const MAX_WIDGETS: usize = 512;
     const MAX_TEXT_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6;
     const MAX_BACKGROUND_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6; // note: rounded corners
     const MAX_IMAGE_VERTICES: usize = Self::MAX_WIDGETS * 4 * 6;
 
-    pub fn new(gpu: &mut GPU) -> Fallible<Self> {
+    pub fn new(gpu: &mut GPU) -> Fallible<Arc<RwLock<Self>>> {
         trace!("WidgetBuffer::new");
 
         let mut paint_context = PaintContext::new(gpu.device());
@@ -190,7 +188,7 @@ impl WidgetBuffer {
                     ],
                 });
 
-        Ok(Self {
+        Ok(Arc::new(RwLock::new(Self {
             root: FloatBox::new(),
             paint_context,
 
@@ -201,7 +199,7 @@ impl WidgetBuffer {
 
             bind_group_layout,
             bind_group: None,
-        })
+        })))
     }
 
     pub fn root(&self) -> Arc<RwLock<FloatBox>> {
@@ -223,7 +221,7 @@ impl WidgetBuffer {
     pub fn handle_events(
         &mut self,
         events: &[GenericEvent],
-        interpreter: Arc<RwLock<Interpreter>>,
+        interpreter: &mut Interpreter,
     ) -> Fallible<()> {
         self.root().write().handle_events(events, interpreter)
     }
@@ -340,9 +338,10 @@ mod test {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;
-        let mut gpu = GPU::new(&window, Default::default())?;
+        let interpreter = Interpreter::new();
+        let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
 
-        let mut widgets = WidgetBuffer::new(&mut gpu)?;
+        let widgets = WidgetBuffer::new(&mut gpu.write())?;
         let label = Label::new(
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\
             สิบสองกษัตริย์ก่อนหน้าแลถัดไป       สององค์ไซร้โง่เขลาเบาปัญญา\
@@ -354,10 +353,12 @@ mod test {
             Y [ˈʏpsilɔn], Yen [jɛn], Yoga [ˈjoːgɑ]",
         )
         .wrapped();
-        widgets.root().write().add_child(label);
+        widgets.read().root().write().add_child("label", label);
 
         let mut tracker = Default::default();
-        widgets.make_upload_buffer(&gpu, &mut tracker)?;
+        widgets
+            .write()
+            .make_upload_buffer(&gpu.read(), &mut tracker)?;
 
         Ok(())
     }

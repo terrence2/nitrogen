@@ -15,16 +15,17 @@
 use crate::widgets::event_mapper::{
     axis::AxisKind,
     keyset::{Key, KeySet},
+    system::SystemEventKind,
+    window::WindowEventKind,
     State,
 };
 use failure::Fallible;
 use input::ElementState;
 use log::trace;
-use nitrous::{Interpreter, Module, Script, Value};
+use nitrous::{Interpreter, Script, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
-use parking_lot::RwLock;
 use smallvec::{smallvec, SmallVec};
-use std::{collections::HashMap, sync::Arc};
+use std::collections::HashMap;
 
 // Map from key, buttons, and axes to commands.
 #[derive(Debug, NitrousModule)]
@@ -33,6 +34,8 @@ pub struct Bindings {
     press_chords: HashMap<Key, Vec<KeySet>>,
     script_map: HashMap<KeySet, Script>,
     axis_map: HashMap<AxisKind, Script>,
+    windows_event_map: HashMap<WindowEventKind, Script>,
+    system_event_map: HashMap<SystemEventKind, Script>,
 }
 
 #[inject_nitrous_module]
@@ -43,6 +46,8 @@ impl Bindings {
             press_chords: HashMap::new(),
             script_map: HashMap::new(),
             axis_map: HashMap::new(),
+            windows_event_map: HashMap::new(),
+            system_event_map: HashMap::new(),
         }
     }
 
@@ -51,20 +56,29 @@ impl Bindings {
         Ok(self)
     }
 
-    pub fn into_module(self) -> Arc<RwLock<dyn Module>> {
-        Arc::new(RwLock::new(self))
-    }
-
     #[method]
-    pub fn bind(&mut self, keyset_or_axis: &str, script_raw: &str) -> Fallible<()> {
+    pub fn bind(&mut self, event_name: &str, script_raw: &str) -> Fallible<()> {
         let script = Script::compile(script_raw)?;
 
-        if let Ok(axis) = AxisKind::from_virtual(keyset_or_axis) {
+        if let Ok(kind) = SystemEventKind::from_virtual(event_name) {
+            trace!("binding {:?} => {}", kind, script);
+            self.system_event_map.insert(kind, script);
+            return Ok(());
+        }
+
+        if let Ok(kind) = WindowEventKind::from_virtual(event_name) {
+            trace!("binding {:?} => {}", kind, script);
+            self.windows_event_map.insert(kind, script);
+            return Ok(());
+        }
+
+        if let Ok(axis) = AxisKind::from_virtual(event_name) {
+            trace!("binding {:?} => {}", axis, script);
             self.axis_map.insert(axis, script);
             return Ok(());
         }
 
-        for ks in KeySet::from_virtual(keyset_or_axis)?.drain(..) {
+        for ks in KeySet::from_virtual(event_name)?.drain(..) {
             trace!("binding {} => {}", ks, script);
             self.script_map.insert(ks.clone(), script.clone());
 
@@ -74,6 +88,28 @@ impl Bindings {
                 sets.push(ks.to_owned());
                 sets.sort_by_key(|ks| usize::max_value() - ks.keys.len());
             }
+        }
+        Ok(())
+    }
+
+    pub fn match_system_event(
+        &self,
+        event: SystemEventKind,
+        interpreter: &mut Interpreter,
+    ) -> Fallible<()> {
+        if let Some(script) = self.system_event_map.get(&event) {
+            interpreter.interpret(script)?;
+        }
+        Ok(())
+    }
+
+    pub fn match_window_event(
+        &self,
+        event: WindowEventKind,
+        interpreter: &mut Interpreter,
+    ) -> Fallible<()> {
+        if let Some(script) = self.windows_event_map.get(&event) {
+            interpreter.interpret(script)?;
         }
         Ok(())
     }
@@ -90,7 +126,7 @@ impl Bindings {
         key: Key,
         key_state: ElementState,
         state: &mut State,
-        interpreter: Arc<RwLock<Interpreter>>,
+        interpreter: &mut Interpreter,
     ) -> Fallible<()> {
         match key_state {
             ElementState::Pressed => self.handle_press(key, state, interpreter)?,
@@ -103,14 +139,14 @@ impl Bindings {
         &self,
         key: Key,
         state: &mut State,
-        interpreter: Arc<RwLock<Interpreter>>,
+        interpreter: &mut Interpreter,
     ) -> Fallible<()> {
         // The press chords gives us a quick map from a key press to all chords which could become
         // active in the case that it is pressed so that we don't have to look at everything.
         if let Some(possible_chord_list) = self.press_chords.get(&key) {
             for chord in possible_chord_list {
                 if chord.is_pressed(&state) {
-                    self.maybe_activate_chord(chord, state, interpreter.clone())?;
+                    self.maybe_activate_chord(chord, state, interpreter)?;
                 }
             }
         }
@@ -130,7 +166,7 @@ impl Bindings {
         &self,
         chord: &KeySet,
         state: &mut State,
-        interpreter: Arc<RwLock<Interpreter>>,
+        interpreter: &mut Interpreter,
     ) -> Fallible<()> {
         // We may have multiple binding sets active for the same KeySet, in which case the first
         // binding in the set wins and checks for subsequent activations should exit early.
@@ -156,7 +192,7 @@ impl Bindings {
         for masked in &masked_chords {
             state.active_chords.remove(masked);
             if let Some(script) = self.script_map.get(masked) {
-                self.deactiveate_chord(script, interpreter.clone())?;
+                self.deactiveate_chord(script, interpreter)?;
             }
         }
 
@@ -171,7 +207,7 @@ impl Bindings {
         &self,
         key: Key,
         state: &mut State,
-        interpreter: Arc<RwLock<Interpreter>>,
+        interpreter: &mut Interpreter,
     ) -> Fallible<()> {
         // Remove any chords that have been released.
         let mut released_chords: SmallVec<[KeySet; 4]> = smallvec![];
@@ -180,7 +216,7 @@ impl Bindings {
                 // Note: unlike with press, we do not implicitly filter out keys we don't care about.
                 if let Some(script) = self.script_map.get(active_chord) {
                     released_chords.push(active_chord.to_owned());
-                    self.deactiveate_chord(script, interpreter.clone())?;
+                    self.deactiveate_chord(script, interpreter)?;
                 }
             }
         }
@@ -194,7 +230,7 @@ impl Bindings {
             for (chord, script) in &self.script_map {
                 if chord.is_subset_of(released_chord) && chord.is_pressed(&state) {
                     state.active_chords.insert(chord.to_owned());
-                    self.activate_chord(script, interpreter.clone())?;
+                    self.activate_chord(script, interpreter)?;
                 }
             }
         }
@@ -202,29 +238,17 @@ impl Bindings {
         Ok(())
     }
 
-    fn activate_chord(
-        &self,
-        script: &Script,
-        interpreter: Arc<RwLock<Interpreter>>,
-    ) -> Fallible<()> {
-        interpreter
-            .write()
-            .with_locals(&[("pressed", Value::True())], |inner| {
-                inner.interpret(script)
-            })?;
+    fn activate_chord(&self, script: &Script, interpreter: &mut Interpreter) -> Fallible<()> {
+        interpreter.with_locals(&[("pressed", Value::True())], |inner| {
+            inner.interpret(script)
+        })?;
         Ok(())
     }
 
-    fn deactiveate_chord(
-        &self,
-        script: &Script,
-        interpreter: Arc<RwLock<Interpreter>>,
-    ) -> Fallible<()> {
-        interpreter
-            .write()
-            .with_locals(&[("pressed", Value::False())], |inner| {
-                inner.interpret(script)
-            })?;
+    fn deactiveate_chord(&self, script: &Script, interpreter: &mut Interpreter) -> Fallible<()> {
+        interpreter.with_locals(&[("pressed", Value::False())], |inner| {
+            inner.interpret(script)
+        })?;
         Ok(())
     }
 }
@@ -235,6 +259,8 @@ mod test {
     use failure::bail;
     use input::{ModifiersState, VirtualKeyCode};
     use nitrous::{Module, Value};
+    use parking_lot::RwLock;
+    use std::sync::Arc;
 
     #[derive(Debug, Default)]
     struct Player {
@@ -282,11 +308,11 @@ mod test {
 
     #[test]
     fn test_modifier_planes_disable_bare() -> Fallible<()> {
-        let interpreter = Interpreter::boot().wrapped();
+        let interpreter = Interpreter::new();
         let player = Arc::new(RwLock::new(Player::default()));
         interpreter
             .write()
-            .put(interpreter.clone(), "player", Value::Module(player.clone()))?;
+            .put_global("player", Value::Module(player.clone()));
 
         let w_key = Key::KeyboardKey(VirtualKeyCode::W);
         let shift_key = Key::KeyboardKey(VirtualKeyCode::LShift);
@@ -300,12 +326,17 @@ mod test {
             shift_key,
             ElementState::Pressed,
             &mut state,
-            interpreter.clone(),
+            &mut interpreter.write(),
         )?;
         assert_eq!(player.read().walking, false);
 
         state.key_states.insert(w_key, ElementState::Pressed);
-        bindings.match_key(w_key, ElementState::Pressed, &mut state, interpreter)?;
+        bindings.match_key(
+            w_key,
+            ElementState::Pressed,
+            &mut state,
+            &mut interpreter.write(),
+        )?;
         assert_eq!(player.read().walking, false);
 
         Ok(())
@@ -313,11 +344,11 @@ mod test {
 
     #[test]
     fn test_matches_exact_modifier_plane() -> Fallible<()> {
-        let interpreter = Interpreter::boot().wrapped();
+        let interpreter = Interpreter::new();
         let player = Arc::new(RwLock::new(Player::default()));
         interpreter
             .write()
-            .put(interpreter.clone(), "player", Value::Module(player.clone()))?;
+            .put_global("player", Value::Module(player.clone()));
 
         let w_key = Key::KeyboardKey(VirtualKeyCode::W);
         let shift_key = Key::KeyboardKey(VirtualKeyCode::LShift);
@@ -331,7 +362,12 @@ mod test {
         state.modifiers_state |= ModifiersState::CTRL;
         state.modifiers_state |= ModifiersState::SHIFT;
         state.key_states.insert(w_key, ElementState::Pressed);
-        bindings.match_key(w_key, ElementState::Pressed, &mut state, interpreter)?;
+        bindings.match_key(
+            w_key,
+            ElementState::Pressed,
+            &mut state,
+            &mut interpreter.write(),
+        )?;
         assert!(!player.read().walking);
 
         Ok(())
@@ -339,11 +375,11 @@ mod test {
 
     #[test]
     fn test_masking() -> Fallible<()> {
-        let interpreter = Interpreter::boot().wrapped();
+        let interpreter = Interpreter::new();
         let player = Arc::new(RwLock::new(Player::default()));
         interpreter
             .write()
-            .put(interpreter.clone(), "player", Value::Module(player.clone()))?;
+            .put_global("player", Value::Module(player.clone()));
 
         let w_key = Key::KeyboardKey(VirtualKeyCode::W);
         let shift_key = Key::KeyboardKey(VirtualKeyCode::LShift);
@@ -358,7 +394,7 @@ mod test {
             w_key,
             ElementState::Pressed,
             &mut state,
-            interpreter.clone(),
+            &mut interpreter.write(),
         )?;
         assert!(player.read().walking);
         assert!(!player.read().running);
@@ -369,7 +405,7 @@ mod test {
             shift_key,
             ElementState::Pressed,
             &mut state,
-            interpreter.clone(),
+            &mut interpreter.write(),
         )?;
         assert!(!player.read().walking);
         assert!(player.read().running);
@@ -380,7 +416,7 @@ mod test {
             shift_key,
             ElementState::Released,
             &mut state,
-            interpreter.clone(),
+            &mut interpreter.write(),
         )?;
         assert!(player.read().walking);
         assert!(!player.read().running);
@@ -391,7 +427,7 @@ mod test {
             shift_key,
             ElementState::Pressed,
             &mut state,
-            interpreter.clone(),
+            &mut interpreter.write(),
         )?;
         assert!(!player.read().walking);
         assert!(player.read().running);
@@ -401,13 +437,18 @@ mod test {
             w_key,
             ElementState::Released,
             &mut state,
-            interpreter.clone(),
+            &mut interpreter.write(),
         )?;
         assert!(!player.read().walking);
         assert!(!player.read().running);
 
         state.key_states.insert(w_key, ElementState::Pressed);
-        bindings.match_key(w_key, ElementState::Pressed, &mut state, interpreter)?;
+        bindings.match_key(
+            w_key,
+            ElementState::Pressed,
+            &mut state,
+            &mut interpreter.write(),
+        )?;
         assert!(!player.read().walking);
         assert!(player.read().running);
 

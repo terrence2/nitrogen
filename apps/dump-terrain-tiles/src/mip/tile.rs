@@ -403,19 +403,17 @@ impl Tile {
     pub fn lookup(&self, level: usize, base: (i32, i32)) -> Option<Arc<RwLock<Tile>>> {
         // Look in our child, rather that descending: we need to return the child ref, which we
         // don't have from the context of the unwrapped node itself.
-        for maybe_child in &self.children {
-            if let Some(childref) = maybe_child {
-                let child = childref.read();
-                if child.base.0 <= base.0
-                    && child.base.0 + child.angular_extent > base.0
-                    && child.base.1 <= base.1
-                    && child.base.1 + child.angular_extent > base.1
-                {
-                    if child.level.offset() == level {
-                        return maybe_child.clone();
-                    } else {
-                        child.lookup(level, base);
-                    }
+        for childref in self.children.iter().flatten() {
+            let child = childref.read();
+            if child.base.0 <= base.0
+                && child.base.0 + child.angular_extent > base.0
+                && child.base.1 <= base.1
+                && child.base.1 + child.angular_extent > base.1
+            {
+                if child.level.offset() == level {
+                    return Some(childref.clone());
+                } else {
+                    child.lookup(level, base);
                 }
             }
         }

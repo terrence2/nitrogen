@@ -13,20 +13,18 @@ log = "^ 0.4"
 nalgebra = "^ 0.24"
 static_assertions = "^ 1"
 wgpu = "^ 0.6"
-zerocopy = "^ 0.3"
+zerocopy = "= 0.3.0"
 camera = { path = "../../sim/camera" }
-command = { path = "../../system/command" }
-commandable = { path = "../../system/commandable" }
 star_catalog = { path = "../../sim/star_catalog" }
 gpu = { path = "../../system/gpu" }
 
 [dev-dependencies]
 absolute_unit = { path = "../../sim/absolute_unit" }
-command = { path = "../../system/command" }
 fullscreen = { path = "../../wgpu-buffer/fullscreen" }
 geodesy = { path = "../../sim/geodesy" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 input = { path = "../../system/input" }
+nitrous = { path = "../../system/nitrous" }
 winit = { version = "^ 0.24", features = ["web-sys"] }
 
 [build-dependencies]

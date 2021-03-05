@@ -13,3 +13,4 @@ gpu = { path = "../../system/gpu" }
 [dev-dependencies]
 rand = "^ 0.8"
 winit = { version = "^ 0.24", features = ["web-sys"] }
+nitrous = { path = "../../system/nitrous" }

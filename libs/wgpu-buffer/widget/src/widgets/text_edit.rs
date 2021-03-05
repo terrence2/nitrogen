@@ -27,6 +27,7 @@ use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::sync::Arc;
 
+#[derive(Debug)]
 pub struct TextEdit {
     lines: Vec<TextRun>,
     width: f32,
@@ -127,7 +128,7 @@ impl Widget for TextEdit {
     fn handle_events(
         &mut self,
         _events: &[GenericEvent],
-        _interpreter: Arc<RwLock<Interpreter>>,
+        _interpreter: &mut Interpreter,
     ) -> Fallible<()> {
         assert!(self.read_only);
         Ok(())

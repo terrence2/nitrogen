@@ -15,7 +15,9 @@
 mod axis;
 mod bindings;
 mod keyset;
+mod system;
 mod widget;
+mod window;
 
 pub(crate) use crate::widgets::event_mapper::widget::State;
 pub use crate::widgets::event_mapper::{bindings::Bindings, widget::EventMapper};

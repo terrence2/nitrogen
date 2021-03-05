@@ -27,6 +27,7 @@ use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::{ops::Range, sync::Arc};
 
+#[derive(Debug)]
 pub struct LineEdit {
     line: TextRun,
     override_width: Option<f32>,
@@ -81,7 +82,7 @@ impl LineEdit {
         &mut self,
         virtual_keycode: &VirtualKeyCode,
         modifiers: &ModifiersState,
-        interpreter: Arc<RwLock<Interpreter>>,
+        interpreter: &mut Interpreter,
     ) -> Fallible<()> {
         match virtual_keycode {
             // Move to actions.
@@ -92,7 +93,7 @@ impl LineEdit {
             VirtualKeyCode::Left => self.line.move_left(modifiers),
             VirtualKeyCode::Right => self.line.move_right(modifiers),
             VirtualKeyCode::Return | VirtualKeyCode::NumpadEnter => {
-                interpreter.write().interpret_once(&self.line.flatten())?;
+                interpreter.interpret_once(&self.line.flatten())?;
             }
             _ => {}
         }
@@ -120,7 +121,7 @@ impl Widget for LineEdit {
     fn handle_events(
         &mut self,
         events: &[GenericEvent],
-        interpreter: Arc<RwLock<Interpreter>>,
+        interpreter: &mut Interpreter,
     ) -> Fallible<()> {
         for event in events {
             if let GenericEvent::KeyboardKey {
@@ -148,7 +149,7 @@ impl Widget for LineEdit {
                         }
                         self.line.insert(&c.to_string());
                     } else {
-                        self.take_action(virtual_keycode, modifiers_state, interpreter.clone())?;
+                        self.take_action(virtual_keycode, modifiers_state, interpreter)?;
                     }
                 }
             }

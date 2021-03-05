@@ -12,25 +12,26 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::paint_context::PaintContext;
-use failure::Fallible;
-use gpu::GPU;
-use input::GenericEvent;
-use nitrous::Interpreter;
-use std::fmt::Debug;
+use failure::{bail, Fallible};
+use unicase::eq_ascii;
 
-#[derive(Clone, Debug, Default)]
-pub struct UploadMetrics {
-    pub widget_info_indexes: Vec<u32>,
-    pub width: f32,
-    pub height: f32,
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub enum SystemEventKind {
+    Quit,
+    DeviceAdded,
+    DeviceRemoved,
 }
 
-pub trait Widget: Debug {
-    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Fallible<UploadMetrics>;
-    fn handle_events(
-        &mut self,
-        events: &[GenericEvent],
-        interpreter: &mut Interpreter,
-    ) -> Fallible<()>;
+impl SystemEventKind {
+    pub fn from_virtual(v: &str) -> Fallible<Self> {
+        Ok(if eq_ascii(v, "quit") {
+            Self::Quit
+        } else if eq_ascii(v, "deviceAdded") {
+            Self::DeviceAdded
+        } else if eq_ascii(v, "deviceRemoved") {
+            Self::DeviceRemoved
+        } else {
+            bail!("unrecognized system event identifier: {}", v)
+        })
+    }
 }

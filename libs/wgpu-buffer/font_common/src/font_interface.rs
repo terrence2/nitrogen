@@ -13,8 +13,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use image::GrayImage;
+use std::fmt::Debug;
 
-pub trait FontInterface {
+pub trait FontInterface: Debug {
     // global metrics
     fn units_per_em(&self) -> f32;
 

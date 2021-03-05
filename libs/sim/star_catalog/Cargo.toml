@@ -6,5 +6,5 @@ edition = "2018"
 
 [dependencies]
 failure = "^ 0.1.2"
-zerocopy = "^ 0.3"
+zerocopy = "= 0.3.0"
 packed_struct = { path = "../../system/packed_struct" }

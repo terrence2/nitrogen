@@ -33,6 +33,7 @@ use image::{ImageBuffer, Rgb};
 use log::trace;
 use std::{
     collections::{BTreeMap, BinaryHeap},
+    fmt,
     io::Read,
     num::NonZeroU32,
     ops::Range,
@@ -153,6 +154,12 @@ pub(crate) struct TileSet {
 
     // Set to true to take a snapshot at the start of the next frame.
     take_index_snapshot: bool,
+}
+
+impl fmt::Debug for TileSet {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "TileSet")
+    }
 }
 
 impl TileSet {
@@ -722,14 +729,14 @@ impl TileSet {
             img.save("__dump__/terrain_geo_index_texture.png")
                 .expect("wrote file");
         }
-        Ok(GPU::dump_texture(
+        GPU::dump_texture(
             &self.index_texture,
             self.index_texture_extent,
             self.index_texture_format,
             async_rt,
             gpu,
             Box::new(write_image),
-        )?)
+        )
     }
 
     fn allocate_atlas_slot(&mut self, votes: u32, qtid: QuadTreeId) {

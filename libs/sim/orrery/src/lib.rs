@@ -13,11 +13,13 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use chrono::{prelude::*, Duration};
-use command::{Bindings, Command};
 use failure::Fallible;
 use lazy_static::lazy_static;
 use nalgebra::{Point3, Unit, UnitQuaternion, Vector3, Vector4};
-use std::f64::consts::PI;
+use nitrous::{Interpreter, Value};
+use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use parking_lot::RwLock;
+use std::{f64::consts::PI, sync::Arc};
 
 /**
  * Orbital mechanics works great. Time, however, does not. The time reference for ephimeris is a
@@ -34,7 +36,8 @@ use std::f64::consts::PI;
  *
  * The name orrery was chosen for this module to put people in mind of the tiny and obviously
  * inaccurate physical solar system models built with gears. Because that is ultimately how this
- * module works: a hack that gives a flavor of the the real thing without trying too hard.
+ * module works: a hack that gives a flavor of the the real thing without trying too hard. Proper
+ * scientists should look elsewhere or hold their nose while reading below.
  */
 
 /*
@@ -86,6 +89,7 @@ omega_bar / longitude of periapsis:
 capital_omega / capital_omega / longitude of ascending node:
 */
 
+#[derive(Debug)]
 pub struct KeplerianElements {
     initial: OrbitalParameters,
     delta_per_century: OrbitalParameters,
@@ -181,6 +185,7 @@ impl KeplerianElements {
     }
 }
 
+#[derive(Debug)]
 pub struct OrbitalParameters {
     a: f64,             // AU
     e: f64,             // rad
@@ -257,44 +262,41 @@ impl OrbitalParameters {
 
 lazy_static! {
     static ref LEAP_SECONDS: Vec<DateTime<Utc>> = {
-        let mut v = Vec::new();
-        v.push(Utc.ymd(1972, 6, 30).and_hms(23, 59, 59));
-        v.push(Utc.ymd(1972, 12, 31).and_hms(23, 59, 59));
-        v.push(Utc.ymd(1973, 12, 31).and_hms(23, 59, 59));
-        v.push(Utc.ymd(1974, 12, 31).and_hms(23, 59, 59));
-        v.push(Utc.ymd(1975, 12, 31).and_hms(23, 59, 59));
-
-        v.push(Utc.ymd(1976, 12, 31).and_hms(23, 59, 59));
-        v.push(Utc.ymd(1977, 12, 31).and_hms(23, 59, 59));
-        v.push(Utc.ymd(1978, 12, 31).and_hms(23, 59, 59));
-        v.push(Utc.ymd(1979, 12, 31).and_hms(23, 59, 59));
-        v.push(Utc.ymd(1981, 6, 30).and_hms(23, 59, 59));
-
-        v.push(Utc.ymd(1982, 6, 30).and_hms(23, 59, 59));
-        v.push(Utc.ymd(1983, 6, 30).and_hms(23, 59, 59));
-        v.push(Utc.ymd(1985, 6, 30).and_hms(23, 59, 59));
-        v.push(Utc.ymd(1987, 12, 31).and_hms(23, 59, 59));
-        v.push(Utc.ymd(1989, 12, 31).and_hms(23, 59, 59));
-
-        v.push(Utc.ymd(1990, 12, 31).and_hms(23, 59, 59));
-        v.push(Utc.ymd(1992, 6, 30).and_hms(23, 59, 59));
-        v.push(Utc.ymd(1993, 6, 30).and_hms(23, 59, 59));
-        v.push(Utc.ymd(1994, 6, 30).and_hms(23, 59, 59));
-        v.push(Utc.ymd(1995, 12, 31).and_hms(23, 59, 59));
-
-        v.push(Utc.ymd(1997, 6, 30).and_hms(23, 59, 59));
-        v.push(Utc.ymd(1998, 12, 31).and_hms(23, 59, 59));
-        v.push(Utc.ymd(2005, 12, 31).and_hms(23, 59, 59));
-        v.push(Utc.ymd(2008, 12, 31).and_hms(23, 59, 59));
-        v.push(Utc.ymd(2012, 6, 30).and_hms(23, 59, 59));
-
-        v.push(Utc.ymd(2015, 6, 30).and_hms(23, 59, 59));
-        v.push(Utc.ymd(2016, 12, 31).and_hms(23, 59, 59));
+        let mut v = vec![
+            Utc.ymd(1972, 6, 30).and_hms(23, 59, 59),
+            Utc.ymd(1972, 12, 31).and_hms(23, 59, 59),
+            Utc.ymd(1973, 12, 31).and_hms(23, 59, 59),
+            Utc.ymd(1974, 12, 31).and_hms(23, 59, 59),
+            Utc.ymd(1975, 12, 31).and_hms(23, 59, 59),
+            Utc.ymd(1976, 12, 31).and_hms(23, 59, 59),
+            Utc.ymd(1977, 12, 31).and_hms(23, 59, 59),
+            Utc.ymd(1978, 12, 31).and_hms(23, 59, 59),
+            Utc.ymd(1979, 12, 31).and_hms(23, 59, 59),
+            Utc.ymd(1981, 6, 30).and_hms(23, 59, 59),
+            Utc.ymd(1982, 6, 30).and_hms(23, 59, 59),
+            Utc.ymd(1983, 6, 30).and_hms(23, 59, 59),
+            Utc.ymd(1985, 6, 30).and_hms(23, 59, 59),
+            Utc.ymd(1987, 12, 31).and_hms(23, 59, 59),
+            Utc.ymd(1989, 12, 31).and_hms(23, 59, 59),
+            Utc.ymd(1990, 12, 31).and_hms(23, 59, 59),
+            Utc.ymd(1992, 6, 30).and_hms(23, 59, 59),
+            Utc.ymd(1993, 6, 30).and_hms(23, 59, 59),
+            Utc.ymd(1994, 6, 30).and_hms(23, 59, 59),
+            Utc.ymd(1995, 12, 31).and_hms(23, 59, 59),
+            Utc.ymd(1997, 6, 30).and_hms(23, 59, 59),
+            Utc.ymd(1998, 12, 31).and_hms(23, 59, 59),
+            Utc.ymd(2005, 12, 31).and_hms(23, 59, 59),
+            Utc.ymd(2008, 12, 31).and_hms(23, 59, 59),
+            Utc.ymd(2012, 6, 30).and_hms(23, 59, 59),
+            Utc.ymd(2015, 6, 30).and_hms(23, 59, 59),
+            Utc.ymd(2016, 12, 31).and_hms(23, 59, 59),
+        ];
         v.reverse();
         v
     };
 }
 
+#[derive(Debug, NitrousModule)]
 pub struct Orrery {
     earth_moon_barycenter: KeplerianElements,
 
@@ -302,14 +304,19 @@ pub struct Orrery {
     in_debug_override: bool,
 }
 
+#[inject_nitrous_module]
 impl Orrery {
-    pub fn now() -> Self {
-        Self::new(Utc::now())
+    pub fn now(interpreter: &mut Interpreter) -> Arc<RwLock<Self>> {
+        Self::new(Utc::now(), interpreter)
     }
 
     #[allow(clippy::unreadable_literal)]
     #[rustfmt::skip]
-    pub fn new(initial_time: DateTime<Utc>) -> Self {
+    pub fn new(
+        initial_time: DateTime<Utc>,
+        interpreter: &mut Interpreter
+    ) -> Arc<RwLock<Self>> {
+        let orrery = Arc::new(RwLock::new(
         Self {
             //EM Bary   1.00000018      0.01673163     -0.00054346      100.46691572    102.93005885     -5.11260389
             //         -0.00000003     -0.00003661     -0.01337178    35999.37306329      0.31795260     -0.24123856
@@ -321,7 +328,22 @@ impl Orrery {
 
             now: initial_time,
             in_debug_override: false,
-        }
+        }));
+
+        interpreter.put_global("orrery", Value::Module(orrery.clone()));
+
+        orrery
+    }
+
+    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Fallible<()> {
+        interpreter.interpret_once(
+            r#"
+                let bindings := mapper.create_bindings("orrery");
+                bindings.bind("mouse2", "orrery.move_sun(pressed)");
+                bindings.bind("mouseMotion", "orrery.handle_mousemove(dx)");
+            "#,
+        )?;
+        Ok(())
     }
 
     pub fn get_time(&self) -> DateTime<Utc> {
@@ -389,26 +411,19 @@ impl Orrery {
             .normalize()
     }
 
-    pub fn debug_bindings() -> Fallible<Bindings> {
-        Ok(Bindings::new("orrery").bind("orrery.+move-sun", "mouse2")?)
+    #[method]
+    pub fn move_sun(&mut self, pressed: bool) {
+        self.in_debug_override = pressed;
     }
 
-    pub fn handle_command(&mut self, command: &Command) -> Fallible<()> {
-        match command.command() {
-            "+move-sun" => self.in_debug_override = true,
-            "-move-sun" => self.in_debug_override = false,
-            "mouse-move" => {
-                if self.in_debug_override {
-                    let minutes = command.displacement(0)?.0 as i64;
-                    self.now = self
-                        .now
-                        .checked_add_signed(Duration::minutes(minutes))
-                        .unwrap();
-                }
-            }
-            _ => {}
+    #[method]
+    pub fn handle_mousemove(&mut self, dx: f64) {
+        if self.in_debug_override {
+            self.now = self
+                .now
+                .checked_add_signed(Duration::minutes(dx.round() as i64))
+                .expect("signed add overflow on date... in minutes!?");
         }
-        Ok(())
     }
 }
 
@@ -418,22 +433,39 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let orrery = Orrery::new(Utc::now());
-        orrery.sun_direction();
+        let interpreter = Interpreter::new();
+        let orrery = Orrery::new(Utc::now(), &mut interpreter.write());
+        orrery.read().sun_direction();
     }
 
     #[test]
     fn test_leap_seconds() {
+        let interpreter = Interpreter::new();
         assert_eq!(
-            Orrery::new(Utc.ymd(2020, 1, 1).and_hms(12, 0, 0)).num_leap_seconds(),
+            Orrery::new(
+                Utc.ymd(2020, 1, 1).and_hms(12, 0, 0),
+                &mut interpreter.write()
+            )
+            .read()
+            .num_leap_seconds(),
             Duration::seconds(27)
         );
         assert_eq!(
-            Orrery::new(Utc.ymd(2010, 1, 1).and_hms(12, 0, 0)).num_leap_seconds(),
+            Orrery::new(
+                Utc.ymd(2010, 1, 1).and_hms(12, 0, 0),
+                &mut interpreter.write()
+            )
+            .read()
+            .num_leap_seconds(),
             Duration::seconds(24)
         );
         assert_eq!(
-            Orrery::new(Utc.ymd(1969, 1, 1).and_hms(12, 0, 0)).num_leap_seconds(),
+            Orrery::new(
+                Utc.ymd(1969, 1, 1).and_hms(12, 0, 0),
+                &mut interpreter.write()
+            )
+            .read()
+            .num_leap_seconds(),
             Duration::seconds(0)
         );
     }

@@ -14,57 +14,68 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{degrees, meters};
 use camera::ArcBallCamera;
-use command::Bindings;
 use failure::Fallible;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
 use gpu::GPU;
-use input::{InputController, InputSystem};
+use input::{
+    GenericEvent, GenericSystemEvent, GenericWindowEvent, InputController, InputSystem,
+    VirtualKeyCode,
+};
+use nitrous::Interpreter;
 use stars::StarsBuffer;
 use winit::window::Window;
 
 fn main() -> Fallible<()> {
-    let system_bindings = Bindings::new("system")
-        .bind("demo.exit", "Escape")?
-        .bind("demo.exit", "q")?;
-    InputSystem::run_forever(vec![system_bindings], window_main)
+    InputSystem::run_forever(vec![], window_main)
 }
 
 fn window_main(window: Window, input_controller: &InputController) -> Fallible<()> {
-    let mut gpu = GPU::new(&window, Default::default())?;
+    let interpreter = Interpreter::new();
+    let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
 
-    let globals_buffer = GlobalParametersBuffer::new(gpu.device())?;
-    let fullscreen_buffer = FullscreenBuffer::new(&gpu)?;
-    let stars_buffers = StarsBuffer::new(&gpu)?;
+    let globals_buffer = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter.write());
+    let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
+    let stars_buffers = StarsBuffer::new(&gpu.read())?;
 
-    let vert_shader = gpu.create_shader_module(include_bytes!("../target/example.vert.spirv"))?;
-    let frag_shader = gpu.create_shader_module(include_bytes!("../target/example.frag.spirv"))?;
+    let vert_shader = gpu
+        .write()
+        .create_shader_module(include_bytes!("../target/example.vert.spirv"))?;
+    let frag_shader = gpu
+        .write()
+        .create_shader_module(include_bytes!("../target/example.frag.spirv"))?;
 
-    let empty_layout = gpu
+    let empty_layout =
+        gpu.read()
+            .device()
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("empty-bind-group-layout"),
+                entries: &[],
+            });
+    let empty_bind_group = gpu
+        .read()
         .device()
-        .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("empty-bind-group-layout"),
+        .create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("empty-bind-group"),
+            layout: &empty_layout,
             entries: &[],
         });
-    let empty_bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("empty-bind-group"),
-        layout: &empty_layout,
-        entries: &[],
-    });
 
-    let pipeline_layout = gpu
-        .device()
-        .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("demo-stars-pipeline-layout"),
-            push_constant_ranges: &[],
-            bind_group_layouts: &[
-                globals_buffer.bind_group_layout(),
-                &empty_layout,
-                stars_buffers.bind_group_layout(),
-            ],
-        });
+    let pipeline_layout =
+        gpu.read()
+            .device()
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("demo-stars-pipeline-layout"),
+                push_constant_ranges: &[],
+                bind_group_layouts: &[
+                    globals_buffer.read().bind_group_layout(),
+                    &empty_layout,
+                    stars_buffers.bind_group_layout(),
+                ],
+            });
     let pipeline = gpu
+        .read()
         .device()
         .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("demo-stars-pipeline"),
@@ -112,45 +123,58 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
             alpha_to_coverage_enabled: false,
         });
 
-    let mut arcball = ArcBallCamera::new(gpu.aspect_ratio(), meters!(0.1));
-    arcball.pan_view(true);
-    arcball.set_eye_relative(Graticule::<Target>::new(
+    let arcball = ArcBallCamera::new(meters!(0.1), &mut gpu.write(), &mut interpreter.write());
+    arcball.write().pan_view(true);
+    arcball.write().set_eye_relative(Graticule::<Target>::new(
         degrees!(0),
         degrees!(0),
         meters!(10),
     ))?;
-    arcball.set_target(Graticule::<GeoSurface>::new(
+    arcball.write().set_target(Graticule::<GeoSurface>::new(
         degrees!(0),
         degrees!(0),
         meters!(10),
     ));
-    arcball.set_distance(meters!(40.0));
+    arcball.write().set_distance(meters!(40.0));
 
     loop {
-        for command in input_controller.poll_commands()? {
-            match command.command() {
-                "window-close" | "window-destroy" | "exit" => return Ok(()),
-                "window-resize" => {
-                    gpu.note_resize(None, &window);
-                    arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
+        for event in input_controller.poll_events()? {
+            match event {
+                GenericEvent::KeyboardKey {
+                    virtual_keycode, ..
+                } => {
+                    if virtual_keycode == VirtualKeyCode::Q
+                        || virtual_keycode == VirtualKeyCode::Escape
+                    {
+                        return Ok(());
+                    }
                 }
-                "window.dpi-change" => {
-                    gpu.note_resize(Some(command.float(0)?), &window);
-                    arcball.camera_mut().set_aspect_ratio(gpu.aspect_ratio());
+                GenericEvent::Window(GenericWindowEvent::Resized { width, height }) => {
+                    gpu.write().on_resize(width as i64, height as i64)?;
                 }
-                "window-cursor-move" => {}
+                GenericEvent::Window(GenericWindowEvent::ScaleFactorChanged { scale }) => {
+                    gpu.write().on_dpi_change(scale)?;
+                }
+                GenericEvent::System(GenericSystemEvent::Quit) => {
+                    return Ok(());
+                }
                 _ => {}
             }
         }
-        arcball.handle_mousemotion(-0.5f64, 0f64);
-        arcball.think();
+        arcball.write().handle_mousemotion(-0.5f64, 0f64);
+        arcball.write().think();
 
         // Prepare new camera parameters.
         let mut tracker = Default::default();
-        globals_buffer.make_upload_buffer(arcball.camera(), 2.2, &gpu, &mut tracker)?;
+        globals_buffer.write().make_upload_buffer(
+            arcball.read().camera(),
+            &gpu.read(),
+            &mut tracker,
+        )?;
 
-        let gb_borrow = &globals_buffer;
-        let fs_borrow = &fullscreen_buffer;
+        let gpu = &mut gpu.write();
+        let gb_borrow = &globals_buffer.read();
+        let fs_borrow = &fullscreen_buffer.read();
         let sb_borrow = &stars_buffers;
         let framebuffer = gpu.get_next_framebuffer()?.unwrap();
         let mut encoder = gpu

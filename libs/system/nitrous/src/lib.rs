@@ -31,22 +31,15 @@ pub trait Module: Debug {
     fn get(&self, module: Arc<RwLock<dyn Module>>, name: &str) -> Fallible<Value>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Interpreter {
     memory: HashMap<String, Value>,
     locals: HashMap<String, Value>,
 }
 
 impl Interpreter {
-    pub fn boot() -> Self {
-        Self {
-            memory: HashMap::new(),
-            locals: HashMap::new(),
-        }
-    }
-
-    pub fn wrapped(self) -> Arc<RwLock<Self>> {
-        Arc::new(RwLock::new(self))
+    pub fn new() -> Arc<RwLock<Self>> {
+        Arc::new(RwLock::new(Self::default()))
     }
 
     pub fn with_locals<F>(&mut self, locals: &[(&str, Value)], callback: F) -> Fallible<Value>
@@ -61,6 +54,14 @@ impl Interpreter {
             self.locals.remove(*name);
         }
         result
+    }
+
+    pub fn put_global(&mut self, name: &str, value: Value) {
+        self.memory.insert(name.to_owned(), value);
+    }
+
+    pub fn get_global(&self, name: &str) -> Option<&Value> {
+        self.memory.get(name)
     }
 
     pub fn interpret_once(&mut self, raw_script: &str) -> Fallible<Value> {
@@ -170,7 +171,7 @@ mod test {
 
     #[test]
     fn test_interpret_basic() -> Fallible<()> {
-        let mut interpreter = Interpreter::boot();
+        let mut interpreter = Interpreter::default();
         let script = Script::compile("2 + 2")?;
         assert_eq!(interpreter.interpret(&script)?, Value::Integer(4));
         Ok(())

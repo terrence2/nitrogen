@@ -76,6 +76,14 @@ impl Camera {
         self.exposure = exposure;
     }
 
+    pub fn increase_exposure(&mut self) {
+        self.exposure *= 1.1;
+    }
+
+    pub fn decrease_exposure(&mut self) {
+        self.exposure /= 1.1;
+    }
+
     pub fn fov_y(&self) -> Angle<Radians> {
         self.fov_y
     }
@@ -229,7 +237,7 @@ mod test {
     #[test]
     fn test_depth_restore() -> Fallible<()> {
         let aspect_ratio = 0.9488875526157546;
-        let mut arcball = ArcBallCamera::new(aspect_ratio, meters!(0.5));
+        let mut arcball = ArcBallCamera::detached(aspect_ratio, meters!(0.5));
         arcball.set_target(Graticule::<GeoSurface>::new(
             degrees!(0),
             degrees!(0),
