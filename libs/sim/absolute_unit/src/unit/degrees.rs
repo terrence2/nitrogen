@@ -15,7 +15,7 @@
 use crate::angle::AngleUnit;
 use std::f64::consts::PI;
 
-#[derive(Debug, Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Degrees;
 impl AngleUnit for Degrees {
     fn unit_name() -> &'static str {

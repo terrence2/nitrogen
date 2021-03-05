@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{degrees, meters};
 use atmosphere::AtmosphereBuffer;
-use camera::ArcBallCamera;
+use camera::{ArcBallCamera, Camera};
 use catalog::{Catalog, DirectoryDrawer};
 use chrono::{TimeZone, Utc};
 use command::Bindings as LegacyBindings;
@@ -57,6 +57,8 @@ struct Opt {
 #[derive(Debug, Default, NitrousModule)]
 struct Demo {
     exit: bool,
+    pin_camera: bool,
+    camera: Camera,
 }
 
 #[inject_nitrous_module]
@@ -74,6 +76,7 @@ impl Demo {
                 bindings.bind("quit", "demo.exit()");
                 bindings.bind("Escape", "demo.exit()");
                 bindings.bind("q", "demo.exit()");
+                bindings.bind("p", "demo.toggle_pin_camera(pressed)");
             "#,
         )?;
         Ok(())
@@ -82,6 +85,22 @@ impl Demo {
     #[method]
     pub fn exit(&mut self) {
         self.exit = true;
+    }
+
+    #[method]
+    pub fn toggle_pin_camera(&mut self, pressed: bool) {
+        if pressed {
+            // println!("eye_rel: {}", arcball.read().get_eye_relative());
+            // println!("target:  {}", arcball.read().get_target());
+            self.pin_camera = !self.pin_camera;
+        }
+    }
+
+    pub fn get_camera(&mut self, camera: &Camera) -> &Camera {
+        if !self.pin_camera {
+            self.camera = camera.to_owned();
+        }
+        &self.camera
     }
 }
 
@@ -133,9 +152,8 @@ make_frame_graph!(
 fn main() -> Fallible<()> {
     env_logger::init();
 
-    let system_bindings = LegacyBindings::new("map")
-        .bind("demo.pin_view", "p")?
-        .bind("demo.toggle_terminal", "Shift+Grave")?;
+    let system_bindings = LegacyBindings::new("map").bind("demo.toggle_terminal", "Shift+Grave")?;
+    // .bind("demo.pin_view", "p")?
     // .bind("demo.exit", "Escape")?
     // .bind("demo.exit", "q")?;
     InputSystem::run_forever(vec![system_bindings], window_main)
@@ -302,8 +320,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         demo.write().add_default_bindings(interp)?;
     }
 
-    let mut is_camera_pinned = false;
-    let mut camera_double = arcball.read().camera().to_owned();
     let mut show_terminal = false;
     while !demo.read().exit {
         let loop_start = Instant::now();
@@ -314,11 +330,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
 
         for command in input_controller.poll_commands()? {
             match command.full() {
-                "demo.pin_view" => {
-                    println!("eye_rel: {}", arcball.read().get_eye_relative());
-                    println!("target:  {}", arcball.read().get_target());
-                    is_camera_pinned = !is_camera_pinned
-                }
                 "demo.toggle_terminal" => {
                     show_terminal = !show_terminal;
                     terminal.write().set_visible(show_terminal);
@@ -328,9 +339,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         }
 
         arcball.write().think();
-        if !is_camera_pinned {
-            camera_double = arcball.read().camera().to_owned();
-        }
 
         let mut tracker = Default::default();
         frame_graph.globals().make_upload_buffer(
@@ -345,7 +353,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         )?;
         frame_graph.terrain_geo_mut().make_upload_buffer(
             arcball.read().camera(),
-            &camera_double,
+            demo.write().get_camera(arcball.read().camera()),
             catalog.clone(),
             &mut async_rt,
             &mut gpu.write(),

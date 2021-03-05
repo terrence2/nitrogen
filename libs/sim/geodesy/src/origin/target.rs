@@ -15,7 +15,7 @@
 use crate::cartesian::CartesianOrigin;
 use crate::graticule::GraticuleOrigin;
 
-#[derive(Debug, Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Target;
 
 impl GraticuleOrigin for Target {
