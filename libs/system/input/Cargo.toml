@@ -9,7 +9,6 @@ log = "^ 0.4"
 failure = "^ 0.1.2"
 smallvec = "^ 1.4"
 winit = { version = "^ 0.24", features = ["web-sys"] }
-command = { path = "../../system/command" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Note: need to match wgpu exactly

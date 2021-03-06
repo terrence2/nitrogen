@@ -12,31 +12,33 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use command::Bindings;
-use failure::{bail, Fallible};
-use input::{InputController, InputSystem};
+use failure::Fallible;
+use input::{GenericEvent, GenericSystemEvent, InputController, InputSystem, VirtualKeyCode};
 use winit::window::Window;
 
 fn main() -> Fallible<()> {
-    let system_bindings = Bindings::new("map")
-        .bind("demo.bail", "b")?
-        .bind("demo.panic", "p")?
-        .bind("demo.exit", "Escape")?
-        .bind("demo.exit", "q")?;
-    InputSystem::run_forever(vec![system_bindings], window_main)
+    InputSystem::run_forever(window_main)
 }
 
 fn window_main(window: Window, input_controller: &InputController) -> Fallible<()> {
     loop {
-        for command in input_controller.poll_commands()? {
-            println!("COMMAND: {:?} <- {:?}", window, command);
-            match command.command() {
-                "exit" => {
+        for event in input_controller.poll_events()? {
+            println!("EVENT: {:?} <- {:?}", window, event);
+            match event {
+                GenericEvent::System(GenericSystemEvent::Quit) => {
                     input_controller.quit()?;
                     return Ok(());
                 }
-                "bail" => bail!("soft crash"),
-                "panic" => bail!("hard panic"),
+                GenericEvent::KeyboardKey {
+                    virtual_keycode, ..
+                } => {
+                    if virtual_keycode == VirtualKeyCode::Escape
+                        || virtual_keycode == VirtualKeyCode::Q
+                    {
+                        input_controller.quit()?;
+                        return Ok(());
+                    }
+                }
                 _ => {}
             }
         }

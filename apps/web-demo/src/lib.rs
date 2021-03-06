@@ -19,7 +19,7 @@ use fullscreen::FullscreenBuffer;
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
 use gpu::GPU;
-use input::{InputController, InputSystem};
+use input::{GenericEvent, InputController, InputSystem, VirtualKeyCode};
 use legion::*;
 // use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use nitrous::Interpreter;
@@ -112,11 +112,21 @@ fn window_loop(
     input_controller: &InputController,
     app: &mut AppContext,
 ) -> Fallible<()> {
-    for command in input_controller.poll_commands()? {
-        console::log_1(&format!("COMMAND: {:?}", command).into());
-        match command.command() {
-            "bail" => bail!("soft crash"),
-            "panic" => bail!("hard panic"),
+    for event in input_controller.poll_events()? {
+        console::log_1(&format!("EVENT: {:?}", event).into());
+        match event {
+            GenericEvent::KeyboardKey {
+                virtual_keycode: VirtualKeyCode::B,
+                ..
+            } => {
+                bail!("soft crash");
+            }
+            GenericEvent::KeyboardKey {
+                virtual_keycode: VirtualKeyCode::P,
+                ..
+            } => {
+                panic!("hard panic");
+            }
             _ => {}
         }
     }

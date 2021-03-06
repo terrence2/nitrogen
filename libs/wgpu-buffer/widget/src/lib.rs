@@ -81,6 +81,7 @@ pub struct WidgetBuffer {
     // Widget state.
     root: Arc<RwLock<FloatBox>>,
     paint_context: PaintContext,
+    queued_scripts: Arc<RwLock<Vec<String>>>,
 
     // The four key buffers.
     widget_info_buffer: Arc<Box<wgpu::Buffer>>,
@@ -191,6 +192,7 @@ impl WidgetBuffer {
         Ok(Arc::new(RwLock::new(Self {
             root: FloatBox::new(),
             paint_context,
+            queued_scripts: Arc::new(RwLock::new(Vec::new())),
 
             widget_info_buffer,
             background_vertex_buffer,
@@ -206,6 +208,10 @@ impl WidgetBuffer {
         self.root.clone()
     }
 
+    pub fn set_keyboard_focus(&self, name: &str) -> Fallible<()> {
+        self.root.write().set_keyboard_focus(name)
+    }
+
     pub fn add_font<S: Borrow<str> + Into<String>>(
         &mut self,
         font_name: S,
@@ -218,11 +224,18 @@ impl WidgetBuffer {
         &self.paint_context.font_context
     }
 
+    pub fn queue_script(&self, script: &str) {
+        self.queued_scripts.write().push(script.to_owned());
+    }
+
     pub fn handle_events(
-        &mut self,
+        &self,
         events: &[GenericEvent],
         interpreter: &mut Interpreter,
     ) -> Fallible<()> {
+        for script in self.queued_scripts.write().drain(..) {
+            interpreter.interpret_once(&script)?;
+        }
         self.root().write().handle_events(events, interpreter)
     }
 

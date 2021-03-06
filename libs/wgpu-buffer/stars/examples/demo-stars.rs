@@ -28,7 +28,7 @@ use stars::StarsBuffer;
 use winit::window::Window;
 
 fn main() -> Fallible<()> {
-    InputSystem::run_forever(vec![], window_main)
+    InputSystem::run_forever(window_main)
 }
 
 fn window_main(window: Window, input_controller: &InputController) -> Fallible<()> {
