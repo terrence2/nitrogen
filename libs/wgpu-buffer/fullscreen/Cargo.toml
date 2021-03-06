@@ -14,7 +14,7 @@ gpu = { path = "../../system/gpu" }
 
 [dev-dependencies]
 absolute_unit = { path = "../../sim/absolute_unit" }
-failure = "^ 0.1.2"
+anyhow = "^ 1"
 geodesy = { path = "../../sim/geodesy" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 input = { path = "../../system/input" }

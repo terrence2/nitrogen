@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::mip::{tile::Tile, DataSource};
 use absolute_unit::ArcSeconds;
-use failure::Fallible;
+use anyhow::Result;
 use json::JsonValue;
 use parking_lot::RwLock;
 use std::{
@@ -54,7 +54,7 @@ impl Index {
         kind: DataSetDataKind,
         coordinates: DataSetCoordinates,
         source: Arc<RwLock<dyn DataSource>>,
-    ) -> Fallible<Arc<RwLock<IndexDataSet>>> {
+    ) -> Result<Arc<RwLock<IndexDataSet>>> {
         let mut path = self.path.clone();
         path.push(&prefix);
 
@@ -98,7 +98,7 @@ impl IndexDataSet {
         kind: DataSetDataKind,
         coordinates: DataSetCoordinates,
         source: Arc<RwLock<dyn DataSource>>,
-    ) -> Fallible<Self> {
+    ) -> Result<Self> {
         let mut work_dir = path.to_owned();
         work_dir.push("work");
         if !work_dir.exists() {
@@ -156,7 +156,7 @@ impl IndexDataSet {
         self.root.read().lookup(level, base)
     }
 
-    pub fn as_json(&self) -> Fallible<JsonValue> {
+    pub fn as_json(&self) -> Result<JsonValue> {
         let mut obj = JsonValue::new_object();
         obj.insert::<&str>("prefix", &self.prefix)?;
         obj.insert("kind", self.kind.name())?;
@@ -169,7 +169,7 @@ impl IndexDataSet {
         Ok(obj)
     }
 
-    pub fn write(&self) -> Fallible<()> {
+    pub fn write(&self) -> Result<()> {
         let mut filename = self.path.clone();
         filename.push(&format!("{}-index.json", self.prefix));
         fs::write(filename, self.as_json()?.to_string())?;

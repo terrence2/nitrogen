@@ -16,8 +16,8 @@ use crate::tile::{
     ChildIndex, LayerPack, LayerPackIndexItem, TerrainLevel, TileCompression, TILE_EXTENT,
 };
 use absolute_unit::{Angle, ArcSeconds};
+use anyhow::{ensure, Result};
 use catalog::{Catalog, FileId};
-use failure::{ensure, Fallible};
 use fxhash::FxHashMap;
 use geometry::AABB2;
 use log::trace;
@@ -90,7 +90,7 @@ pub(crate) struct QuadTree {
 }
 
 impl QuadTree {
-    pub(crate) fn from_layers(prefix: &str, catalog: &Catalog) -> Fallible<Self> {
+    pub(crate) fn from_layers(prefix: &str, catalog: &Catalog) -> Result<Self> {
         // Find all layers in this set.
         let mut layer_packs = Vec::new();
         let layer_glob = format!("{}-L??.mip", prefix);
@@ -128,7 +128,7 @@ impl QuadTree {
         acc: &mut FxHashMap<(i32, i32), QuadTreeId>,
         layer_num: usize,
         catalog: &Catalog,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         // Create a node for each item at level i, given we have created nodes for i-1 and that
         // the base of those nodes are in `acc`.
         let extent = self.layer_packs[layer_num].angular_extent_as();

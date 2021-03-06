@@ -17,8 +17,8 @@ use crate::{
     srtm::tile::Tile,
 };
 use absolute_unit::{arcseconds, degrees, meters, ArcSeconds, Degrees, Meters};
+use anyhow::Result;
 use approx::assert_relative_eq;
-use failure::Fallible;
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule};
 use image::Rgb;
 use nalgebra::{Vector2, Vector3};
@@ -107,7 +107,7 @@ impl Index {
         TerrainLevel::arcsecond_level()
     }
 
-    pub fn from_directory(directory: &Path) -> Fallible<Arc<RwLock<Self>>> {
+    pub fn from_directory(directory: &Path) -> Result<Arc<RwLock<Self>>> {
         let mut index_filename = PathBuf::from(directory);
         index_filename.push("srtm30m_bounding_boxes.json");
 

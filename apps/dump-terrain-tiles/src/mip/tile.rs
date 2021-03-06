@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::mip::Region;
 use absolute_unit::{arcseconds, meters, Angle, ArcSeconds};
-use failure::Fallible;
+use anyhow::Result;
 use geodesy::{GeoCenter, Graticule};
 use image::{ImageBuffer, Luma, Rgb, RgbImage};
 use memmap::{Mmap, MmapOptions};
@@ -649,7 +649,7 @@ impl Tile {
         };
     }
 
-    pub fn maybe_map_data(&mut self, kind: DataSetDataKind, directory: &Path) -> Fallible<bool> {
+    pub fn maybe_map_data(&mut self, kind: DataSetDataKind, directory: &Path) -> Result<bool> {
         assert!(self.data.is_absent());
         let mip_filename = self.mip_filename(directory);
         if mip_filename.exists() {
@@ -886,7 +886,7 @@ impl Tile {
             .put_pixel(lon_offset as u32, lat_offset as u32, color);
     }
 
-    pub fn save_equalized_png(&self, kind: DataSetDataKind, directory: &Path) -> Fallible<()> {
+    pub fn save_equalized_png(&self, kind: DataSetDataKind, directory: &Path) -> Result<()> {
         assert!(self.data.is_inline());
         if self.is_empty_tile() {
             return Ok(());
@@ -944,7 +944,7 @@ impl Tile {
         self.mip_filename(directory).exists()
     }
 
-    pub fn write(&mut self, directory: &Path, sum_height: i32) -> Fallible<()> {
+    pub fn write(&mut self, directory: &Path, sum_height: i32) -> Result<()> {
         assert!(self.data.is_inline());
         if sum_height == 0 {
             self.data = TileData::Empty;

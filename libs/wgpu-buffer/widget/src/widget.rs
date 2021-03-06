@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::paint_context::PaintContext;
-use failure::Fallible;
+use anyhow::Result;
 use gpu::GPU;
 use input::GenericEvent;
 use nitrous::Interpreter;
@@ -27,10 +27,10 @@ pub struct UploadMetrics {
 }
 
 pub trait Widget: Debug {
-    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Fallible<UploadMetrics>;
+    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Result<UploadMetrics>;
     fn handle_events(
         &mut self,
         events: &[GenericEvent],
         interpreter: &mut Interpreter,
-    ) -> Fallible<()>;
+    ) -> Result<()>;
 }

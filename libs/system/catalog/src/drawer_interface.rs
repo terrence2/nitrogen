@@ -12,8 +12,8 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use anyhow::Result;
 use async_trait::async_trait;
-use failure::Fallible;
 use std::{borrow::Cow, collections::HashMap, ops::Range, path::PathBuf};
 
 // Files are identified by an id internally.
@@ -47,7 +47,7 @@ pub trait DrawerInterface: Send + Sync {
     // every name that can be loaded from the drawer, even if it is not yet loadable. After
     // this method is called, the catalog will never reference the returned names again, in
     // preference of the associated FileId returned here.
-    fn index(&self) -> Fallible<HashMap<DrawerFileId, String>>;
+    fn index(&self) -> Result<HashMap<DrawerFileId, String>>;
 
     // Must return the priority of a drawer. Files from drawers with higher priority will be
     // loaded from by name before drawers with lower priority. Clients can still list every
@@ -60,17 +60,17 @@ pub trait DrawerInterface: Send + Sync {
     fn name(&self) -> &str;
 
     // Stat must fill out the stat struct for the given file.
-    fn stat_sync(&self, id: DrawerFileId) -> Fallible<DrawerFileMetadata>;
+    fn stat_sync(&self, id: DrawerFileId) -> Result<DrawerFileMetadata>;
 
     // Provide the content of the given file, blocking.
-    fn read_sync(&self, id: DrawerFileId) -> Fallible<Cow<[u8]>>;
+    fn read_sync(&self, id: DrawerFileId) -> Result<Cow<[u8]>>;
 
     // Provide a slice of the content of the given file, blocking.
-    fn read_slice_sync(&self, id: DrawerFileId, extent: Range<usize>) -> Fallible<Cow<[u8]>>;
+    fn read_slice_sync(&self, id: DrawerFileId, extent: Range<usize>) -> Result<Cow<[u8]>>;
 
     // Provide the content of the given file, async.
-    async fn read(&self, id: DrawerFileId) -> Fallible<Vec<u8>>;
+    async fn read(&self, id: DrawerFileId) -> Result<Vec<u8>>;
 
     // Provide a slice of the content of the given file, async.
-    async fn read_slice(&self, id: DrawerFileId, extent: Range<usize>) -> Fallible<Vec<u8>>;
+    async fn read_slice(&self, id: DrawerFileId, extent: Range<usize>) -> Result<Vec<u8>>;
 }

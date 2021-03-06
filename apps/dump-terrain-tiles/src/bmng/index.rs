@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::mip::{DataSource, Region};
 use absolute_unit::{degrees, ArcSeconds, Degrees};
-use failure::Fallible;
+use anyhow::Result;
 use geodesy::{GeoSurface, Graticule};
 use image::{open, EncodableLayout, ImageBuffer, Rgb};
 use memmap::{Mmap, MmapOptions};
@@ -31,7 +31,7 @@ pub struct Index {
 impl Index {
     pub const TILE_SIZE: u32 = 21_600;
 
-    pub fn from_directory(month: i32, directory: &Path) -> Fallible<Arc<RwLock<Self>>> {
+    pub fn from_directory(month: i32, directory: &Path) -> Result<Arc<RwLock<Self>>> {
         let mut raw = Vec::new();
         for (_lon, lon_name) in "ABCD".chars().enumerate() {
             let mut inner = Vec::new();

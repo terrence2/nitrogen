@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{DrawerFileId, DrawerInterface, FileMetadata};
-use failure::{bail, ensure, Fallible};
+use anyhow::{bail, ensure, Result};
 use glob::{MatchOptions, Pattern};
 use smallvec::SmallVec;
 use std::{borrow::Cow, collections::HashMap, ops::Range};
@@ -26,7 +26,7 @@ struct ShelfId(u16);
 
 pub const DEFAULT_LABEL: &str = "default";
 
-pub fn from_utf8_string(input: Cow<[u8]>) -> Fallible<Cow<str>> {
+pub fn from_utf8_string(input: Cow<[u8]>) -> Result<Cow<str>> {
     Ok(match input {
         Cow::Borrowed(r) => Cow::from(std::str::from_utf8(r)?),
         Cow::Owned(o) => Cow::from(String::from_utf8(o)?),
@@ -74,7 +74,7 @@ impl Catalog {
     }
 
     /// Create a new catalog with the given drawers.
-    pub fn with_drawers(mut drawers: Vec<Box<dyn DrawerInterface>>) -> Fallible<Self> {
+    pub fn with_drawers(mut drawers: Vec<Box<dyn DrawerInterface>>) -> Result<Self> {
         let mut catalog = Self::empty();
         for drawer in drawers.drain(..) {
             catalog.add_labeled_drawer(DEFAULT_LABEL, drawer)?;
@@ -83,12 +83,12 @@ impl Catalog {
     }
 
     /// Add a drawer full of files to the catalog.
-    pub fn add_drawer(&mut self, drawer: Box<dyn DrawerInterface>) -> Fallible<()> {
+    pub fn add_drawer(&mut self, drawer: Box<dyn DrawerInterface>) -> Result<()> {
         self.add_labeled_drawer(&self.default_label.clone(), drawer)
     }
 
     /// Get the label of a given file by id.
-    pub fn file_label(&self, fid: FileId) -> Fallible<String> {
+    pub fn file_label(&self, fid: FileId) -> Result<String> {
         for (name, &sid) in &self.shelf_index {
             if fid.shelf_id == sid {
                 return Ok(name.to_owned());
@@ -114,47 +114,47 @@ impl Catalog {
         &self,
         glob: &str,
         with_extension: Option<&str>,
-    ) -> Fallible<SmallVec<[FileId; 4]>> {
+    ) -> Result<SmallVec<[FileId; 4]>> {
         self.find_labeled_matching(&self.default_label, glob, with_extension)
     }
 
     // TODO: replace uses and remove.
-    pub fn find_matching_names(&self, glob: &str) -> Fallible<Vec<String>> {
+    pub fn find_matching_names(&self, glob: &str) -> Result<Vec<String>> {
         self.find_labeled_matching_names(&self.default_label, glob)
     }
 
     /// Get metadata about the given file by id.
-    pub fn stat_sync(&self, fid: FileId) -> Fallible<FileMetadata> {
+    pub fn stat_sync(&self, fid: FileId) -> Result<FileMetadata> {
         self.shelves[&fid.shelf_id].stat_sync(fid)
     }
 
     /// Read the given file id and return the contents. Blocks until complete.
-    pub fn read_sync(&self, fid: FileId) -> Fallible<Cow<[u8]>> {
+    pub fn read_sync(&self, fid: FileId) -> Result<Cow<[u8]>> {
         self.shelves[&fid.shelf_id].read_sync(fid)
     }
 
     /// Read the given file id and return the contents. Blocks until complete.
-    pub fn read_slice_sync(&self, fid: FileId, extent: Range<usize>) -> Fallible<Cow<[u8]>> {
+    pub fn read_slice_sync(&self, fid: FileId, extent: Range<usize>) -> Result<Cow<[u8]>> {
         self.shelves[&fid.shelf_id].read_slice_sync(fid, extent)
     }
 
     /// Read the given file id and return a Future with the contents.
-    pub async fn read(&self, fid: FileId) -> Fallible<Vec<u8>> {
+    pub async fn read(&self, fid: FileId) -> Result<Vec<u8>> {
         Ok(self.shelves[&fid.shelf_id].read(fid).await?)
     }
 
     /// Read the given file id and return a Future with the given slice from that file.
-    pub async fn read_slice(&self, fid: FileId, extent: Range<usize>) -> Fallible<Vec<u8>> {
+    pub async fn read_slice(&self, fid: FileId, extent: Range<usize>) -> Result<Vec<u8>> {
         Ok(self.shelves[&fid.shelf_id].read_slice(fid, extent).await?)
     }
 
     /// Get metadata about the given file by name.
-    pub fn stat_name_sync(&self, name: &str) -> Fallible<FileMetadata> {
+    pub fn stat_name_sync(&self, name: &str) -> Result<FileMetadata> {
         self.stat_labeled_name_sync(&self.default_label, name)
     }
 
     /// Read the given file name and return the contents. Blocks until complete.
-    pub fn read_name_sync(&self, name: &str) -> Fallible<Cow<[u8]>> {
+    pub fn read_name_sync(&self, name: &str) -> Result<Cow<[u8]>> {
         self.read_labeled_name_sync(&self.default_label, name)
     }
 
@@ -162,7 +162,7 @@ impl Catalog {
         &mut self,
         label: &str,
         drawer: Box<dyn DrawerInterface>,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         if !self.shelf_index.contains_key(label) {
             let shelf_id = ShelfId(self.last_shelf);
             self.last_shelf += 1;
@@ -181,7 +181,7 @@ impl Catalog {
         label: &str,
         glob: &str,
         with_extension: Option<&str>,
-    ) -> Fallible<SmallVec<[FileId; 4]>> {
+    ) -> Result<SmallVec<[FileId; 4]>> {
         self.shelves[&self.shelf_index[label]].find_matching(glob, with_extension)
     }
 
@@ -198,15 +198,15 @@ impl Catalog {
             .copied()
     }
 
-    pub fn find_labeled_matching_names(&self, label: &str, glob: &str) -> Fallible<Vec<String>> {
+    pub fn find_labeled_matching_names(&self, label: &str, glob: &str) -> Result<Vec<String>> {
         self.shelves[&self.shelf_index[label]].find_matching_names(glob)
     }
 
-    pub fn stat_labeled_name_sync(&self, label: &str, name: &str) -> Fallible<FileMetadata> {
+    pub fn stat_labeled_name_sync(&self, label: &str, name: &str) -> Result<FileMetadata> {
         self.shelves[&self.shelf_index[label]].stat_name_sync(name)
     }
 
-    pub fn read_labeled_name_sync(&self, label: &str, name: &str) -> Fallible<Cow<[u8]>> {
+    pub fn read_labeled_name_sync(&self, label: &str, name: &str) -> Result<Cow<[u8]>> {
         self.shelves[&self.shelf_index[label]].read_name_sync(name)
     }
 
@@ -248,7 +248,7 @@ impl Shelf {
         }
     }
 
-    fn add_drawer(&mut self, shelf_id: ShelfId, drawer: Box<dyn DrawerInterface>) -> Fallible<()> {
+    fn add_drawer(&mut self, shelf_id: ShelfId, drawer: Box<dyn DrawerInterface>) -> Result<()> {
         let next_priority = drawer.priority();
         let index = drawer.index()?;
         let drawer_key = (drawer.priority(), drawer.name().to_owned());
@@ -285,7 +285,7 @@ impl Shelf {
         &self,
         glob: &str,
         with_extension: Option<&str>,
-    ) -> Fallible<SmallVec<[FileId; 4]>> {
+    ) -> Result<SmallVec<[FileId; 4]>> {
         let mut matching = SmallVec::new();
         let opts = MatchOptions {
             case_sensitive: false,
@@ -309,7 +309,7 @@ impl Shelf {
         Ok(matching)
     }
 
-    pub fn find_matching_names(&self, glob: &str) -> Fallible<Vec<String>> {
+    pub fn find_matching_names(&self, glob: &str) -> Result<Vec<String>> {
         let mut matching = Vec::new();
         let opts = MatchOptions {
             case_sensitive: false,
@@ -325,37 +325,37 @@ impl Shelf {
         Ok(matching)
     }
 
-    pub fn stat_sync(&self, fid: FileId) -> Fallible<FileMetadata> {
+    pub fn stat_sync(&self, fid: FileId) -> Result<FileMetadata> {
         let drawer_meta = self.drawers[&fid.drawer_id].stat_sync(fid.drawer_file_id)?;
         Ok(FileMetadata::from_drawer(fid, drawer_meta))
     }
 
-    pub fn stat_name_sync(&self, name: &str) -> Fallible<FileMetadata> {
+    pub fn stat_name_sync(&self, name: &str) -> Result<FileMetadata> {
         ensure!(self.index.contains_key(name), "file not found");
         self.stat_sync(self.index[name])
     }
 
-    pub fn read_sync(&self, fid: FileId) -> Fallible<Cow<[u8]>> {
+    pub fn read_sync(&self, fid: FileId) -> Result<Cow<[u8]>> {
         self.drawers[&fid.drawer_id].read_sync(fid.drawer_file_id)
     }
 
-    pub fn read_slice_sync(&self, fid: FileId, extent: Range<usize>) -> Fallible<Cow<[u8]>> {
+    pub fn read_slice_sync(&self, fid: FileId, extent: Range<usize>) -> Result<Cow<[u8]>> {
         self.drawers[&fid.drawer_id].read_slice_sync(fid.drawer_file_id, extent)
     }
 
-    pub async fn read(&self, fid: FileId) -> Fallible<Vec<u8>> {
+    pub async fn read(&self, fid: FileId) -> Result<Vec<u8>> {
         Ok(self.drawers[&fid.drawer_id]
             .read(fid.drawer_file_id)
             .await?)
     }
 
-    pub async fn read_slice(&self, fid: FileId, extent: Range<usize>) -> Fallible<Vec<u8>> {
+    pub async fn read_slice(&self, fid: FileId, extent: Range<usize>) -> Result<Vec<u8>> {
         Ok(self.drawers[&fid.drawer_id]
             .read_slice(fid.drawer_file_id, extent)
             .await?)
     }
 
-    pub fn read_name_sync(&self, name: &str) -> Fallible<Cow<[u8]>> {
+    pub fn read_name_sync(&self, name: &str) -> Result<Cow<[u8]>> {
         ensure!(self.index.contains_key(name), "file not found");
         self.read_sync(self.index[name])
     }
@@ -368,7 +368,7 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn test_basic_functionality() -> Fallible<()> {
+    fn test_basic_functionality() -> Result<()> {
         let mut catalog = Catalog::with_drawers(vec![DirectoryDrawer::from_directory(
             0,
             "./masking_test_data/a",
@@ -418,7 +418,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_async_functionality() -> Fallible<()> {
+    async fn test_async_functionality() -> Result<()> {
         let catalog = Catalog::with_drawers(vec![DirectoryDrawer::from_directory(
             0,
             "./masking_test_data/a",

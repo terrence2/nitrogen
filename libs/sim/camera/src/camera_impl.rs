@@ -207,8 +207,8 @@ mod test {
     use super::*;
     use crate::arc_ball_camera::ArcBallCamera;
     use absolute_unit::{degrees, meters};
+    use anyhow::Result;
     use approx::assert_relative_eq;
-    use failure::Fallible;
     use geodesy::{GeoSurface, Graticule, Target};
     use nalgebra::Vector4;
 
@@ -235,7 +235,7 @@ mod test {
     }
 
     #[test]
-    fn test_depth_restore() -> Fallible<()> {
+    fn test_depth_restore() -> Result<()> {
         let aspect_ratio = 0.9488875526157546;
         let mut arcball = ArcBallCamera::detached(aspect_ratio, meters!(0.5));
         arcball.set_target(Graticule::<GeoSurface>::new(

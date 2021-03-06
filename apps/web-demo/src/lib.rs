@@ -13,8 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{degrees, meters};
+use anyhow::{bail, Result};
 use camera::ArcBallCamera;
-use failure::{bail, Fallible};
 use fullscreen::FullscreenBuffer;
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
@@ -56,7 +56,7 @@ struct AppContext {
     fullscreen_buffer: Arc<RwLock<FullscreenBuffer>>,
 }
 
-async fn async_main() -> Fallible<()> {
+async fn async_main() -> Result<()> {
     let event_loop = InputSystem::make_event_loop();
     let window = WindowBuilder::new()
         .with_title("Nitrogen")
@@ -111,7 +111,7 @@ fn window_loop(
     window: &Window,
     input_controller: &InputController,
     app: &mut AppContext,
-) -> Fallible<()> {
+) -> Result<()> {
     for event in input_controller.poll_events()? {
         console::log_1(&format!("EVENT: {:?}", event).into());
         match event {

@@ -21,7 +21,7 @@
  *     DUMP_SPIRV=1   Dump disassembled code next to bytecode.
  *     DEBUG=1        Compile with debug settings.
  */
-use failure::{bail, Fallible};
+use anyhow::{bail, Result};
 use log::trace;
 use shaderc::{
     CompilationArtifact, CompileOptions, Compiler, Error, IncludeType, OptimizationLevel,
@@ -109,7 +109,7 @@ fn find_included_file(
     Err("NOT_FOUND".to_owned())
 }
 
-pub fn build() -> Fallible<()> {
+pub fn build() -> Result<()> {
     println!("cargo:rerun-if-env-changed=DUMP_SPIRV");
     println!("cargo:rerun-if-env-changed=DEBUG");
     let shaders_dir = env::current_dir()?.as_path().join("shaders");
@@ -160,7 +160,7 @@ pub fn build() -> Fallible<()> {
 pub fn build_shader_from_path(
     path: &Path,
     dump_spirv: bool,
-) -> Fallible<(CompilationArtifact, Option<CompilationArtifact>)> {
+) -> Result<(CompilationArtifact, Option<CompilationArtifact>)> {
     let path_str = path.to_str().expect("a filename");
 
     let shader_content = fs::read_to_string(path)?;

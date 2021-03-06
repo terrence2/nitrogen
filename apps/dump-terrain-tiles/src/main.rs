@@ -22,8 +22,8 @@ use crate::{
     srtm::SrtmIndex,
 };
 use absolute_unit::{arcseconds, degrees, meters, radians, Angle, Radians};
+use anyhow::Result;
 use bzip2::{read::BzEncoder, Compression};
-use failure::Fallible;
 use geodesy::{GeoSurface, Graticule};
 use parking_lot::{Mutex, RwLock};
 use rayon::prelude::*;
@@ -210,7 +210,7 @@ fn build_tree(
     tile_ref: Arc<RwLock<MipTile>>,
     node_count: &mut usize,
     leaf_count: &mut usize,
-) -> Fallible<()> {
+) -> Result<()> {
     if current_level < source.read().root_level().offset() {
         {
             let src = source.read();
@@ -248,7 +248,7 @@ fn collect_tiles_at_level(
     node: Arc<RwLock<MipTile>>,
     offset: &mut usize,
     level_tiles: &mut Vec<(Arc<RwLock<MipTile>>, usize)>,
-) -> Fallible<()> {
+) -> Result<()> {
     if current_level < target_level {
         for child in node.read().maybe_children().iter().flatten() {
             collect_tiles_at_level(
@@ -272,7 +272,7 @@ pub fn generate_mip_tile_from_source(
     index: Arc<RwLock<MipIndexDataSet>>,
     node: Arc<RwLock<MipTile>>,
     dump_png: bool,
-) -> Fallible<()> {
+) -> Result<()> {
     // Assume that tiles we've already created are good.
     if node.read().file_exists(index.read().work_path()) {
         return Ok(());
@@ -356,7 +356,7 @@ pub fn generate_mip_tile_from_mip(
     index: Arc<RwLock<MipIndexDataSet>>,
     node: Arc<RwLock<MipTile>>,
     dump_png: bool,
-) -> Fallible<()> {
+) -> Result<()> {
     // Assume that tiles we've already created are good.
     if node.read().file_exists(index.read().work_path()) {
         assert!(node.read().data_state().starts_with("mapped"));
@@ -410,7 +410,7 @@ fn map_all_available_tile(
     tiles: &mut Vec<(Arc<RwLock<MipTile>>, usize)>,
     path: &Path,
     serialize: bool,
-) -> Fallible<usize> {
+) -> Result<usize> {
     let mmap_count = Arc::new(RwLock::new(0usize));
     if serialize {
         for (tile, _offset) in tiles {
@@ -421,7 +421,7 @@ fn map_all_available_tile(
     } else {
         tiles
             .par_chunks_mut(256)
-            .try_for_each::<_, Fallible<()>>(|chunk| {
+            .try_for_each::<_, Result<()>>(|chunk| {
                 for (tile, _offset) in chunk {
                     if tile.write().maybe_map_data(kind, path).expect("mmap file") {
                         *mmap_count.write() += 1;
@@ -445,7 +445,7 @@ fn write_layer_pack(
     target_level: usize,
     force: bool,
     compression: TileCompression,
-) -> Fallible<()> {
+) -> Result<()> {
     if tiles.is_empty() {
         println!("  skipping write because pack is empty");
         return Ok(());
@@ -498,7 +498,7 @@ fn write_layer_pack(
     Ok(())
 }
 
-fn main() -> Fallible<()> {
+fn main() -> Result<()> {
     let opt = Opt::from_args();
     let compression = if let Some(comp) = opt.compression {
         match comp.as_str() {

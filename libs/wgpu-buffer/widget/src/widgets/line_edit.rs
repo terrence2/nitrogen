@@ -20,7 +20,7 @@ use crate::{
     widget::{UploadMetrics, Widget},
     widget_info::WidgetInfo,
 };
-use failure::Fallible;
+use anyhow::Result;
 use gpu::GPU;
 use input::{ElementState, GenericEvent, ModifiersState, VirtualKeyCode};
 use nitrous::Interpreter;
@@ -83,7 +83,7 @@ impl LineEdit {
         virtual_keycode: &VirtualKeyCode,
         modifiers: &ModifiersState,
         interpreter: &mut Interpreter,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         match virtual_keycode {
             // Move to actions.
             VirtualKeyCode::Home => self.line.move_home(modifiers),
@@ -106,7 +106,7 @@ impl LineEdit {
 }
 
 impl Widget for LineEdit {
-    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Fallible<UploadMetrics> {
+    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Result<UploadMetrics> {
         let info = WidgetInfo::default();
         let widget_info_index = context.push_widget(&info);
 
@@ -122,7 +122,7 @@ impl Widget for LineEdit {
         &mut self,
         events: &[GenericEvent],
         interpreter: &mut Interpreter,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         for event in events {
             if let GenericEvent::KeyboardKey {
                 virtual_keycode,

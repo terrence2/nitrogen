@@ -19,7 +19,7 @@ use crate::{
     widget::{UploadMetrics, Widget},
     LineEdit, TextEdit, VerticalBox,
 };
-use failure::Fallible;
+use anyhow::Result;
 use gpu::GPU;
 use input::GenericEvent;
 use nitrous::Interpreter;
@@ -76,7 +76,7 @@ impl Terminal {
 }
 
 impl Widget for Terminal {
-    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Fallible<UploadMetrics> {
+    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Result<UploadMetrics> {
         if self.visible {
             self.container.read().upload(gpu, context)
         } else {
@@ -88,7 +88,7 @@ impl Widget for Terminal {
         &mut self,
         events: &[GenericEvent],
         interpreter: &mut Interpreter,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         if self.visible {
             self.edit.write().handle_events(events, interpreter)
         } else {

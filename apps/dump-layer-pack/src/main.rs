@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use failure::Fallible;
+use anyhow::Result;
 use memmap::MmapOptions;
 use std::{fs::File, mem, path::PathBuf};
 use structopt::StructOpt;
@@ -38,7 +38,7 @@ struct Opt {
     input: PathBuf,
 }
 
-fn main() -> Fallible<()> {
+fn main() -> Result<()> {
     let opt = Opt::from_args();
 
     let fp = File::open(&opt.input)?;

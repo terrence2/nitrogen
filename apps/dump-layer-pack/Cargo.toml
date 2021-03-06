@@ -5,7 +5,7 @@ authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-failure = "^ 0.1.2"
+anyhow = "^ 1"
 memmap = "^ 0.7"
 structopt = "^ 0.3"
 zerocopy = "= 0.3.0"

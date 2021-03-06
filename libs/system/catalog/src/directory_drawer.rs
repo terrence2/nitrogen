@@ -13,8 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{DrawerFileId, DrawerFileMetadata, DrawerInterface};
+use anyhow::{ensure, Result};
 use async_trait::async_trait;
-use failure::{ensure, Fallible};
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -39,7 +39,7 @@ pub struct DirectoryDrawer {
 }
 
 impl DirectoryDrawer {
-    fn populate_from_directory(&mut self, only_extension: Option<&str>) -> Fallible<()> {
+    fn populate_from_directory(&mut self, only_extension: Option<&str>) -> Result<()> {
         for (i, entry) in fs::read_dir(&self.path)?.enumerate() {
             let entry = entry?;
             if !entry.file_type()?.is_file() {
@@ -62,7 +62,7 @@ impl DirectoryDrawer {
         priority: i64,
         path_name: &S,
         only_extension: &str,
-    ) -> Fallible<Box<dyn DrawerInterface>> {
+    ) -> Result<Box<dyn DrawerInterface>> {
         let path = PathBuf::from(path_name);
         let name = path
             .file_name()
@@ -86,14 +86,14 @@ impl DirectoryDrawer {
     pub fn from_directory<S: AsRef<OsStr> + ?Sized>(
         priority: i64,
         path_name: &S,
-    ) -> Fallible<Box<dyn DrawerInterface>> {
+    ) -> Result<Box<dyn DrawerInterface>> {
         Self::from_directory_with_extension(priority, path_name, "")
     }
 }
 
 #[async_trait]
 impl DrawerInterface for DirectoryDrawer {
-    fn index(&self) -> Fallible<HashMap<DrawerFileId, String>> {
+    fn index(&self) -> Result<HashMap<DrawerFileId, String>> {
         Ok(self.index.clone())
     }
 
@@ -105,7 +105,7 @@ impl DrawerInterface for DirectoryDrawer {
         &self.name
     }
 
-    fn stat_sync(&self, id: DrawerFileId) -> Fallible<DrawerFileMetadata> {
+    fn stat_sync(&self, id: DrawerFileId) -> Result<DrawerFileMetadata> {
         ensure!(self.index.contains_key(&id), "file not found");
         let mut global_path = self.path.clone();
         global_path.push(&self.index[&id]);
@@ -120,7 +120,7 @@ impl DrawerInterface for DirectoryDrawer {
         })
     }
 
-    fn read_sync(&self, id: DrawerFileId) -> Fallible<Cow<[u8]>> {
+    fn read_sync(&self, id: DrawerFileId) -> Result<Cow<[u8]>> {
         ensure!(self.index.contains_key(&id), "file not found");
         let mut global_path = self.path.clone();
         global_path.push(&self.index[&id]);
@@ -130,7 +130,7 @@ impl DrawerInterface for DirectoryDrawer {
         Ok(Cow::from(content))
     }
 
-    fn read_slice_sync(&self, id: DrawerFileId, extent: Range<usize>) -> Fallible<Cow<[u8]>> {
+    fn read_slice_sync(&self, id: DrawerFileId, extent: Range<usize>) -> Result<Cow<[u8]>> {
         ensure!(self.index.contains_key(&id), "file not found");
         let mut global_path = self.path.clone();
         global_path.push(&self.index[&id]);
@@ -141,7 +141,7 @@ impl DrawerInterface for DirectoryDrawer {
         Ok(Cow::from(content))
     }
 
-    async fn read(&self, id: DrawerFileId) -> Fallible<Vec<u8>> {
+    async fn read(&self, id: DrawerFileId) -> Result<Vec<u8>> {
         ensure!(self.index.contains_key(&id), "file not found");
         let mut global_path = self.path.clone();
         global_path.push(&self.index[&id]);
@@ -151,7 +151,7 @@ impl DrawerInterface for DirectoryDrawer {
         Ok(content)
     }
 
-    async fn read_slice(&self, id: DrawerFileId, extent: Range<usize>) -> Fallible<Vec<u8>> {
+    async fn read_slice(&self, id: DrawerFileId, extent: Range<usize>) -> Result<Vec<u8>> {
         ensure!(self.index.contains_key(&id), "file not found");
         let mut global_path = self.path.clone();
         global_path.push(&self.index[&id]);

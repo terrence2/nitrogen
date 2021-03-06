@@ -19,16 +19,16 @@ mod value;
 pub use crate::{script::Script, value::Value};
 
 use crate::ir::{Expr, Operator, Stmt, Term};
-use failure::{bail, Fallible};
+use anyhow::{bail, Result};
 use parking_lot::RwLock;
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
 // Note: manually passing the module until we have arbitrary self.
 pub trait Module: Debug {
     fn module_name(&self) -> String;
-    fn call_method(&mut self, name: &str, args: &[Value]) -> Fallible<Value>;
-    fn put(&mut self, module: Arc<RwLock<dyn Module>>, name: &str, value: Value) -> Fallible<()>;
-    fn get(&self, module: Arc<RwLock<dyn Module>>, name: &str) -> Fallible<Value>;
+    fn call_method(&mut self, name: &str, args: &[Value]) -> Result<Value>;
+    fn put(&mut self, module: Arc<RwLock<dyn Module>>, name: &str, value: Value) -> Result<()>;
+    fn get(&self, module: Arc<RwLock<dyn Module>>, name: &str) -> Result<Value>;
 }
 
 #[derive(Debug, Default)]
@@ -42,9 +42,9 @@ impl Interpreter {
         Arc::new(RwLock::new(Self::default()))
     }
 
-    pub fn with_locals<F>(&mut self, locals: &[(&str, Value)], callback: F) -> Fallible<Value>
+    pub fn with_locals<F>(&mut self, locals: &[(&str, Value)], callback: F) -> Result<Value>
     where
-        F: Fn(&mut Interpreter) -> Fallible<Value>,
+        F: Fn(&mut Interpreter) -> Result<Value>,
     {
         for (name, value) in locals {
             self.locals.insert((*name).to_owned(), value.to_owned());
@@ -64,11 +64,11 @@ impl Interpreter {
         self.memory.get(name)
     }
 
-    pub fn interpret_once(&mut self, raw_script: &str) -> Fallible<Value> {
+    pub fn interpret_once(&mut self, raw_script: &str) -> Result<Value> {
         self.interpret(&Script::compile(raw_script)?)
     }
 
-    pub fn interpret(&mut self, script: &Script) -> Fallible<Value> {
+    pub fn interpret(&mut self, script: &Script) -> Result<Value> {
         use std::borrow::Borrow;
         let mut out = Value::True();
         for stmt in script.statements() {
@@ -87,7 +87,7 @@ impl Interpreter {
         Ok(out)
     }
 
-    fn interpret_expr(&self, expr: &Expr) -> Fallible<Value> {
+    fn interpret_expr(&self, expr: &Expr) -> Result<Value> {
         Ok(match expr {
             Expr::Term(term) => match term {
                 Term::Boolean(b) => Value::Boolean(*b),
@@ -144,16 +144,16 @@ impl Module for Interpreter {
         "Interpreter".to_owned()
     }
 
-    fn call_method(&mut self, _name: &str, _args: &[Value]) -> Fallible<Value> {
+    fn call_method(&mut self, _name: &str, _args: &[Value]) -> Result<Value> {
         bail!("no methods are defined on the interpreter")
     }
 
-    fn put(&mut self, _module: Arc<RwLock<dyn Module>>, name: &str, value: Value) -> Fallible<()> {
+    fn put(&mut self, _module: Arc<RwLock<dyn Module>>, name: &str, value: Value) -> Result<()> {
         self.memory.insert(name.to_owned(), value);
         Ok(())
     }
 
-    fn get(&self, _module: Arc<RwLock<dyn Module>>, name: &str) -> Fallible<Value> {
+    fn get(&self, _module: Arc<RwLock<dyn Module>>, name: &str) -> Result<Value> {
         match self.memory.get(name) {
             Some(v) => Ok(v.to_owned()),
             None => bail!(
@@ -170,7 +170,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_interpret_basic() -> Fallible<()> {
+    fn test_interpret_basic() -> Result<()> {
         let mut interpreter = Interpreter::default();
         let script = Script::compile("2 + 2")?;
         assert_eq!(interpreter.interpret(&script)?, Value::Integer(4));

@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with packed_struct.  If not, see <http://www.gnu.org/licenses/>.
-pub use failure::{ensure, err_msg, Error};
+pub use anyhow::{anyhow, ensure, Error};
 pub use zerocopy::{AsBytes, FromBytes, LayoutVerified};
 
 #[macro_export]
@@ -49,17 +49,17 @@ macro_rules! packed_struct {
             )+
 
             #[allow(unused)]
-            pub fn overlay(buf: &[u8]) -> ::failure::Fallible<&$name> {
+            pub fn overlay(buf: &[u8]) -> ::anyhow::Result<&$name> {
                 $crate::LayoutVerified::<&[u8], $name>::new(buf)
                     .map(|v| v.into_ref())
-                    .ok_or_else(|| ::failure::err_msg("cannot overlay"))
+                    .ok_or_else(|| ::anyhow::anyhow!("cannot overlay"))
             }
 
             #[allow(unused)]
-            pub fn overlay_slice(buf: &[u8]) -> ::failure::Fallible<&[$name]> {
+            pub fn overlay_slice(buf: &[u8]) -> ::anyhow::Result<&[$name]> {
                 $crate::LayoutVerified::<&[u8], [$name]>::new_slice(buf)
                     .map(|v| v.into_slice())
-                    .ok_or_else(|| ::failure::err_msg("cannot overlay slice"))
+                    .ok_or_else(|| ::anyhow::anyhow!("cannot overlay slice"))
             }
 
             #[allow(clippy::too_many_arguments)]
@@ -89,7 +89,7 @@ macro_rules! packed_struct {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use failure::Fallible;
+    use anyhow::Result;
 
     packed_struct!(TestStruct {
         _0 => a: u8 as usize,
@@ -98,7 +98,7 @@ mod tests {
     });
 
     #[test]
-    fn it_has_accessors() -> Fallible<()> {
+    fn it_has_accessors() -> Result<()> {
         let buf: &[u8] = &[42, 1, 0, 0, 0, 0, 1];
         let ts = TestStruct::overlay(buf)?;
         assert_eq!(ts.a(), 42usize);
@@ -108,7 +108,7 @@ mod tests {
     }
 
     #[test]
-    fn it_can_debug() -> Fallible<()> {
+    fn it_can_debug() -> Result<()> {
         let buf: &[u8] = &[42, 1, 0, 0, 0, 0, 1];
         let ts = TestStruct::overlay(buf)?;
         format!("{:?}", ts);
@@ -116,7 +116,7 @@ mod tests {
     }
 
     #[test]
-    fn it_can_roundtrip() -> Fallible<()> {
+    fn it_can_roundtrip() -> Result<()> {
         let buf: &[u8] = &[42, 1, 0, 0, 0, 0, 1];
         let ts2 = TestStruct::build(42, 1, 0x100)?;
         assert_eq!(buf, ts2.as_bytes());

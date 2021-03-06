@@ -24,7 +24,7 @@ pub use layer_pack::{LayerPackBuilder, LayerPackHeader, LayerPackIndexItem};
 pub(crate) use tile_manager::TileManager;
 
 use absolute_unit::{arcseconds, meters, Angle, ArcSeconds};
-use failure::{bail, Fallible};
+use anyhow::{bail, Result};
 use geodesy::{GeoCenter, Graticule};
 use lazy_static::lazy_static;
 use std::ops::Range;
@@ -72,7 +72,7 @@ impl DataSetCoordinates {
         .to_owned()
     }
 
-    pub fn from_name(name: &str) -> Fallible<Self> {
+    pub fn from_name(name: &str) -> Result<Self> {
         Ok(match name {
             "spherical" => Self::Spherical,
             "cartesian_polar" => Self::CartesianPolar,
@@ -98,7 +98,7 @@ impl DataSetDataKind {
         .to_owned()
     }
 
-    pub fn from_name(name: &str) -> Fallible<Self> {
+    pub fn from_name(name: &str) -> Result<Self> {
         Ok(match name {
             "color" => Self::Color,
             "normal" => Self::Normal,

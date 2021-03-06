@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 approx = "^ 0.4"
 bitflags = ">= 1.0"
-failure = "^ 0.1.2"
+anyhow = "^ 1"
 lazy_static = "^ 1"
 log = "^ 0.4"
 nalgebra = "^ 0.24"

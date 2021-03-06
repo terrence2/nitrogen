@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use failure::Fallible;
+use anyhow::Result;
 use nalgebra::{
     Isometry3, Matrix4, Perspective3, Point3, Similarity3, Translation3, Unit, UnitQuaternion,
     Vector3,
@@ -59,7 +59,7 @@ impl UfoCamera {
         }
     }
 
-    pub fn init(self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Arc<RwLock<Self>>> {
+    pub fn init(self, interpreter: Arc<RwLock<Interpreter>>) -> Result<Arc<RwLock<Self>>> {
         let ufo = Arc::new(RwLock::new(self));
         interpreter
             .write()
@@ -67,7 +67,7 @@ impl UfoCamera {
         Ok(ufo)
     }
 
-    pub fn with_default_bindings(self, interpreter: Arc<RwLock<Interpreter>>) -> Fallible<Self> {
+    pub fn with_default_bindings(self, interpreter: Arc<RwLock<Interpreter>>) -> Result<Self> {
         interpreter.write().interpret_once(
             r#"
                 let bindings := mapper.create_bindings("arc_ball_camera");

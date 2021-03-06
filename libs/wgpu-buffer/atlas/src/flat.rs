@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use failure::Fallible;
+use anyhow::Result;
 use gpu::{texture_format_component_type, texture_format_size, UploadTracker, GPU};
 use image::{GenericImage, ImageBuffer, Pixel};
 use std::{mem, sync::Arc};
@@ -197,7 +197,7 @@ where
         self
     }
 
-    pub fn push_image(&mut self, image: &ImageBuffer<P, Vec<P::Subpixel>>) -> Fallible<Frame> {
+    pub fn push_image(&mut self, image: &ImageBuffer<P, Vec<P::Subpixel>>) -> Result<Frame> {
         let w = image.width() + self.padding;
         let h = image.height() + self.padding;
         assert!(w < self.initial_width);
@@ -425,7 +425,7 @@ where
         (self.texture_view, self.sampler)
     }
 
-    fn grow(&mut self) -> Fallible<()> {
+    fn grow(&mut self) -> Result<()> {
         // panic!("Cannot safely grow");
         self.width += self.initial_width;
         self.height += self.initial_height;
@@ -441,7 +441,7 @@ where
         Ok(())
     }
 
-    fn blit(&mut self, other: &ImageBuffer<P, Vec<P::Subpixel>>, x: u32, y: u32) -> Fallible<()> {
+    fn blit(&mut self, other: &ImageBuffer<P, Vec<P::Subpixel>>, x: u32, y: u32) -> Result<()> {
         self.buffer.copy_from(other, x, y)?;
         Ok(())
     }
@@ -468,7 +468,7 @@ mod test {
 
     #[cfg(unix)]
     #[test]
-    fn test_random_packing() -> Fallible<()> {
+    fn test_random_packing() -> Result<()> {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
@@ -520,7 +520,7 @@ mod test {
 
     #[cfg(unix)]
     #[test]
-    fn test_finish() -> Fallible<()> {
+    fn test_finish() -> Result<()> {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
@@ -554,7 +554,7 @@ mod test {
 
     #[cfg(unix)]
     #[test]
-    fn test_incremental_upload() -> Fallible<()> {
+    fn test_incremental_upload() -> Result<()> {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();

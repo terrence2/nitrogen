@@ -48,8 +48,8 @@ use crate::{
     tile::{tile_info::TileInfo, tile_set::TileSet, DataSetCoordinates, DataSetDataKind},
     GpuDetail, VisiblePatch,
 };
+use anyhow::Result;
 use catalog::{from_utf8_string, Catalog};
-use failure::Fallible;
 use gpu::{UploadTracker, GPU};
 use smallvec::{smallvec, SmallVec};
 use std::{mem, num::NonZeroU64, sync::Arc};
@@ -71,7 +71,7 @@ impl TileManager {
         catalog: &Catalog,
         gpu_detail: &GpuDetail,
         gpu: &mut GPU,
-    ) -> Fallible<Self> {
+    ) -> Result<Self> {
         let mut tile_sets = Vec::new();
 
         // This layout is common for all indexed data sets.
@@ -238,7 +238,7 @@ impl TileManager {
     pub fn paint_atlas_indices(
         &self,
         mut encoder: wgpu::CommandEncoder,
-    ) -> Fallible<wgpu::CommandEncoder> {
+    ) -> Result<wgpu::CommandEncoder> {
         for ts in self.tile_sets.iter() {
             ts.paint_atlas_index(&mut encoder)?
         }
@@ -250,7 +250,7 @@ impl TileManager {
         vertex_count: u32,
         mesh_bind_group: &'a wgpu::BindGroup,
         mut cpass: wgpu::ComputePass<'a>,
-    ) -> Fallible<wgpu::ComputePass<'a>> {
+    ) -> Result<wgpu::ComputePass<'a>> {
         for ts in self.tile_sets.iter() {
             cpass = ts.displace_height(vertex_count, mesh_bind_group, cpass)?;
         }

@@ -17,7 +17,7 @@ use crate::{
     colorspace::{wavelength_to_srgb, MAX_LAMBDA, MIN_LAMBDA},
     earth_consts::{EarthParameters, RGB_LAMBDAS},
 };
-use failure::{bail, Fallible};
+use anyhow::{bail, Result};
 use futures::executor::block_on;
 use gpu::GPU;
 use image::{ImageBuffer, Luma, Rgb};
@@ -105,7 +105,7 @@ impl Precompute {
         num_scattering_passes: usize,
         skip_cache: bool,
         gpu: &mut GPU,
-    ) -> Fallible<(
+    ) -> Result<(
         wgpu::Buffer,
         wgpu::Texture,
         wgpu::Texture,
@@ -130,7 +130,7 @@ impl Precompute {
         ))
     }
 
-    pub fn new(gpu: &GPU) -> Fallible<Self> {
+    pub fn new(gpu: &GPU) -> Result<Self> {
         let device = gpu.device();
         let params = EarthParameters::new();
 
@@ -667,7 +667,7 @@ impl Precompute {
         num_scattering_passes: usize,
         skip_cache: bool,
         gpu: &mut GPU,
-    ) -> Fallible<wgpu::Buffer> /* AtmosphereParameters */ {
+    ) -> Result<wgpu::Buffer> /* AtmosphereParameters */ {
         let mut srgb_atmosphere = self.params.sample(RGB_LAMBDAS);
         srgb_atmosphere.ground_albedo = [0f32, 0f32, 0.04f32, 0f32];
         let srgb_atmosphere_buffer = gpu.push_data(
@@ -1607,7 +1607,7 @@ impl Precompute {
         }
     }
 
-    async fn update_cache(&self, gpu: &mut GPU) -> Fallible<()> {
+    async fn update_cache(&self, gpu: &mut GPU) -> Result<()> {
         let _ = fs::create_dir(CACHE_DIR);
 
         let transmittance_buf_size =
@@ -1742,12 +1742,12 @@ impl Precompute {
     }
 
     #[cfg(target_arch = "wasm32")]
-    fn load_cache(&self, gpu: &mut GPU) -> Fallible<()> {
+    fn load_cache(&self, gpu: &mut GPU) -> Result<()> {
         bail!("TODO: no atmosphere cache on wasm32");
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn load_cache(&self, gpu: &mut GPU) -> Fallible<()> {
+    fn load_cache(&self, gpu: &mut GPU) -> Result<()> {
         use memmap::MmapOptions;
 
         let transmittance_path = format!("{}/solar_transmittance.wgpu.bin", CACHE_DIR);
@@ -1868,7 +1868,7 @@ mod test {
 
     #[cfg(unix)]
     #[test]
-    fn test_create() -> Fallible<()> {
+    fn test_create() -> Result<()> {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;

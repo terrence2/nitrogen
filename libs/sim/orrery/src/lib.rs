@@ -12,8 +12,8 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use anyhow::Result;
 use chrono::{prelude::*, Duration};
-use failure::Fallible;
 use lazy_static::lazy_static;
 use nalgebra::{Point3, Unit, UnitQuaternion, Vector3, Vector4};
 use nitrous::{Interpreter, Value};
@@ -335,7 +335,7 @@ impl Orrery {
         orrery
     }
 
-    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Fallible<()> {
+    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
         interpreter.interpret_once(
             r#"
                 let bindings := mapper.create_bindings("orrery");

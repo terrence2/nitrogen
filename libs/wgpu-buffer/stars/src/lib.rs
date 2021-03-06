@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use failure::Fallible;
+use anyhow::Result;
 use gpu::GPU;
 use log::trace;
 use nalgebra::Vector3;
@@ -191,7 +191,7 @@ impl StarsBuffer {
         band.base_index as usize + rai
     }
 
-    pub fn new(gpu: &GPU) -> Fallible<Self> {
+    pub fn new(gpu: &GPU) -> Result<Self> {
         trace!("StarsBuffer::new");
 
         let mut offset = 0;
@@ -429,7 +429,7 @@ mod tests {
     }
 
     #[test]
-    fn vec_to_rad_to_vec() -> Fallible<()> {
+    fn vec_to_rad_to_vec() -> Result<()> {
         let stars = Stars::new()?;
         for i in 0..stars.catalog_size() {
             let entry = stars.entry(i)?;

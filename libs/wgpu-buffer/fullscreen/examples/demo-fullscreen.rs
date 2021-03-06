@@ -13,8 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{degrees, meters};
+use anyhow::Result;
 use camera::ArcBallCamera;
-use failure::Fallible;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
@@ -26,11 +26,11 @@ use input::{
 use nitrous::Interpreter;
 use winit::window::Window;
 
-fn main() -> Fallible<()> {
+fn main() -> Result<()> {
     InputSystem::run_forever(window_main)
 }
 
-fn window_main(window: Window, input_controller: &InputController) -> Fallible<()> {
+fn window_main(window: Window, input_controller: &InputController) -> Result<()> {
     let interpreter = Interpreter::new();
     let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
 

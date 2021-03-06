@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use failure::{bail, Fallible};
+use anyhow::{bail, Result};
 use unicase::eq_ascii;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -23,7 +23,7 @@ pub enum SystemEventKind {
 }
 
 impl SystemEventKind {
-    pub fn from_virtual(v: &str) -> Fallible<Self> {
+    pub fn from_virtual(v: &str) -> Result<Self> {
         Ok(if eq_ascii(v, "quit") {
             Self::Quit
         } else if eq_ascii(v, "deviceAdded") {

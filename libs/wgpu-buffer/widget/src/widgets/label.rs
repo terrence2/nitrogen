@@ -20,7 +20,7 @@ use crate::{
     widget::{UploadMetrics, Widget},
     widget_info::WidgetInfo,
 };
-use failure::Fallible;
+use anyhow::Result;
 use gpu::GPU;
 use input::GenericEvent;
 use nitrous::Interpreter;
@@ -80,7 +80,7 @@ impl Label {
 }
 
 impl Widget for Label {
-    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Fallible<UploadMetrics> {
+    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Result<UploadMetrics> {
         let info = WidgetInfo::default(); //.with_foreground_color(self.default_color);
         let widget_info_index = context.push_widget(&info);
 
@@ -97,7 +97,7 @@ impl Widget for Label {
         &mut self,
         _events: &[GenericEvent],
         _interpreter: &mut Interpreter,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         Ok(())
     }
 }
