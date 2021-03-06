@@ -18,8 +18,8 @@ use crate::{
     GpuDetailLevel, VisiblePatch,
 };
 use absolute_unit::{degrees, meters, radians, Angle, Kilometers, Radians};
+use anyhow::Result;
 use camera::Camera;
-use failure::Fallible;
 use geodesy::{Cartesian, GeoCenter, Graticule};
 use gpu::{UploadTracker, GPU};
 use nalgebra::{Matrix4, Point3};
@@ -116,7 +116,7 @@ impl PatchManager {
         desired_patch_count: usize,
         max_subdivisions: usize,
         gpu: &mut GPU,
-    ) -> Fallible<Self> {
+    ) -> Result<Self> {
         let patch_upload_stride = 3; // 3 vertices per patch in the upload buffer.
         let patch_upload_byte_size = TerrainVertex::mem_size() * patch_upload_stride;
         let patch_upload_buffer_size =
@@ -489,7 +489,7 @@ impl PatchManager {
         gpu: &mut GPU,
         tracker: &mut UploadTracker,
         visible_regions: &mut Vec<VisiblePatch>,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         // Select optimal live patches from our coherent patch tree.
         self.live_patches.clear();
         self.patch_tree
@@ -571,7 +571,7 @@ impl PatchManager {
     pub fn tessellate<'a>(
         &'a self,
         mut cpass: wgpu::ComputePass<'a>,
-    ) -> Fallible<wgpu::ComputePass<'a>> {
+    ) -> Result<wgpu::ComputePass<'a>> {
         // Copy our upload buffer into seed positions for subdivisions.
         cpass.set_pipeline(&self.subdivide_prepare_pipeline);
         cpass.set_bind_group(0, &self.subdivide_prepare_bind_group, &[]);

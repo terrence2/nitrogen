@@ -17,7 +17,7 @@ lalrpop_mod!(#[allow(clippy::all)] pub(crate) script);
 use script::StatementsParser;
 
 use crate::ir::Stmt;
-use failure::{bail, Fallible};
+use anyhow::{bail, Result};
 use std::fmt;
 
 #[derive(Debug, Clone)]
@@ -27,7 +27,7 @@ pub struct Script {
 }
 
 impl Script {
-    pub fn compile(script: &str) -> Fallible<Self> {
+    pub fn compile(script: &str) -> Result<Self> {
         Ok(match StatementsParser::new().parse(script) {
             Ok(stmts) => Self { stmts },
             Err(e) => {
@@ -55,11 +55,11 @@ impl fmt::Display for Script {
 mod test {
     use super::*;
     use crate::ir::{Expr, Operator, Term};
-    use failure::{err_msg, Fallible};
+    use anyhow::{anyhow, Result};
     use ordered_float::OrderedFloat;
 
     #[test]
-    fn script_terms() -> Fallible<()> {
+    fn script_terms() -> Result<()> {
         assert!(StatementsParser::new().parse("22").is_ok());
         assert!(StatementsParser::new().parse("(22)").is_ok());
         assert!(StatementsParser::new().parse("((((22))))").is_ok());
@@ -121,7 +121,7 @@ mod test {
     }
 
     #[test]
-    fn test_expr() -> Fallible<()> {
+    fn test_expr() -> Result<()> {
         let rv = StatementsParser::new().parse("a + b * c")?;
         assert_eq!(
             rv,
@@ -158,7 +158,7 @@ mod test {
         let s = "a".to_owned();
         let rv = StatementsParser::new()
             .parse(&s)
-            .map_err(|_| err_msg("failed to parse expression"))?;
+            .map_err(|_| anyhow!("failed to parse expression"))?;
         assert_eq!(
             rv,
             vec![Box::new(Stmt::Expr(Box::new(Expr::Term(Term::Symbol(
@@ -175,7 +175,7 @@ mod test {
     }
 
     #[test]
-    fn script_stmts() -> Fallible<()> {
+    fn script_stmts() -> Result<()> {
         let rv = StatementsParser::new().parse(
             r#"
                 2;

@@ -9,7 +9,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 console_error_panic_hook = "^ 0.1"
-failure = "^ 0.1.2"
+anyhow = "^ 1"
 legion = "^ 0.3"
 log = "^ 0.4"
 parking_lot = "^ 0.11"

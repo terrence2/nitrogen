@@ -103,7 +103,7 @@ macro_rules! make_frame_graph {
                     $(
                         $buffer_name: ::std::sync::Arc<::parking_lot::RwLock<$buffer_type>>
                     ),*
-                ) -> ::failure::Fallible<Self> {
+                ) -> ::anyhow::Result<Self> {
                     Ok(Self {
                         $(
                             $buffer_name
@@ -123,7 +123,7 @@ macro_rules! make_frame_graph {
                     }
                 )*
 
-                pub fn run(&mut self, gpu: &mut $crate::GPU, tracker: $crate::UploadTracker) -> ::failure::Fallible<bool> {
+                pub fn run(&mut self, gpu: &mut $crate::GPU, tracker: $crate::UploadTracker) -> ::anyhow::Result<bool> {
                     $(
                         let $buffer_name = &self.$buffer_name.read();
                     )*
@@ -154,7 +154,7 @@ macro_rules! make_frame_graph {
 #[cfg(test)]
 mod test {
     use crate::{UploadTracker, GPU};
-    use failure::Fallible;
+    use anyhow::Result;
     use legion::*;
     use nitrous::Interpreter;
     use parking_lot::RwLock;
@@ -210,7 +210,7 @@ mod test {
         fn example_compute_pass<'a>(
             &self,
             cpass: wgpu::ComputePass<'a>,
-        ) -> Fallible<wgpu::ComputePass<'a>> {
+        ) -> Result<wgpu::ComputePass<'a>> {
             *self.compute_count.borrow_mut() += 1;
             Ok(cpass)
         }
@@ -218,7 +218,7 @@ mod test {
         fn example_render_pass<'a>(
             &self,
             rpass: wgpu::RenderPass<'a>,
-        ) -> Fallible<wgpu::RenderPass<'a>> {
+        ) -> Result<wgpu::RenderPass<'a>> {
             *self.render_count.borrow_mut() += 1;
             Ok(rpass)
         }
@@ -241,10 +241,7 @@ mod test {
             )
         }
         #[allow(clippy::unnecessary_wraps)]
-        fn example_any_pass(
-            &self,
-            encoder: wgpu::CommandEncoder,
-        ) -> Fallible<wgpu::CommandEncoder> {
+        fn example_any_pass(&self, encoder: wgpu::CommandEncoder) -> Result<wgpu::CommandEncoder> {
             *self.any_count.borrow_mut() += 1;
             Ok(encoder)
         }
@@ -255,7 +252,7 @@ mod test {
     }
     impl TestRenderer {
         #[allow(clippy::unnecessary_wraps)]
-        fn new(_gpu: &GPU, _foo: &TestBuffer) -> Fallible<Self> {
+        fn new(_gpu: &GPU, _foo: &TestBuffer) -> Result<Self> {
             Ok(Self {
                 render_count: RefCell::new(0),
             })
@@ -266,7 +263,7 @@ mod test {
             &self,
             rpass: wgpu::RenderPass<'a>,
             test_buffer: &'a TestBuffer,
-        ) -> Fallible<wgpu::RenderPass<'a>> {
+        ) -> Result<wgpu::RenderPass<'a>> {
             *self.render_count.borrow_mut() += 1;
             *test_buffer.screen_count.borrow_mut() += 1;
             Ok(rpass)
@@ -297,7 +294,7 @@ mod test {
     );
 
     #[test]
-    fn test_basic() -> Fallible<()> {
+    fn test_basic() -> Result<()> {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;

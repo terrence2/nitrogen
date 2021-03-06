@@ -12,8 +12,8 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use anyhow::Result;
 use atmosphere::AtmosphereBuffer;
-use failure::Fallible;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::GlobalParametersBuffer;
 use gpu::{texture_format_component_type, ResizeHint, GPU};
@@ -73,7 +73,7 @@ impl WorldRenderPass {
         atmosphere_buffer: &AtmosphereBuffer,
         stars_buffer: &StarsBuffer,
         terrain_geo_buffer: &TerrainGeoBuffer,
-    ) -> Fallible<Arc<RwLock<Self>>> {
+    ) -> Result<Arc<RwLock<Self>>> {
         trace!("WorldRenderPass::new");
 
         let deferred_bind_group_layout =
@@ -400,7 +400,7 @@ impl WorldRenderPass {
         })
     }
 
-    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Fallible<()> {
+    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
         interpreter.interpret_once(
             r#"
                 let bindings := mapper.create_bindings("world");
@@ -474,7 +474,7 @@ impl WorldRenderPass {
         atmosphere_buffer: &'a AtmosphereBuffer,
         stars_buffer: &'a StarsBuffer,
         terrain_geo_buffer: &'a TerrainGeoBuffer,
-    ) -> Fallible<wgpu::RenderPass<'a>> {
+    ) -> Result<wgpu::RenderPass<'a>> {
         match self.debug_mode {
             DebugMode::None => rpass.set_pipeline(&self.composite_pipeline),
             DebugMode::Deferred => rpass.set_pipeline(&self.dbg_deferred_pipeline),
@@ -519,7 +519,7 @@ impl WorldRenderPass {
 }
 
 impl ResizeHint for WorldRenderPass {
-    fn note_resize(&mut self, gpu: &GPU) -> Fallible<()> {
+    fn note_resize(&mut self, gpu: &GPU) -> Result<()> {
         self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
         self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
         self.deferred_bind_group = Self::_make_deferred_bind_group(

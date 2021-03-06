@@ -20,7 +20,7 @@ use crate::{
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
 };
-use failure::Fallible;
+use anyhow::Result;
 use gpu::GPU;
 use input::GenericEvent;
 use nitrous::Interpreter;
@@ -91,7 +91,7 @@ impl VerticalBox {
 }
 
 impl Widget for VerticalBox {
-    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Fallible<UploadMetrics> {
+    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Result<UploadMetrics> {
         let widget_info_index = context.push_widget(&self.info);
         let mut widget_info_indexes = vec![widget_info_index];
 
@@ -140,7 +140,7 @@ impl Widget for VerticalBox {
         &mut self,
         events: &[GenericEvent],
         interpreter: &mut Interpreter,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         // TODO: track keyboard focus
         for child in &self.children {
             child.widget.write().handle_events(events, interpreter)?;

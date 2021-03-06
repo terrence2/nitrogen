@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 approx = "^ 0.4"
 bzip2 = "^ 0.4"
-failure = "^ 0.1.2"
+anyhow = "^ 1"
 image = "^ 0.23"
 json = "^ 0.12"
 memmap = "^ 0.7"

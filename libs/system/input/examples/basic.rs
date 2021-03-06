@@ -12,15 +12,15 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use failure::Fallible;
+use anyhow::Result;
 use input::{GenericEvent, GenericSystemEvent, InputController, InputSystem, VirtualKeyCode};
 use winit::window::Window;
 
-fn main() -> Fallible<()> {
+fn main() -> Result<()> {
     InputSystem::run_forever(window_main)
 }
 
-fn window_main(window: Window, input_controller: &InputController) -> Fallible<()> {
+fn window_main(window: Window, input_controller: &InputController) -> Result<()> {
     loop {
         for event in input_controller.poll_events()? {
             println!("EVENT: {:?} <- {:?}", window, event);

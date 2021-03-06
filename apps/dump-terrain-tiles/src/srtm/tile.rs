@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{degrees, meters, Angle, ArcSeconds, Degrees};
-use failure::Fallible;
+use anyhow::Result;
 use geodesy::{GeoSurface, Graticule};
 use json::JsonValue;
 use memmap::{Mmap, MmapOptions};
@@ -50,7 +50,7 @@ pub struct Tile {
 }
 
 impl Tile {
-    pub fn from_feature(feature: &JsonValue, base_path: &Path) -> Fallible<Self> {
+    pub fn from_feature(feature: &JsonValue, base_path: &Path) -> Result<Self> {
         assert_eq!(feature["type"], "Feature");
         let geometry = &feature["geometry"];
         assert_eq!(geometry["type"], "Polygon");

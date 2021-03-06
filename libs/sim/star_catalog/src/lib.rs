@@ -15,7 +15,7 @@
 
 /// Parse and provide the contents of the Yale Bright Star Catalogue
 /// for use in rendering the skybox.
-use failure::{ensure, Fallible};
+use anyhow::{ensure, Result};
 use packed_struct::packed_struct;
 use std::mem;
 
@@ -152,7 +152,7 @@ pub struct Stars {
 }
 
 impl Stars {
-    pub fn new() -> Fallible<Self> {
+    pub fn new() -> Result<Self> {
         const HDR_SIZE: usize = mem::size_of::<Header>();
 
         #[allow(clippy::transmute_ptr_to_ptr)]
@@ -174,7 +174,7 @@ impl Stars {
         })
     }
 
-    pub fn entry(&self, n: usize) -> Fallible<&'static SAOEntry> {
+    pub fn entry(&self, n: usize) -> Result<&'static SAOEntry> {
         ensure!(n < self.n_stars, "star out of bounds");
         Ok(&self.entries[n])
     }
@@ -190,7 +190,7 @@ mod tests {
     use std::f64::consts::PI;
 
     #[test]
-    fn it_can_parse_stars() -> Fallible<()> {
+    fn it_can_parse_stars() -> Result<()> {
         let stars = Stars::new()?;
 
         let mut visible = 0;
@@ -211,7 +211,7 @@ mod tests {
     }
 
     #[test]
-    fn band_by_ascension() -> Fallible<()> {
+    fn band_by_ascension() -> Result<()> {
         let stars = Stars::new()?;
 
         const MAG: f32 = 6.5f32;

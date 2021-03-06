@@ -18,8 +18,8 @@ use crate::{
     widget_vertex::WidgetVertex,
     SANS_FONT_NAME,
 };
+use anyhow::Result;
 use atlas::{AtlasPacker, Frame};
-use failure::Fallible;
 use font_common::FontInterface;
 use gpu::{UploadTracker, GPU};
 use image::Luma;
@@ -135,7 +135,7 @@ impl FontContext {
         self.trackers.insert(fid, GlyphTracker::new(font));
     }
 
-    pub fn load_glyph(&mut self, fid: FontId, c: char, scale: f32) -> Fallible<Frame> {
+    pub fn load_glyph(&mut self, fid: FontId, c: char, scale: f32) -> Result<Frame> {
         if let Some(frame) = self.trackers[&fid].glyphs.get(&(c, OrderedFloat(scale))) {
             return Ok(*frame);
         }
@@ -185,7 +185,7 @@ impl FontContext {
         gpu: &GPU,
         text_pool: &mut Vec<WidgetVertex>,
         background_pool: &mut Vec<WidgetVertex>,
-    ) -> Fallible<TextSpanMetrics> {
+    ) -> Result<TextSpanMetrics> {
         let initial_text_offset = text_pool.len();
         let initial_background_offset = background_pool.len();
 

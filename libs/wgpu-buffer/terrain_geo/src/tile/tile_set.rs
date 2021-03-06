@@ -23,9 +23,9 @@ use crate::{
     GpuDetail, VisiblePatch,
 };
 use absolute_unit::arcseconds;
+use anyhow::{anyhow, Result};
 use bzip2::read::BzDecoder;
 use catalog::Catalog;
-use failure::{err_msg, Fallible};
 use futures::task::noop_waker;
 use geometry::AABB2;
 use gpu::{texture_format_size, UploadTracker, GPU};
@@ -171,19 +171,19 @@ impl TileSet {
         index_json: json::JsonValue,
         gpu_detail: &GpuDetail,
         gpu: &mut GPU,
-    ) -> Fallible<Self> {
+    ) -> Result<Self> {
         let prefix = index_json["prefix"]
             .as_str()
-            .ok_or_else(|| err_msg("no prefix listed in index"))?;
+            .ok_or_else(|| anyhow!("no prefix listed in index"))?;
         let kind = DataSetDataKind::from_name(
             index_json["kind"]
                 .as_str()
-                .ok_or_else(|| err_msg("no kind listed in index"))?,
+                .ok_or_else(|| anyhow!("no kind listed in index"))?,
         )?;
         let coordinates = DataSetCoordinates::from_name(
             index_json["coordinates"]
                 .as_str()
-                .ok_or_else(|| err_msg("no coordinates listed in index"))?,
+                .ok_or_else(|| anyhow!("no coordinates listed in index"))?,
         )?;
 
         let qt_start = Instant::now();
@@ -707,7 +707,7 @@ impl TileSet {
         &mut self,
         async_rt: &mut Runtime,
         gpu: &mut GPU,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         fn write_image(extent: wgpu::Extent3d, _: wgpu::TextureFormat, data: Vec<u8>) {
             let pix_cnt = extent.width as usize * extent.height as usize;
             let img_len = pix_cnt * 3;
@@ -772,7 +772,7 @@ impl TileSet {
         self.atlas_free_list.push(atlas_slot);
     }
 
-    pub fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) -> Fallible<()> {
+    pub fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) -> Result<()> {
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                 attachment: &self.index_texture_view,
@@ -795,7 +795,7 @@ impl TileSet {
         vertex_count: u32,
         mesh_bind_group: &'a wgpu::BindGroup,
         mut cpass: wgpu::ComputePass<'a>,
-    ) -> Fallible<wgpu::ComputePass<'a>> {
+    ) -> Result<wgpu::ComputePass<'a>> {
         assert_eq!(self.coordinates, DataSetCoordinates::Spherical);
         if self.kind != DataSetDataKind::Height {
             return Ok(cpass);

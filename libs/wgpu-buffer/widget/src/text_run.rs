@@ -18,7 +18,7 @@ use crate::{
     paint_context::PaintContext,
     widget::UploadMetrics,
 };
-use failure::Fallible;
+use anyhow::Result;
 use gpu::GPU;
 use input::ModifiersState;
 use smallvec::{smallvec, SmallVec};
@@ -465,7 +465,7 @@ impl TextRun {
         widget_info_index: u32,
         gpu: &GPU,
         context: &mut PaintContext,
-    ) -> Fallible<(UploadMetrics, TextSpanMetrics)> {
+    ) -> Result<(UploadMetrics, TextSpanMetrics)> {
         let mut min_text_offset = usize::MAX;
         let mut min_background_offset = usize::MAX;
         let mut position = 0;

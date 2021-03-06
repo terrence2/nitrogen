@@ -16,7 +16,7 @@ use crate::Camera;
 use absolute_unit::{
     degrees, meters, radians, Angle, Degrees, Kilometers, Length, LengthUnit, Meters,
 };
-use failure::{ensure, Fallible};
+use anyhow::{ensure, Result};
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
 use gpu::{ResizeHint, GPU};
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
@@ -67,7 +67,7 @@ impl ArcBallCamera {
         }
     }
 
-    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Fallible<()> {
+    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
         interpreter.interpret_once(
             r#"
                 let bindings := mapper.create_bindings("arc_ball_camera");
@@ -108,7 +108,7 @@ impl ArcBallCamera {
         self.eye
     }
 
-    pub fn set_eye_relative(&mut self, eye: Graticule<Target>) -> Fallible<()> {
+    pub fn set_eye_relative(&mut self, eye: Graticule<Target>) -> Result<()> {
         ensure!(
             eye.latitude < radians!(degrees!(90)),
             "eye coordinate past limits"
@@ -285,7 +285,7 @@ impl ArcBallCamera {
 }
 
 impl ResizeHint for ArcBallCamera {
-    fn note_resize(&mut self, gpu: &GPU) -> Fallible<()> {
+    fn note_resize(&mut self, gpu: &GPU) -> Result<()> {
         self.camera.set_aspect_ratio(gpu.aspect_ratio());
         Ok(())
     }
@@ -299,7 +299,7 @@ mod tests {
     use physical_constants::EARTH_RADIUS_KM;
 
     #[test]
-    fn it_can_compute_eye_positions_at_origin() -> Fallible<()> {
+    fn it_can_compute_eye_positions_at_origin() -> Result<()> {
         let mut c = ArcBallCamera::detached(1f64, meters!(0.1f64));
 
         // Verify base target position.
@@ -357,7 +357,7 @@ mod tests {
     }
 
     #[test]
-    fn it_can_compute_eye_positions_with_offset_latitude() -> Fallible<()> {
+    fn it_can_compute_eye_positions_with_offset_latitude() -> Result<()> {
         let mut c = ArcBallCamera::detached(1f64, meters!(0.1f64));
 
         // Verify base target position.
@@ -399,7 +399,7 @@ mod tests {
     }
 
     #[test]
-    fn it_can_compute_eye_positions_with_offset_longitude() -> Fallible<()> {
+    fn it_can_compute_eye_positions_with_offset_longitude() -> Result<()> {
         let mut c = ArcBallCamera::detached(1f64, meters!(0.1f64));
 
         // Verify base target position.

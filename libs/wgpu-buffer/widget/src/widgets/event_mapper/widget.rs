@@ -23,7 +23,7 @@ use crate::{
     },
     PaintContext,
 };
-use failure::{ensure, Fallible};
+use anyhow::{ensure, Result};
 use gpu::GPU;
 use input::{ElementState, GenericEvent, GenericSystemEvent, GenericWindowEvent, ModifiersState};
 use nitrous::{Interpreter, Value};
@@ -57,7 +57,7 @@ impl EventMapper {
     }
 
     #[method]
-    pub fn create_bindings(&mut self, name: &str) -> Fallible<Value> {
+    pub fn create_bindings(&mut self, name: &str) -> Result<Value> {
         ensure!(
             !self.bindings.contains_key(name),
             format!("already have a bindings set named {}", name)
@@ -69,7 +69,7 @@ impl EventMapper {
 }
 
 impl Widget for EventMapper {
-    fn upload(&self, _gpu: &GPU, _context: &mut PaintContext) -> Fallible<UploadMetrics> {
+    fn upload(&self, _gpu: &GPU, _context: &mut PaintContext) -> Result<UploadMetrics> {
         Ok(UploadMetrics {
             widget_info_indexes: vec![],
             width: 0.,
@@ -81,7 +81,7 @@ impl Widget for EventMapper {
         &mut self,
         events: &[GenericEvent],
         interpreter: &mut Interpreter,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         for event in events {
             if !event.is_window_focused() {
                 continue;

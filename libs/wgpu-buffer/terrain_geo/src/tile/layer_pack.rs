@@ -13,8 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::tile::{TerrainLevel, TileCompression};
+use anyhow::{ensure, Result};
 use catalog::{Catalog, FileId};
-use failure::{ensure, Fallible};
 use packed_struct::packed_struct;
 use std::{
     borrow::Cow,
@@ -69,7 +69,7 @@ pub struct LayerPack {
 }
 
 impl LayerPack {
-    pub fn new(layer_pack_fid: FileId, catalog: &Catalog) -> Fallible<Self> {
+    pub fn new(layer_pack_fid: FileId, catalog: &Catalog) -> Result<Self> {
         let header_raw =
             catalog.read_slice_sync(layer_pack_fid, 0..mem::size_of::<LayerPackHeader>())?;
         let header = LayerPackHeader::overlay(&header_raw)?;
@@ -90,7 +90,7 @@ impl LayerPack {
         })
     }
 
-    pub(crate) fn index_bytes<'a>(&self, catalog: &'a Catalog) -> Fallible<Cow<'a, [u8]>> {
+    pub(crate) fn index_bytes<'a>(&self, catalog: &'a Catalog) -> Result<Cow<'a, [u8]>> {
         catalog.read_slice_sync(self.layer_pack_fid, self.index_extent.clone())
     }
 
@@ -133,7 +133,7 @@ impl LayerPackBuilder {
         tile_level: u32,
         tile_compression: TileCompression,
         angular_extent_as: i32,
-    ) -> Fallible<Self> {
+    ) -> Result<Self> {
         let mut stream = File::create(path)?;
 
         // Emit the header
@@ -160,12 +160,7 @@ impl LayerPackBuilder {
         })
     }
 
-    pub fn push_tile(
-        &mut self,
-        base: (i32, i32),
-        index_in_parent: u32,
-        data: &[u8],
-    ) -> Fallible<()> {
+    pub fn push_tile(&mut self, base: (i32, i32), index_in_parent: u32, data: &[u8]) -> Result<()> {
         if data.is_empty() {
             return Ok(());
         }

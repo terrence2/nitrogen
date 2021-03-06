@@ -13,9 +13,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{Kilometers, Meters};
+use anyhow::Result;
 use camera::Camera;
 use core::num::NonZeroU64;
-use failure::Fallible;
 use gpu::{UploadTracker, GPU};
 use nalgebra::{convert, Matrix3, Matrix4, Point3, Vector3, Vector4};
 use nitrous::{Interpreter, Value};
@@ -205,7 +205,7 @@ impl GlobalParametersBuffer {
         globals
     }
 
-    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Fallible<()> {
+    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
         interpreter.interpret_once(
             r#"
                 let bindings := mapper.create_bindings("globals");
@@ -245,7 +245,7 @@ impl GlobalParametersBuffer {
         camera: &Camera,
         gpu: &GPU,
         tracker: &mut UploadTracker,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         let globals: Globals = Default::default();
         let globals = globals
             .with_screen_overlay_projection(gpu)
@@ -379,7 +379,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn it_can_create_a_buffer() -> Fallible<()> {
+    fn it_can_create_a_buffer() -> Result<()> {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;

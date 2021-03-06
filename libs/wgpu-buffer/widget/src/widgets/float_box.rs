@@ -17,7 +17,7 @@ use crate::{
     paint_context::PaintContext,
     widget::{UploadMetrics, Widget},
 };
-use failure::{ensure, err_msg, Fallible};
+use anyhow::{anyhow, ensure, Result};
 use gpu::GPU;
 use input::GenericEvent;
 use nitrous::Interpreter;
@@ -81,29 +81,29 @@ impl FloatBox {
         self.packing_mut(name).unwrap()
     }
 
-    pub fn set_keyboard_focus(&mut self, name: &str) -> Fallible<()> {
+    pub fn set_keyboard_focus(&mut self, name: &str) -> Result<()> {
         ensure!(self.children.contains_key(name));
         self.focus = name.to_owned();
         Ok(())
     }
 
-    pub fn packing(&self, name: &str) -> Fallible<&FloatPacking> {
+    pub fn packing(&self, name: &str) -> Result<&FloatPacking> {
         self.children
             .get(name)
-            .ok_or_else(|| err_msg("request for unknown widget in float"))
+            .ok_or_else(|| anyhow!("request for unknown widget in float"))
     }
 
-    pub fn packing_mut(&mut self, name: &str) -> Fallible<&mut FloatPacking> {
+    pub fn packing_mut(&mut self, name: &str) -> Result<&mut FloatPacking> {
         self.children
             .get_mut(name)
-            .ok_or_else(|| err_msg("mut request for unknown widget in float"))
+            .ok_or_else(|| anyhow!("mut request for unknown widget in float"))
     }
 }
 
 impl Widget for FloatBox {
     // Webgpu: (-1, -1) maps to the bottom-left of the screen.
     // Widget: (0, 0) maps to the top-left of the widget.
-    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Fallible<UploadMetrics> {
+    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Result<UploadMetrics> {
         let mut widget_info_indexes = Vec::with_capacity(self.children.len());
         for pack in self.children.values() {
             let widget = pack.widget.read();
@@ -138,7 +138,7 @@ impl Widget for FloatBox {
         &mut self,
         events: &[GenericEvent],
         interpreter: &mut Interpreter,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         if !self.focus.is_empty() {
             assert!(self.children.contains_key(&self.focus));
             self.children[&self.focus]

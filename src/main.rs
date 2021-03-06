@@ -13,12 +13,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{degrees, meters};
+use anyhow::Result;
 use atmosphere::AtmosphereBuffer;
 use camera::{ArcBallCamera, Camera};
 use catalog::{Catalog, DirectoryDrawer};
 use chrono::{TimeZone, Utc};
 use composite::CompositeRenderPass;
-use failure::Fallible;
 use fullscreen::FullscreenBuffer;
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
@@ -81,7 +81,7 @@ impl Demo {
         demo
     }
 
-    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Fallible<()> {
+    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
         interpreter.interpret_once(
             r#"
                 let bindings := mapper.create_bindings("demo");
@@ -117,7 +117,7 @@ impl Demo {
     }
 
     #[method]
-    pub fn toggle_terminal(&mut self, pressed: bool) -> Fallible<()> {
+    pub fn toggle_terminal(&mut self, pressed: bool) -> Result<()> {
         if pressed {
             self.show_terminal = !self.show_terminal;
             self.terminal.write().set_visible(self.show_terminal);
@@ -129,7 +129,7 @@ impl Demo {
     }
 
     #[method]
-    pub fn toggle_terminal_bottom(&self) -> Fallible<()> {
+    pub fn toggle_terminal_bottom(&self) -> Result<()> {
         self.widgets
             .read()
             .set_keyboard_focus(if self.show_terminal {
@@ -185,12 +185,12 @@ make_frame_graph!(
     }
 );
 
-fn main() -> Fallible<()> {
+fn main() -> Result<()> {
     env_logger::init();
     InputSystem::run_forever(window_main)
 }
 
-fn window_main(window: Window, input_controller: &InputController) -> Fallible<()> {
+fn window_main(window: Window, input_controller: &InputController) -> Result<()> {
     let opt = Opt::from_args();
     let (cpu_detail, gpu_detail) = if cfg!(debug_assertions) {
         (CpuDetailLevel::Low, GpuDetailLevel::Low)

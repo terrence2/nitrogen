@@ -19,7 +19,7 @@ use crate::widgets::event_mapper::{
     window::WindowEventKind,
     State,
 };
-use failure::Fallible;
+use anyhow::Result;
 use input::ElementState;
 use log::trace;
 use nitrous::{Interpreter, Script, Value};
@@ -51,13 +51,13 @@ impl Bindings {
         }
     }
 
-    pub fn with_bind(mut self, keyset_or_axis: &str, script_raw: &str) -> Fallible<Self> {
+    pub fn with_bind(mut self, keyset_or_axis: &str, script_raw: &str) -> Result<Self> {
         self.bind(keyset_or_axis, script_raw)?;
         Ok(self)
     }
 
     #[method]
-    pub fn bind(&mut self, event_name: &str, script_raw: &str) -> Fallible<()> {
+    pub fn bind(&mut self, event_name: &str, script_raw: &str) -> Result<()> {
         let script = Script::compile(script_raw)?;
 
         if let Ok(kind) = SystemEventKind::from_virtual(event_name) {
@@ -96,7 +96,7 @@ impl Bindings {
         &self,
         event: SystemEventKind,
         interpreter: &mut Interpreter,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         if let Some(script) = self.system_event_map.get(&event) {
             interpreter.interpret(script)?;
         }
@@ -107,14 +107,14 @@ impl Bindings {
         &self,
         event: WindowEventKind,
         interpreter: &mut Interpreter,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         if let Some(script) = self.windows_event_map.get(&event) {
             interpreter.interpret(script)?;
         }
         Ok(())
     }
 
-    pub fn match_axis(&self, axis: AxisKind, interpreter: &mut Interpreter) -> Fallible<()> {
+    pub fn match_axis(&self, axis: AxisKind, interpreter: &mut Interpreter) -> Result<()> {
         if let Some(script) = self.axis_map.get(&axis) {
             interpreter.interpret(script)?;
         }
@@ -127,7 +127,7 @@ impl Bindings {
         key_state: ElementState,
         state: &mut State,
         interpreter: &mut Interpreter,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         match key_state {
             ElementState::Pressed => self.handle_press(key, state, interpreter)?,
             ElementState::Released => self.handle_release(key, state, interpreter)?,
@@ -140,7 +140,7 @@ impl Bindings {
         key: Key,
         state: &mut State,
         interpreter: &mut Interpreter,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         // The press chords gives us a quick map from a key press to all chords which could become
         // active in the case that it is pressed so that we don't have to look at everything.
         if let Some(possible_chord_list) = self.press_chords.get(&key) {
@@ -167,7 +167,7 @@ impl Bindings {
         chord: &KeySet,
         state: &mut State,
         interpreter: &mut Interpreter,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         // We may have multiple binding sets active for the same KeySet, in which case the first
         // binding in the set wins and checks for subsequent activations should exit early.
         if state.active_chords.contains(&chord) {
@@ -208,7 +208,7 @@ impl Bindings {
         key: Key,
         state: &mut State,
         interpreter: &mut Interpreter,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         // Remove any chords that have been released.
         let mut released_chords: SmallVec<[KeySet; 4]> = smallvec![];
         for active_chord in &state.active_chords {
@@ -238,14 +238,14 @@ impl Bindings {
         Ok(())
     }
 
-    fn activate_chord(&self, script: &Script, interpreter: &mut Interpreter) -> Fallible<()> {
+    fn activate_chord(&self, script: &Script, interpreter: &mut Interpreter) -> Result<()> {
         interpreter.with_locals(&[("pressed", Value::True())], |inner| {
             inner.interpret(script)
         })?;
         Ok(())
     }
 
-    fn deactiveate_chord(&self, script: &Script, interpreter: &mut Interpreter) -> Fallible<()> {
+    fn deactiveate_chord(&self, script: &Script, interpreter: &mut Interpreter) -> Result<()> {
         interpreter.with_locals(&[("pressed", Value::False())], |inner| {
             inner.interpret(script)
         })?;
@@ -256,7 +256,7 @@ impl Bindings {
 #[cfg(test)]
 mod test {
     use super::*;
-    use failure::bail;
+    use anyhow::bail;
     use input::{ModifiersState, VirtualKeyCode};
     use nitrous::{Module, Value};
     use parking_lot::RwLock;
@@ -273,7 +273,7 @@ mod test {
             "Player".to_owned()
         }
 
-        fn call_method(&mut self, name: &str, args: &[Value]) -> Fallible<Value> {
+        fn call_method(&mut self, name: &str, args: &[Value]) -> Result<Value> {
             println!("Call: {}({})", name, args[0]);
             Ok(match name {
                 "walk" => {
@@ -293,11 +293,11 @@ mod test {
             _module: Arc<RwLock<dyn Module>>,
             _name: &str,
             _value: Value,
-        ) -> Fallible<()> {
+        ) -> Result<()> {
             unimplemented!()
         }
 
-        fn get(&self, module: Arc<RwLock<dyn Module>>, name: &str) -> Fallible<Value> {
+        fn get(&self, module: Arc<RwLock<dyn Module>>, name: &str) -> Result<Value> {
             Ok(match name {
                 "walk" => Value::Method(module, name.to_owned()),
                 "run" => Value::Method(module, name.to_owned()),
@@ -307,7 +307,7 @@ mod test {
     }
 
     #[test]
-    fn test_modifier_planes_disable_bare() -> Fallible<()> {
+    fn test_modifier_planes_disable_bare() -> Result<()> {
         let interpreter = Interpreter::new();
         let player = Arc::new(RwLock::new(Player::default()));
         interpreter
@@ -343,7 +343,7 @@ mod test {
     }
 
     #[test]
-    fn test_matches_exact_modifier_plane() -> Fallible<()> {
+    fn test_matches_exact_modifier_plane() -> Result<()> {
         let interpreter = Interpreter::new();
         let player = Arc::new(RwLock::new(Player::default()));
         interpreter
@@ -374,7 +374,7 @@ mod test {
     }
 
     #[test]
-    fn test_masking() -> Fallible<()> {
+    fn test_masking() -> Result<()> {
         let interpreter = Interpreter::new();
         let player = Arc::new(RwLock::new(Player::default()));
         interpreter

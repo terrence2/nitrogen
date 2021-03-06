@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use failure::Fallible;
+use anyhow::Result;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::GlobalParametersBuffer;
 use gpu::GPU;
@@ -32,7 +32,7 @@ impl CompositeRenderPass {
         globals: &GlobalParametersBuffer,
         world: &WorldRenderPass,
         ui: &UiRenderPass,
-    ) -> Fallible<Self> {
+    ) -> Result<Self> {
         trace!("CompositeRenderPass::new");
 
         // Layout shared by all three render passes.
@@ -114,7 +114,7 @@ impl CompositeRenderPass {
         globals: &'a GlobalParametersBuffer,
         world: &'a WorldRenderPass,
         ui: &'a UiRenderPass,
-    ) -> Fallible<wgpu::RenderPass<'a>> {
+    ) -> Result<wgpu::RenderPass<'a>> {
         rpass.set_pipeline(&self.pipeline);
         rpass.set_bind_group(Group::Globals.index(), globals.bind_group(), &[]);
         rpass.set_bind_group(Group::OffScreenWorld.index(), world.bind_group(), &[]);

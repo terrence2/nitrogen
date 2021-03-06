@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::Module;
-use failure::{bail, Fallible};
+use anyhow::{bail, Result};
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
 use std::{fmt, fmt::Debug, sync::Arc};
@@ -39,28 +39,28 @@ impl Value {
         Self::Boolean(false)
     }
 
-    pub fn to_bool(&self) -> Fallible<bool> {
+    pub fn to_bool(&self) -> Result<bool> {
         if let Self::Boolean(b) = self {
             return Ok(*b);
         }
         bail!("not a boolean value: {}", self)
     }
 
-    pub fn to_int(&self) -> Fallible<i64> {
+    pub fn to_int(&self) -> Result<i64> {
         if let Self::Integer(i) = self {
             return Ok(*i);
         }
         bail!("not an integer value: {}", self)
     }
 
-    pub fn to_float(&self) -> Fallible<f64> {
+    pub fn to_float(&self) -> Result<f64> {
         if let Self::Float(f) = self {
             return Ok(f.0);
         }
         bail!("not a float value: {}", self)
     }
 
-    pub fn to_str(&self) -> Fallible<&str> {
+    pub fn to_str(&self) -> Result<&str> {
         if let Self::String(s) = self {
             return Ok(s);
         }
@@ -109,7 +109,7 @@ impl PartialEq for Value {
 impl Eq for Value {}
 
 impl Value {
-    pub fn impl_multiply(self, other: Self) -> Fallible<Self> {
+    pub fn impl_multiply(self, other: Self) -> Result<Self> {
         Ok(match self {
             Value::Integer(lhs) => match other {
                 Value::Integer(rhs) => Value::Integer(lhs * rhs),
@@ -141,7 +141,7 @@ impl Value {
         })
     }
 
-    pub fn impl_divide(self, other: Self) -> Fallible<Self> {
+    pub fn impl_divide(self, other: Self) -> Result<Self> {
         Ok(match self {
             Value::Integer(lhs) => match other {
                 Value::Integer(rhs) => Value::Integer(lhs / rhs),
@@ -166,7 +166,7 @@ impl Value {
         })
     }
 
-    pub fn impl_add(self, other: Self) -> Fallible<Self> {
+    pub fn impl_add(self, other: Self) -> Result<Self> {
         Ok(match self {
             Value::Integer(lhs) => match other {
                 Value::Integer(rhs) => Value::Integer(lhs + rhs),
@@ -198,7 +198,7 @@ impl Value {
         })
     }
 
-    pub fn impl_subtract(self, other: Self) -> Fallible<Self> {
+    pub fn impl_subtract(self, other: Self) -> Result<Self> {
         Ok(match self {
             Value::Integer(lhs) => match other {
                 Value::Integer(rhs) => Value::Integer(lhs - rhs),

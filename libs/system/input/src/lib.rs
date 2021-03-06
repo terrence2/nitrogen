@@ -17,7 +17,7 @@ mod generic;
 pub use generic::{GenericEvent, GenericSystemEvent, GenericWindowEvent, MouseAxis};
 pub use winit::event::{ButtonId, ElementState, ModifiersState, VirtualKeyCode};
 
-use failure::{bail, Fallible};
+use anyhow::{bail, Result};
 use smallvec::SmallVec;
 use std::{
     collections::HashMap,
@@ -56,12 +56,12 @@ impl InputController {
         }
     }
 
-    pub fn quit(&self) -> Fallible<()> {
+    pub fn quit(&self) -> Result<()> {
         self.proxy.send_event(MetaEvent::Stop)?;
         Ok(())
     }
 
-    pub fn poll_events(&self) -> Fallible<SmallVec<[GenericEvent; 8]>> {
+    pub fn poll_events(&self) -> Result<SmallVec<[GenericEvent; 8]>> {
         let mut out = SmallVec::new();
         let mut event_input = self.event_source.try_recv();
         while event_input.is_ok() {
@@ -90,10 +90,10 @@ impl InputSystem {
         window: Window,
         mut window_loop: M,
         mut ctx: T,
-    ) -> Fallible<()>
+    ) -> Result<()>
     where
         T: 'static + Send + Sync,
-        M: 'static + Send + FnMut(&Window, &InputController, &mut T) -> Fallible<()>,
+        M: 'static + Send + FnMut(&Window, &InputController, &mut T) -> Result<()>,
     {
         use web_sys::console;
 
@@ -141,9 +141,9 @@ impl InputSystem {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn run_forever<M>(mut window_main: M) -> Fallible<()>
+    pub fn run_forever<M>(mut window_main: M) -> Result<()>
     where
-        M: 'static + Send + FnMut(Window, &InputController) -> Fallible<()>,
+        M: 'static + Send + FnMut(Window, &InputController) -> Result<()>,
     {
         let event_loop = EventLoop::<MetaEvent>::with_user_event();
         let window = WindowBuilder::new()

@@ -22,7 +22,7 @@ pub use crate::upload_tracker::{
 // Note: re-export for use by FrameGraph when it is instantiated in other crates.
 pub use wgpu;
 
-use failure::{bail, err_msg, Fallible};
+use anyhow::{anyhow, bail, Result};
 use futures::executor::block_on;
 use log::{info, trace};
 use nitrous::{Interpreter, Value};
@@ -51,7 +51,7 @@ impl Default for GPUConfig {
 
 /// Implement this and register with the gpu instance to get resize notifications.
 pub trait ResizeHint: Debug + 'static {
-    fn note_resize(&mut self, gpu: &GPU) -> Fallible<()>;
+    fn note_resize(&mut self, gpu: &GPU) -> Result<()>;
 }
 
 #[derive(Debug, NitrousModule)]
@@ -111,7 +111,7 @@ impl GPU {
         window: &Window,
         config: GPUConfig,
         interpreter: &mut Interpreter,
-    ) -> Fallible<Arc<RwLock<Self>>> {
+    ) -> Result<Arc<RwLock<Self>>> {
         block_on(Self::new_async(window, config, interpreter))
     }
 
@@ -119,7 +119,7 @@ impl GPU {
         window: &Window,
         config: GPUConfig,
         interpreter: &mut Interpreter,
-    ) -> Fallible<Arc<RwLock<Self>>> {
+    ) -> Result<Arc<RwLock<Self>>> {
         window.set_title("Nitrogen");
         let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
 
@@ -129,7 +129,7 @@ impl GPU {
                 compatible_surface: None,
             })
             .await
-            .ok_or_else(|| err_msg("no suitable graphics adapter"))?;
+            .ok_or_else(|| anyhow!("no suitable graphics adapter"))?;
 
         let surface = unsafe { instance.create_surface(window) };
 
@@ -191,7 +191,7 @@ impl GPU {
     }
 
     #[method]
-    pub fn on_resize(&mut self, width: i64, height: i64) -> Fallible<()> {
+    pub fn on_resize(&mut self, width: i64, height: i64) -> Result<()> {
         self.physical_size = PhysicalSize {
             width: width as u32,
             height: height as u32,
@@ -215,7 +215,7 @@ impl GPU {
     }
 
     #[method]
-    pub fn on_dpi_change(&mut self, scale: f64) -> Fallible<()> {
+    pub fn on_dpi_change(&mut self, scale: f64) -> Result<()> {
         self.scale_factor = scale;
         self.logical_size = self.physical_size.to_logical(self.scale_factor);
         Ok(())
@@ -258,7 +258,7 @@ impl GPU {
         }
     }
 
-    pub fn get_next_framebuffer(&mut self) -> Fallible<Option<wgpu::SwapChainFrame>> {
+    pub fn get_next_framebuffer(&mut self) -> Result<Option<wgpu::SwapChainFrame>> {
         self.frame_count += 1;
         match self.swap_chain.get_current_frame() {
             Ok(frame) => Ok(Some(frame)),
@@ -395,7 +395,7 @@ impl GPU {
         }
     }
 
-    pub fn create_shader_module(&self, spirv: &[u8]) -> Fallible<wgpu::ShaderModule> {
+    pub fn create_shader_module(&self, spirv: &[u8]) -> Result<wgpu::ShaderModule> {
         let spirv_words = wgpu::util::make_spirv(spirv);
         Ok(self.device.create_shader_module(spirv_words))
     }
@@ -414,7 +414,7 @@ impl GPU {
         callback: Box<
             dyn FnOnce(wgpu::Extent3d, wgpu::TextureFormat, Vec<u8>) + Send + Sync + 'static,
         >,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         let _ = fs::create_dir("__dump__");
         let sample_size = texture_format_size(format);
         let bytes_per_row = Self::stride_for_row_size(extent.width * sample_size);
@@ -488,7 +488,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn test_create() -> Fallible<()> {
+    fn test_create() -> Result<()> {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;

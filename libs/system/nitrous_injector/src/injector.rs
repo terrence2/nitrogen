@@ -32,15 +32,15 @@ pub(crate) fn make_derive_nitrous_module(item: DeriveInput) -> TokenStream2 {
                 stringify!(#ident).to_owned()
             }
 
-            fn call_method(&mut self, name: &str, args: &[::nitrous::Value]) -> ::failure::Fallible<::nitrous::Value> {
+            fn call_method(&mut self, name: &str, args: &[::nitrous::Value]) -> ::anyhow::Result<::nitrous::Value> {
                 self.__call_method_inner__(name, args)
             }
 
-            fn put(&mut self, module: ::std::sync::Arc<::parking_lot::RwLock<dyn ::nitrous::Module>>, name: &str, value: ::nitrous::Value) -> ::failure::Fallible<()> {
+            fn put(&mut self, module: ::std::sync::Arc<::parking_lot::RwLock<dyn ::nitrous::Module>>, name: &str, value: ::nitrous::Value) -> ::anyhow::Result<()> {
                 self.__put_inner__(module, name, value)
             }
 
-            fn get(&self, module: ::std::sync::Arc<::parking_lot::RwLock<dyn ::nitrous::Module>>, name: &str) -> ::failure::Fallible<::nitrous::Value> {
+            fn get(&self, module: ::std::sync::Arc<::parking_lot::RwLock<dyn ::nitrous::Module>>, name: &str) -> ::anyhow::Result<::nitrous::Value> {
                 self.__get_inner__(module, name)
             }
         }
@@ -109,7 +109,7 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
                     quote! { #name => { self.#item( #(#arg_items),* ); Ok(::nitrous::Value::True()) } }
                 }
             },
-            RetType::FallibleRaw(llty) => match llty {
+            RetType::ResultRaw(llty) => match llty {
                 Scalar::Boolean => {
                     quote! { #name => { Ok(::nitrous::Value::Boolean(self.#item( #(#arg_items),* )?)) } }
                 }
@@ -157,32 +157,32 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
 
     quote! {
         impl #impl_generics #ty #ty_generics #where_clause {
-            fn __call_method_inner__(&mut self, name: &str, args: &[::nitrous::Value]) -> ::failure::Fallible<::nitrous::Value> {
+            fn __call_method_inner__(&mut self, name: &str, args: &[::nitrous::Value]) -> ::anyhow::Result<::nitrous::Value> {
                 match name {
                     #(#method_arms)*
                     _ => {
                         log::warn!("Unknown call_method '{}' passed to {}", name, stringify!(#ty));
-                        ::failure::bail!("Unknown call_method '{}' passed to {}", name, stringify!(#ty))
+                        ::anyhow::bail!("Unknown call_method '{}' passed to {}", name, stringify!(#ty))
                     }
                 }
             }
 
-            fn __get_inner__(&self, module: ::std::sync::Arc<::parking_lot::RwLock<dyn ::nitrous::Module>>, name: &str) -> ::failure::Fallible<::nitrous::Value> {
+            fn __get_inner__(&self, module: ::std::sync::Arc<::parking_lot::RwLock<dyn ::nitrous::Module>>, name: &str) -> ::anyhow::Result<::nitrous::Value> {
                 match name {
                     #(#get_arms)*
                     _ => {
                         log::warn!("Unknown get '{}' passed to {}", name, stringify!(#ty));
-                        ::failure::bail!("Unknown get '{}' passed to {}", name, stringify!(#ty));
+                        ::anyhow::bail!("Unknown get '{}' passed to {}", name, stringify!(#ty));
                     }
                 }
             }
 
-            fn __put_inner__(&mut self, module: ::std::sync::Arc<::parking_lot::RwLock<dyn ::nitrous::Module>>, name: &str, value: ::nitrous::Value) -> ::failure::Fallible<()> {
+            fn __put_inner__(&mut self, module: ::std::sync::Arc<::parking_lot::RwLock<dyn ::nitrous::Module>>, name: &str, value: ::nitrous::Value) -> ::anyhow::Result<()> {
                 match name {
                     #(#put_arms)*
                     _ => {
                         log::warn!("Unknown put '{}' passed to {}", name, stringify!(#ty));
-                        ::failure::bail!("Unknown put '{}' passed to {}", name, stringify!(#ty));
+                        ::anyhow::bail!("Unknown put '{}' passed to {}", name, stringify!(#ty));
                     }
                 }
             }
@@ -258,7 +258,7 @@ impl Scalar {
 enum RetType {
     Nothing,
     Raw(Scalar),
-    FallibleRaw(Scalar),
+    ResultRaw(Scalar),
 }
 
 impl RetType {
@@ -268,24 +268,24 @@ impl RetType {
             ReturnType::Type(_, ref ty) => {
                 if let Type::Path(p) = ty.borrow() {
                     match Scalar::type_path_name(p).as_str() {
-                        "Fallible" => {
+                        "Result" => {
                             if let PathArguments::AngleBracketed(ab_generic_args) =
                                 &p.path.segments.first().unwrap().arguments
                             {
                                 let fallible_arg = ab_generic_args.args.first().unwrap();
                                 if let GenericArgument::Type(ty_inner) = fallible_arg {
-                                    RetType::FallibleRaw(Scalar::from_type(ty_inner))
+                                    RetType::ResultRaw(Scalar::from_type(ty_inner))
                                 } else {
-                                    panic!("Fallible parameter must be a type");
+                                    panic!("Result parameter must be a type");
                                 }
                             } else {
-                                panic!("Fallible must have an angle bracketed argument");
+                                panic!("Result must have an angle bracketed argument");
                             }
                         }
                         _ => Self::Raw(Scalar::from_type(ty.borrow())),
                     }
                 } else {
-                    panic!("nitrous RetType only supports Fallible, None, Value, and basic types")
+                    panic!("nitrous RetType only supports Result, None, Value, and basic types")
                 }
             }
         }

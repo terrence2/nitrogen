@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use failure::Fallible;
+use anyhow::Result;
 use nitrous::{Interpreter, Module, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use ordered_float::OrderedFloat;
@@ -55,39 +55,39 @@ impl TestInjector {
     }
 
     #[method]
-    fn fail_plain(&self) -> Fallible<()> {
+    fn fail_plain(&self) -> Result<()> {
         println!("Called Fail Plain");
         Ok(())
     }
 
     #[method]
-    fn fail_boolean(&self, b: bool) -> Fallible<bool> {
+    fn fail_boolean(&self, b: bool) -> Result<bool> {
         Ok(b)
     }
 
     #[method]
-    fn fail_integer(&self, i: i64) -> Fallible<i64> {
+    fn fail_integer(&self, i: i64) -> Result<i64> {
         Ok(i * 2)
     }
 
     #[method]
-    fn fail_float(&self, f: f64) -> Fallible<f64> {
+    fn fail_float(&self, f: f64) -> Result<f64> {
         Ok(f * 2.)
     }
 
     #[method]
-    fn fail_string(&self, s: &str) -> Fallible<String> {
+    fn fail_string(&self, s: &str) -> Result<String> {
         Ok(s.to_owned() + ", world!")
     }
 
     #[method]
-    fn fail_value(&self, v: Value) -> Fallible<Value> {
+    fn fail_value(&self, v: Value) -> Result<Value> {
         Ok(v)
     }
 }
 
 #[test]
-fn test_it_works() -> Fallible<()> {
+fn test_it_works() -> Result<()> {
     let interpreter = Interpreter::new();
     let inj = Arc::new(RwLock::new(TestInjector {}));
     interpreter
@@ -121,7 +121,7 @@ fn test_it_works() -> Fallible<()> {
         Value::Integer(2)
     );
 
-    // Fallible versions
+    // Result versions
     assert_eq!(
         interpreter
             .write()

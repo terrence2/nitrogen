@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::widgets::event_mapper::State;
-use failure::{bail, ensure, Fallible};
+use anyhow::{bail, ensure, Result};
 use input::{ButtonId, ElementState, ModifiersState, VirtualKeyCode};
 use log::warn;
 use once_cell::sync::Lazy;
@@ -211,7 +211,7 @@ static KEYCODES: Lazy<HashMap<Ascii<&'static str>, Key>> = Lazy::new(|| {
 });
 
 impl Key {
-    pub fn from_virtual(s: &str) -> Fallible<Self> {
+    pub fn from_virtual(s: &str) -> Result<Self> {
         if let Some(key) = KEYCODES.get(&Ascii::new(s)) {
             return Ok(*key);
         }
@@ -253,7 +253,7 @@ impl KeySet {
     // Note that there is a special case for the 4 modifiers in which we
     // expect to be able to refer to "Control" and not care what key it is.
     // In this case we emit all possible keysets, combinatorially.
-    pub fn from_virtual(keyset: &str) -> Fallible<Vec<Self>> {
+    pub fn from_virtual(keyset: &str) -> Result<Vec<Self>> {
         let mut out = vec![SmallVec::<[Key; 2]>::new()];
         for keyname in keyset.split('+') {
             if let Ok(key) = Key::from_virtual(keyname) {
@@ -359,7 +359,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_can_create_keys() -> Fallible<()> {
+    fn test_can_create_keys() -> Result<()> {
         assert_eq!(Key::from_virtual("A")?, Key::KeyboardKey(VirtualKeyCode::A));
         assert_eq!(Key::from_virtual("a")?, Key::KeyboardKey(VirtualKeyCode::A));
         assert_eq!(
@@ -378,13 +378,13 @@ mod test {
     }
 
     #[test]
-    fn test_can_create_mouse() -> Fallible<()> {
+    fn test_can_create_mouse() -> Result<()> {
         assert_eq!(Key::from_virtual("MoUsE5000")?, Key::MouseButton(5000));
         Ok(())
     }
 
     #[test]
-    fn test_can_create_keysets() -> Fallible<()> {
+    fn test_can_create_keysets() -> Result<()> {
         assert_eq!(KeySet::from_virtual("a+b")?.len(), 1);
         assert_eq!(KeySet::from_virtual("Control+Win+a")?.len(), 4);
         assert_eq!(KeySet::from_virtual("Control+b+Shift")?.len(), 4);

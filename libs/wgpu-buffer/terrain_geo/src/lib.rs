@@ -21,9 +21,9 @@ pub use crate::patch::{PatchWinding, TerrainVertex};
 use crate::{patch::PatchManager, tile::TileManager};
 
 use absolute_unit::{Length, Meters};
+use anyhow::Result;
 use camera::Camera;
 use catalog::Catalog;
-use failure::Fallible;
 use geodesy::{GeoCenter, Graticule};
 use global_data::GlobalParametersBuffer;
 use gpu::{ResizeHint, UploadTracker, GPU};
@@ -180,7 +180,7 @@ impl TerrainGeoBuffer {
         globals_buffer: &GlobalParametersBuffer,
         gpu: &mut GPU,
         interpreter: &mut Interpreter,
-    ) -> Fallible<Arc<RwLock<Self>>> {
+    ) -> Result<Arc<RwLock<Self>>> {
         let cpu_detail = cpu_detail_level.parameters();
         let gpu_detail = gpu_detail_level.parameters();
 
@@ -508,7 +508,7 @@ impl TerrainGeoBuffer {
         Ok(terrain)
     }
 
-    pub fn init(self) -> Fallible<Arc<RwLock<Self>>> {
+    pub fn init(self) -> Result<Arc<RwLock<Self>>> {
         let terrain = Arc::new(RwLock::new(self));
         Ok(terrain)
     }
@@ -720,7 +720,7 @@ impl TerrainGeoBuffer {
         async_rt: &mut Runtime,
         gpu: &mut GPU,
         tracker: &mut UploadTracker,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         // Upload patches and capture visibility regions.
         self.visible_regions.clear();
         self.patch_manager.make_upload_buffer(
@@ -745,14 +745,14 @@ impl TerrainGeoBuffer {
     pub fn paint_atlas_indices(
         &self,
         encoder: wgpu::CommandEncoder,
-    ) -> Fallible<wgpu::CommandEncoder> {
+    ) -> Result<wgpu::CommandEncoder> {
         self.tile_manager.paint_atlas_indices(encoder)
     }
 
     pub fn tessellate<'a>(
         &'a self,
         mut cpass: wgpu::ComputePass<'a>,
-    ) -> Fallible<wgpu::ComputePass<'a>> {
+    ) -> Result<wgpu::ComputePass<'a>> {
         // Use the CPU input mesh to tessellate on the GPU.
         cpass = self.patch_manager.tessellate(cpass)?;
 
@@ -796,7 +796,7 @@ impl TerrainGeoBuffer {
         &'a self,
         mut rpass: wgpu::RenderPass<'a>,
         globals_buffer: &'a GlobalParametersBuffer,
-    ) -> Fallible<wgpu::RenderPass<'a>> {
+    ) -> Result<wgpu::RenderPass<'a>> {
         rpass.set_pipeline(&self.deferred_texture_pipeline);
         rpass.set_bind_group(Group::Globals.index(), &globals_buffer.bind_group(), &[]);
         rpass.set_vertex_buffer(0, self.patch_manager.vertex_buffer());
@@ -817,7 +817,7 @@ impl TerrainGeoBuffer {
         &'a self,
         mut cpass: wgpu::ComputePass<'a>,
         globals_buffer: &'a GlobalParametersBuffer,
-    ) -> Fallible<wgpu::ComputePass<'a>> {
+    ) -> Result<wgpu::ComputePass<'a>> {
         cpass.set_pipeline(&self.accumulate_clear_pipeline);
         cpass.set_bind_group(Group::Globals.index(), globals_buffer.bind_group(), &[]);
         cpass.set_bind_group(
@@ -901,7 +901,7 @@ impl TerrainGeoBuffer {
 }
 
 impl ResizeHint for TerrainGeoBuffer {
-    fn note_resize(&mut self, gpu: &GPU) -> Fallible<()> {
+    fn note_resize(&mut self, gpu: &GPU) -> Result<()> {
         self.acc_extent = gpu.attachment_extent();
         self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
         self.deferred_depth = Self::_make_deferred_depth_targets(gpu);

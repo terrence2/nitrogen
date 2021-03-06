@@ -8,7 +8,7 @@ edition = "2018"
 lalrpop = "0.19.4"
 
 [dependencies]
-failure = "^ 0.1"
+anyhow = "^ 1"
 lalrpop-util = "0.19.4"
 ordered-float = "^ 2"
 parking_lot = "^ 0.11"

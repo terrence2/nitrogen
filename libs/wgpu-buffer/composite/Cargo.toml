@@ -5,7 +5,7 @@ authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-failure = "^ 0.1.2"
+anyhow = "^ 1"
 log = "^ 0.4"
 wgpu = "^ 0.6"
 fullscreen = { path = "../../wgpu-buffer/fullscreen" }

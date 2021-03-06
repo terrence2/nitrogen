@@ -41,7 +41,7 @@ pub use crate::{
 };
 
 use crate::font_context::FontContext;
-use failure::{ensure, Fallible};
+use anyhow::{ensure, Result};
 use font_common::FontInterface;
 use font_ttf::TtfFont;
 use gpu::{UploadTracker, GPU};
@@ -100,7 +100,7 @@ impl WidgetBuffer {
     const MAX_BACKGROUND_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6; // note: rounded corners
     const MAX_IMAGE_VERTICES: usize = Self::MAX_WIDGETS * 4 * 6;
 
-    pub fn new(gpu: &mut GPU) -> Fallible<Arc<RwLock<Self>>> {
+    pub fn new(gpu: &mut GPU) -> Result<Arc<RwLock<Self>>> {
         trace!("WidgetBuffer::new");
 
         let mut paint_context = PaintContext::new(gpu.device());
@@ -208,7 +208,7 @@ impl WidgetBuffer {
         self.root.clone()
     }
 
-    pub fn set_keyboard_focus(&self, name: &str) -> Fallible<()> {
+    pub fn set_keyboard_focus(&self, name: &str) -> Result<()> {
         self.root.write().set_keyboard_focus(name)
     }
 
@@ -232,7 +232,7 @@ impl WidgetBuffer {
         &self,
         events: &[GenericEvent],
         interpreter: &mut Interpreter,
-    ) -> Fallible<()> {
+    ) -> Result<()> {
         for script in self.queued_scripts.write().drain(..) {
             interpreter.interpret_once(&script)?;
         }
@@ -269,7 +269,7 @@ impl WidgetBuffer {
         0u32..self.paint_context.text_pool.len() as u32
     }
 
-    pub fn make_upload_buffer(&mut self, gpu: &GPU, tracker: &mut UploadTracker) -> Fallible<()> {
+    pub fn make_upload_buffer(&mut self, gpu: &GPU, tracker: &mut UploadTracker) -> Result<()> {
         self.paint_context.reset_for_frame();
         self.root.read().upload(gpu, &mut self.paint_context)?;
 
@@ -347,7 +347,7 @@ mod test {
     use winit::{event_loop::EventLoop, window::Window};
 
     #[test]
-    fn test_label_widget() -> Fallible<()> {
+    fn test_label_widget() -> Result<()> {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;

@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use failure::Fallible;
+use anyhow::Result;
 use global_data::GlobalParametersBuffer;
 use gpu::{texture_format_component_type, ResizeHint, GPU};
 use log::trace;
@@ -42,7 +42,7 @@ impl UiRenderPass {
         global_data: &GlobalParametersBuffer,
         widget_buffer: &WidgetBuffer,
         world_render_pass: &WorldRenderPass,
-    ) -> Fallible<Arc<RwLock<Self>>> {
+    ) -> Result<Arc<RwLock<Self>>> {
         trace!("UiRenderPass::new");
 
         let deferred_bind_group_layout =
@@ -358,7 +358,7 @@ impl UiRenderPass {
         global_data: &'a GlobalParametersBuffer,
         widget_buffer: &'a WidgetBuffer,
         world: &'a WorldRenderPass,
-    ) -> Fallible<wgpu::RenderPass<'a>> {
+    ) -> Result<wgpu::RenderPass<'a>> {
         // Background
         rpass.set_pipeline(&self.background_pipeline);
         rpass.set_bind_group(Group::Globals.index(), &global_data.bind_group(), &[]);
@@ -379,7 +379,7 @@ impl UiRenderPass {
 }
 
 impl ResizeHint for UiRenderPass {
-    fn note_resize(&mut self, gpu: &GPU) -> Fallible<()> {
+    fn note_resize(&mut self, gpu: &GPU) -> Result<()> {
         self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
         self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
         self.deferred_bind_group = Self::_make_deferred_bind_group(
