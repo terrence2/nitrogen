@@ -26,7 +26,7 @@ pub trait LengthUnit: Copy {
     fn nanometers_in_unit() -> i64;
 }
 
-#[derive(Debug, Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Length<Unit: LengthUnit> {
     nm: i64, // in nanometers
     phantom: PhantomData<Unit>,

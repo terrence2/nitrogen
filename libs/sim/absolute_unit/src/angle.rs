@@ -25,7 +25,7 @@ pub trait AngleUnit: Copy {
     fn femto_radians_in_unit() -> i64;
 }
 
-#[derive(Debug, Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Angle<Unit: AngleUnit> {
     femto_rad: i64, // femto = 10**-15
     phantom: PhantomData<Unit>,

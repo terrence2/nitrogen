@@ -17,7 +17,7 @@ use crate::{
     paint_context::PaintContext,
     widget::{UploadMetrics, Widget},
 };
-use failure::{err_msg, Fallible};
+use failure::{ensure, err_msg, Fallible};
 use gpu::GPU;
 use input::GenericEvent;
 use nitrous::Interpreter;
@@ -60,12 +60,14 @@ impl FloatPacking {
 // Items packed from top to bottom.
 #[derive(Debug)]
 pub struct FloatBox {
+    focus: String,
     children: HashMap<String, FloatPacking>,
 }
 
 impl FloatBox {
     pub fn new() -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(Self {
+            focus: "".to_owned(),
             children: HashMap::new(),
         }))
     }
@@ -73,7 +75,16 @@ impl FloatBox {
     pub fn add_child(&mut self, name: &str, child: Arc<RwLock<dyn Widget>>) -> &mut FloatPacking {
         self.children
             .insert(name.to_owned(), FloatPacking::new(name, child));
+        if self.focus.is_empty() {
+            self.focus = name.to_owned();
+        }
         self.packing_mut(name).unwrap()
+    }
+
+    pub fn set_keyboard_focus(&mut self, name: &str) -> Fallible<()> {
+        ensure!(self.children.contains_key(name));
+        self.focus = name.to_owned();
+        Ok(())
     }
 
     pub fn packing(&self, name: &str) -> Fallible<&FloatPacking> {
@@ -128,8 +139,12 @@ impl Widget for FloatBox {
         events: &[GenericEvent],
         interpreter: &mut Interpreter,
     ) -> Fallible<()> {
-        for child in self.children.values() {
-            child.widget.write().handle_events(events, interpreter)?;
+        if !self.focus.is_empty() {
+            assert!(self.children.contains_key(&self.focus));
+            self.children[&self.focus]
+                .widget
+                .write()
+                .handle_events(events, interpreter)?;
         }
         Ok(())
     }

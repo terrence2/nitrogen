@@ -24,7 +24,6 @@ members = [
     "libs/system/ansi",
     "libs/system/build_shaders",
     "libs/system/catalog",
-    "libs/system/command",
     "libs/system/gpu",
     "libs/system/input",
     "libs/system/nitrous",
@@ -63,7 +62,6 @@ absolute_unit = { path = "libs/sim/absolute_unit" }
 atmosphere = { path = "libs/wgpu-buffer/atmosphere" }
 camera = { path = "libs/sim/camera" }
 catalog = { path = "libs/system/catalog" }
-command = { path = "libs/system/command" }
 composite = { path = "libs/wgpu-buffer/composite" }
 fullscreen = { path = "libs/wgpu-buffer/fullscreen" }
 geodesy = { path = "libs/sim/geodesy" }

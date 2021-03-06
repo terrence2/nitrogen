@@ -25,7 +25,7 @@ pub trait CartesianOrigin {
     fn origin_name() -> &'static str;
 }
 
-#[derive(Debug, Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Cartesian<Origin, Unit>
 where
     Origin: CartesianOrigin,

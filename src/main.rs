@@ -14,10 +14,9 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{degrees, meters};
 use atmosphere::AtmosphereBuffer;
-use camera::ArcBallCamera;
+use camera::{ArcBallCamera, Camera};
 use catalog::{Catalog, DirectoryDrawer};
 use chrono::{TimeZone, Utc};
-use command::Bindings as LegacyBindings;
 use composite::CompositeRenderPass;
 use failure::Fallible;
 use fullscreen::FullscreenBuffer;
@@ -26,7 +25,6 @@ use global_data::GlobalParametersBuffer;
 use gpu::{make_frame_graph, GPU};
 use input::{InputController, InputSystem};
 use legion::world::World;
-use log::trace;
 use nalgebra::convert;
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -54,15 +52,31 @@ struct Opt {
     no_cache: bool,
 }
 
-#[derive(Debug, Default, NitrousModule)]
+#[derive(Debug, NitrousModule)]
 struct Demo {
     exit: bool,
+    pin_camera: bool,
+    show_terminal: bool,
+    camera: Camera,
+    widgets: Arc<RwLock<WidgetBuffer>>,
+    terminal: Arc<RwLock<Terminal>>,
 }
 
 #[inject_nitrous_module]
 impl Demo {
-    pub fn new(interpreter: &mut Interpreter) -> Arc<RwLock<Self>> {
-        let demo = Arc::new(RwLock::new(Self::default()));
+    pub fn new(
+        widgets: Arc<RwLock<WidgetBuffer>>,
+        terminal: Arc<RwLock<Terminal>>,
+        interpreter: &mut Interpreter,
+    ) -> Arc<RwLock<Self>> {
+        let demo = Arc::new(RwLock::new(Self {
+            exit: false,
+            pin_camera: false,
+            show_terminal: false,
+            camera: Default::default(),
+            widgets,
+            terminal,
+        }));
         interpreter.put_global("demo", Value::Module(demo.clone()));
         demo
     }
@@ -74,6 +88,8 @@ impl Demo {
                 bindings.bind("quit", "demo.exit()");
                 bindings.bind("Escape", "demo.exit()");
                 bindings.bind("q", "demo.exit()");
+                bindings.bind("p", "demo.toggle_pin_camera(pressed)");
+                bindings.bind("Shift+Grave", "demo.toggle_terminal(pressed)");
             "#,
         )?;
         Ok(())
@@ -82,6 +98,45 @@ impl Demo {
     #[method]
     pub fn exit(&mut self) {
         self.exit = true;
+    }
+
+    #[method]
+    pub fn toggle_pin_camera(&mut self, pressed: bool) {
+        if pressed {
+            // println!("eye_rel: {}", arcball.read().get_eye_relative());
+            // println!("target:  {}", arcball.read().get_target());
+            self.pin_camera = !self.pin_camera;
+        }
+    }
+
+    pub fn get_camera(&mut self, camera: &Camera) -> &Camera {
+        if !self.pin_camera {
+            self.camera = camera.to_owned();
+        }
+        &self.camera
+    }
+
+    #[method]
+    pub fn toggle_terminal(&mut self, pressed: bool) -> Fallible<()> {
+        if pressed {
+            self.show_terminal = !self.show_terminal;
+            self.terminal.write().set_visible(self.show_terminal);
+            self.widgets
+                .read()
+                .queue_script("demo.toggle_terminal_bottom()");
+        }
+        Ok(())
+    }
+
+    #[method]
+    pub fn toggle_terminal_bottom(&self) -> Fallible<()> {
+        self.widgets
+            .read()
+            .set_keyboard_focus(if self.show_terminal {
+                "terminal"
+            } else {
+                "mapper"
+            })
     }
 }
 
@@ -132,13 +187,7 @@ make_frame_graph!(
 
 fn main() -> Fallible<()> {
     env_logger::init();
-
-    let system_bindings = LegacyBindings::new("map")
-        .bind("demo.pin_view", "p")?
-        .bind("demo.toggle_terminal", "Shift+Grave")?;
-    // .bind("demo.exit", "Escape")?
-    // .bind("demo.exit", "q")?;
-    InputSystem::run_forever(vec![system_bindings], window_main)
+    InputSystem::run_forever(window_main)
 }
 
 fn window_main(window: Window, input_controller: &InputController) -> Fallible<()> {
@@ -288,11 +337,8 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
     //     meters!(1308.7262),
     // ))?;
 
-    let demo = Demo::new(&mut interpreter.write());
+    let demo = Demo::new(widgets.clone(), terminal, &mut interpreter.write());
 
-    // let system_bindings = Bindings::new("map")
-    //     .bind("demo.pin_view", "p")?
-    //     .bind("demo.toggle_terminal", "Shift+Grave")?
     {
         let interp = &mut interpreter.write();
         orrery.write().add_default_bindings(interp)?;
@@ -302,35 +348,14 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         demo.write().add_default_bindings(interp)?;
     }
 
-    let mut is_camera_pinned = false;
-    let mut camera_double = arcball.read().camera().to_owned();
-    let mut show_terminal = false;
     while !demo.read().exit {
         let loop_start = Instant::now();
 
         widgets
-            .write()
+            .read()
             .handle_events(&input_controller.poll_events()?, &mut interpreter.write())?;
 
-        for command in input_controller.poll_commands()? {
-            match command.full() {
-                "demo.pin_view" => {
-                    println!("eye_rel: {}", arcball.read().get_eye_relative());
-                    println!("target:  {}", arcball.read().get_target());
-                    is_camera_pinned = !is_camera_pinned
-                }
-                "demo.toggle_terminal" => {
-                    show_terminal = !show_terminal;
-                    terminal.write().set_visible(show_terminal);
-                }
-                _ => trace!("unhandled command: {}", command.full(),),
-            }
-        }
-
         arcball.write().think();
-        if !is_camera_pinned {
-            camera_double = arcball.read().camera().to_owned();
-        }
 
         let mut tracker = Default::default();
         frame_graph.globals().make_upload_buffer(
@@ -345,7 +370,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Fallible<(
         )?;
         frame_graph.terrain_geo_mut().make_upload_buffer(
             arcball.read().camera(),
-            &camera_double,
+            demo.write().get_camera(arcball.read().camera()),
             catalog.clone(),
             &mut async_rt,
             &mut gpu.write(),

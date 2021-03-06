@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::length::LengthUnit;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Feet;
 impl LengthUnit for Feet {
     fn unit_name() -> &'static str {

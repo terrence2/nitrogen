@@ -24,7 +24,7 @@ pub trait GraticuleOrigin: Copy {
     fn origin_marker() -> &'static str;
 }
 
-#[derive(Debug, Clone, Copy, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Graticule<Origin>
 where
     Origin: GraticuleOrigin,
