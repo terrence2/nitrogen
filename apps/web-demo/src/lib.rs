@@ -15,7 +15,7 @@
 use absolute_unit::{degrees, meters};
 use anyhow::{bail, Result};
 use camera::ArcBallCamera;
-use fullscreen::FullscreenBuffer;
+//use fullscreen::FullscreenBuffer;
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
 use gpu::GPU;
@@ -92,22 +92,18 @@ async fn async_main() -> Result<()> {
     ));
     arcball.write().set_distance(meters!(40.0));
 
+    let _ctx = AppContext {
+        interpreter,
+        gpu,
+        arcball,
+        //async_rt,
+        //legion,
+        globals_buffer,
+        // fullscreen_buffer,
+    };
     #[cfg(target_arch = "wasm32")]
-    InputSystem::run_forever(
-        event_loop,
-        window,
-        window_loop,
-        AppContext {
-            interpreter,
-            gpu,
-            arcball,
-            //async_rt,
-            //legion,
-            globals_buffer,
-            // fullscreen_buffer,
-        },
-    )
-    .await?;
+    InputSystem::run_forever(event_loop, window, window_loop, _ctx).await?;
+
     Ok(())
 }
 
