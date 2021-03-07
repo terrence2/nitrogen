@@ -274,7 +274,6 @@ impl StarsBuffer {
         let star_buffer_size = (mem::size_of::<StarInst>() * star_buf.len()) as u64;
         let star_buffer = gpu.push_slice("stars-buffer", &star_buf, wgpu::BufferUsage::STORAGE);
 
-        /*
         let bind_group_layout =
             gpu.device()
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -283,57 +282,9 @@ impl StarsBuffer {
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::StorageBuffer {
-                                dynamic: false,
-                                readonly: true,
-                                min_binding_size: NonZeroU64::new(band_buffer_size),
-                            },
-                            count: NonZeroU32::new(DEC_BANDS.len() as u32),
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::StorageBuffer {
-                                dynamic: false,
-                                readonly: true,
-                                min_binding_size: NonZeroU64::new(bin_positions_buffer_size),
-                            },
-                            count: NonZeroU32::new(bin_positions.len() as u32),
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 2,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::StorageBuffer {
-                                dynamic: false,
-                                readonly: true,
-                                min_binding_size: NonZeroU64::new(star_indices_buffer_size),
-                            },
-                            count: NonZeroU32::new(indices.len() as u32),
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 3,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::StorageBuffer {
-                                dynamic: false,
-                                readonly: true,
-                                min_binding_size: NonZeroU64::new(star_buffer_size),
-                            },
-                            count: NonZeroU32::new(star_buf.len() as u32),
-                        },
-                    ],
-                });
-         */
-        let bind_group_layout =
-            gpu.device()
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("stars-bind-group-layout"),
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::StorageBuffer {
-                                dynamic: false,
-                                readonly: true,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
                                 min_binding_size: NonZeroU64::new(band_buffer_size),
                             },
                             count: None,
@@ -341,9 +292,9 @@ impl StarsBuffer {
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::StorageBuffer {
-                                dynamic: false,
-                                readonly: true,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
                                 min_binding_size: NonZeroU64::new(bin_positions_buffer_size),
                             },
                             count: None,
@@ -351,9 +302,9 @@ impl StarsBuffer {
                         wgpu::BindGroupLayoutEntry {
                             binding: 2,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::StorageBuffer {
-                                dynamic: false,
-                                readonly: true,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
                                 min_binding_size: NonZeroU64::new(star_indices_buffer_size),
                             },
                             count: None,
@@ -361,9 +312,9 @@ impl StarsBuffer {
                         wgpu::BindGroupLayoutEntry {
                             binding: 3,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::StorageBuffer {
-                                dynamic: false,
-                                readonly: true,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
                                 min_binding_size: NonZeroU64::new(star_buffer_size),
                             },
                             count: None,
@@ -377,19 +328,35 @@ impl StarsBuffer {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer(band_buffer.slice(..)),
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &band_buffer,
+                        offset: 0,
+                        size: None,
+                    },
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Buffer(bin_positions_buffer.slice(..)),
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &bin_positions_buffer,
+                        offset: 0,
+                        size: None,
+                    },
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: wgpu::BindingResource::Buffer(star_indices_buffer.slice(..)),
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &star_indices_buffer,
+                        offset: 0,
+                        size: None,
+                    },
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
-                    resource: wgpu::BindingResource::Buffer(star_buffer.slice(..)),
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &star_buffer,
+                        offset: 0,
+                        size: None,
+                    },
                 },
             ],
         });

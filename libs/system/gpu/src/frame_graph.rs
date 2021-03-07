@@ -19,7 +19,9 @@ macro_rules! make_frame_graph_pass {
         $owner:ident, $gpu:ident, $encoder:ident, $need_rebuild:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
      }
     ) => {{
-        let _cpass = $encoder.begin_compute_pass();
+        let _cpass = $encoder.begin_compute_pass(&$crate::wgpu::ComputePassDescriptor {
+            label: Some("compute-pass")
+        });
         $(
             let _cpass = $pass_item_name.$pass_name(_cpass, $($pass_item_input_name),*)?;
         )*
@@ -39,6 +41,7 @@ macro_rules! make_frame_graph_pass {
         let maybe_color_attachment = $gpu.get_next_framebuffer()?;
         if let Some(color_attachment) = maybe_color_attachment.as_ref() {
             let _rpass = $encoder.begin_render_pass(&$crate::wgpu::RenderPassDescriptor {
+                label: Some("screen-render-pass"),
                 color_attachments: &[$crate::GPU::color_attachment(&color_attachment.output.view)],
                 depth_stencil_attachment: Some($gpu.depth_stencil_attachment()),
             });
@@ -60,6 +63,7 @@ macro_rules! make_frame_graph_pass {
     ) => {{
         let (color_attachments, depth_stencil_attachment) = $pass_target_buffer.$pass_target_func();
         let render_pass_desc_ref = $crate::wgpu::RenderPassDescriptor {
+            label: Some("non-screen-render-pass"),
             color_attachments: &color_attachments,
             depth_stencil_attachment,
         };

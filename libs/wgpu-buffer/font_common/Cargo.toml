@@ -7,5 +7,5 @@ edition = "2018"
 [dependencies]
 anyhow = "^ 1"
 image = "^ 0.23"
-wgpu = "^ 0.6"
+wgpu = "^ 0.7"
 gpu = { path = "../../system/gpu" }

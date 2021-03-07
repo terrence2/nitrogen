@@ -86,8 +86,9 @@ impl AtmosphereBuffer {
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::UniformBuffer {
-                                dynamic: false,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
                                 min_binding_size: None,
                             },
                             count: None,
@@ -96,8 +97,9 @@ impl AtmosphereBuffer {
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::UniformBuffer {
-                                dynamic: false,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
                                 min_binding_size: NonZeroU64::new(
                                     mem::size_of::<AtmosphereParameters>() as u64,
                                 ),
@@ -108,68 +110,80 @@ impl AtmosphereBuffer {
                         wgpu::BindGroupLayoutEntry {
                             binding: 2,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::SampledTexture {
-                                multisampled: true,
-                                component_type: wgpu::TextureComponentType::Float,
-                                dimension: wgpu::TextureViewDimension::D2,
+                            ty: wgpu::BindingType::Texture {
+                                multisampled: false,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                                view_dimension: wgpu::TextureViewDimension::D2,
                             },
                             count: None,
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 3,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler { comparison: false },
+                            ty: wgpu::BindingType::Sampler {
+                                filtering: true,
+                                comparison: false,
+                            },
                             count: None,
                         },
                         // irradiance texture
                         wgpu::BindGroupLayoutEntry {
                             binding: 4,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::SampledTexture {
-                                multisampled: true,
-                                component_type: wgpu::TextureComponentType::Float,
-                                dimension: wgpu::TextureViewDimension::D2,
+                            ty: wgpu::BindingType::Texture {
+                                multisampled: false,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                                view_dimension: wgpu::TextureViewDimension::D2,
                             },
                             count: None,
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 5,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler { comparison: false },
+                            ty: wgpu::BindingType::Sampler {
+                                filtering: true,
+                                comparison: false,
+                            },
                             count: None,
                         },
                         // scattering texture
                         wgpu::BindGroupLayoutEntry {
                             binding: 6,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::SampledTexture {
-                                multisampled: true,
-                                component_type: wgpu::TextureComponentType::Float,
-                                dimension: wgpu::TextureViewDimension::D3,
+                            ty: wgpu::BindingType::Texture {
+                                multisampled: false,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                                view_dimension: wgpu::TextureViewDimension::D3,
                             },
                             count: None,
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 7,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler { comparison: false },
+                            ty: wgpu::BindingType::Sampler {
+                                filtering: true,
+                                comparison: false,
+                            },
                             count: None,
                         },
                         // single mie scattering texture
                         wgpu::BindGroupLayoutEntry {
                             binding: 8,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::SampledTexture {
-                                multisampled: true,
-                                component_type: wgpu::TextureComponentType::Float,
-                                dimension: wgpu::TextureViewDimension::D3,
+                            ty: wgpu::BindingType::Texture {
+                                multisampled: false,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                                view_dimension: wgpu::TextureViewDimension::D3,
                             },
                             count: None,
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 9,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler { comparison: false },
+                            ty: wgpu::BindingType::Sampler {
+                                filtering: true,
+                                comparison: false,
+                            },
                             count: None,
                         },
                     ],
@@ -187,6 +201,7 @@ impl AtmosphereBuffer {
             lod_max_clamp: 9_999_999f32,
             compare: None,
             anisotropy_clamp: None,
+            border_color: None,
         });
 
         let view_descriptor = wgpu::TextureViewDescriptor {
@@ -207,12 +222,20 @@ impl AtmosphereBuffer {
                 // camera and sun
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer(camera_and_sun_buffer.slice(..)),
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &camera_and_sun_buffer,
+                        offset: 0,
+                        size: None,
+                    },
                 },
                 // atmosphere
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Buffer(atmosphere_params_buffer.slice(..)),
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &atmosphere_params_buffer,
+                        offset: 0,
+                        size: None,
+                    },
                 },
                 // transmittance texture
                 wgpu::BindGroupEntry {

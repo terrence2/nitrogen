@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 log = "^ 0.4"
 parking_lot = "^ 0.11"
-wgpu = "^ 0.6"
+wgpu = "^ 0.7"
 zerocopy = "= 0.3.0"
 camera = { path = "../../sim/camera" }
 gpu = { path = "../../system/gpu" }

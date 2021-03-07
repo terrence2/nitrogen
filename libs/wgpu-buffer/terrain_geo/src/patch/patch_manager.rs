@@ -36,11 +36,8 @@ pub struct SubdivisionContext {
 
     // The final target subdivision level of the subdivision process.
     target_subdivision_level: u32,
-
-    // Pad out size to vec4.
-    pad: [u32; 2],
 }
-assert_eq_size!(SubdivisionContext, [f32; 4]);
+assert_eq_size!(SubdivisionContext, [u32; 2]);
 assert_eq_align!(SubdivisionContext, [f32; 4]);
 
 #[repr(C)]
@@ -57,11 +54,8 @@ pub struct SubdivisionExpandContext {
     // number of vertices in this subdivision level *minus* the number of vertices in the previous
     // expansion level.
     compute_vertices_in_patch: u32,
-
-    // Pad out size to vec4.
-    pad: [u32; 1],
 }
-assert_eq_size!(SubdivisionExpandContext, [f32; 4]);
+assert_eq_size!(SubdivisionExpandContext, [u32; 3]);
 assert_eq_align!(SubdivisionExpandContext, [f32; 4]);
 
 pub(crate) struct PatchManager {
@@ -134,7 +128,6 @@ impl PatchManager {
         let subdivide_context = SubdivisionContext {
             target_stride: GpuDetailLevel::vertices_per_subdivision(max_subdivisions) as u32,
             target_subdivision_level: max_subdivisions as u32,
-            pad: [0u32; 2],
         };
         let subdivide_context_buffer = Arc::new(Box::new(gpu.push_data(
             "subdivision-context",
@@ -158,6 +151,14 @@ impl PatchManager {
             },
         )));
 
+        let ctx_size = mem::size_of::<SubdivisionContext>() as u64;
+        println!(
+            "SIZES: {} + {} + {} = {}",
+            ctx_size,
+            target_vertex_buffer_size,
+            patch_upload_buffer_size,
+            ctx_size + target_vertex_buffer_size + patch_upload_buffer_size
+        );
         let subdivide_prepare_bind_group_layout =
             gpu.device()
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -166,8 +167,9 @@ impl PatchManager {
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::UniformBuffer {
-                                dynamic: false,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
                                 min_binding_size: NonZeroU64::new(
                                     mem::size_of::<SubdivisionContext>() as u64,
                                 ),
@@ -177,28 +179,32 @@ impl PatchManager {
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::StorageBuffer {
-                                dynamic: false,
-                                readonly: false,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: false },
+                                has_dynamic_offset: false,
                                 min_binding_size: NonZeroU64::new(target_vertex_buffer_size),
+                                //min_binding_size: None,
                             },
                             count: None,
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 2,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::StorageBuffer {
-                                dynamic: false,
-                                readonly: true,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
                                 min_binding_size: NonZeroU64::new(patch_upload_buffer_size),
+                                //min_binding_size: None,
                             },
                             count: None,
                         },
                     ],
                 });
 
-        let subdivide_prepare_shader =
-            gpu.create_shader_module(include_bytes!("../../target/subdivide_prepare.comp.spirv"))?;
+        let subdivide_prepare_shader = gpu.create_shader_module(
+            "subdivide_prepare.comp",
+            include_bytes!("../../target/subdivide_prepare.comp.spirv"),
+        )?;
         let subdivide_prepare_pipeline =
             gpu.device()
                 .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -210,10 +216,8 @@ impl PatchManager {
                             bind_group_layouts: &[&subdivide_prepare_bind_group_layout],
                         },
                     )),
-                    compute_stage: wgpu::ProgrammableStageDescriptor {
-                        module: &subdivide_prepare_shader,
-                        entry_point: "main",
-                    },
+                    module: &subdivide_prepare_shader,
+                    entry_point: "main",
                 });
 
         let subdivide_prepare_bind_group =
@@ -223,15 +227,27 @@ impl PatchManager {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::Buffer(subdivide_context_buffer.slice(..)),
+                        resource: wgpu::BindingResource::Buffer {
+                            buffer: &subdivide_context_buffer,
+                            offset: 0,
+                            size: NonZeroU64::new(mem::size_of::<SubdivisionContext>() as u64),
+                        },
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Buffer(target_vertex_buffer.slice(..)),
+                        resource: wgpu::BindingResource::Buffer {
+                            buffer: &target_vertex_buffer,
+                            offset: 0,
+                            size: None,
+                        },
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::Buffer(patch_upload_buffer.slice(..)),
+                        resource: wgpu::BindingResource::Buffer {
+                            buffer: &patch_upload_buffer,
+                            offset: 0,
+                            size: None,
+                        },
                     },
                 ],
             });
@@ -255,8 +271,9 @@ impl PatchManager {
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::UniformBuffer {
-                                dynamic: false,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
                                 min_binding_size: NonZeroU64::new(
                                     mem::size_of::<SubdivisionContext>() as u64,
                                 ),
@@ -267,8 +284,9 @@ impl PatchManager {
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::UniformBuffer {
-                                dynamic: false,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
                                 min_binding_size: NonZeroU64::new(mem::size_of::<
                                     SubdivisionExpandContext,
                                 >(
@@ -281,9 +299,9 @@ impl PatchManager {
                         wgpu::BindGroupLayoutEntry {
                             binding: 2,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::StorageBuffer {
-                                dynamic: false,
-                                readonly: false,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: false },
+                                has_dynamic_offset: false,
                                 min_binding_size: NonZeroU64::new(target_vertex_buffer_size),
                             },
                             count: None,
@@ -292,9 +310,9 @@ impl PatchManager {
                         wgpu::BindGroupLayoutEntry {
                             binding: 3,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::StorageBuffer {
-                                dynamic: false,
-                                readonly: true,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
                                 min_binding_size: NonZeroU64::new(index_dependency_lut_buffer_size),
                             },
                             count: None,
@@ -302,23 +320,23 @@ impl PatchManager {
                     ],
                 });
 
-        let subdivide_expand_shader =
-            gpu.create_shader_module(include_bytes!("../../target/subdivide_expand.comp.spirv"))?;
+        let subdivide_expand_shader = gpu.create_shader_module(
+            "subdivide_expand.comp",
+            include_bytes!("../../target/subdivide_expand.comp.spirv"),
+        )?;
         let subdivide_expand_pipeline =
             gpu.device()
                 .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                    label: Some("terrain-subdivide-expand-pipeline"),
+                    label: Some("terrain-geo-subdivide-expand-pipeline"),
                     layout: Some(&gpu.device().create_pipeline_layout(
                         &wgpu::PipelineLayoutDescriptor {
-                            label: Some("terrain-subdivide-expand-pipeline-layout"),
+                            label: Some("terrain-geo-subdivide-expand-pipeline-layout"),
                             push_constant_ranges: &[],
                             bind_group_layouts: &[&subdivide_expand_bind_group_layout],
                         },
                     )),
-                    compute_stage: wgpu::ProgrammableStageDescriptor {
-                        module: &subdivide_expand_shader,
-                        entry_point: "main",
-                    },
+                    module: &subdivide_expand_shader,
+                    entry_point: "main",
                 });
 
         let mut subdivide_expand_bind_groups = Vec::new();
@@ -329,7 +347,6 @@ impl PatchManager {
                 compute_vertices_in_patch: (GpuDetailLevel::vertices_per_subdivision(i)
                     - GpuDetailLevel::vertices_per_subdivision(i - 1))
                     as u32,
-                pad: [0u32; 1],
             };
             let expand_context_buffer = gpu.push_data(
                 "terrain-geo-expand-context-SUB",
@@ -343,25 +360,35 @@ impl PatchManager {
                     entries: &[
                         wgpu::BindGroupEntry {
                             binding: 0,
-                            resource: wgpu::BindingResource::Buffer(
-                                subdivide_context_buffer.slice(..),
-                            ),
+                            resource: wgpu::BindingResource::Buffer {
+                                buffer: &subdivide_context_buffer,
+                                offset: 0,
+                                size: None,
+                            },
                         },
                         wgpu::BindGroupEntry {
                             binding: 1,
-                            resource: wgpu::BindingResource::Buffer(
-                                expand_context_buffer.slice(..),
-                            ),
+                            resource: wgpu::BindingResource::Buffer {
+                                buffer: &expand_context_buffer,
+                                offset: 0,
+                                size: None,
+                            },
                         },
                         wgpu::BindGroupEntry {
                             binding: 2,
-                            resource: wgpu::BindingResource::Buffer(target_vertex_buffer.slice(..)),
+                            resource: wgpu::BindingResource::Buffer {
+                                buffer: &target_vertex_buffer,
+                                offset: 0,
+                                size: None,
+                            },
                         },
                         wgpu::BindGroupEntry {
                             binding: 3,
-                            resource: wgpu::BindingResource::Buffer(
-                                index_dependency_lut_buffer.slice(..),
-                            ),
+                            resource: wgpu::BindingResource::Buffer {
+                                buffer: &index_dependency_lut_buffer,
+                                offset: 0,
+                                size: None,
+                            },
                         },
                     ],
                 });
@@ -375,9 +402,9 @@ impl PatchManager {
                     entries: &[wgpu::BindGroupLayoutEntry {
                         binding: 0,
                         visibility: wgpu::ShaderStage::COMPUTE,
-                        ty: wgpu::BindingType::StorageBuffer {
-                            dynamic: false,
-                            readonly: false,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: false },
+                            has_dynamic_offset: false,
                             min_binding_size: NonZeroU64::new(target_vertex_buffer_size),
                         },
                         count: None,
@@ -389,7 +416,11 @@ impl PatchManager {
                 layout: &displace_height_bind_group_layout,
                 entries: &[wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer(target_vertex_buffer.slice(..)),
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &target_vertex_buffer,
+                        offset: 0,
+                        size: None,
+                    },
                 }],
             });
 

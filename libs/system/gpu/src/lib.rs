@@ -15,9 +15,7 @@
 mod frame_graph;
 mod upload_tracker;
 
-pub use crate::upload_tracker::{
-    texture_format_component_type, texture_format_size, UploadTracker,
-};
+pub use crate::upload_tracker::{texture_format_sample_type, texture_format_size, UploadTracker};
 
 // Note: re-export for use by FrameGraph when it is instantiated in other crates.
 pub use wgpu;
@@ -137,10 +135,9 @@ impl GPU {
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
+                    label: None,
                     features: adapter.features(),
                     limits: adapter.limits(),
-                    // TODO: make this configurable?
-                    shader_validation: true,
                 },
                 Some(&trace_path),
             )
@@ -150,7 +147,7 @@ impl GPU {
         let physical_size = window.inner_size();
         let logical_size = physical_size.to_logical::<f64>(scale_factor);
         let sc_desc = wgpu::SwapChainDescriptor {
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
+            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
             format: Self::SCREEN_FORMAT,
             width: physical_size.width,
             height: physical_size.height,
@@ -198,7 +195,7 @@ impl GPU {
         };
         self.logical_size = self.physical_size.to_logical(self.scale_factor);
         let sc_desc = wgpu::SwapChainDescriptor {
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
+            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
             format: Self::SCREEN_FORMAT,
             width: self.physical_size.width,
             height: self.physical_size.height,
@@ -236,7 +233,7 @@ impl GPU {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Self::DEPTH_FORMAT,
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
+            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
         });
         depth_texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some("depth-texture-view"),
@@ -395,9 +392,16 @@ impl GPU {
         }
     }
 
-    pub fn create_shader_module(&self, spirv: &[u8]) -> Result<wgpu::ShaderModule> {
+    pub fn create_shader_module(&self, name: &str, spirv: &[u8]) -> Result<wgpu::ShaderModule> {
         let spirv_words = wgpu::util::make_spirv(spirv);
-        Ok(self.device.create_shader_module(spirv_words))
+        Ok(self
+            .device
+            .create_shader_module(&wgpu::ShaderModuleDescriptor {
+                label: Some(name),
+                source: spirv_words,
+                // FIXME: make configurable?
+                flags: wgpu::ShaderFlags::VALIDATION,
+            }))
     }
 
     pub const fn stride_for_row_size(size: u32) -> u32 {

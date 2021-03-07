@@ -28,7 +28,7 @@ use winit::{
         DeviceEvent, DeviceId, Event, KeyboardInput, MouseScrollDelta, StartCause, WindowEvent,
     },
     event_loop::{ControlFlow, EventLoop, EventLoopProxy},
-    window::{Window, WindowBuilder},
+    window::Window,
 };
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -85,7 +85,6 @@ impl InputSystem {
 
     #[cfg(target_arch = "wasm32")]
     pub async fn run_forever<M, T>(
-        bindings: Vec<Bindings>,
         event_loop: EventLoop<MetaEvent>,
         window: Window,
         mut window_loop: M,
@@ -95,19 +94,32 @@ impl InputSystem {
         T: 'static + Send + Sync,
         M: 'static + Send + FnMut(&Window, &InputController, &mut T) -> Result<()>,
     {
-        use web_sys::console;
-
-        let (tx_command, rx_command) = channel();
-        let input_controller = InputController::new(event_loop.create_proxy(), rx_command);
+        let (tx_event, rx_event) = channel();
+        let input_controller = InputController::new(event_loop.create_proxy(), rx_event);
 
         // Hijack the main thread.
-        let mut button_state = HashMap::new();
+        let mut generic_events = Vec::new();
+        let mut input_state: InputState = Default::default();
         event_loop.run(move |event, _target, control_flow| {
             *control_flow = ControlFlow::Wait;
             if event == Event::UserEvent(MetaEvent::Stop) {
                 *control_flow = ControlFlow::Exit;
                 return;
             }
+
+            Self::wrap_event(&event, &mut input_state, &mut generic_events);
+            for evt in generic_events.drain(..) {
+                if let Err(e) = tx_event.send(evt) {
+                    println!("Game loop hung up ({}), exiting...", e);
+                    *control_flow = ControlFlow::Exit;
+                    return;
+                }
+            }
+            if event == Event::MainEventsCleared {
+                window_loop(&window, &input_controller, &mut ctx).unwrap();
+            }
+
+            /*
             let commands = match event {
                 Event::WindowEvent { event, .. } => {
                     console::log_1(&format!("window event: {:?}", event).into());
@@ -137,6 +149,7 @@ impl InputSystem {
                     return;
                 }
             }
+             */
         });
     }
 
@@ -146,7 +159,7 @@ impl InputSystem {
         M: 'static + Send + FnMut(Window, &InputController) -> Result<()>,
     {
         let event_loop = EventLoop::<MetaEvent>::with_user_event();
-        let window = WindowBuilder::new()
+        let window = winit::window::WindowBuilder::new()
             .with_title("Nitrogen")
             .build(&event_loop)?;
         let (tx_event, rx_event) = channel();

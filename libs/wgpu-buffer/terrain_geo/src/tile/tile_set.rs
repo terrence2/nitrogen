@@ -218,7 +218,7 @@ impl TileSet {
             dimension: wgpu::TextureDimension::D2,
             format: index_texture_format,
             usage: wgpu::TextureUsage::SAMPLED
-                | wgpu::TextureUsage::OUTPUT_ATTACHMENT
+                | wgpu::TextureUsage::RENDER_ATTACHMENT
                 | wgpu::TextureUsage::COPY_SRC,
         });
         let index_texture_view = index_texture.create_view(&wgpu::TextureViewDescriptor {
@@ -243,6 +243,7 @@ impl TileSet {
             lod_max_clamp: 9_999_999f32,
             compare: None,
             anisotropy_clamp: None,
+            border_color: None,
         });
         let index_paint_range = 0u32..(6 * gpu_detail.tile_cache_size);
         let index_paint_vert_buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
@@ -252,10 +253,14 @@ impl TileSet {
             usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::VERTEX,
             mapped_at_creation: false,
         });
-        let index_paint_vert_shader =
-            gpu.create_shader_module(include_bytes!("../../target/index_paint.vert.spirv"))?;
-        let index_paint_frag_shader =
-            gpu.create_shader_module(include_bytes!("../../target/index_paint.frag.spirv"))?;
+        let index_paint_vert_shader = gpu.create_shader_module(
+            "index_paint.vert",
+            include_bytes!("../../target/index_paint.vert.spirv"),
+        )?;
+        let index_paint_frag_shader = gpu.create_shader_module(
+            "index_paint.frag",
+            include_bytes!("../../target/index_paint.frag.spirv"),
+        )?;
         let index_paint_pipeline =
             gpu.device()
                 .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -267,37 +272,34 @@ impl TileSet {
                             bind_group_layouts: &[],
                         },
                     )),
-                    vertex_stage: wgpu::ProgrammableStageDescriptor {
+                    vertex: wgpu::VertexState {
                         module: &index_paint_vert_shader,
                         entry_point: "main",
+                        buffers: &[IndexPaintVertex::descriptor()],
                     },
-                    fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
+                    fragment: Some(wgpu::FragmentState {
                         module: &index_paint_frag_shader,
                         entry_point: "main",
+                        targets: &[wgpu::ColorTargetState {
+                            format: index_texture_format,
+                            color_blend: wgpu::BlendState::REPLACE,
+                            alpha_blend: wgpu::BlendState::REPLACE,
+                            write_mask: wgpu::ColorWrite::ALL,
+                        }],
                     }),
-                    rasterization_state: Some(wgpu::RasterizationStateDescriptor {
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::TriangleList,
+                        strip_index_format: None,
                         front_face: wgpu::FrontFace::Ccw,
                         cull_mode: wgpu::CullMode::Back,
-                        depth_bias: 0,
-                        depth_bias_slope_scale: 0.0,
-                        depth_bias_clamp: 0.0,
-                        clamp_depth: false,
-                    }),
-                    primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-                    color_states: &[wgpu::ColorStateDescriptor {
-                        format: index_texture_format,
-                        alpha_blend: wgpu::BlendDescriptor::REPLACE,
-                        color_blend: wgpu::BlendDescriptor::REPLACE,
-                        write_mask: wgpu::ColorWrite::ALL,
-                    }],
-                    depth_stencil_state: None,
-                    vertex_state: wgpu::VertexStateDescriptor {
-                        index_format: wgpu::IndexFormat::Uint16,
-                        vertex_buffers: &[IndexPaintVertex::descriptor()],
+                        polygon_mode: wgpu::PolygonMode::Fill,
                     },
-                    sample_count: 1,
-                    sample_mask: !0,
-                    alpha_to_coverage_enabled: false,
+                    depth_stencil: None,
+                    multisample: wgpu::MultisampleState {
+                        count: 1,
+                        mask: !0,
+                        alpha_to_coverage_enabled: false,
+                    },
                 });
 
         // The atlas texture is a 2d array of tiles. All tiles have the same size, but may be
@@ -341,6 +343,7 @@ impl TileSet {
             lod_max_clamp: 9_999_999f32,
             compare: None,
             anisotropy_clamp: None,
+            border_color: None,
         });
         let atlas_tile_info = Arc::new(Box::new(gpu.device().create_buffer(
             &wgpu::BufferDescriptor {
@@ -365,12 +368,11 @@ impl TileSet {
                             ],
                         },
                     )),
-                    compute_stage: wgpu::ProgrammableStageDescriptor {
-                        module: &gpu.create_shader_module(include_bytes!(
-                            "../../target/displace_spherical_height.comp.spirv"
-                        ))?,
-                        entry_point: "main",
-                    },
+                    module: &gpu.create_shader_module(
+                        "displace_spherical_height.comp",
+                        include_bytes!("../../target/displace_spherical_height.comp.spirv"),
+                    )?,
+                    entry_point: "main",
                 });
 
         let layout = if kind == DataSetDataKind::Color {
@@ -403,7 +405,11 @@ impl TileSet {
                 // Tile Metdata
                 wgpu::BindGroupEntry {
                     binding: 4,
-                    resource: wgpu::BindingResource::Buffer(atlas_tile_info.slice(..)),
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &atlas_tile_info,
+                        offset: 0,
+                        size: None,
+                    },
                 },
             ],
         });
@@ -774,6 +780,7 @@ impl TileSet {
 
     pub fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) -> Result<()> {
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("paint-atlas-index-render-pass"),
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
                 attachment: &self.index_texture_view,
                 resolve_target: None,

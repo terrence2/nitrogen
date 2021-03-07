@@ -27,31 +27,31 @@ pub struct WidgetVertex {
 }
 
 impl WidgetVertex {
-    pub fn descriptor() -> wgpu::VertexBufferDescriptor<'static> {
-        let tmp = wgpu::VertexBufferDescriptor {
-            stride: mem::size_of::<Self>() as wgpu::BufferAddress,
+    pub fn descriptor() -> wgpu::VertexBufferLayout<'static> {
+        let tmp = wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::InputStepMode::Vertex,
             attributes: &[
                 // position
-                wgpu::VertexAttributeDescriptor {
+                wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float3,
                     offset: 0,
                     shader_location: 0,
                 },
                 // tex_coord
-                wgpu::VertexAttributeDescriptor {
+                wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float3,
                     offset: 12,
                     shader_location: 1,
                 },
                 // color
-                wgpu::VertexAttributeDescriptor {
+                wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Uchar4Norm,
                     offset: 20,
                     shader_location: 2,
                 },
                 // info_index
-                wgpu::VertexAttributeDescriptor {
+                wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Uint,
                     offset: 24,
                     shader_location: 3,

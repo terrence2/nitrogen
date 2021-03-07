@@ -23,7 +23,7 @@ parking_lot = "^ 0.11"
 smallvec = "^ 1.4"
 static_assertions = "^ 1"
 tokio = { version = "^ 1.0", features = ["rt-multi-thread", "macros", "io-util", "fs", "sync"] }
-wgpu = "^ 0.6"
+wgpu = "^ 0.7"
 zerocopy = "= 0.3.0"
 absolute_unit = { path = "../../sim/absolute_unit" }
 camera = { path = "../../sim/camera" }

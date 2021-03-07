@@ -172,8 +172,9 @@ impl WidgetBuffer {
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
                             visibility: wgpu::ShaderStage::all(),
-                            ty: wgpu::BindingType::UniformBuffer {
-                                dynamic: false,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
                                 min_binding_size: NonZeroU64::new(widget_info_buffer_size),
                             },
                             count: None,
@@ -323,7 +324,11 @@ impl WidgetBuffer {
                     // widget_info
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::Buffer(self.widget_info_buffer.slice(..)),
+                        resource: wgpu::BindingResource::Buffer {
+                            buffer: &self.widget_info_buffer,
+                            offset: 0,
+                            size: None,
+                        },
                     },
                     // glyph_sheet_texture: Texture2dArray
                     self.paint_context
