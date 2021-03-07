@@ -151,14 +151,6 @@ impl PatchManager {
             },
         )));
 
-        let ctx_size = mem::size_of::<SubdivisionContext>() as u64;
-        println!(
-            "SIZES: {} + {} + {} = {}",
-            ctx_size,
-            target_vertex_buffer_size,
-            patch_upload_buffer_size,
-            ctx_size + target_vertex_buffer_size + patch_upload_buffer_size
-        );
         let subdivide_prepare_bind_group_layout =
             gpu.device()
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {

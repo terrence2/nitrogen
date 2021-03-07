@@ -11,15 +11,15 @@ crate-type = ["cdylib"]
 anyhow = "^ 1"
 console_error_panic_hook = "^ 0.1"
 getrandom = { version = "0.2", features = ["js"] }
-legion = "^ 0.3"
+#legion = "^ 0.4"
 log = "^ 0.4"
 parking_lot = "^ 0.11"
 smallvec = "^ 1.4"
 tokio = { version = "^ 1.0", features = ["rt-multi-thread", "macros", "io-util", "fs", "sync"] }
-wasm-bindgen = "^ 0.2"
-wasm-bindgen-futures = "^ 0.4"
+wasm-bindgen = "=0.2.69"
+wasm-bindgen-futures = "=0.4.19"
 web-sys = "=0.3.46"
-wgpu = "^ 0.7"
+wgpu = "=0.7.0"
 winit = { version = "^ 0.24", features = ["web-sys"] }
 absolute_unit = { path = "../../libs/sim/absolute_unit" }
 camera = { path = "../../libs/sim/camera" }

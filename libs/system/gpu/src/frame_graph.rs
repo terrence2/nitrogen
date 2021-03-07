@@ -102,8 +102,6 @@ macro_rules! make_frame_graph {
             impl $name {
                 #[allow(clippy::too_many_arguments)]
                 pub fn new(
-                    _legion: &mut ::legion::world::World,
-                    _gpu: &mut $crate::GPU,
                     $(
                         $buffer_name: ::std::sync::Arc<::parking_lot::RwLock<$buffer_type>>
                     ),*
@@ -159,7 +157,6 @@ macro_rules! make_frame_graph {
 mod test {
     use crate::{UploadTracker, GPU};
     use anyhow::Result;
-    use legion::*;
     use nitrous::Interpreter;
     use parking_lot::RwLock;
     use std::{cell::RefCell, sync::Arc};
@@ -303,15 +300,13 @@ mod test {
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;
         let interpreter = Interpreter::new();
-        let mut legion = World::default();
         let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
         let test_buffer = Arc::new(RwLock::new(TestBuffer::new(&gpu.read())));
         let test_renderer = Arc::new(RwLock::new(TestRenderer::new(
             &gpu.read(),
             &test_buffer.read(),
         )?));
-        let mut frame_graph =
-            FrameGraph::new(&mut legion, &mut gpu.write(), test_buffer, test_renderer)?;
+        let mut frame_graph = FrameGraph::new(test_buffer, test_renderer)?;
 
         for _ in 0..3 {
             let mut upload_tracker = Default::default();

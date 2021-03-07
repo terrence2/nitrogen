@@ -199,7 +199,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     };
 
     let mut async_rt = Runtime::new()?;
-    let mut legion = World::default();
+    let mut _legion = World::default();
 
     let mut catalog = Catalog::empty();
     for (i, d) in opt.libdir.iter().enumerate() {
@@ -257,8 +257,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     )?));
 
     let mut frame_graph = FrameGraph::new(
-        &mut legion,
-        &mut gpu.write(),
         atmosphere_buffer,
         fullscreen_buffer,
         globals.clone(),

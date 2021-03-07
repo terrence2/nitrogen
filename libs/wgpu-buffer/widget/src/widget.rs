@@ -26,7 +26,7 @@ pub struct UploadMetrics {
     pub height: f32,
 }
 
-pub trait Widget: Debug {
+pub trait Widget: Debug + Send + Sync + 'static {
     fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Result<UploadMetrics>;
     fn handle_events(
         &mut self,

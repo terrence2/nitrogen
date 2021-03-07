@@ -48,7 +48,7 @@ impl Default for GPUConfig {
 }
 
 /// Implement this and register with the gpu instance to get resize notifications.
-pub trait ResizeHint: Debug + 'static {
+pub trait ResizeHint: Debug + Send + Sync + 'static {
     fn note_resize(&mut self, gpu: &GPU) -> Result<()>;
 }
 

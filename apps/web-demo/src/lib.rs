@@ -15,12 +15,12 @@
 use absolute_unit::{degrees, meters};
 use anyhow::{bail, Result};
 use camera::ArcBallCamera;
-use fullscreen::FullscreenBuffer;
+//use fullscreen::FullscreenBuffer;
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
 use gpu::GPU;
 use input::{GenericEvent, InputController, InputSystem, VirtualKeyCode};
-use legion::*;
+//use legion::*;
 // use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use nitrous::Interpreter;
 use parking_lot::RwLock;
@@ -47,13 +47,13 @@ async fn async_trampoline() {
 
 #[allow(unused)]
 struct AppContext {
+    interpreter: Arc<RwLock<Interpreter>>,
     gpu: Arc<RwLock<GPU>>,
-    //async_rt: Runtime,
-    legion: World,
     arcball: Arc<RwLock<ArcBallCamera>>,
-
+    // //async_rt: Runtime,
+    // //legion: World,
     globals_buffer: Arc<RwLock<GlobalParametersBuffer>>,
-    fullscreen_buffer: Arc<RwLock<FullscreenBuffer>>,
+    // fullscreen_buffer: Arc<RwLock<FullscreenBuffer>>,
 }
 
 async fn async_main() -> Result<()> {
@@ -74,10 +74,10 @@ async fn async_main() -> Result<()> {
     let interpreter = Interpreter::new();
     let gpu = GPU::new_async(&window, Default::default(), &mut interpreter.write()).await?;
     //let mut async_rt = Runtime::new()?;
-    let legion = World::default();
+    //let legion = World::default();
 
     let globals_buffer = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter.write());
-    let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
+    // let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
 
     let arcball = ArcBallCamera::new(meters!(0.1), &mut gpu.write(), &mut interpreter.write());
     arcball.write().set_eye_relative(Graticule::<Target>::new(
@@ -93,16 +93,17 @@ async fn async_main() -> Result<()> {
     arcball.write().set_distance(meters!(40.0));
 
     let _ctx = AppContext {
+        interpreter,
         gpu,
-        //async_rt,
-        legion,
         arcball,
+        //async_rt,
+        //legion,
         globals_buffer,
-        fullscreen_buffer,
+        // fullscreen_buffer,
     };
-
     #[cfg(target_arch = "wasm32")]
-    InputSystem::run_forever(vec![], event_loop, window, window_loop, _ctx).await?;
+    InputSystem::run_forever(event_loop, window, window_loop, _ctx).await?;
+
     Ok(())
 }
 
@@ -130,7 +131,6 @@ fn window_loop(
             _ => {}
         }
     }
-    let _ = input_controller.poll_events()?;
     app.arcball.write().think();
 
     // Sim
@@ -141,8 +141,10 @@ fn window_loop(
         &mut tracker,
     )?;
 
+    /*
     // Render
     let framebuffer = app.gpu.write().get_next_framebuffer()?.unwrap();
+            */
     let mut encoder =
         app.gpu
             .read()
