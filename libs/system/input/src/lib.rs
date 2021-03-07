@@ -94,6 +94,8 @@ impl InputSystem {
         T: 'static + Send + Sync,
         M: 'static + Send + FnMut(&Window, &InputController, &mut T) -> Result<()>,
     {
+        use web_sys::console;
+
         let (tx_event, rx_event) = channel();
         let input_controller = InputController::new(event_loop.create_proxy(), rx_event);
 
@@ -110,7 +112,7 @@ impl InputSystem {
             Self::wrap_event(&event, &mut input_state, &mut generic_events);
             for evt in generic_events.drain(..) {
                 if let Err(e) = tx_event.send(evt) {
-                    println!("Game loop hung up ({}), exiting...", e);
+                    console::log_1(&format!("Game loop hung up ({}), exiting...", e).into());
                     *control_flow = ControlFlow::Exit;
                     return;
                 }
@@ -435,6 +437,17 @@ impl InputSystem {
         }
     }
 
+    #[cfg(target_arch = "wasm32")]
+    fn guess_key(
+        _scancode: u32,
+        virtual_key: Option<VirtualKeyCode>,
+        _shift_pressed: bool,
+    ) -> Option<VirtualKeyCode> {
+        // The virtual_key is all we get with wasm... scancode looks like ascii?
+        virtual_key
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     fn guess_key(
         scancode: u32,
         virtual_key: Option<VirtualKeyCode>,

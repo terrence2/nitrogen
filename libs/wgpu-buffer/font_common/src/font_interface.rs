@@ -15,7 +15,7 @@
 use image::GrayImage;
 use std::fmt::Debug;
 
-pub trait FontInterface: Debug {
+pub trait FontInterface: Debug + Send + Sync + 'static {
     // global metrics
     fn units_per_em(&self) -> f32;
 

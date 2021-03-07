@@ -24,7 +24,7 @@ use parking_lot::RwLock;
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
 // Note: manually passing the module until we have arbitrary self.
-pub trait Module: Debug {
+pub trait Module: Debug + Send + Sync + 'static {
     fn module_name(&self) -> String;
     fn call_method(&mut self, name: &str, args: &[Value]) -> Result<Value>;
     fn put(&mut self, module: Arc<RwLock<dyn Module>>, name: &str, value: Value) -> Result<()>;
