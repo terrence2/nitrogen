@@ -16,7 +16,7 @@ use anyhow::Result;
 use atmosphere::AtmosphereBuffer;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::GlobalParametersBuffer;
-use gpu::{texture_format_component_type, ResizeHint, GPU};
+use gpu::{texture_format_sample_type, ResizeHint, GPU};
 use log::trace;
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -84,9 +84,9 @@ impl WorldRenderPass {
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::SampledTexture {
-                                dimension: wgpu::TextureViewDimension::D2,
-                                component_type: texture_format_component_type(GPU::SCREEN_FORMAT),
+                            ty: wgpu::BindingType::Texture {
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: texture_format_sample_type(GPU::SCREEN_FORMAT),
                                 multisampled: false,
                             },
                             count: None,
@@ -94,7 +94,10 @@ impl WorldRenderPass {
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler { comparison: false },
+                            ty: wgpu::BindingType::Sampler {
+                                filtering: true,
+                                comparison: false,
+                            },
                             count: None,
                         },
                     ],
@@ -112,6 +115,7 @@ impl WorldRenderPass {
             lod_max_clamp: 0f32,
             compare: None,
             anisotropy_clamp: None,
+            border_color: None,
         });
 
         let deferred_texture = Self::_make_deferred_texture_targets(gpu);
@@ -123,8 +127,10 @@ impl WorldRenderPass {
             &deferred_sampler,
         );
 
-        let fullscreen_shared_vert =
-            gpu.create_shader_module(include_bytes!("../target/dbg-fullscreen-shared.vert.spirv"))?;
+        let fullscreen_shared_vert = gpu.create_shader_module(
+            "dbg-fullscreen-shared.vert",
+            include_bytes!("../target/dbg-fullscreen-shared.vert.spirv"),
+        )?;
         let fullscreen_layout =
             gpu.device()
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -142,43 +148,55 @@ impl WorldRenderPass {
             gpu.device(),
             &fullscreen_layout,
             &fullscreen_shared_vert,
-            &gpu.create_shader_module(include_bytes!(
-                "../target/world-composite-buffer.frag.spirv"
-            ))?,
+            &gpu.create_shader_module(
+                "world-composite-buffer.frag",
+                include_bytes!("../target/world-composite-buffer.frag.spirv"),
+            )?,
         );
         let dbg_deferred_pipeline = Self::make_fullscreen_pipeline(
             gpu.device(),
             &fullscreen_layout,
             &fullscreen_shared_vert,
-            &gpu.create_shader_module(include_bytes!("../target/dbg-deferred-buffer.frag.spirv"))?,
+            &gpu.create_shader_module(
+                "dbg-deferred-buffer.frag",
+                include_bytes!("../target/dbg-deferred-buffer.frag.spirv"),
+            )?,
         );
         let dbg_depth_pipeline = Self::make_fullscreen_pipeline(
             gpu.device(),
             &fullscreen_layout,
             &fullscreen_shared_vert,
-            &gpu.create_shader_module(include_bytes!("../target/dbg-depth-buffer.frag.spirv"))?,
+            &gpu.create_shader_module(
+                "dbg-depth-buffer.frag",
+                include_bytes!("../target/dbg-depth-buffer.frag.spirv"),
+            )?,
         );
         let dbg_color_pipeline = Self::make_fullscreen_pipeline(
             gpu.device(),
             &fullscreen_layout,
             &fullscreen_shared_vert,
-            &gpu.create_shader_module(include_bytes!("../target/dbg-color_acc-buffer.frag.spirv"))?,
+            &gpu.create_shader_module(
+                "dbg-color_acc-buffer.frag",
+                include_bytes!("../target/dbg-color_acc-buffer.frag.spirv"),
+            )?,
         );
         let dbg_normal_local_pipeline = Self::make_fullscreen_pipeline(
             gpu.device(),
             &fullscreen_layout,
             &fullscreen_shared_vert,
-            &gpu.create_shader_module(include_bytes!(
-                "../target/dbg-normal_acc-buffer-local.frag.spirv"
-            ))?,
+            &gpu.create_shader_module(
+                "dbg-normal_acc-buffer-local.frag",
+                include_bytes!("../target/dbg-normal_acc-buffer-local.frag.spirv"),
+            )?,
         );
         let dbg_normal_global_pipeline = Self::make_fullscreen_pipeline(
             gpu.device(),
             &fullscreen_layout,
             &fullscreen_shared_vert,
-            &gpu.create_shader_module(include_bytes!(
-                "../target/dbg-normal_acc-buffer-global.frag.spirv"
-            ))?,
+            &gpu.create_shader_module(
+                "dbg-normal_acc-buffer-global.frag",
+                include_bytes!("../target/dbg-normal_acc-buffer-global.frag.spirv"),
+            )?,
         );
 
         let wireframe_pipeline =
@@ -192,51 +210,57 @@ impl WorldRenderPass {
                             bind_group_layouts: &[globals_buffer.bind_group_layout()],
                         },
                     )),
-                    vertex_stage: wgpu::ProgrammableStageDescriptor {
-                        module: &gpu.create_shader_module(include_bytes!(
-                            "../target/dbg-wireframe.vert.spirv"
-                        ))?,
+                    vertex: wgpu::VertexState {
+                        module: &gpu.create_shader_module(
+                            "dbg-wireframe.vert",
+                            include_bytes!("../target/dbg-wireframe.vert.spirv"),
+                        )?,
                         entry_point: "main",
+                        buffers: &[TerrainVertex::descriptor()],
                     },
-                    fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                        module: &gpu.create_shader_module(include_bytes!(
-                            "../target/dbg-wireframe.frag.spirv"
-                        ))?,
+                    fragment: Some(wgpu::FragmentState {
+                        module: &gpu.create_shader_module(
+                            "dbg-wireframe.frag",
+                            include_bytes!("../target/dbg-wireframe.frag.spirv"),
+                        )?,
                         entry_point: "main",
+                        targets: &[wgpu::ColorTargetState {
+                            format: GPU::SCREEN_FORMAT,
+                            color_blend: wgpu::BlendState::REPLACE,
+                            alpha_blend: wgpu::BlendState::REPLACE,
+                            write_mask: wgpu::ColorWrite::ALL,
+                        }],
                     }),
-                    rasterization_state: Some(wgpu::RasterizationStateDescriptor {
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::LineList,
+                        strip_index_format: None,
                         front_face: wgpu::FrontFace::Cw,
                         cull_mode: wgpu::CullMode::None,
-                        depth_bias: 0,
-                        depth_bias_slope_scale: 0.0,
-                        depth_bias_clamp: 0.0,
-                        clamp_depth: false,
-                    }),
-                    primitive_topology: wgpu::PrimitiveTopology::LineList,
-                    color_states: &[wgpu::ColorStateDescriptor {
-                        format: GPU::SCREEN_FORMAT,
-                        color_blend: wgpu::BlendDescriptor::REPLACE,
-                        alpha_blend: wgpu::BlendDescriptor::REPLACE,
-                        write_mask: wgpu::ColorWrite::ALL,
-                    }],
-                    depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
+                        // TODO: should we use fill here, since it's line list?
+                        polygon_mode: wgpu::PolygonMode::Line,
+                    },
+                    depth_stencil: Some(wgpu::DepthStencilState {
                         format: GPU::DEPTH_FORMAT,
                         depth_write_enabled: false,
                         depth_compare: wgpu::CompareFunction::Always,
-                        stencil: wgpu::StencilStateDescriptor {
-                            front: wgpu::StencilStateFaceDescriptor::IGNORE,
-                            back: wgpu::StencilStateFaceDescriptor::IGNORE,
+                        stencil: wgpu::StencilState {
+                            front: wgpu::StencilFaceState::IGNORE,
+                            back: wgpu::StencilFaceState::IGNORE,
                             read_mask: 0,
                             write_mask: 0,
                         },
+                        bias: wgpu::DepthBiasState {
+                            constant: 0,
+                            slope_scale: 0.0,
+                            clamp: 0.0,
+                        },
+                        clamp_depth: false,
                     }),
-                    vertex_state: wgpu::VertexStateDescriptor {
-                        index_format: wgpu::IndexFormat::Uint32,
-                        vertex_buffers: &[TerrainVertex::descriptor()],
+                    multisample: wgpu::MultisampleState {
+                        count: 1,
+                        mask: !0,
+                        alpha_to_coverage_enabled: false,
                     },
-                    sample_count: 1,
-                    sample_mask: !0,
-                    alpha_to_coverage_enabled: false,
                 });
 
         let world = Arc::new(RwLock::new(Self {
@@ -278,7 +302,7 @@ impl WorldRenderPass {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: GPU::SCREEN_FORMAT,
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT
+            usage: wgpu::TextureUsage::RENDER_ATTACHMENT
                 | wgpu::TextureUsage::COPY_SRC
                 | wgpu::TextureUsage::SAMPLED,
         });
@@ -308,7 +332,7 @@ impl WorldRenderPass {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: GPU::DEPTH_FORMAT,
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT
+            usage: wgpu::TextureUsage::RENDER_ATTACHMENT
                 | wgpu::TextureUsage::COPY_SRC
                 | wgpu::TextureUsage::SAMPLED,
         });
@@ -356,47 +380,50 @@ impl WorldRenderPass {
         device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("world-dbg-deferred-pipeline"),
             layout: Some(layout),
-            vertex_stage: wgpu::ProgrammableStageDescriptor {
+            vertex: wgpu::VertexState {
                 module: &vert_shader,
                 entry_point: "main",
+                buffers: &[FullscreenVertex::descriptor()],
             },
-            fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
+            fragment: Some(wgpu::FragmentState {
                 module: &frag_shader,
                 entry_point: "main",
+                targets: &[wgpu::ColorTargetState {
+                    format: GPU::SCREEN_FORMAT,
+                    color_blend: wgpu::BlendState::REPLACE,
+                    alpha_blend: wgpu::BlendState::REPLACE,
+                    write_mask: wgpu::ColorWrite::ALL,
+                }],
             }),
-            rasterization_state: Some(wgpu::RasterizationStateDescriptor {
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                strip_index_format: Some(wgpu::IndexFormat::Uint32),
                 front_face: wgpu::FrontFace::Cw,
                 cull_mode: wgpu::CullMode::Back,
-                depth_bias: 0,
-                depth_bias_slope_scale: 0.0,
-                depth_bias_clamp: 0.0,
-                clamp_depth: false,
-            }),
-            primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
-            color_states: &[wgpu::ColorStateDescriptor {
-                format: GPU::SCREEN_FORMAT,
-                color_blend: wgpu::BlendDescriptor::REPLACE,
-                alpha_blend: wgpu::BlendDescriptor::REPLACE,
-                write_mask: wgpu::ColorWrite::ALL,
-            }],
-            depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
+                polygon_mode: wgpu::PolygonMode::Fill,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
                 format: GPU::DEPTH_FORMAT,
-                depth_write_enabled: true,
+                depth_write_enabled: false,
                 depth_compare: wgpu::CompareFunction::Greater,
-                stencil: wgpu::StencilStateDescriptor {
-                    front: wgpu::StencilStateFaceDescriptor::IGNORE,
-                    back: wgpu::StencilStateFaceDescriptor::IGNORE,
+                stencil: wgpu::StencilState {
+                    front: wgpu::StencilFaceState::IGNORE,
+                    back: wgpu::StencilFaceState::IGNORE,
                     read_mask: 0,
                     write_mask: 0,
                 },
+                bias: wgpu::DepthBiasState {
+                    constant: 0,
+                    slope_scale: 0.0,
+                    clamp: 0.0,
+                },
+                clamp_depth: false,
             }),
-            vertex_state: wgpu::VertexStateDescriptor {
-                index_format: wgpu::IndexFormat::Uint32,
-                vertex_buffers: &[FullscreenVertex::descriptor()],
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
             },
-            sample_count: 1,
-            sample_mask: !0,
-            alpha_to_coverage_enabled: false,
         })
     }
 
@@ -505,7 +532,10 @@ impl WorldRenderPass {
             for i in 0..terrain_geo_buffer.num_patches() {
                 let winding = terrain_geo_buffer.patch_winding(i);
                 let base_vertex = terrain_geo_buffer.patch_vertex_buffer_offset(i);
-                rpass.set_index_buffer(terrain_geo_buffer.wireframe_index_buffer(winding));
+                rpass.set_index_buffer(
+                    terrain_geo_buffer.wireframe_index_buffer(winding),
+                    wgpu::IndexFormat::Uint32,
+                );
                 rpass.draw_indexed(
                     terrain_geo_buffer.wireframe_index_range(winding),
                     base_vertex,

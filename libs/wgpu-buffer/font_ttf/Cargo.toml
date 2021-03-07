@@ -11,6 +11,6 @@ anyhow = "^ 1"
 image = "^ 0.23"
 rusttype = "^ 0.9"
 parking_lot = "^ 0.11"
-wgpu = "^ 0.6"
+wgpu = "^ 0.7"
 gpu = { path = "../../system/gpu" }
 font_common = { path = "../../wgpu-buffer/font_common" }

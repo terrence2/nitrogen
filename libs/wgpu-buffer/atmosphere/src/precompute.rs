@@ -138,8 +138,9 @@ impl Precompute {
             wgpu::BindGroupLayoutEntry {
                 binding,
                 visibility: wgpu::ShaderStage::COMPUTE,
-                ty: wgpu::BindingType::UniformBuffer {
-                    dynamic: false,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
                     min_binding_size: NonZeroU64::new(min_binding_size as u64),
                 },
                 count: None,
@@ -150,9 +151,9 @@ impl Precompute {
                 binding,
                 visibility: wgpu::ShaderStage::COMPUTE,
                 ty: wgpu::BindingType::StorageTexture {
-                    dimension: wgpu::TextureViewDimension::D2,
+                    view_dimension: wgpu::TextureViewDimension::D2,
                     format: wgpu::TextureFormat::R32Float,
-                    readonly: false,
+                    access: wgpu::StorageTextureAccess::ReadWrite,
                 },
                 count: None,
             }
@@ -162,9 +163,9 @@ impl Precompute {
                 binding,
                 visibility: wgpu::ShaderStage::COMPUTE,
                 ty: wgpu::BindingType::StorageTexture {
-                    dimension: wgpu::TextureViewDimension::D3,
+                    view_dimension: wgpu::TextureViewDimension::D3,
                     format: wgpu::TextureFormat::R32Float,
-                    readonly: false,
+                    access: wgpu::StorageTextureAccess::ReadWrite,
                 },
                 count: None,
             }
@@ -173,10 +174,10 @@ impl Precompute {
             wgpu::BindGroupLayoutEntry {
                 binding,
                 visibility: wgpu::ShaderStage::COMPUTE,
-                ty: wgpu::BindingType::SampledTexture {
-                    multisampled: true,
-                    component_type: wgpu::TextureComponentType::Float,
-                    dimension: wgpu::TextureViewDimension::D2,
+                ty: wgpu::BindingType::Texture {
+                    multisampled: false,
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D2,
                 },
                 count: None,
             }
@@ -185,10 +186,10 @@ impl Precompute {
             wgpu::BindGroupLayoutEntry {
                 binding,
                 visibility: wgpu::ShaderStage::COMPUTE,
-                ty: wgpu::BindingType::SampledTexture {
-                    multisampled: true,
-                    component_type: wgpu::TextureComponentType::Float,
-                    dimension: wgpu::TextureViewDimension::D3,
+                ty: wgpu::BindingType::Texture {
+                    multisampled: false,
+                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                    view_dimension: wgpu::TextureViewDimension::D3,
                 },
                 count: None,
             }
@@ -197,15 +198,19 @@ impl Precompute {
             wgpu::BindGroupLayoutEntry {
                 binding,
                 visibility: wgpu::ShaderStage::COMPUTE,
-                ty: wgpu::BindingType::Sampler { comparison: false },
+                ty: wgpu::BindingType::Sampler {
+                    filtering: true,
+                    comparison: false,
+                },
                 count: None,
             }
         }
 
         // Transmittance
-        let build_transmittance_lut_shader = gpu.create_shader_module(include_bytes!(
-            "../target/build_transmittance_lut.comp.spirv"
-        ))?;
+        let build_transmittance_lut_shader = gpu.create_shader_module(
+            "build_transmittance_lut.comp",
+            include_bytes!("../target/build_transmittance_lut.comp.spirv"),
+        )?;
         let build_transmittance_lut_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("atmosphere-build-transmittance-lut-bind-group"),
@@ -224,16 +229,15 @@ impl Precompute {
                         bind_group_layouts: &[&build_transmittance_lut_bind_group_layout],
                     }),
                 ),
-                compute_stage: wgpu::ProgrammableStageDescriptor {
-                    module: &build_transmittance_lut_shader,
-                    entry_point: "main",
-                },
+                module: &build_transmittance_lut_shader,
+                entry_point: "main",
             });
 
         // Direct Irradiance
-        let build_direct_irradiance_lut_shader = gpu.create_shader_module(include_bytes!(
-            "../target/build_direct_irradiance_lut.comp.spirv"
-        ))?;
+        let build_direct_irradiance_lut_shader = gpu.create_shader_module(
+            "build_direct_irradiance_lut.comp",
+            include_bytes!("../target/build_direct_irradiance_lut.comp.spirv"),
+        )?;
         let build_direct_irradiance_lut_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("atmosphere-build-direct-irradiance-lut-bind-group"),
@@ -254,16 +258,15 @@ impl Precompute {
                         bind_group_layouts: &[&build_direct_irradiance_lut_bind_group_layout],
                     }),
                 ),
-                compute_stage: wgpu::ProgrammableStageDescriptor {
-                    module: &build_direct_irradiance_lut_shader,
-                    entry_point: "main",
-                },
+                module: &build_direct_irradiance_lut_shader,
+                entry_point: "main",
             });
 
         // Single Scattering
-        let build_single_scattering_lut_shader = gpu.create_shader_module(include_bytes!(
-            "../target/build_single_scattering_lut.comp.spirv"
-        ))?;
+        let build_single_scattering_lut_shader = gpu.create_shader_module(
+            "build_single_scattering_lut.comp",
+            include_bytes!("../target/build_single_scattering_lut.comp.spirv"),
+        )?;
         let build_single_scattering_lut_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("atmosphere-build-single-scattering-lut-bind-group"),
@@ -288,16 +291,15 @@ impl Precompute {
                         bind_group_layouts: &[&build_single_scattering_lut_bind_group_layout],
                     }),
                 ),
-                compute_stage: wgpu::ProgrammableStageDescriptor {
-                    module: &build_single_scattering_lut_shader,
-                    entry_point: "main",
-                },
+                module: &build_single_scattering_lut_shader,
+                entry_point: "main",
             });
 
         // Scattering Density
-        let build_scattering_density_lut_shader = gpu.create_shader_module(include_bytes!(
-            "../target/build_scattering_density_lut.comp.spirv"
-        ))?;
+        let build_scattering_density_lut_shader = gpu.create_shader_module(
+            "build_scattering_density_lut.comp",
+            include_bytes!("../target/build_scattering_density_lut.comp.spirv"),
+        )?;
         let build_scattering_density_lut_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("atmosphere-build-scattering-density-lut-bind-group"),
@@ -327,16 +329,15 @@ impl Precompute {
                         bind_group_layouts: &[&build_scattering_density_lut_bind_group_layout],
                     }),
                 ),
-                compute_stage: wgpu::ProgrammableStageDescriptor {
-                    module: &build_scattering_density_lut_shader,
-                    entry_point: "main",
-                },
+                module: &build_scattering_density_lut_shader,
+                entry_point: "main",
             });
 
         // Indirect Irradiance
-        let build_indirect_irradiance_lut_shader = gpu.create_shader_module(include_bytes!(
-            "../target/build_indirect_irradiance_lut.comp.spirv"
-        ))?;
+        let build_indirect_irradiance_lut_shader = gpu.create_shader_module(
+            "build_indirect_irradiance_lut.comp",
+            include_bytes!("../target/build_indirect_irradiance_lut.comp.spirv"),
+        )?;
         let build_indirect_irradiance_lut_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("atmosphere-build-indirect-irradiance-lut-bind-group"),
@@ -364,16 +365,15 @@ impl Precompute {
                         bind_group_layouts: &[&build_indirect_irradiance_lut_bind_group_layout],
                     }),
                 ),
-                compute_stage: wgpu::ProgrammableStageDescriptor {
-                    module: &build_indirect_irradiance_lut_shader,
-                    entry_point: "main",
-                },
+                module: &build_indirect_irradiance_lut_shader,
+                entry_point: "main",
             });
 
         // Multiple Scattering
-        let build_multiple_scattering_lut_shader = gpu.create_shader_module(include_bytes!(
-            "../target/build_multiple_scattering_lut.comp.spirv"
-        ))?;
+        let build_multiple_scattering_lut_shader = gpu.create_shader_module(
+            "build_multiple_scattering_lut.comp",
+            include_bytes!("../target/build_multiple_scattering_lut.comp.spirv"),
+        )?;
         let build_multiple_scattering_lut_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("atmosphere-build-multiple-scattering-lut-bind-group"),
@@ -399,10 +399,8 @@ impl Precompute {
                         bind_group_layouts: &[&build_multiple_scattering_lut_bind_group_layout],
                     }),
                 ),
-                compute_stage: wgpu::ProgrammableStageDescriptor {
-                    module: &build_multiple_scattering_lut_shader,
-                    entry_point: "main",
-                },
+                module: &build_multiple_scattering_lut_shader,
+                entry_point: "main",
             });
 
         let transmittance_extent = wgpu::Extent3d {
@@ -616,6 +614,7 @@ impl Precompute {
             lod_max_clamp: 9_999_999f32,
             compare: None,
             anisotropy_clamp: None,
+            border_color: None,
         });
 
         Ok(Self {
@@ -907,7 +906,11 @@ impl Precompute {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer(atmosphere_params_buffer.slice(..)),
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &atmosphere_params_buffer,
+                        offset: 0,
+                        size: None,
+                    },
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -922,7 +925,9 @@ impl Precompute {
                 label: Some("atmosphere-compute-transmittance-command-encoder"),
             });
         {
-            let mut cpass = encoder.begin_compute_pass();
+            let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("compute_transmittance_at"),
+            });
             cpass.set_pipeline(&self.build_transmittance_lut_pipeline);
             cpass.set_bind_group(0, &bind_group, &[]);
             cpass.dispatch(
@@ -956,7 +961,11 @@ impl Precompute {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer(atmosphere_params_buffer.slice(..)),
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &atmosphere_params_buffer,
+                        offset: 0,
+                        size: None,
+                    },
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -981,7 +990,9 @@ impl Precompute {
                 label: Some("atmosphere-compute-direct-irradiance-command-encoder"),
             });
         {
-            let mut cpass = encoder.begin_compute_pass();
+            let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("compute_direct_irradiance_at"),
+            });
             cpass.set_pipeline(&self.build_direct_irradiance_lut_pipeline);
             cpass.set_bind_group(0, &bind_group, &[]);
             cpass.dispatch(
@@ -1026,7 +1037,11 @@ impl Precompute {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer(atmosphere_params_buffer.slice(..)),
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &atmosphere_params_buffer,
+                        offset: 0,
+                        size: None,
+                    },
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -1038,7 +1053,11 @@ impl Precompute {
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
-                    resource: wgpu::BindingResource::Buffer(rad_to_lum_buffer.slice(..)),
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &rad_to_lum_buffer,
+                        offset: 0,
+                        size: None,
+                    },
                 },
                 wgpu::BindGroupEntry {
                     binding: 4,
@@ -1071,7 +1090,9 @@ impl Precompute {
                 label: Some("atmosphere-compute-single-scattering-command-encoder"),
             });
         {
-            let mut cpass = encoder.begin_compute_pass();
+            let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("compute_single_scattering_at"),
+            });
             cpass.set_pipeline(&self.build_single_scattering_lut_pipeline);
             cpass.set_bind_group(0, &bind_group, &[]);
             cpass.dispatch(
@@ -1149,11 +1170,19 @@ impl Precompute {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer(atmosphere_params_buffer.slice(..)),
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &atmosphere_params_buffer,
+                        offset: 0,
+                        size: None,
+                    },
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Buffer(scattering_order_buffer.slice(..)),
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &scattering_order_buffer,
+                        offset: 0,
+                        size: None,
+                    },
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
@@ -1218,7 +1247,9 @@ impl Precompute {
                 label: Some("atmosphere-compute-scattering-density-command-encoder"),
             });
         {
-            let mut cpass = encoder.begin_compute_pass();
+            let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("compute_scattering_density"),
+            });
             cpass.set_pipeline(&self.build_scattering_density_lut_pipeline);
             cpass.set_bind_group(0, &bind_group, &[]);
             cpass.dispatch(
@@ -1269,15 +1300,27 @@ impl Precompute {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer(atmosphere_params_buffer.slice(..)),
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &atmosphere_params_buffer,
+                        offset: 0,
+                        size: None,
+                    },
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Buffer(rad_to_lum_buffer.slice(..)),
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &rad_to_lum_buffer,
+                        offset: 0,
+                        size: None,
+                    },
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: wgpu::BindingResource::Buffer(scattering_order_buffer.slice(..)),
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &scattering_order_buffer,
+                        offset: 0,
+                        size: None,
+                    },
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
@@ -1328,7 +1371,9 @@ impl Precompute {
                 label: Some("atmosphere-compute-indirect-irradiance-command-encoder"),
             });
         {
-            let mut cpass = encoder.begin_compute_pass();
+            let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("compute_indirect_irradiance_at"),
+            });
             cpass.set_pipeline(&self.build_indirect_irradiance_lut_pipeline);
             cpass.set_bind_group(0, &bind_group, &[]);
             cpass.dispatch(
@@ -1386,15 +1431,27 @@ impl Precompute {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer(atmosphere_params_buffer.slice(..)),
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &atmosphere_params_buffer,
+                        offset: 0,
+                        size: None,
+                    },
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Buffer(rad_to_lum_buffer.slice(..)),
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &rad_to_lum_buffer,
+                        offset: 0,
+                        size: None,
+                    },
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: wgpu::BindingResource::Buffer(scattering_order_buffer.slice(..)),
+                    resource: wgpu::BindingResource::Buffer {
+                        buffer: &scattering_order_buffer,
+                        offset: 0,
+                        size: None,
+                    },
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
@@ -1433,7 +1490,9 @@ impl Precompute {
                 label: Some("atmosphere-compute-multiple-scattering-command-encoder"),
             });
         {
-            let mut cpass = encoder.begin_compute_pass();
+            let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("compute_multiple_scattering_at"),
+            });
             cpass.set_pipeline(&self.build_multiple_scattering_lut_pipeline);
             cpass.set_bind_group(0, &bind_group, &[]);
             cpass.dispatch(

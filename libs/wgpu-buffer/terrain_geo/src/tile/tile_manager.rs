@@ -86,9 +86,9 @@ impl TileManager {
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::SampledTexture {
-                                dimension: wgpu::TextureViewDimension::D2,
-                                component_type: wgpu::TextureComponentType::Uint,
+                            ty: wgpu::BindingType::Texture {
+                                sample_type: wgpu::TextureSampleType::Uint,
+                                view_dimension: wgpu::TextureViewDimension::D2,
                                 multisampled: false,
                             },
                             count: None,
@@ -96,16 +96,19 @@ impl TileManager {
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::Sampler { comparison: false },
+                            ty: wgpu::BindingType::Sampler {
+                                filtering: true,
+                                comparison: false,
+                            },
                             count: None,
                         },
                         // Atlas Textures, as referenced by the above index
                         wgpu::BindGroupLayoutEntry {
                             binding: 2,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::SampledTexture {
-                                dimension: wgpu::TextureViewDimension::D2Array,
-                                component_type: wgpu::TextureComponentType::Sint,
+                            ty: wgpu::BindingType::Texture {
+                                view_dimension: wgpu::TextureViewDimension::D2Array,
+                                sample_type: wgpu::TextureSampleType::Sint,
                                 multisampled: false,
                             },
                             count: None,
@@ -113,15 +116,18 @@ impl TileManager {
                         wgpu::BindGroupLayoutEntry {
                             binding: 3,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::Sampler { comparison: false },
+                            ty: wgpu::BindingType::Sampler {
+                                filtering: true,
+                                comparison: false,
+                            },
                             count: None,
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 4,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::StorageBuffer {
-                                dynamic: false,
-                                readonly: true,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
                                 min_binding_size: NonZeroU64::new(atlas_tile_info_buffer_size),
                             },
                             count: None,
@@ -137,9 +143,9 @@ impl TileManager {
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::SampledTexture {
-                                dimension: wgpu::TextureViewDimension::D2,
-                                component_type: wgpu::TextureComponentType::Uint,
+                            ty: wgpu::BindingType::Texture {
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: wgpu::TextureSampleType::Uint,
                                 multisampled: false,
                             },
                             count: None,
@@ -147,16 +153,19 @@ impl TileManager {
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::Sampler { comparison: false },
+                            ty: wgpu::BindingType::Sampler {
+                                filtering: true,
+                                comparison: false,
+                            },
                             count: None,
                         },
                         // Atlas Textures, as referenced by the above index
                         wgpu::BindGroupLayoutEntry {
                             binding: 2,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::SampledTexture {
-                                dimension: wgpu::TextureViewDimension::D2Array,
-                                component_type: wgpu::TextureComponentType::Float,
+                            ty: wgpu::BindingType::Texture {
+                                view_dimension: wgpu::TextureViewDimension::D2Array,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
                                 multisampled: false,
                             },
                             count: None,
@@ -164,15 +173,18 @@ impl TileManager {
                         wgpu::BindGroupLayoutEntry {
                             binding: 3,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::Sampler { comparison: false },
+                            ty: wgpu::BindingType::Sampler {
+                                filtering: true,
+                                comparison: false,
+                            },
                             count: None,
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 4,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::StorageBuffer {
-                                dynamic: false,
-                                readonly: true,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
                                 min_binding_size: NonZeroU64::new(atlas_tile_info_buffer_size),
                             },
                             count: None,

@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 anyhow = "^ 1"
 log = "^ 0.4"
-wgpu = "^ 0.6"
+wgpu = "^ 0.7"
 fullscreen = { path = "../../wgpu-buffer/fullscreen" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 gpu = { path = "../../system/gpu" }

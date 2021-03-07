@@ -210,51 +210,56 @@ impl TerrainGeoBuffer {
                             bind_group_layouts: &[globals_buffer.bind_group_layout()],
                         },
                     )),
-                    vertex_stage: wgpu::ProgrammableStageDescriptor {
-                        module: &gpu.create_shader_module(include_bytes!(
-                            "../target/draw_deferred_texture.vert.spirv"
-                        ))?,
+                    vertex: wgpu::VertexState {
+                        module: &gpu.create_shader_module(
+                            "draw_deferred_texture.vert",
+                            include_bytes!("../target/draw_deferred_texture.vert.spirv"),
+                        )?,
                         entry_point: "main",
+                        buffers: &[TerrainVertex::descriptor()],
                     },
-                    fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                        module: &gpu.create_shader_module(include_bytes!(
-                            "../target/draw_deferred_texture.frag.spirv"
-                        ))?,
+                    fragment: Some(wgpu::FragmentState {
+                        module: &gpu.create_shader_module(
+                            "draw_deferred_texture.frag",
+                            include_bytes!("../target/draw_deferred_texture.frag.spirv"),
+                        )?,
                         entry_point: "main",
+                        targets: &[wgpu::ColorTargetState {
+                            format: Self::DEFERRED_TEXTURE_FORMAT,
+                            color_blend: wgpu::BlendState::REPLACE,
+                            alpha_blend: wgpu::BlendState::REPLACE,
+                            write_mask: wgpu::ColorWrite::ALL,
+                        }],
                     }),
-                    rasterization_state: Some(wgpu::RasterizationStateDescriptor {
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::TriangleStrip,
+                        strip_index_format: Some(wgpu::IndexFormat::Uint32),
                         front_face: wgpu::FrontFace::Ccw,
                         cull_mode: wgpu::CullMode::Back,
-                        depth_bias: 0,
-                        depth_bias_slope_scale: 0.0,
-                        depth_bias_clamp: 0.0,
-                        clamp_depth: false,
-                    }),
-                    primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
-                    color_states: &[wgpu::ColorStateDescriptor {
-                        format: Self::DEFERRED_TEXTURE_FORMAT,
-                        color_blend: wgpu::BlendDescriptor::REPLACE,
-                        alpha_blend: wgpu::BlendDescriptor::REPLACE,
-                        write_mask: wgpu::ColorWrite::ALL,
-                    }],
-                    depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
+                        polygon_mode: wgpu::PolygonMode::Fill,
+                    },
+                    depth_stencil: Some(wgpu::DepthStencilState {
                         format: Self::DEFERRED_TEXTURE_DEPTH,
                         depth_write_enabled: true,
                         depth_compare: wgpu::CompareFunction::Greater,
-                        stencil: wgpu::StencilStateDescriptor {
-                            front: wgpu::StencilStateFaceDescriptor::IGNORE,
-                            back: wgpu::StencilStateFaceDescriptor::IGNORE,
+                        stencil: wgpu::StencilState {
+                            front: wgpu::StencilFaceState::IGNORE,
+                            back: wgpu::StencilFaceState::IGNORE,
                             read_mask: 0,
                             write_mask: 0,
                         },
+                        bias: wgpu::DepthBiasState {
+                            constant: 0,
+                            slope_scale: 0.0,
+                            clamp: 0.0,
+                        },
+                        clamp_depth: false,
                     }),
-                    vertex_state: wgpu::VertexStateDescriptor {
-                        index_format: wgpu::IndexFormat::Uint32,
-                        vertex_buffers: &[TerrainVertex::descriptor()],
+                    multisample: wgpu::MultisampleState {
+                        count: 1,
+                        mask: !0,
+                        alpha_to_coverage_enabled: false,
                     },
-                    sample_count: 1,
-                    sample_mask: !0,
-                    alpha_to_coverage_enabled: false,
                 });
 
         let sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
@@ -269,6 +274,7 @@ impl TerrainGeoBuffer {
             lod_max_clamp: 1f32,
             compare: None,
             anisotropy_clamp: None,
+            border_color: None,
         });
 
         // The bind group layout for compositing all of our buffers together (or debugging)
@@ -281,9 +287,9 @@ impl TerrainGeoBuffer {
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::SampledTexture {
-                                dimension: wgpu::TextureViewDimension::D2,
-                                component_type: wgpu::TextureComponentType::Float,
+                            ty: wgpu::BindingType::Texture {
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
                                 multisampled: false,
                             },
                             count: None,
@@ -292,9 +298,9 @@ impl TerrainGeoBuffer {
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::SampledTexture {
-                                dimension: wgpu::TextureViewDimension::D2,
-                                component_type: wgpu::TextureComponentType::Float,
+                            ty: wgpu::BindingType::Texture {
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
                                 multisampled: false,
                             },
                             count: None,
@@ -303,9 +309,9 @@ impl TerrainGeoBuffer {
                         wgpu::BindGroupLayoutEntry {
                             binding: 2,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::SampledTexture {
-                                dimension: wgpu::TextureViewDimension::D2,
-                                component_type: wgpu::TextureComponentType::Uint,
+                            ty: wgpu::BindingType::Texture {
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: wgpu::TextureSampleType::Uint,
                                 multisampled: false,
                             },
                             count: None,
@@ -314,9 +320,9 @@ impl TerrainGeoBuffer {
                         wgpu::BindGroupLayoutEntry {
                             binding: 3,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::SampledTexture {
-                                dimension: wgpu::TextureViewDimension::D2,
-                                component_type: wgpu::TextureComponentType::Sint,
+                            ty: wgpu::BindingType::Texture {
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: wgpu::TextureSampleType::Sint,
                                 multisampled: false,
                             },
                             count: None,
@@ -325,7 +331,10 @@ impl TerrainGeoBuffer {
                         wgpu::BindGroupLayoutEntry {
                             binding: 4,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler { comparison: false },
+                            ty: wgpu::BindingType::Sampler {
+                                filtering: true,
+                                comparison: false,
+                            },
                             count: None,
                         },
                     ],
@@ -340,9 +349,9 @@ impl TerrainGeoBuffer {
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::SampledTexture {
-                                dimension: wgpu::TextureViewDimension::D2,
-                                component_type: wgpu::TextureComponentType::Float,
+                            ty: wgpu::BindingType::Texture {
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
                                 multisampled: false,
                             },
                             count: None,
@@ -351,9 +360,9 @@ impl TerrainGeoBuffer {
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::SampledTexture {
-                                dimension: wgpu::TextureViewDimension::D2,
-                                component_type: wgpu::TextureComponentType::Float,
+                            ty: wgpu::BindingType::Texture {
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
                                 multisampled: false,
                             },
                             count: None,
@@ -363,9 +372,9 @@ impl TerrainGeoBuffer {
                             binding: 2,
                             visibility: wgpu::ShaderStage::COMPUTE,
                             ty: wgpu::BindingType::StorageTexture {
-                                dimension: wgpu::TextureViewDimension::D2,
                                 format: Self::COLOR_ACCUMULATION_FORMAT,
-                                readonly: false,
+                                access: wgpu::StorageTextureAccess::ReadWrite,
+                                view_dimension: wgpu::TextureViewDimension::D2,
                             },
                             count: None,
                         },
@@ -374,9 +383,9 @@ impl TerrainGeoBuffer {
                             binding: 3,
                             visibility: wgpu::ShaderStage::COMPUTE,
                             ty: wgpu::BindingType::StorageTexture {
-                                dimension: wgpu::TextureViewDimension::D2,
                                 format: Self::NORMAL_ACCUMULATION_FORMAT,
-                                readonly: false,
+                                access: wgpu::StorageTextureAccess::ReadWrite,
+                                view_dimension: wgpu::TextureViewDimension::D2,
                             },
                             count: None,
                         },
@@ -384,7 +393,10 @@ impl TerrainGeoBuffer {
                         wgpu::BindGroupLayoutEntry {
                             binding: 4,
                             visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::Sampler { comparison: false },
+                            ty: wgpu::BindingType::Sampler {
+                                filtering: true,
+                                comparison: false,
+                            },
                             count: None,
                         },
                     ],
@@ -404,12 +416,11 @@ impl TerrainGeoBuffer {
                             ],
                         },
                     )),
-                    compute_stage: wgpu::ProgrammableStageDescriptor {
-                        module: &gpu.create_shader_module(include_bytes!(
-                            "../target/accumulate_clear.comp.spirv"
-                        ))?,
-                        entry_point: "main",
-                    },
+                    module: &gpu.create_shader_module(
+                        "accumulate_clear.comp",
+                        include_bytes!("../target/accumulate_clear.comp.spirv"),
+                    )?,
+                    entry_point: "main",
                 });
 
         let accumulate_spherical_normals_pipeline =
@@ -427,12 +438,11 @@ impl TerrainGeoBuffer {
                             ],
                         },
                     )),
-                    compute_stage: wgpu::ProgrammableStageDescriptor {
-                        module: &gpu.create_shader_module(include_bytes!(
-                            "../target/accumulate_spherical_normals.comp.spirv"
-                        ))?,
-                        entry_point: "main",
-                    },
+                    module: &gpu.create_shader_module(
+                        "accumulate_spherical_normals.comp",
+                        include_bytes!("../target/accumulate_spherical_normals.comp.spirv"),
+                    )?,
+                    entry_point: "main",
                 });
 
         let accumulate_spherical_colors_pipeline =
@@ -450,12 +460,11 @@ impl TerrainGeoBuffer {
                             ],
                         },
                     )),
-                    compute_stage: wgpu::ProgrammableStageDescriptor {
-                        module: &gpu.create_shader_module(include_bytes!(
-                            "../target/accumulate_spherical_colors.comp.spirv"
-                        ))?,
-                        entry_point: "main",
-                    },
+                    module: &gpu.create_shader_module(
+                        "accumulate_spherical_colors.comp",
+                        include_bytes!("../target/accumulate_spherical_colors.comp.spirv"),
+                    )?,
+                    entry_point: "main",
                 });
 
         let deferred_texture = Self::_make_deferred_texture_targets(gpu);
@@ -526,7 +535,7 @@ impl TerrainGeoBuffer {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Self::DEFERRED_TEXTURE_FORMAT,
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT
+            usage: wgpu::TextureUsage::RENDER_ATTACHMENT
                 | wgpu::TextureUsage::COPY_SRC
                 | wgpu::TextureUsage::SAMPLED,
         });
@@ -556,7 +565,7 @@ impl TerrainGeoBuffer {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Self::DEFERRED_TEXTURE_DEPTH,
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT
+            usage: wgpu::TextureUsage::RENDER_ATTACHMENT
                 | wgpu::TextureUsage::COPY_SRC
                 | wgpu::TextureUsage::SAMPLED,
         });
@@ -803,7 +812,10 @@ impl TerrainGeoBuffer {
         for i in 0..self.patch_manager.num_patches() {
             let winding = self.patch_manager.patch_winding(i);
             let base_vertex = self.patch_manager.patch_vertex_buffer_offset(i);
-            rpass.set_index_buffer(self.patch_manager.tristrip_index_buffer(winding));
+            rpass.set_index_buffer(
+                self.patch_manager.tristrip_index_buffer(winding),
+                wgpu::IndexFormat::Uint32,
+            );
             rpass.draw_indexed(
                 self.patch_manager.tristrip_index_range(winding),
                 base_vertex,

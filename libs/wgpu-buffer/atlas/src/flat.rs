@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
-use gpu::{texture_format_component_type, texture_format_size, UploadTracker, GPU};
+use gpu::{texture_format_sample_type, texture_format_size, UploadTracker, GPU};
 use image::{GenericImage, ImageBuffer, Pixel};
 use std::{mem, sync::Arc};
 
@@ -141,6 +141,7 @@ where
             lod_max_clamp: 1.0, // TODO: mipmapping
             anisotropy_clamp: None,
             compare: None,
+            border_color: None,
         });
         let texture = Arc::new(Box::new(device.create_texture(&wgpu::TextureDescriptor {
             label: Some("atlas-texture"),
@@ -272,10 +273,10 @@ where
         wgpu::BindGroupLayoutEntry {
             binding,
             visibility: wgpu::ShaderStage::FRAGMENT,
-            ty: wgpu::BindingType::SampledTexture {
-                dimension: wgpu::TextureViewDimension::D2,
-                component_type: texture_format_component_type(self.format),
+            ty: wgpu::BindingType::Texture {
                 multisampled: false,
+                sample_type: texture_format_sample_type(self.format),
+                view_dimension: wgpu::TextureViewDimension::D2,
             },
             count: None,
         }
@@ -285,7 +286,10 @@ where
         wgpu::BindGroupLayoutEntry {
             binding,
             visibility: wgpu::ShaderStage::FRAGMENT,
-            ty: wgpu::BindingType::Sampler { comparison: false },
+            ty: wgpu::BindingType::Sampler {
+                filtering: true,
+                comparison: false,
+            },
             count: None,
         }
     }

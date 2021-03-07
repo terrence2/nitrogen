@@ -53,55 +53,56 @@ impl CompositeRenderPass {
             .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("composite-pipeline"),
                 layout: Some(&pipeline_layout),
-                vertex_stage: wgpu::ProgrammableStageDescriptor {
-                    module: &gpu
-                        .create_shader_module(include_bytes!("../target/composite.vert.spirv"))?,
+                vertex: wgpu::VertexState {
+                    module: &gpu.create_shader_module(
+                        "composite.vert",
+                        include_bytes!("../target/composite.vert.spirv"),
+                    )?,
                     entry_point: "main",
+                    buffers: &[FullscreenVertex::descriptor()],
                 },
-                fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                    module: &gpu
-                        .create_shader_module(include_bytes!("../target/composite.frag.spirv"))?,
+                fragment: Some(wgpu::FragmentState {
+                    module: &gpu.create_shader_module(
+                        "composite.frag",
+                        include_bytes!("../target/composite.frag.spirv"),
+                    )?,
                     entry_point: "main",
+                    targets: &[wgpu::ColorTargetState {
+                        format: GPU::SCREEN_FORMAT,
+                        color_blend: wgpu::BlendState::REPLACE,
+                        alpha_blend: wgpu::BlendState::REPLACE,
+                        write_mask: wgpu::ColorWrite::ALL,
+                    }],
                 }),
-                rasterization_state: Some(wgpu::RasterizationStateDescriptor {
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleStrip,
+                    strip_index_format: Some(wgpu::IndexFormat::Uint32),
                     front_face: wgpu::FrontFace::Cw,
                     cull_mode: wgpu::CullMode::Back,
-                    depth_bias: 0,
-                    depth_bias_slope_scale: 0.0,
-                    depth_bias_clamp: 0.0,
-                    clamp_depth: false,
-                }),
-                primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
-                color_states: &[wgpu::ColorStateDescriptor {
-                    format: GPU::SCREEN_FORMAT,
-                    alpha_blend: wgpu::BlendDescriptor::REPLACE,
-                    // FIXME:
-                    color_blend: wgpu::BlendDescriptor::REPLACE,
-                    // color_blend: wgpu::BlendDescriptor {
-                    //     src_factor: wgpu::BlendFactor::SrcAlpha,
-                    //     dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                    //     operation: wgpu::BlendOperation::Add,
-                    // },
-                    write_mask: wgpu::ColorWrite::ALL,
-                }],
-                depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
                     format: GPU::DEPTH_FORMAT,
                     depth_write_enabled: false, // FIXME
                     depth_compare: wgpu::CompareFunction::Always,
-                    stencil: wgpu::StencilStateDescriptor {
-                        front: wgpu::StencilStateFaceDescriptor::IGNORE,
-                        back: wgpu::StencilStateFaceDescriptor::IGNORE,
+                    stencil: wgpu::StencilState {
+                        front: wgpu::StencilFaceState::IGNORE,
+                        back: wgpu::StencilFaceState::IGNORE,
                         read_mask: 0,
                         write_mask: 0,
                     },
+                    bias: wgpu::DepthBiasState {
+                        constant: 0,
+                        slope_scale: 0.0,
+                        clamp: 0.0,
+                    },
+                    clamp_depth: false,
                 }),
-                vertex_state: wgpu::VertexStateDescriptor {
-                    index_format: wgpu::IndexFormat::Uint32,
-                    vertex_buffers: &[FullscreenVertex::descriptor()],
+                multisample: wgpu::MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
                 },
-                sample_count: 1,
-                sample_mask: !0,
-                alpha_to_coverage_enabled: false,
             });
 
         Ok(Self { pipeline })

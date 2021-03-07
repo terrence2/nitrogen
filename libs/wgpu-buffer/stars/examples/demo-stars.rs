@@ -39,12 +39,14 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
     let stars_buffers = StarsBuffer::new(&gpu.read())?;
 
-    let vert_shader = gpu
-        .write()
-        .create_shader_module(include_bytes!("../target/example.vert.spirv"))?;
-    let frag_shader = gpu
-        .write()
-        .create_shader_module(include_bytes!("../target/example.frag.spirv"))?;
+    let vert_shader = gpu.write().create_shader_module(
+        "example.vert",
+        include_bytes!("../target/example.vert.spirv"),
+    )?;
+    let frag_shader = gpu.write().create_shader_module(
+        "example.frag",
+        include_bytes!("../target/example.frag.spirv"),
+    )?;
 
     let empty_layout =
         gpu.read()
@@ -80,47 +82,50 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("demo-stars-pipeline"),
             layout: Some(&pipeline_layout),
-            vertex_stage: wgpu::ProgrammableStageDescriptor {
+            vertex: wgpu::VertexState {
                 module: &vert_shader,
                 entry_point: "main",
+                buffers: &[FullscreenVertex::descriptor()],
             },
-            fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
+            fragment: Some(wgpu::FragmentState {
                 module: &frag_shader,
                 entry_point: "main",
+                targets: &[wgpu::ColorTargetState {
+                    format: GPU::SCREEN_FORMAT,
+                    color_blend: wgpu::BlendState::REPLACE,
+                    alpha_blend: wgpu::BlendState::REPLACE,
+                    write_mask: wgpu::ColorWrite::ALL,
+                }],
             }),
-            rasterization_state: Some(wgpu::RasterizationStateDescriptor {
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                strip_index_format: Some(wgpu::IndexFormat::Uint16),
                 front_face: wgpu::FrontFace::Cw,
                 cull_mode: wgpu::CullMode::Back,
-                depth_bias: 0,
-                depth_bias_slope_scale: 0.0,
-                depth_bias_clamp: 0.0,
-                clamp_depth: false,
-            }),
-            primitive_topology: wgpu::PrimitiveTopology::TriangleStrip,
-            color_states: &[wgpu::ColorStateDescriptor {
-                format: GPU::SCREEN_FORMAT,
-                color_blend: wgpu::BlendDescriptor::REPLACE,
-                alpha_blend: wgpu::BlendDescriptor::REPLACE,
-                write_mask: wgpu::ColorWrite::ALL,
-            }],
-            depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
+                polygon_mode: wgpu::PolygonMode::Fill,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
                 format: GPU::DEPTH_FORMAT,
                 depth_write_enabled: false,
                 depth_compare: wgpu::CompareFunction::Always,
-                stencil: wgpu::StencilStateDescriptor {
-                    front: wgpu::StencilStateFaceDescriptor::IGNORE,
-                    back: wgpu::StencilStateFaceDescriptor::IGNORE,
+                stencil: wgpu::StencilState {
+                    front: wgpu::StencilFaceState::IGNORE,
+                    back: wgpu::StencilFaceState::IGNORE,
                     read_mask: 0,
                     write_mask: 0,
                 },
+                bias: wgpu::DepthBiasState {
+                    constant: 0,
+                    slope_scale: 0.0,
+                    clamp: 0.0,
+                },
+                clamp_depth: false,
             }),
-            vertex_state: wgpu::VertexStateDescriptor {
-                index_format: wgpu::IndexFormat::Uint16,
-                vertex_buffers: &[FullscreenVertex::descriptor()],
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
             },
-            sample_count: 1,
-            sample_mask: !0,
-            alpha_to_coverage_enabled: false,
         });
 
     let arcball = ArcBallCamera::new(meters!(0.1), &mut gpu.write(), &mut interpreter.write());
@@ -185,6 +190,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         tracker.dispatch_uploads(&mut encoder);
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: None,
                 color_attachments: &[GPU::color_attachment(&framebuffer.output.view)],
                 depth_stencil_attachment: Some(gpu.depth_stencil_attachment()),
             });

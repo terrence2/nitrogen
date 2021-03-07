@@ -174,10 +174,10 @@ impl GlobalParametersBuffer {
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStage::all(),
-                ty: wgpu::BindingType::StorageBuffer {
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
                     min_binding_size: NonZeroU64::new(buffer_size),
-                    dynamic: false,
-                    readonly: true,
                 },
                 count: None,
             }],
@@ -188,7 +188,11 @@ impl GlobalParametersBuffer {
             layout: &bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::Buffer(parameters_buffer.slice(0..buffer_size)),
+                resource: wgpu::BindingResource::Buffer {
+                    buffer: &parameters_buffer,
+                    offset: 0,
+                    size: None,
+                },
             }],
         });
 

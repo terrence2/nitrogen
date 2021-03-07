@@ -44,11 +44,11 @@ impl FullscreenVertex {
         )
     }
 
-    pub fn descriptor() -> wgpu::VertexBufferDescriptor<'static> {
-        wgpu::VertexBufferDescriptor {
-            stride: mem::size_of::<Self>() as wgpu::BufferAddress,
+    pub fn descriptor() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::InputStepMode::Vertex,
-            attributes: &[wgpu::VertexAttributeDescriptor {
+            attributes: &[wgpu::VertexAttribute {
                 format: wgpu::VertexFormat::Float2,
                 offset: 0,
                 shader_location: 0,

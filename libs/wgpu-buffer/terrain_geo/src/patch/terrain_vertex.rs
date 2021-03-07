@@ -49,25 +49,25 @@ impl TerrainVertex {
     }
 
     #[allow(clippy::unneeded_field_pattern)]
-    pub fn descriptor() -> wgpu::VertexBufferDescriptor<'static> {
-        let tmp = wgpu::VertexBufferDescriptor {
-            stride: mem::size_of::<Self>() as wgpu::BufferAddress,
+    pub fn descriptor() -> wgpu::VertexBufferLayout<'static> {
+        let tmp = wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::InputStepMode::Vertex,
             attributes: &[
                 // position
-                wgpu::VertexAttributeDescriptor {
+                wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float3,
                     offset: 0,
                     shader_location: 0,
                 },
                 // normal
-                wgpu::VertexAttributeDescriptor {
+                wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float3,
                     offset: 12,
                     shader_location: 1,
                 },
                 // graticule
-                wgpu::VertexAttributeDescriptor {
+                wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float2,
                     offset: 24,
                     shader_location: 2,

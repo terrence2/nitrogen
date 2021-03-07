@@ -36,19 +36,19 @@ impl IndexPaintVertex {
     }
 
     #[allow(clippy::unneeded_field_pattern)]
-    pub fn descriptor() -> wgpu::VertexBufferDescriptor<'static> {
-        let tmp = wgpu::VertexBufferDescriptor {
-            stride: mem::size_of::<Self>() as wgpu::BufferAddress,
+    pub fn descriptor() -> wgpu::VertexBufferLayout<'static> {
+        let tmp = wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
             step_mode: wgpu::InputStepMode::Vertex,
             attributes: &[
                 // position
-                wgpu::VertexAttributeDescriptor {
+                wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Float2,
                     offset: 0,
                     shader_location: 0,
                 },
                 // color
-                wgpu::VertexAttributeDescriptor {
+                wgpu::VertexAttribute {
                     format: wgpu::VertexFormat::Uint,
                     offset: 8,
                     shader_location: 1,

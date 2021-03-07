@@ -13,7 +13,7 @@ winit = { version = "^ 0.24", features = ["web-sys"] }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Note: need to match wgpu exactly
 wasm-bindgen = "^ 0.2"
-web-sys = "=0.3.39"
+web-sys = "=0.3.46"
 futures = "^ 0.3"
 
 [dev-dependencies]

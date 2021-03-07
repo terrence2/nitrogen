@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
 use global_data::GlobalParametersBuffer;
-use gpu::{texture_format_component_type, ResizeHint, GPU};
+use gpu::{texture_format_sample_type, ResizeHint, GPU};
 use log::trace;
 use parking_lot::RwLock;
 use shader_shared::Group;
@@ -53,9 +53,9 @@ impl UiRenderPass {
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::SampledTexture {
-                                dimension: wgpu::TextureViewDimension::D2,
-                                component_type: texture_format_component_type(GPU::SCREEN_FORMAT),
+                            ty: wgpu::BindingType::Texture {
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                sample_type: texture_format_sample_type(GPU::SCREEN_FORMAT),
                                 multisampled: false,
                             },
                             count: None,
@@ -63,7 +63,10 @@ impl UiRenderPass {
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
                             visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler { comparison: false },
+                            ty: wgpu::BindingType::Sampler {
+                                filtering: true,
+                                comparison: false,
+                            },
                             count: None,
                         },
                     ],
@@ -81,6 +84,7 @@ impl UiRenderPass {
             lod_max_clamp: 0f32,
             compare: None,
             anisotropy_clamp: None,
+            border_color: None,
         });
 
         let deferred_texture = Self::_make_deferred_texture_targets(gpu);
@@ -110,55 +114,60 @@ impl UiRenderPass {
                 .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                     label: Some("ui-background-pipeline"),
                     layout: Some(&pipeline_layout),
-                    vertex_stage: wgpu::ProgrammableStageDescriptor {
-                        module: &gpu.create_shader_module(include_bytes!(
-                            "../target/ui-background.vert.spirv"
-                        ))?,
+                    vertex: wgpu::VertexState {
+                        module: &gpu.create_shader_module(
+                            "ui-background.vert",
+                            include_bytes!("../target/ui-background.vert.spirv"),
+                        )?,
                         entry_point: "main",
+                        buffers: &[WidgetVertex::descriptor()],
                     },
-                    fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                        module: &gpu.create_shader_module(include_bytes!(
-                            "../target/ui-background.frag.spirv"
-                        ))?,
+                    fragment: Some(wgpu::FragmentState {
+                        module: &gpu.create_shader_module(
+                            "ui-background.frag",
+                            include_bytes!("../target/ui-background.frag.spirv"),
+                        )?,
                         entry_point: "main",
+                        targets: &[wgpu::ColorTargetState {
+                            format: GPU::SCREEN_FORMAT,
+                            color_blend: wgpu::BlendState {
+                                src_factor: wgpu::BlendFactor::SrcAlpha,
+                                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                                operation: wgpu::BlendOperation::Add,
+                            },
+                            alpha_blend: wgpu::BlendState::REPLACE,
+                            write_mask: wgpu::ColorWrite::ALL,
+                        }],
                     }),
-                    rasterization_state: Some(wgpu::RasterizationStateDescriptor {
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::TriangleList,
+                        strip_index_format: None,
                         front_face: wgpu::FrontFace::Ccw,
                         cull_mode: wgpu::CullMode::Back,
-                        depth_bias: 0,
-                        depth_bias_slope_scale: 0.0,
-                        depth_bias_clamp: 0.0,
-                        clamp_depth: false,
-                    }),
-                    primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-                    color_states: &[wgpu::ColorStateDescriptor {
-                        format: GPU::SCREEN_FORMAT,
-                        alpha_blend: wgpu::BlendDescriptor::REPLACE,
-                        color_blend: wgpu::BlendDescriptor {
-                            src_factor: wgpu::BlendFactor::SrcAlpha,
-                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                        write_mask: wgpu::ColorWrite::ALL,
-                    }],
-                    depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
+                        polygon_mode: wgpu::PolygonMode::Fill,
+                    },
+                    depth_stencil: Some(wgpu::DepthStencilState {
                         format: GPU::DEPTH_FORMAT,
                         depth_write_enabled: true,
                         depth_compare: wgpu::CompareFunction::Greater,
-                        stencil: wgpu::StencilStateDescriptor {
-                            front: wgpu::StencilStateFaceDescriptor::IGNORE,
-                            back: wgpu::StencilStateFaceDescriptor::IGNORE,
+                        stencil: wgpu::StencilState {
+                            front: wgpu::StencilFaceState::IGNORE,
+                            back: wgpu::StencilFaceState::IGNORE,
                             read_mask: 0,
                             write_mask: 0,
                         },
+                        bias: wgpu::DepthBiasState {
+                            constant: 0,
+                            slope_scale: 0.0,
+                            clamp: 0.0,
+                        },
+                        clamp_depth: false,
                     }),
-                    vertex_state: wgpu::VertexStateDescriptor {
-                        index_format: wgpu::IndexFormat::Uint32,
-                        vertex_buffers: &[WidgetVertex::descriptor()],
+                    multisample: wgpu::MultisampleState {
+                        count: 1,
+                        mask: !0,
+                        alpha_to_coverage_enabled: false,
                     },
-                    sample_count: 1,
-                    sample_mask: !0,
-                    alpha_to_coverage_enabled: false,
                 });
 
         let text_pipeline = gpu
@@ -166,58 +175,64 @@ impl UiRenderPass {
             .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("ui-text-pipeline"),
                 layout: Some(&pipeline_layout),
-                vertex_stage: wgpu::ProgrammableStageDescriptor {
-                    module: &gpu
-                        .create_shader_module(include_bytes!("../target/ui-text.vert.spirv"))?,
+                vertex: wgpu::VertexState {
+                    module: &gpu.create_shader_module(
+                        "ui-text.vert",
+                        include_bytes!("../target/ui-text.vert.spirv"),
+                    )?,
                     entry_point: "main",
+                    buffers: &[WidgetVertex::descriptor()],
                 },
-                fragment_stage: Some(wgpu::ProgrammableStageDescriptor {
-                    module: &gpu
-                        .create_shader_module(include_bytes!("../target/ui-text.frag.spirv"))?,
+                fragment: Some(wgpu::FragmentState {
+                    module: &gpu.create_shader_module(
+                        "ui-text.frag",
+                        include_bytes!("../target/ui-text.frag.spirv"),
+                    )?,
                     entry_point: "main",
+                    targets: &[wgpu::ColorTargetState {
+                        format: GPU::SCREEN_FORMAT,
+                        alpha_blend: wgpu::BlendState {
+                            src_factor: wgpu::BlendFactor::SrcAlpha,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            operation: wgpu::BlendOperation::Max,
+                        },
+                        color_blend: wgpu::BlendState {
+                            src_factor: wgpu::BlendFactor::SrcAlpha,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                        write_mask: wgpu::ColorWrite::ALL,
+                    }],
                 }),
-                rasterization_state: Some(wgpu::RasterizationStateDescriptor {
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
                     front_face: wgpu::FrontFace::Ccw,
                     cull_mode: wgpu::CullMode::Back,
-                    depth_bias: 0,
-                    depth_bias_slope_scale: 0.0,
-                    depth_bias_clamp: 0.0,
-                    clamp_depth: false,
-                }),
-                primitive_topology: wgpu::PrimitiveTopology::TriangleList,
-                color_states: &[wgpu::ColorStateDescriptor {
-                    format: GPU::SCREEN_FORMAT,
-                    alpha_blend: wgpu::BlendDescriptor {
-                        src_factor: wgpu::BlendFactor::SrcAlpha,
-                        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                        operation: wgpu::BlendOperation::Max,
-                    },
-                    color_blend: wgpu::BlendDescriptor {
-                        src_factor: wgpu::BlendFactor::SrcAlpha,
-                        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                        operation: wgpu::BlendOperation::Add,
-                    },
-                    write_mask: wgpu::ColorWrite::ALL,
-                }],
-                depth_stencil_state: Some(wgpu::DepthStencilStateDescriptor {
-                    // text is mostly transparent, so we cannot elide.
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                },
+                depth_stencil: Some(wgpu::DepthStencilState {
                     format: GPU::DEPTH_FORMAT,
                     depth_write_enabled: false,
                     depth_compare: wgpu::CompareFunction::Always,
-                    stencil: wgpu::StencilStateDescriptor {
-                        front: wgpu::StencilStateFaceDescriptor::IGNORE,
-                        back: wgpu::StencilStateFaceDescriptor::IGNORE,
+                    stencil: wgpu::StencilState {
+                        front: wgpu::StencilFaceState::IGNORE,
+                        back: wgpu::StencilFaceState::IGNORE,
                         read_mask: 0,
                         write_mask: 0,
                     },
+                    bias: wgpu::DepthBiasState {
+                        constant: 0,
+                        slope_scale: 0.0,
+                        clamp: 0.0,
+                    },
+                    clamp_depth: false,
                 }),
-                vertex_state: wgpu::VertexStateDescriptor {
-                    index_format: wgpu::IndexFormat::Uint32,
-                    vertex_buffers: &[WidgetVertex::descriptor()],
+                multisample: wgpu::MultisampleState {
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
                 },
-                sample_count: 1,
-                sample_mask: !0,
-                alpha_to_coverage_enabled: false,
             });
 
         let ui = Arc::new(RwLock::new(Self {
@@ -249,7 +264,7 @@ impl UiRenderPass {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: GPU::SCREEN_FORMAT,
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT
+            usage: wgpu::TextureUsage::RENDER_ATTACHMENT
                 | wgpu::TextureUsage::COPY_SRC
                 | wgpu::TextureUsage::SAMPLED,
         });
@@ -279,7 +294,7 @@ impl UiRenderPass {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: GPU::DEPTH_FORMAT,
-            usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT
+            usage: wgpu::TextureUsage::RENDER_ATTACHMENT
                 | wgpu::TextureUsage::COPY_SRC
                 | wgpu::TextureUsage::SAMPLED,
         });
