@@ -27,14 +27,12 @@ struct TerrainVertex {
 struct SubdivisionContext {
     uint target_stride;
     uint target_subdivision_level;
-    uint pad[2];
 };
 
 struct SubdivisionExpandContext {
     uint current_target_subdivision_level;
     uint skip_vertices_in_patch;
     uint compute_vertices_in_patch;
-    uint pad[1];
 };
 
 struct TileInfo {

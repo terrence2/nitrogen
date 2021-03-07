@@ -16,7 +16,7 @@ use anyhow::Result;
 use atmosphere::AtmosphereBuffer;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::GlobalParametersBuffer;
-use gpu::{texture_format_sample_type, ResizeHint, GPU};
+use gpu::{ResizeHint, GPU};
 use log::trace;
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -76,6 +76,7 @@ impl WorldRenderPass {
     ) -> Result<Arc<RwLock<Self>>> {
         trace!("WorldRenderPass::new");
 
+        // Render target reader for compositing.
         let deferred_bind_group_layout =
             gpu.device()
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -86,7 +87,7 @@ impl WorldRenderPass {
                             visibility: wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 view_dimension: wgpu::TextureViewDimension::D2,
-                                sample_type: texture_format_sample_type(GPU::SCREEN_FORMAT),
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
                                 multisampled: false,
                             },
                             count: None,
@@ -290,6 +291,7 @@ impl WorldRenderPass {
     }
 
     fn _make_deferred_texture_targets(gpu: &GPU) -> (wgpu::Texture, wgpu::TextureView) {
+        // FIXME: centralize the offscreen render size.
         let sz = gpu.physical_size();
         let target = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("world-offscreen-texture-target"),

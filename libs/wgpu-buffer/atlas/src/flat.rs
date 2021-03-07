@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
-use gpu::{texture_format_sample_type, texture_format_size, UploadTracker, GPU};
+use gpu::{texture_format_size, UploadTracker, GPU};
 use image::{GenericImage, ImageBuffer, Pixel};
 use std::{mem, sync::Arc};
 
@@ -275,7 +275,7 @@ where
             visibility: wgpu::ShaderStage::FRAGMENT,
             ty: wgpu::BindingType::Texture {
                 multisampled: false,
-                sample_type: texture_format_sample_type(self.format),
+                sample_type: wgpu::TextureSampleType::Float { filterable: true },
                 view_dimension: wgpu::TextureViewDimension::D2,
             },
             count: None,

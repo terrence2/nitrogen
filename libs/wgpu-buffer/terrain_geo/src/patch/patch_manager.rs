@@ -36,11 +36,8 @@ pub struct SubdivisionContext {
 
     // The final target subdivision level of the subdivision process.
     target_subdivision_level: u32,
-
-    // Pad out size to vec4.
-    pad: [u32; 2],
 }
-assert_eq_size!(SubdivisionContext, [f32; 4]);
+assert_eq_size!(SubdivisionContext, [u32; 2]);
 assert_eq_align!(SubdivisionContext, [f32; 4]);
 
 #[repr(C)]
@@ -57,11 +54,8 @@ pub struct SubdivisionExpandContext {
     // number of vertices in this subdivision level *minus* the number of vertices in the previous
     // expansion level.
     compute_vertices_in_patch: u32,
-
-    // Pad out size to vec4.
-    pad: [u32; 1],
 }
-assert_eq_size!(SubdivisionExpandContext, [f32; 4]);
+assert_eq_size!(SubdivisionExpandContext, [u32; 3]);
 assert_eq_align!(SubdivisionExpandContext, [f32; 4]);
 
 pub(crate) struct PatchManager {
@@ -134,7 +128,6 @@ impl PatchManager {
         let subdivide_context = SubdivisionContext {
             target_stride: GpuDetailLevel::vertices_per_subdivision(max_subdivisions) as u32,
             target_subdivision_level: max_subdivisions as u32,
-            pad: [0u32; 2],
         };
         let subdivide_context_buffer = Arc::new(Box::new(gpu.push_data(
             "subdivision-context",
@@ -158,6 +151,14 @@ impl PatchManager {
             },
         )));
 
+        let ctx_size = mem::size_of::<SubdivisionContext>() as u64;
+        println!(
+            "SIZES: {} + {} + {} = {}",
+            ctx_size,
+            target_vertex_buffer_size,
+            patch_upload_buffer_size,
+            ctx_size + target_vertex_buffer_size + patch_upload_buffer_size
+        );
         let subdivide_prepare_bind_group_layout =
             gpu.device()
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -182,6 +183,7 @@ impl PatchManager {
                                 ty: wgpu::BufferBindingType::Storage { read_only: false },
                                 has_dynamic_offset: false,
                                 min_binding_size: NonZeroU64::new(target_vertex_buffer_size),
+                                //min_binding_size: None,
                             },
                             count: None,
                         },
@@ -192,6 +194,7 @@ impl PatchManager {
                                 ty: wgpu::BufferBindingType::Storage { read_only: true },
                                 has_dynamic_offset: false,
                                 min_binding_size: NonZeroU64::new(patch_upload_buffer_size),
+                                //min_binding_size: None,
                             },
                             count: None,
                         },
@@ -227,7 +230,7 @@ impl PatchManager {
                         resource: wgpu::BindingResource::Buffer {
                             buffer: &subdivide_context_buffer,
                             offset: 0,
-                            size: None,
+                            size: NonZeroU64::new(mem::size_of::<SubdivisionContext>() as u64),
                         },
                     },
                     wgpu::BindGroupEntry {
@@ -324,10 +327,10 @@ impl PatchManager {
         let subdivide_expand_pipeline =
             gpu.device()
                 .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                    label: Some("terrain-subdivide-expand-pipeline"),
+                    label: Some("terrain-geo-subdivide-expand-pipeline"),
                     layout: Some(&gpu.device().create_pipeline_layout(
                         &wgpu::PipelineLayoutDescriptor {
-                            label: Some("terrain-subdivide-expand-pipeline-layout"),
+                            label: Some("terrain-geo-subdivide-expand-pipeline-layout"),
                             push_constant_ranges: &[],
                             bind_group_layouts: &[&subdivide_expand_bind_group_layout],
                         },
@@ -344,7 +347,6 @@ impl PatchManager {
                 compute_vertices_in_patch: (GpuDetailLevel::vertices_per_subdivision(i)
                     - GpuDetailLevel::vertices_per_subdivision(i - 1))
                     as u32,
-                pad: [0u32; 1],
             };
             let expand_context_buffer = gpu.push_data(
                 "terrain-geo-expand-context-SUB",

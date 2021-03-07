@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
 use global_data::GlobalParametersBuffer;
-use gpu::{texture_format_sample_type, ResizeHint, GPU};
+use gpu::{ResizeHint, GPU};
 use log::trace;
 use parking_lot::RwLock;
 use shader_shared::Group;
@@ -45,6 +45,7 @@ impl UiRenderPass {
     ) -> Result<Arc<RwLock<Self>>> {
         trace!("UiRenderPass::new");
 
+        // Binding layout for composite to read our offscreen render.
         let deferred_bind_group_layout =
             gpu.device()
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -55,7 +56,7 @@ impl UiRenderPass {
                             visibility: wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 view_dimension: wgpu::TextureViewDimension::D2,
-                                sample_type: texture_format_sample_type(GPU::SCREEN_FORMAT),
+                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
                                 multisampled: false,
                             },
                             count: None,
