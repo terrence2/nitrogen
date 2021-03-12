@@ -15,6 +15,7 @@
 use crate::{DrawerFileId, DrawerInterface, FileMetadata};
 use anyhow::{bail, ensure, Result};
 use glob::{MatchOptions, Pattern};
+use log::debug;
 use smallvec::SmallVec;
 use std::{borrow::Cow, collections::HashMap, ops::Range};
 
@@ -163,6 +164,7 @@ impl Catalog {
         label: &str,
         drawer: Box<dyn DrawerInterface>,
     ) -> Result<()> {
+        debug!("add_labeled_drawer: {}, {}", label, drawer.name());
         if !self.shelf_index.contains_key(label) {
             let shelf_id = ShelfId(self.last_shelf);
             self.last_shelf += 1;
@@ -186,9 +188,11 @@ impl Catalog {
     }
 
     pub fn exists_labeled(&self, label: &str, name: &str) -> bool {
-        self.shelves[&self.shelf_index[label]]
+        let exists = self.shelves[&self.shelf_index[label]]
             .index
-            .contains_key(name)
+            .contains_key(name);
+        debug!("exists_labeled {}:{} => {}", label, name, exists);
+        exists
     }
 
     pub fn lookup_labeled(&self, label: &str, name: &str) -> Option<FileId> {
@@ -215,6 +219,11 @@ impl Catalog {
     }
 
     pub fn set_default_label(&mut self, context: &str) {
+        assert!(
+            self.shelf_index.contains_key(context),
+            "cannot set default label to unknown shelf: {}",
+            context
+        );
         self.default_label = context.to_owned()
     }
 
