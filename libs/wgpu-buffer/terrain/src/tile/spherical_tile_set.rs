@@ -95,10 +95,11 @@ impl TileState {
 }
 
 pub(crate) struct SphericalTileSet {
+    kind: DataSetDataKind,
+
     index_texture_format: wgpu::TextureFormat,
     index_texture_extent: wgpu::Extent3d,
     index_texture: wgpu::Texture,
-    #[allow(unused)]
     index_texture_view: wgpu::TextureView,
     #[allow(unused)]
     index_texture_sampler: wgpu::Sampler,
@@ -118,11 +119,6 @@ pub(crate) struct SphericalTileSet {
 
     bind_group: wgpu::BindGroup,
     displace_height_pipeline: wgpu::ComputePipeline,
-
-    #[allow(unused)]
-    kind: DataSetDataKind,
-    #[allow(unused)]
-    coordinates: DataSetCoordinates,
 
     // For each offset in the atlas, records the allocation state and the target tile, if allocated.
     atlas_tile_map: Vec<Option<QuadTreeId>>,
@@ -153,9 +149,6 @@ pub(crate) struct SphericalTileSet {
     // Tile transfer from the background read thread to the main thread.
     tile_sender: UnboundedSender<(QuadTreeId, Vec<u8>)>,
     tile_receiver: UnboundedReceiver<(QuadTreeId, Vec<u8>)>,
-
-    // Set to true to take a snapshot at the start of the next frame.
-    take_index_snapshot: bool,
 }
 
 impl fmt::Debug for SphericalTileSet {
@@ -170,9 +163,8 @@ impl SphericalTileSet {
         catalog: &Catalog,
         prefix: &str,
         kind: DataSetDataKind,
-        coordinates: DataSetCoordinates,
         gpu_detail: &GpuDetail,
-        gpu: &mut GPU,
+        gpu: &GPU,
     ) -> Result<Self> {
         let qt_start = Instant::now();
         let tile_tree = QuadTree::from_layers(prefix, catalog)?;
@@ -428,7 +420,6 @@ impl SphericalTileSet {
             displace_height_pipeline,
 
             kind,
-            coordinates,
 
             atlas_tile_map: vec![None; gpu_detail.tile_cache_size as usize],
             atlas_free_list: (0..gpu_detail.tile_cache_size as usize).collect(),
@@ -439,17 +430,11 @@ impl SphericalTileSet {
             tile_read_count: 0,
             tile_sender,
             tile_receiver,
-
-            take_index_snapshot: false,
         })
     }
 
     #[allow(clippy::transmute_ptr_to_ptr)]
-    fn capture_and_save_index_snapshot(
-        &mut self,
-        async_rt: &mut Runtime,
-        gpu: &mut GPU,
-    ) -> Result<()> {
+    fn capture_and_save_index_snapshot(&mut self, async_rt: &Runtime, gpu: &mut GPU) -> Result<()> {
         fn write_image(extent: wgpu::Extent3d, _: wgpu::TextureFormat, data: Vec<u8>) {
             let pix_cnt = extent.width as usize * extent.height as usize;
             let img_len = pix_cnt * 3;
@@ -521,7 +506,7 @@ impl TileSet for SphericalTileSet {
     }
 
     fn coordinates(&self) -> DataSetCoordinates {
-        self.coordinates
+        DataSetCoordinates::Spherical
     }
 
     fn begin_update(&mut self) {
@@ -556,15 +541,10 @@ impl TileSet for SphericalTileSet {
     fn finish_update(
         &mut self,
         catalog: Arc<RwLock<Catalog>>,
-        async_rt: &mut Runtime,
-        gpu: &mut GPU,
+        async_rt: &Runtime,
+        gpu: &GPU,
         tracker: &mut UploadTracker,
     ) {
-        if self.take_index_snapshot {
-            self.capture_and_save_index_snapshot(async_rt, gpu).unwrap();
-            self.take_index_snapshot = false;
-        }
-
         let mut additions = Vec::new();
         let mut removals = Vec::new();
         self.tile_tree.finish_update(&mut additions, &mut removals);
@@ -764,8 +744,8 @@ impl TileSet for SphericalTileSet {
         );
     }
 
-    fn snapshot_index(&mut self) {
-        self.take_index_snapshot = true;
+    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut GPU) {
+        self.capture_and_save_index_snapshot(async_rt, gpu).unwrap();
     }
 
     fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) -> Result<()> {
@@ -793,7 +773,6 @@ impl TileSet for SphericalTileSet {
         mesh_bind_group: &'a wgpu::BindGroup,
         mut cpass: wgpu::ComputePass<'a>,
     ) -> Result<wgpu::ComputePass<'a>> {
-        assert_eq!(self.coordinates, DataSetCoordinates::Spherical);
         if self.kind != DataSetDataKind::Height {
             return Ok(cpass);
         }

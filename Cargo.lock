@@ -2979,6 +2979,7 @@ dependencies = [
  "packed_struct",
  "parking_lot",
  "physical_constants",
+ "rayon",
  "shader_shared",
  "smallvec",
  "static_assertions",

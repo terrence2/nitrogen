@@ -54,19 +54,10 @@ use crate::{
 use anyhow::{anyhow, bail, Result};
 use catalog::{from_utf8_string, Catalog};
 use gpu::{UploadTracker, GPU};
+use rayon::prelude::*;
 use smallvec::{smallvec, SmallVec};
 use std::{fmt::Debug, mem, num::NonZeroU64, sync::Arc};
 use tokio::{runtime::Runtime, sync::RwLock};
-
-// A collection of TileSet, potentially more than one per kind.
-#[derive(Debug)]
-pub(crate) struct TileManager {
-    // TODO: we will probably need some way of finding the right ones efficiently.
-    tile_sets: Vec<Box<dyn TileSet>>,
-
-    tile_set_bind_group_layout_sint: wgpu::BindGroupLayout,
-    tile_set_bind_group_layout_float: wgpu::BindGroupLayout,
-}
 
 /// Layouts that are shared by all shaders implementing TileSetInterface.
 #[derive(Debug)]
@@ -88,13 +79,13 @@ pub trait TileSet: Debug + Send + Sync + 'static {
     fn finish_update(
         &mut self,
         catalog: Arc<RwLock<Catalog>>,
-        async_rt: &mut Runtime,
-        gpu: &mut GPU,
+        async_rt: &Runtime,
+        gpu: &GPU,
         tracker: &mut UploadTracker,
     );
 
     // Indicate that the current index should be written to the debug file.
-    fn snapshot_index(&mut self);
+    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut GPU);
 
     // Per-frame opportunity to update the index based on any visibility updates pushed above.
     fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) -> Result<()>;
@@ -119,15 +110,25 @@ pub trait TileSet: Debug + Send + Sync + 'static {
     fn bind_group(&self) -> &wgpu::BindGroup;
 }
 
+// A collection of TileSet, potentially more than one per kind.
+#[derive(Debug)]
+pub(crate) struct TileManager {
+    // TODO: we will probably need some way of finding the right ones efficiently.
+    tile_sets: Vec<Box<dyn TileSet>>,
+
+    tile_set_bind_group_layout_sint: wgpu::BindGroupLayout,
+    tile_set_bind_group_layout_float: wgpu::BindGroupLayout,
+
+    take_index_snapshot: bool,
+}
+
 impl TileManager {
     pub(crate) fn new(
         displace_height_bind_group_layout: &wgpu::BindGroupLayout,
         catalog: &Catalog,
         gpu_detail: &GpuDetail,
-        gpu: &mut GPU,
+        gpu: &GPU,
     ) -> Result<Self> {
-        let mut tile_sets = Vec::new();
-
         // This layout is common for all indexed data sets.
         // Note: this size must match the buffer size we allocate in all tile sets.
         let atlas_tile_info_buffer_size =
@@ -254,45 +255,50 @@ impl TileManager {
         };
 
         // Scan catalog for all tile sets.
-        for index_fid in catalog.find_labeled_matching("default", "*-index.json", Some("json"))? {
-            // Parse the index to figure out what sort of TileSet to create.
-            let index_data = from_utf8_string(catalog.read_sync(index_fid)?)?;
-            let index_json = json::parse(&index_data)?;
-            let prefix = index_json["prefix"]
-                .as_str()
-                .ok_or_else(|| anyhow!("no prefix listed in index"))?;
-            let kind = DataSetDataKind::from_name(
-                index_json["kind"]
+        let tile_sets = catalog
+            .find_labeled_matching("default", "*-index.json", Some("json"))?
+            .par_iter()
+            .map(|&index_fid| {
+                // Parse the index to figure out what sort of TileSet to create.
+                let index_data = from_utf8_string(catalog.read_sync(index_fid)?)?;
+                let index_json = json::parse(&index_data)?;
+                let prefix = index_json["prefix"]
                     .as_str()
-                    .ok_or_else(|| anyhow!("no kind listed in index"))?,
-            )?;
-            let coordinates = DataSetCoordinates::from_name(
-                index_json["coordinates"]
-                    .as_str()
-                    .ok_or_else(|| anyhow!("no coordinates listed in index"))?,
-            )?;
+                    .ok_or_else(|| anyhow!("no prefix listed in index"))?;
+                let kind = DataSetDataKind::from_name(
+                    index_json["kind"]
+                        .as_str()
+                        .ok_or_else(|| anyhow!("no kind listed in index"))?,
+                )?;
+                let coordinates = DataSetCoordinates::from_name(
+                    index_json["coordinates"]
+                        .as_str()
+                        .ok_or_else(|| anyhow!("no coordinates listed in index"))?,
+                )?;
 
-            let tile_set = match coordinates {
-                DataSetCoordinates::Spherical => SphericalTileSet::new(
-                    &bind_group_layouts,
-                    catalog,
-                    prefix,
-                    kind,
-                    coordinates,
-                    gpu_detail,
-                    gpu,
-                )?,
-                DataSetCoordinates::CartesianPolar => {
-                    bail!("unimplemented polar tiles")
-                }
-            };
-            tile_sets.push(Box::new(tile_set) as Box<dyn TileSet>);
-        }
+                let tile_set = match coordinates {
+                    DataSetCoordinates::Spherical => SphericalTileSet::new(
+                        &bind_group_layouts,
+                        catalog,
+                        prefix,
+                        kind,
+                        gpu_detail,
+                        gpu,
+                    )?,
+                    DataSetCoordinates::CartesianPolar => {
+                        bail!("unimplemented polar tiles")
+                    }
+                };
+                //tile_sets.push(Box::new(tile_set) as Box<dyn TileSet>);
+                Ok(Box::new(tile_set) as Box<dyn TileSet>)
+            })
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
             tile_set_bind_group_layout_sint,
             tile_set_bind_group_layout_float,
             tile_sets,
+            take_index_snapshot: false,
         })
     }
 
@@ -315,19 +321,24 @@ impl TileManager {
     pub fn finish_update(
         &mut self,
         catalog: Arc<RwLock<Catalog>>,
-        async_rt: &mut Runtime,
+        async_rt: &Runtime,
         gpu: &mut GPU,
         tracker: &mut UploadTracker,
     ) {
         for ts in self.tile_sets.iter_mut() {
             ts.finish_update(catalog.clone(), async_rt, gpu, tracker);
         }
+
+        if self.take_index_snapshot {
+            for ts in self.tile_sets.iter_mut() {
+                ts.snapshot_index(async_rt, gpu);
+            }
+            self.take_index_snapshot = false;
+        }
     }
 
     pub fn snapshot_index(&mut self) {
-        for ts in self.tile_sets.iter_mut() {
-            ts.snapshot_index();
-        }
+        self.take_index_snapshot = true;
     }
 
     pub fn paint_atlas_indices(
