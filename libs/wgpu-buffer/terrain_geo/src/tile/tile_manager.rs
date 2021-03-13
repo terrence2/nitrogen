@@ -45,24 +45,78 @@
 //       * Q: are there optimizations we can make knowing that it is a quadtree?
 
 use crate::{
-    tile::{tile_info::TileInfo, tile_set::TileSet, DataSetCoordinates, DataSetDataKind},
+    tile::{
+        spherical_tile_set::SphericalTileSet, tile_info::TileInfo, DataSetCoordinates,
+        DataSetDataKind,
+    },
     GpuDetail, VisiblePatch,
 };
-use anyhow::Result;
+use anyhow::{anyhow, bail, Result};
 use catalog::{from_utf8_string, Catalog};
 use gpu::{UploadTracker, GPU};
 use smallvec::{smallvec, SmallVec};
-use std::{mem, num::NonZeroU64, sync::Arc};
+use std::{fmt::Debug, mem, num::NonZeroU64, sync::Arc};
 use tokio::{runtime::Runtime, sync::RwLock};
 
 // A collection of TileSet, potentially more than one per kind.
 #[derive(Debug)]
 pub(crate) struct TileManager {
     // TODO: we will probably need some way of finding the right ones efficiently.
-    tile_sets: Vec<TileSet>,
+    tile_sets: Vec<Box<dyn TileSet>>,
 
     tile_set_bind_group_layout_sint: wgpu::BindGroupLayout,
     tile_set_bind_group_layout_float: wgpu::BindGroupLayout,
+}
+
+/// Layouts that are shared by all shaders implementing TileSetInterface.
+#[derive(Debug)]
+pub(crate) struct BindGroupLayouts<'a> {
+    pub displace_height: &'a wgpu::BindGroupLayout,
+    pub accumulate_tiled_sint: &'a wgpu::BindGroupLayout,
+    pub accumulate_tiled_float: &'a wgpu::BindGroupLayout,
+}
+
+pub trait TileSet: Debug + Send + Sync + 'static {
+    // Indicates what passes this tile set will be used for.
+    fn kind(&self) -> DataSetDataKind;
+    fn coordinates(&self) -> DataSetCoordinates;
+
+    // Maintain runtime visibility tracking based on VisiblePatch notifications derived
+    // from the global geometry calculations.
+    fn begin_update(&mut self);
+    fn note_required(&mut self, visible_patch: &VisiblePatch);
+    fn finish_update(
+        &mut self,
+        catalog: Arc<RwLock<Catalog>>,
+        async_rt: &mut Runtime,
+        gpu: &mut GPU,
+        tracker: &mut UploadTracker,
+    );
+
+    // Indicate that the current index should be written to the debug file.
+    fn snapshot_index(&mut self);
+
+    // Per-frame opportunity to update the index based on any visibility updates pushed above.
+    fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) -> Result<()>;
+
+    // The Terrain engine produces an optimal, gpu-tesselated mesh at the start of every frame
+    // based on the current view. This mesh is at the terrain surface. This callback gives each
+    // tile-set an opportunity to displace the terrain based on a shader and the height data we
+    // uploaded as part of finish_update and paint_atlas_index.
+    //
+    // The terrain may already have been updated by other passes. The implementor should be
+    // sure to coordinate to make sure that all passes sum together nicely.
+    fn displace_height<'a>(
+        &'a self,
+        vertex_count: u32,
+        mesh_bind_group: &'a wgpu::BindGroup,
+        cpass: wgpu::ComputePass<'a>,
+    ) -> Result<wgpu::ComputePass<'a>>;
+
+    // The bind group representing the GPU resources that will be bound before....?
+    // combining the index, atlas, and TileInfo buffer that describes
+    // the atlas content.
+    fn bind_group(&self) -> &wgpu::BindGroup;
 }
 
 impl TileManager {
@@ -75,6 +129,7 @@ impl TileManager {
         let mut tile_sets = Vec::new();
 
         // This layout is common for all indexed data sets.
+        // Note: this size must match the buffer size we allocate in all tile sets.
         let atlas_tile_info_buffer_size =
             (mem::size_of::<TileInfo>() as u32 * gpu_detail.tile_cache_size) as wgpu::BufferAddress;
         let tile_set_bind_group_layout_sint =
@@ -192,22 +247,46 @@ impl TileManager {
                     ],
                 });
 
+        let bind_group_layouts = BindGroupLayouts {
+            displace_height: displace_height_bind_group_layout,
+            accumulate_tiled_sint: &tile_set_bind_group_layout_sint,
+            accumulate_tiled_float: &tile_set_bind_group_layout_float,
+        };
+
         // Scan catalog for all tile sets.
         for index_fid in catalog.find_labeled_matching("default", "*-index.json", Some("json"))? {
+            // Parse the index to figure out what sort of TileSet to create.
             let index_data = from_utf8_string(catalog.read_sync(index_fid)?)?;
             let index_json = json::parse(&index_data)?;
-            tile_sets.push(TileSet::new(
-                atlas_tile_info_buffer_size,
-                [
-                    &tile_set_bind_group_layout_sint,
-                    &tile_set_bind_group_layout_float,
-                ],
-                displace_height_bind_group_layout,
-                catalog,
-                index_json,
-                gpu_detail,
-                gpu,
-            )?);
+            let prefix = index_json["prefix"]
+                .as_str()
+                .ok_or_else(|| anyhow!("no prefix listed in index"))?;
+            let kind = DataSetDataKind::from_name(
+                index_json["kind"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("no kind listed in index"))?,
+            )?;
+            let coordinates = DataSetCoordinates::from_name(
+                index_json["coordinates"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("no coordinates listed in index"))?,
+            )?;
+
+            let tile_set = match coordinates {
+                DataSetCoordinates::Spherical => SphericalTileSet::new(
+                    &bind_group_layouts,
+                    catalog,
+                    prefix,
+                    kind,
+                    coordinates,
+                    gpu_detail,
+                    gpu,
+                )?,
+                DataSetCoordinates::CartesianPolar => {
+                    bail!("unimplemented polar tiles")
+                }
+            };
+            tile_sets.push(Box::new(tile_set) as Box<dyn TileSet>);
         }
 
         Ok(Self {
@@ -215,6 +294,10 @@ impl TileManager {
             tile_set_bind_group_layout_float,
             tile_sets,
         })
+    }
+
+    pub fn add_tile_set(&mut self, tile_set: Box<dyn TileSet>) {
+        self.tile_sets.push(tile_set);
     }
 
     pub fn begin_update(&mut self) {
