@@ -16,7 +16,7 @@ use anyhow::Result;
 use memmap::MmapOptions;
 use std::{fs::File, mem, path::PathBuf};
 use structopt::StructOpt;
-use terrain_geo::tile::{ChildIndex, LayerPackHeader, LayerPackIndexItem};
+use terrain::tile::{ChildIndex, LayerPackHeader, LayerPackIndexItem};
 
 #[derive(Debug, StructOpt)]
 #[structopt(name = "dump-layer-pack", about = "Show the contents of layer packs.")]

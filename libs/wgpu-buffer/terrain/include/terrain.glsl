@@ -53,7 +53,7 @@ const float INDEX_ANGULAR_EXTENT_LON_DEG = INDEX_WIDTH_AS / 60.0 / 60.0;
 const float INDEX_ANGULAR_EXTENT_LAT_DEG = INDEX_HEIGHT_AS / 60.0 / 60.0;
 
 uint
-terrain_geo_atlas_slot_for_graticule(vec2 graticule_rad, utexture2D index_texture, sampler index_sampler) {
+terrain_atlas_slot_for_graticule(vec2 graticule_rad, utexture2D index_texture, sampler index_sampler) {
     // Our index is stored in degrees -- close enough with the pad in the tile data, even at full depth.
     vec2 graticule_deg = degrees(graticule_rad);
 
@@ -71,7 +71,7 @@ terrain_geo_atlas_slot_for_graticule(vec2 graticule_rad, utexture2D index_textur
 }
 
 ivec4
-terrain_geo_sample_in_tile(vec2 graticule_rad, TileInfo tile, itexture2DArray atlas_texture, sampler atlas_sampler) {
+terrain_sample_in_tile(vec2 graticule_rad, TileInfo tile, itexture2DArray atlas_texture, sampler atlas_sampler) {
     // Tile metadata is stored in arcseconds for maximum precision.
     vec2 graticule_deg = degrees(graticule_rad);
     vec2 graticule_as = graticule_deg * 60.0 * 60.0;
@@ -91,17 +91,17 @@ terrain_geo_sample_in_tile(vec2 graticule_rad, TileInfo tile, itexture2DArray at
 }
 
 int
-terrain_geo_height_in_tile(vec2 graticule_rad, TileInfo tile, itexture2DArray atlas_texture, sampler atlas_sampler) {
-    return terrain_geo_sample_in_tile(graticule_rad, tile, atlas_texture, atlas_sampler).r;
+terrain_height_in_tile(vec2 graticule_rad, TileInfo tile, itexture2DArray atlas_texture, sampler atlas_sampler) {
+    return terrain_sample_in_tile(graticule_rad, tile, atlas_texture, atlas_sampler).r;
 }
 
 ivec2
-terrain_geo_normal_in_tile(vec2 graticule_rad, TileInfo tile, itexture2DArray atlas_texture, sampler atlas_sampler) {
-    return terrain_geo_sample_in_tile(graticule_rad, tile, atlas_texture, atlas_sampler).xy;
+terrain_normal_in_tile(vec2 graticule_rad, TileInfo tile, itexture2DArray atlas_texture, sampler atlas_sampler) {
+    return terrain_sample_in_tile(graticule_rad, tile, atlas_texture, atlas_sampler).xy;
 }
 
 vec4
-terrain_geo_color_in_tile(vec2 graticule_rad, TileInfo tile, texture2DArray atlas_texture, sampler atlas_sampler) {
+terrain_color_in_tile(vec2 graticule_rad, TileInfo tile, texture2DArray atlas_texture, sampler atlas_sampler) {
     // Tile metadata is stored in arcseconds for maximum precision.
     vec2 graticule_deg = degrees(graticule_rad);
     vec2 graticule_as = graticule_deg * 60.0 * 60.0;

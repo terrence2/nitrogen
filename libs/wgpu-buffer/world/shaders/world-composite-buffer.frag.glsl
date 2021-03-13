@@ -16,7 +16,7 @@
 #include <wgpu-buffer/shader_shared/include/consts.glsl>
 #include <wgpu-buffer/shader_shared/include/quaternion.glsl>
 #include <wgpu-buffer/global_data/include/global_data.glsl>
-#include <wgpu-buffer/terrain_geo/include/layout_composite.glsl>
+#include <wgpu-buffer/terrain/include/layout_composite.glsl>
 #include <wgpu-buffer/atmosphere/include/global.glsl>
 #include <wgpu-buffer/atmosphere/include/descriptorset.glsl>
 #include <wgpu-buffer/atmosphere/include/library.glsl>

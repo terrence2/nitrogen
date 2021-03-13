@@ -36,7 +36,7 @@ use std::{
     time::Instant,
 };
 use structopt::StructOpt;
-use terrain_geo::tile::{
+use terrain::tile::{
     ChildIndex, DataSetCoordinates, DataSetDataKind, LayerPackBuilder, TerrainLevel,
     TileCompression, TILE_PHYSICAL_SIZE, TILE_SAMPLES,
 };

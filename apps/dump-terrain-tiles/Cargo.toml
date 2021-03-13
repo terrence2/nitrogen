@@ -18,5 +18,5 @@ structopt = "^ 0.3"
 zerocopy = "= 0.3.0"
 absolute_unit = { path = "../../libs/sim/absolute_unit" }
 geodesy = { path = "../../libs/sim/geodesy" }
-terrain_geo = { path = "../../libs/wgpu-buffer/terrain_geo" }
+terrain = { path = "../../libs/wgpu-buffer/terrain" }
 compression = { version = "^ 0.1", features = ["lzhuf"]  }

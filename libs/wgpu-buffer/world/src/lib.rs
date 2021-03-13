@@ -24,7 +24,7 @@ use parking_lot::RwLock;
 use shader_shared::Group;
 use stars::StarsBuffer;
 use std::sync::Arc;
-use terrain_geo::{TerrainGeoBuffer, TerrainVertex};
+use terrain::{TerrainBuffer, TerrainVertex};
 
 #[derive(Debug)]
 enum DebugMode {
@@ -72,7 +72,7 @@ impl WorldRenderPass {
         globals_buffer: &GlobalParametersBuffer,
         atmosphere_buffer: &AtmosphereBuffer,
         stars_buffer: &StarsBuffer,
-        terrain_geo_buffer: &TerrainGeoBuffer,
+        terrain_buffer: &TerrainBuffer,
     ) -> Result<Arc<RwLock<Self>>> {
         trace!("WorldRenderPass::new");
 
@@ -141,7 +141,7 @@ impl WorldRenderPass {
                         globals_buffer.bind_group_layout(),
                         atmosphere_buffer.bind_group_layout(),
                         stars_buffer.bind_group_layout(),
-                        terrain_geo_buffer.composite_bind_group_layout(),
+                        terrain_buffer.composite_bind_group_layout(),
                     ],
                 });
 
@@ -502,7 +502,7 @@ impl WorldRenderPass {
         fullscreen_buffer: &'a FullscreenBuffer,
         atmosphere_buffer: &'a AtmosphereBuffer,
         stars_buffer: &'a StarsBuffer,
-        terrain_geo_buffer: &'a TerrainGeoBuffer,
+        terrain_buffer: &'a TerrainBuffer,
     ) -> Result<wgpu::RenderPass<'a>> {
         match self.debug_mode {
             DebugMode::None => rpass.set_pipeline(&self.composite_pipeline),
@@ -520,7 +520,7 @@ impl WorldRenderPass {
         );
         rpass.set_bind_group(
             Group::TerrainComposite.index(),
-            terrain_geo_buffer.composite_bind_group(),
+            terrain_buffer.composite_bind_group(),
             &[],
         );
         rpass.set_bind_group(Group::Stars.index(), &stars_buffer.bind_group(), &[]);
@@ -530,16 +530,16 @@ impl WorldRenderPass {
         if self.show_wireframe {
             rpass.set_pipeline(&self.wireframe_pipeline);
             rpass.set_bind_group(Group::Globals.index(), &globals_buffer.bind_group(), &[]);
-            rpass.set_vertex_buffer(0, terrain_geo_buffer.vertex_buffer());
-            for i in 0..terrain_geo_buffer.num_patches() {
-                let winding = terrain_geo_buffer.patch_winding(i);
-                let base_vertex = terrain_geo_buffer.patch_vertex_buffer_offset(i);
+            rpass.set_vertex_buffer(0, terrain_buffer.vertex_buffer());
+            for i in 0..terrain_buffer.num_patches() {
+                let winding = terrain_buffer.patch_winding(i);
+                let base_vertex = terrain_buffer.patch_vertex_buffer_offset(i);
                 rpass.set_index_buffer(
-                    terrain_geo_buffer.wireframe_index_buffer(winding),
+                    terrain_buffer.wireframe_index_buffer(winding),
                     wgpu::IndexFormat::Uint32,
                 );
                 rpass.draw_indexed(
-                    terrain_geo_buffer.wireframe_index_range(winding),
+                    terrain_buffer.wireframe_index_range(winding),
                     base_vertex,
                     0..1,
                 );

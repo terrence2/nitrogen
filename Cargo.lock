@@ -818,7 +818,7 @@ dependencies = [
  "anyhow",
  "memmap",
  "structopt",
- "terrain_geo",
+ "terrain",
  "zerocopy",
 ]
 
@@ -847,7 +847,7 @@ dependencies = [
  "parking_lot",
  "rayon",
  "structopt",
- "terrain_geo",
+ "terrain",
  "zerocopy",
 ]
 
@@ -2011,7 +2011,7 @@ dependencies = [
  "paste",
  "stars",
  "structopt",
- "terrain_geo",
+ "terrain",
  "tokio",
  "ui",
  "universe",
@@ -2949,7 +2949,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "terrain_geo"
+name = "terrain"
 version = "0.1.0"
 dependencies = [
  "absolute_unit",
@@ -3602,7 +3602,7 @@ dependencies = [
  "parking_lot",
  "shader_shared",
  "stars",
- "terrain_geo",
+ "terrain",
  "wgpu",
 ]
 

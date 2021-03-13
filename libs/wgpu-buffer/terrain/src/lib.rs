@@ -144,7 +144,7 @@ pub struct VisiblePatch {
 }
 
 #[derive(Debug, NitrousModule)]
-pub struct TerrainGeoBuffer {
+pub struct TerrainBuffer {
     patch_manager: PatchManager,
     tile_manager: TileManager,
 
@@ -170,7 +170,7 @@ pub struct TerrainGeoBuffer {
 }
 
 #[inject_nitrous_module]
-impl TerrainGeoBuffer {
+impl TerrainBuffer {
     const DEFERRED_TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
     const DEFERRED_TEXTURE_DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
     const NORMAL_ACCUMULATION_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Sint;
@@ -925,7 +925,7 @@ impl TerrainGeoBuffer {
     // }
 }
 
-impl ResizeHint for TerrainGeoBuffer {
+impl ResizeHint for TerrainBuffer {
     fn note_resize(&mut self, gpu: &GPU) -> Result<()> {
         self.acc_extent = gpu.attachment_extent();
         self.deferred_texture = Self::_make_deferred_texture_targets(gpu);

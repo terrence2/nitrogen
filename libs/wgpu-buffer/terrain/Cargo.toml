@@ -1,5 +1,5 @@
 [package]
-name = "terrain_geo"
+name = "terrain"
 description = "Mesh for sampling terrain properties."
 version = "0.1.0"
 authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]

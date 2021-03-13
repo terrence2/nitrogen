@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 #version 450
 #include <wgpu-buffer/shader_shared/include/buffer_helpers.glsl>
-#include <wgpu-buffer/terrain_geo/include/terrain_geo.glsl>
+#include <wgpu-buffer/terrain/include/terrain.glsl>
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
@@ -32,8 +32,8 @@ main()
     uint i = gl_GlobalInvocationID.x;
 
     vec2 v_graticule = arr_to_vec2(vertices[i].graticule);
-    uint atlas_slot = terrain_geo_atlas_slot_for_graticule(v_graticule, index_texture, index_sampler);
-    int height = terrain_geo_height_in_tile(v_graticule, tile_info[atlas_slot], atlas_texture, atlas_sampler);
+    uint atlas_slot = terrain_atlas_slot_for_graticule(v_graticule, index_texture, index_sampler);
+    int height = terrain_height_in_tile(v_graticule, tile_info[atlas_slot], atlas_texture, atlas_sampler);
 
     vec3 v_normal = arr_to_vec3(vertices[i].normal);
     vec3 v_position = arr_to_vec3(vertices[i].position);

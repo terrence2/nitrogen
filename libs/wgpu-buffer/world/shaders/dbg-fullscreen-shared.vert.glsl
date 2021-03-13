@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 #version 450
 #include <wgpu-buffer/global_data/include/global_data.glsl>
-#include <wgpu-buffer/terrain_geo/include/terrain_geo.glsl>
+#include <wgpu-buffer/terrain/include/terrain.glsl>
 
 layout(location = 0) in vec2 position;
 layout(location = 0) out vec2 v_tc;

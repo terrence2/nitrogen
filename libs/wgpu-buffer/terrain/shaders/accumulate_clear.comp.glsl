@@ -14,8 +14,8 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 #version 450
 #include <wgpu-buffer/global_data/include/global_data.glsl>
-#include <wgpu-buffer/terrain_geo/include/terrain_geo.glsl>
-#include <wgpu-buffer/terrain_geo/include/layout_accumulate.glsl>
+#include <wgpu-buffer/terrain/include/terrain.glsl>
+#include <wgpu-buffer/terrain/include/layout_accumulate.glsl>
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
