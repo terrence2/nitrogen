@@ -29,12 +29,12 @@ use bzip2::read::BzDecoder;
 use catalog::Catalog;
 use futures::task::noop_waker;
 use geometry::AABB2;
+use gpu::wgpu::{BindGroup, CommandEncoder, ComputePass};
 use gpu::{texture_format_size, UploadTracker, GPU};
 use image::{ImageBuffer, Rgb};
 use log::trace;
 use std::{
     collections::{BTreeMap, BinaryHeap},
-    fmt,
     io::Read,
     mem,
     num::NonZeroU32,
@@ -94,7 +94,260 @@ impl TileState {
     }
 }
 
-pub(crate) struct SphericalTileSet {
+#[derive(Debug)]
+pub(crate) struct SphericalHeightTileSet {
+    common: SphericalTileSetCommon,
+    displace_height_pipeline: wgpu::ComputePipeline,
+}
+
+impl SphericalHeightTileSet {
+    pub(crate) fn new(
+        bind_group_layouts: &BindGroupLayouts,
+        catalog: &Catalog,
+        prefix: &str,
+        gpu_detail: &GpuDetail,
+        gpu: &GPU,
+    ) -> Result<Self> {
+        let displace_height_pipeline =
+            gpu.device()
+                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some("terrain-displace-height-pipeline"),
+                    layout: Some(&gpu.device().create_pipeline_layout(
+                        &wgpu::PipelineLayoutDescriptor {
+                            label: Some("terrain-displace-height-pipeline-layout"),
+                            push_constant_ranges: &[],
+                            bind_group_layouts: &[
+                                bind_group_layouts.displace_height,
+                                bind_group_layouts.accumulate_tiled_sint,
+                            ],
+                        },
+                    )),
+                    module: &gpu.create_shader_module(
+                        "displace_spherical_height.comp",
+                        include_bytes!("../../target/displace_spherical_height.comp.spirv"),
+                    )?,
+                    entry_point: "main",
+                });
+
+        Ok(Self {
+            common: SphericalTileSetCommon::new(
+                bind_group_layouts,
+                catalog,
+                prefix,
+                DataSetDataKind::Height,
+                gpu_detail,
+                gpu,
+            )?,
+            displace_height_pipeline,
+        })
+    }
+}
+
+impl TileSet for SphericalHeightTileSet {
+    fn kind(&self) -> DataSetDataKind {
+        DataSetDataKind::Height
+    }
+
+    fn coordinates(&self) -> DataSetCoordinates {
+        DataSetCoordinates::Spherical
+    }
+
+    fn begin_update(&mut self) {
+        self.common.begin_update()
+    }
+
+    fn note_required(&mut self, visible_patch: &VisiblePatch) {
+        self.common.note_required(visible_patch)
+    }
+
+    fn finish_update(
+        &mut self,
+        catalog: Arc<RwLock<Catalog>>,
+        async_rt: &Runtime,
+        gpu: &GPU,
+        tracker: &mut UploadTracker,
+    ) {
+        self.common.finish_update(catalog, async_rt, gpu, tracker)
+    }
+
+    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut GPU) {
+        self.common.snapshot_index(async_rt, gpu)
+    }
+
+    fn paint_atlas_index(&self, encoder: &mut CommandEncoder) {
+        self.common.paint_atlas_index(encoder)
+    }
+
+    fn displace_height<'a>(
+        &'a self,
+        vertex_count: u32,
+        mesh_bind_group: &'a BindGroup,
+        mut cpass: ComputePass<'a>,
+    ) -> Result<ComputePass<'a>> {
+        cpass.set_pipeline(&self.displace_height_pipeline);
+        cpass.set_bind_group(0, mesh_bind_group, &[]);
+        cpass.set_bind_group(1, &self.common.bind_group, &[]);
+        cpass.dispatch(vertex_count, 1, 1);
+        Ok(cpass)
+    }
+
+    fn bind_group(&self) -> &BindGroup {
+        self.common.bind_group()
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct SphericalColorTileSet {
+    common: SphericalTileSetCommon,
+}
+
+impl SphericalColorTileSet {
+    pub(crate) fn new(
+        bind_group_layouts: &BindGroupLayouts,
+        catalog: &Catalog,
+        prefix: &str,
+        gpu_detail: &GpuDetail,
+        gpu: &GPU,
+    ) -> Result<Self> {
+        Ok(Self {
+            common: SphericalTileSetCommon::new(
+                bind_group_layouts,
+                catalog,
+                prefix,
+                DataSetDataKind::Color,
+                gpu_detail,
+                gpu,
+            )?,
+        })
+    }
+}
+
+impl TileSet for SphericalColorTileSet {
+    fn kind(&self) -> DataSetDataKind {
+        DataSetDataKind::Color
+    }
+
+    fn coordinates(&self) -> DataSetCoordinates {
+        DataSetCoordinates::Spherical
+    }
+
+    fn begin_update(&mut self) {
+        self.common.begin_update()
+    }
+
+    fn note_required(&mut self, visible_patch: &VisiblePatch) {
+        self.common.note_required(visible_patch)
+    }
+
+    fn finish_update(
+        &mut self,
+        catalog: Arc<RwLock<Catalog>>,
+        async_rt: &Runtime,
+        gpu: &GPU,
+        tracker: &mut UploadTracker,
+    ) {
+        self.common.finish_update(catalog, async_rt, gpu, tracker)
+    }
+
+    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut GPU) {
+        self.common.snapshot_index(async_rt, gpu)
+    }
+
+    fn paint_atlas_index(&self, encoder: &mut CommandEncoder) {
+        self.common.paint_atlas_index(encoder)
+    }
+
+    fn displace_height<'a>(
+        &'a self,
+        _vertex_count: u32,
+        _mesh_bind_group: &'a BindGroup,
+        cpass: ComputePass<'a>,
+    ) -> Result<ComputePass<'a>> {
+        Ok(cpass)
+    }
+
+    fn bind_group(&self) -> &BindGroup {
+        self.common.bind_group()
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct SphericalNormalsTileSet {
+    common: SphericalTileSetCommon,
+}
+
+impl SphericalNormalsTileSet {
+    pub(crate) fn new(
+        bind_group_layouts: &BindGroupLayouts,
+        catalog: &Catalog,
+        prefix: &str,
+        gpu_detail: &GpuDetail,
+        gpu: &GPU,
+    ) -> Result<Self> {
+        Ok(Self {
+            common: SphericalTileSetCommon::new(
+                bind_group_layouts,
+                catalog,
+                prefix,
+                DataSetDataKind::Normal,
+                gpu_detail,
+                gpu,
+            )?,
+        })
+    }
+}
+
+impl TileSet for SphericalNormalsTileSet {
+    fn kind(&self) -> DataSetDataKind {
+        DataSetDataKind::Normal
+    }
+
+    fn coordinates(&self) -> DataSetCoordinates {
+        DataSetCoordinates::Spherical
+    }
+
+    fn begin_update(&mut self) {
+        self.common.begin_update()
+    }
+
+    fn note_required(&mut self, visible_patch: &VisiblePatch) {
+        self.common.note_required(visible_patch)
+    }
+
+    fn finish_update(
+        &mut self,
+        catalog: Arc<RwLock<Catalog>>,
+        async_rt: &Runtime,
+        gpu: &GPU,
+        tracker: &mut UploadTracker,
+    ) {
+        self.common.finish_update(catalog, async_rt, gpu, tracker)
+    }
+
+    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut GPU) {
+        self.common.snapshot_index(async_rt, gpu)
+    }
+
+    fn paint_atlas_index(&self, encoder: &mut CommandEncoder) {
+        self.common.paint_atlas_index(encoder)
+    }
+
+    fn displace_height<'a>(
+        &'a self,
+        _vertex_count: u32,
+        _mesh_bind_group: &'a BindGroup,
+        cpass: ComputePass<'a>,
+    ) -> Result<ComputePass<'a>> {
+        Ok(cpass)
+    }
+
+    fn bind_group(&self) -> &BindGroup {
+        self.common.bind_group()
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct SphericalTileSetCommon {
     kind: DataSetDataKind,
 
     index_texture_format: wgpu::TextureFormat,
@@ -118,7 +371,6 @@ pub(crate) struct SphericalTileSet {
     atlas_tile_info: Arc<Box<wgpu::Buffer>>,
 
     bind_group: wgpu::BindGroup,
-    displace_height_pipeline: wgpu::ComputePipeline,
 
     // For each offset in the atlas, records the allocation state and the target tile, if allocated.
     atlas_tile_map: Vec<Option<QuadTreeId>>,
@@ -151,13 +403,7 @@ pub(crate) struct SphericalTileSet {
     tile_receiver: UnboundedReceiver<(QuadTreeId, Vec<u8>)>,
 }
 
-impl fmt::Debug for SphericalTileSet {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TileSet")
-    }
-}
-
-impl SphericalTileSet {
+impl SphericalTileSetCommon {
     pub(crate) fn new(
         bind_group_layouts: &BindGroupLayouts,
         catalog: &Catalog,
@@ -336,27 +582,6 @@ impl SphericalTileSet {
             },
         )));
 
-        let displace_height_pipeline =
-            gpu.device()
-                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                    label: Some("terrain-displace-height-pipeline"),
-                    layout: Some(&gpu.device().create_pipeline_layout(
-                        &wgpu::PipelineLayoutDescriptor {
-                            label: Some("terrain-displace-height-pipeline-layout"),
-                            push_constant_ranges: &[],
-                            bind_group_layouts: &[
-                                bind_group_layouts.displace_height,
-                                bind_group_layouts.accumulate_tiled_sint,
-                            ],
-                        },
-                    )),
-                    module: &gpu.create_shader_module(
-                        "displace_spherical_height.comp",
-                        include_bytes!("../../target/displace_spherical_height.comp.spirv"),
-                    )?,
-                    entry_point: "main",
-                });
-
         let layout = if kind == DataSetDataKind::Color {
             bind_group_layouts.accumulate_tiled_float
         } else {
@@ -417,7 +642,6 @@ impl SphericalTileSet {
             atlas_tile_info,
 
             bind_group,
-            displace_height_pipeline,
 
             kind,
 
@@ -497,16 +721,6 @@ impl SphericalTileSet {
         };
         self.atlas_tile_map[atlas_slot] = None;
         self.atlas_free_list.push(atlas_slot);
-    }
-}
-
-impl TileSet for SphericalTileSet {
-    fn kind(&self) -> DataSetDataKind {
-        self.kind
-    }
-
-    fn coordinates(&self) -> DataSetCoordinates {
-        DataSetCoordinates::Spherical
     }
 
     fn begin_update(&mut self) {
@@ -748,7 +962,7 @@ impl TileSet for SphericalTileSet {
         self.capture_and_save_index_snapshot(async_rt, gpu).unwrap();
     }
 
-    fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) -> Result<()> {
+    fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) {
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("paint-atlas-index-render-pass"),
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
@@ -764,23 +978,6 @@ impl TileSet for SphericalTileSet {
         rpass.set_pipeline(&self.index_paint_pipeline);
         rpass.set_vertex_buffer(0, self.index_paint_vert_buffer.slice(..));
         rpass.draw(self.index_paint_range.clone(), 0..1);
-        Ok(())
-    }
-
-    fn displace_height<'a>(
-        &'a self,
-        vertex_count: u32,
-        mesh_bind_group: &'a wgpu::BindGroup,
-        mut cpass: wgpu::ComputePass<'a>,
-    ) -> Result<wgpu::ComputePass<'a>> {
-        if self.kind != DataSetDataKind::Height {
-            return Ok(cpass);
-        }
-        cpass.set_pipeline(&self.displace_height_pipeline);
-        cpass.set_bind_group(0, mesh_bind_group, &[]);
-        cpass.set_bind_group(1, &self.bind_group, &[]);
-        cpass.dispatch(vertex_count, 1, 1);
-        Ok(cpass)
     }
 
     fn bind_group(&self) -> &wgpu::BindGroup {

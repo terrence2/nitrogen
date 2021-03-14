@@ -46,8 +46,11 @@
 
 use crate::{
     tile::{
-        spherical_tile_set::SphericalTileSet, tile_info::TileInfo, DataSetCoordinates,
-        DataSetDataKind,
+        spherical_tile_set::{
+            SphericalColorTileSet, SphericalHeightTileSet, SphericalNormalsTileSet,
+        },
+        tile_info::TileInfo,
+        DataSetCoordinates, DataSetDataKind,
     },
     GpuDetail, VisiblePatch,
 };
@@ -88,7 +91,7 @@ pub trait TileSet: Debug + Send + Sync + 'static {
     fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut GPU);
 
     // Per-frame opportunity to update the index based on any visibility updates pushed above.
-    fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) -> Result<()>;
+    fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder);
 
     // The Terrain engine produces an optimal, gpu-tesselated mesh at the start of every frame
     // based on the current view. This mesh is at the terrain surface. This callback gives each
@@ -276,21 +279,34 @@ impl TileManager {
                         .ok_or_else(|| anyhow!("no coordinates listed in index"))?,
                 )?;
 
-                let tile_set = match coordinates {
-                    DataSetCoordinates::Spherical => SphericalTileSet::new(
-                        &bind_group_layouts,
-                        catalog,
-                        prefix,
-                        kind,
-                        gpu_detail,
-                        gpu,
-                    )?,
+                Ok(match coordinates {
+                    DataSetCoordinates::Spherical => match kind {
+                        DataSetDataKind::Height => Box::new(SphericalHeightTileSet::new(
+                            &bind_group_layouts,
+                            catalog,
+                            prefix,
+                            gpu_detail,
+                            gpu,
+                        )?) as Box<dyn TileSet>,
+                        DataSetDataKind::Color => Box::new(SphericalColorTileSet::new(
+                            &bind_group_layouts,
+                            catalog,
+                            prefix,
+                            gpu_detail,
+                            gpu,
+                        )?) as Box<dyn TileSet>,
+                        DataSetDataKind::Normal => Box::new(SphericalNormalsTileSet::new(
+                            &bind_group_layouts,
+                            catalog,
+                            prefix,
+                            gpu_detail,
+                            gpu,
+                        )?) as Box<dyn TileSet>,
+                    },
                     DataSetCoordinates::CartesianPolar => {
                         bail!("unimplemented polar tiles")
                     }
-                };
-                //tile_sets.push(Box::new(tile_set) as Box<dyn TileSet>);
-                Ok(Box::new(tile_set) as Box<dyn TileSet>)
+                })
             })
             .collect::<Result<Vec<_>>>()?;
 
@@ -346,7 +362,7 @@ impl TileManager {
         mut encoder: wgpu::CommandEncoder,
     ) -> Result<wgpu::CommandEncoder> {
         for ts in self.tile_sets.iter() {
-            ts.paint_atlas_index(&mut encoder)?
+            ts.paint_atlas_index(&mut encoder);
         }
         Ok(encoder)
     }
