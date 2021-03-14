@@ -22,7 +22,7 @@ use absolute_unit::{Angle, ArcSeconds};
 use geodesy::{GeoCenter, GeoSurface, Graticule};
 use image::Rgb;
 use std::ops::RangeInclusive;
-use terrain_geo::tile::TerrainLevel;
+use terrain::tile::TerrainLevel;
 
 #[derive(Copy, Clone, Debug)]
 pub struct Region {

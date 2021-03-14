@@ -26,7 +26,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use terrain_geo::tile::{ChildIndex, DataSetDataKind, TerrainLevel, TILE_PHYSICAL_SIZE};
+use terrain::tile::{ChildIndex, DataSetDataKind, TerrainLevel, TILE_PHYSICAL_SIZE};
 use zerocopy::{AsBytes, LayoutVerified};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]

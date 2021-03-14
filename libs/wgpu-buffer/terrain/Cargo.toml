@@ -1,5 +1,5 @@
 [package]
-name = "terrain_geo"
+name = "terrain"
 description = "Mesh for sampling terrain properties."
 version = "0.1.0"
 authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
@@ -20,6 +20,7 @@ log = "^ 0.4"
 memoffset = "^ 0.6"
 nalgebra = "^ 0.24"
 parking_lot = "^ 0.11"
+rayon = "= 1.4.0"
 smallvec = "^ 1.4"
 static_assertions = "^ 1"
 tokio = { version = "^ 1.0", features = ["rt-multi-thread", "macros", "io-util", "fs", "sync"] }

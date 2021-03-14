@@ -17,8 +17,11 @@ mod tables;
 
 pub mod tile;
 
-pub use crate::patch::{PatchWinding, TerrainVertex};
 use crate::{patch::PatchManager, tile::TileManager};
+pub use crate::{
+    patch::{PatchWinding, TerrainVertex},
+    tile::TileSet,
+};
 
 use absolute_unit::{Length, Meters};
 use anyhow::Result;
@@ -133,7 +136,7 @@ impl GpuDetailLevel {
 }
 
 #[derive(Debug)]
-pub(crate) struct VisiblePatch {
+pub struct VisiblePatch {
     g0: Graticule<GeoCenter>,
     g1: Graticule<GeoCenter>,
     g2: Graticule<GeoCenter>,
@@ -141,7 +144,7 @@ pub(crate) struct VisiblePatch {
 }
 
 #[derive(Debug, NitrousModule)]
-pub struct TerrainGeoBuffer {
+pub struct TerrainBuffer {
     patch_manager: PatchManager,
     tile_manager: TileManager,
 
@@ -167,7 +170,7 @@ pub struct TerrainGeoBuffer {
 }
 
 #[inject_nitrous_module]
-impl TerrainGeoBuffer {
+impl TerrainBuffer {
     const DEFERRED_TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
     const DEFERRED_TEXTURE_DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
     const NORMAL_ACCUMULATION_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Sint;
@@ -801,6 +804,9 @@ impl TerrainGeoBuffer {
         )
     }
 
+    /// Draw the tessellated and height-displaced patch geometry to an offscreen buffer colored
+    /// with the texture coordinates. This is the only geometry pass. All other terrain passes
+    /// work in the screen space that we create here.
     pub fn deferred_texture<'a>(
         &'a self,
         mut rpass: wgpu::RenderPass<'a>,
@@ -825,6 +831,9 @@ impl TerrainGeoBuffer {
         Ok(rpass)
     }
 
+    /// Use the offscreen texcoord buffer to build offscreen color and normals buffers.
+    /// These offscreen buffers will get fed into the `world` renderer with the atmosphere,
+    /// clouds, shadowmap, etc, to composite a final "world" image.
     pub fn accumulate_normal_and_color<'a>(
         &'a self,
         mut cpass: wgpu::ComputePass<'a>,
@@ -864,6 +873,10 @@ impl TerrainGeoBuffer {
         }
 
         Ok(cpass)
+    }
+
+    pub fn add_tile_set(&mut self, tile_set: Box<dyn TileSet>) {
+        self.tile_manager.add_tile_set(tile_set);
     }
 
     #[method]
@@ -912,7 +925,7 @@ impl TerrainGeoBuffer {
     // }
 }
 
-impl ResizeHint for TerrainGeoBuffer {
+impl ResizeHint for TerrainBuffer {
     fn note_resize(&mut self, gpu: &GPU) -> Result<()> {
         self.acc_extent = gpu.attachment_extent();
         self.deferred_texture = Self::_make_deferred_texture_targets(gpu);

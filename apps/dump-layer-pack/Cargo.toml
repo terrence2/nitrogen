@@ -9,4 +9,4 @@ anyhow = "^ 1"
 memmap = "^ 0.7"
 structopt = "^ 0.3"
 zerocopy = "= 0.3.0"
-terrain_geo = { path = "../../libs/wgpu-buffer/terrain_geo" }
+terrain = { path = "../../libs/wgpu-buffer/terrain" }

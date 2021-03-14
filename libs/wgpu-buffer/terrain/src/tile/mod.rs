@@ -15,13 +15,14 @@
 mod index_paint_vertex;
 mod layer_pack;
 mod quad_tree;
+mod spherical_tile_set;
 mod tile_info;
 mod tile_manager;
-mod tile_set;
 
 pub(crate) use layer_pack::LayerPack;
 pub use layer_pack::{LayerPackBuilder, LayerPackHeader, LayerPackIndexItem};
 pub(crate) use tile_manager::TileManager;
+pub use tile_manager::TileSet;
 
 use absolute_unit::{arcseconds, meters, Angle, ArcSeconds};
 use anyhow::{bail, Result};
@@ -113,6 +114,14 @@ impl DataSetDataKind {
             Self::Color => wgpu::TextureFormat::Rgba8Unorm,
             Self::Normal => wgpu::TextureFormat::Rg16Sint,
             Self::Height => wgpu::TextureFormat::R16Sint,
+        }
+    }
+
+    pub fn layout_index(&self) -> usize {
+        match self {
+            Self::Normal => 0,
+            Self::Color => 1,
+            Self::Height => 2,
         }
     }
 }

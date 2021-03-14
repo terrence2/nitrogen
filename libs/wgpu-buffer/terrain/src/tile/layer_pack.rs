@@ -58,6 +58,7 @@ packed_struct!(LayerPackIndexItem {
 const HEADER_MAGIC: [u8; 3] = [b'L', b'P', b'K'];
 const HEADER_VERSION: u8 = 1;
 
+#[derive(Debug)]
 pub struct LayerPack {
     // Map from base lat/lon in arcseconds, to start and end offsets in the file.
     layer_pack_fid: FileId,

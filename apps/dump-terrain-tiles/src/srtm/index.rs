@@ -31,7 +31,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use terrain_geo::tile::TerrainLevel;
+use terrain::tile::TerrainLevel;
 
 pub struct Index {
     tiles: Vec<Tile>,

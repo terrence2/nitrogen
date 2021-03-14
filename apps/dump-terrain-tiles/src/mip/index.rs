@@ -23,7 +23,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-use terrain_geo::tile::{ChildIndex, DataSetCoordinates, DataSetDataKind, TerrainLevel};
+use terrain::tile::{ChildIndex, DataSetCoordinates, DataSetDataKind, TerrainLevel};
 
 // Files in Catalogs are flat, so each dataset gets its own unique prefix. All datasets can
 // be found by looking for *metadata.json. Each level is laid out flat in the dataset, so the

@@ -413,7 +413,7 @@ impl GPU {
         texture: &wgpu::Texture,
         extent: wgpu::Extent3d,
         format: wgpu::TextureFormat,
-        async_rt: &mut Runtime,
+        async_rt: &Runtime,
         gpu: &mut GPU,
         callback: Box<
             dyn FnOnce(wgpu::Extent3d, wgpu::TextureFormat, Vec<u8>) + Send + Sync + 'static,

@@ -18,23 +18,25 @@ use crate::{
         index_paint_vertex::IndexPaintVertex,
         quad_tree::{QuadTree, QuadTreeId},
         tile_info::TileInfo,
+        tile_manager::{BindGroupLayouts, TileSet},
         DataSetCoordinates, DataSetDataKind, TerrainLevel, TileCompression,
     },
     GpuDetail, VisiblePatch,
 };
 use absolute_unit::arcseconds;
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use bzip2::read::BzDecoder;
 use catalog::Catalog;
 use futures::task::noop_waker;
 use geometry::AABB2;
+use gpu::wgpu::{BindGroup, CommandEncoder, ComputePass};
 use gpu::{texture_format_size, UploadTracker, GPU};
 use image::{ImageBuffer, Rgb};
 use log::trace;
 use std::{
     collections::{BTreeMap, BinaryHeap},
-    fmt,
     io::Read,
+    mem,
     num::NonZeroU32,
     ops::Range,
     sync::Arc,
@@ -92,11 +94,265 @@ impl TileState {
     }
 }
 
-pub(crate) struct TileSet {
+#[derive(Debug)]
+pub(crate) struct SphericalHeightTileSet {
+    common: SphericalTileSetCommon,
+    displace_height_pipeline: wgpu::ComputePipeline,
+}
+
+impl SphericalHeightTileSet {
+    pub(crate) fn new(
+        bind_group_layouts: &BindGroupLayouts,
+        catalog: &Catalog,
+        prefix: &str,
+        gpu_detail: &GpuDetail,
+        gpu: &GPU,
+    ) -> Result<Self> {
+        let displace_height_pipeline =
+            gpu.device()
+                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some("terrain-displace-height-pipeline"),
+                    layout: Some(&gpu.device().create_pipeline_layout(
+                        &wgpu::PipelineLayoutDescriptor {
+                            label: Some("terrain-displace-height-pipeline-layout"),
+                            push_constant_ranges: &[],
+                            bind_group_layouts: &[
+                                bind_group_layouts.displace_height,
+                                bind_group_layouts.accumulate_tiled_sint,
+                            ],
+                        },
+                    )),
+                    module: &gpu.create_shader_module(
+                        "displace_spherical_height.comp",
+                        include_bytes!("../../target/displace_spherical_height.comp.spirv"),
+                    )?,
+                    entry_point: "main",
+                });
+
+        Ok(Self {
+            common: SphericalTileSetCommon::new(
+                bind_group_layouts,
+                catalog,
+                prefix,
+                DataSetDataKind::Height,
+                gpu_detail,
+                gpu,
+            )?,
+            displace_height_pipeline,
+        })
+    }
+}
+
+impl TileSet for SphericalHeightTileSet {
+    fn kind(&self) -> DataSetDataKind {
+        DataSetDataKind::Height
+    }
+
+    fn coordinates(&self) -> DataSetCoordinates {
+        DataSetCoordinates::Spherical
+    }
+
+    fn begin_update(&mut self) {
+        self.common.begin_update()
+    }
+
+    fn note_required(&mut self, visible_patch: &VisiblePatch) {
+        self.common.note_required(visible_patch)
+    }
+
+    fn finish_update(
+        &mut self,
+        catalog: Arc<RwLock<Catalog>>,
+        async_rt: &Runtime,
+        gpu: &GPU,
+        tracker: &mut UploadTracker,
+    ) {
+        self.common.finish_update(catalog, async_rt, gpu, tracker)
+    }
+
+    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut GPU) {
+        self.common.snapshot_index(async_rt, gpu)
+    }
+
+    fn paint_atlas_index(&self, encoder: &mut CommandEncoder) {
+        self.common.paint_atlas_index(encoder)
+    }
+
+    fn displace_height<'a>(
+        &'a self,
+        vertex_count: u32,
+        mesh_bind_group: &'a BindGroup,
+        mut cpass: ComputePass<'a>,
+    ) -> Result<ComputePass<'a>> {
+        cpass.set_pipeline(&self.displace_height_pipeline);
+        cpass.set_bind_group(0, mesh_bind_group, &[]);
+        cpass.set_bind_group(1, &self.common.bind_group, &[]);
+        cpass.dispatch(vertex_count, 1, 1);
+        Ok(cpass)
+    }
+
+    fn bind_group(&self) -> &BindGroup {
+        self.common.bind_group()
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct SphericalColorTileSet {
+    common: SphericalTileSetCommon,
+}
+
+impl SphericalColorTileSet {
+    pub(crate) fn new(
+        bind_group_layouts: &BindGroupLayouts,
+        catalog: &Catalog,
+        prefix: &str,
+        gpu_detail: &GpuDetail,
+        gpu: &GPU,
+    ) -> Result<Self> {
+        Ok(Self {
+            common: SphericalTileSetCommon::new(
+                bind_group_layouts,
+                catalog,
+                prefix,
+                DataSetDataKind::Color,
+                gpu_detail,
+                gpu,
+            )?,
+        })
+    }
+}
+
+impl TileSet for SphericalColorTileSet {
+    fn kind(&self) -> DataSetDataKind {
+        DataSetDataKind::Color
+    }
+
+    fn coordinates(&self) -> DataSetCoordinates {
+        DataSetCoordinates::Spherical
+    }
+
+    fn begin_update(&mut self) {
+        self.common.begin_update()
+    }
+
+    fn note_required(&mut self, visible_patch: &VisiblePatch) {
+        self.common.note_required(visible_patch)
+    }
+
+    fn finish_update(
+        &mut self,
+        catalog: Arc<RwLock<Catalog>>,
+        async_rt: &Runtime,
+        gpu: &GPU,
+        tracker: &mut UploadTracker,
+    ) {
+        self.common.finish_update(catalog, async_rt, gpu, tracker)
+    }
+
+    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut GPU) {
+        self.common.snapshot_index(async_rt, gpu)
+    }
+
+    fn paint_atlas_index(&self, encoder: &mut CommandEncoder) {
+        self.common.paint_atlas_index(encoder)
+    }
+
+    fn displace_height<'a>(
+        &'a self,
+        _vertex_count: u32,
+        _mesh_bind_group: &'a BindGroup,
+        cpass: ComputePass<'a>,
+    ) -> Result<ComputePass<'a>> {
+        Ok(cpass)
+    }
+
+    fn bind_group(&self) -> &BindGroup {
+        self.common.bind_group()
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct SphericalNormalsTileSet {
+    common: SphericalTileSetCommon,
+}
+
+impl SphericalNormalsTileSet {
+    pub(crate) fn new(
+        bind_group_layouts: &BindGroupLayouts,
+        catalog: &Catalog,
+        prefix: &str,
+        gpu_detail: &GpuDetail,
+        gpu: &GPU,
+    ) -> Result<Self> {
+        Ok(Self {
+            common: SphericalTileSetCommon::new(
+                bind_group_layouts,
+                catalog,
+                prefix,
+                DataSetDataKind::Normal,
+                gpu_detail,
+                gpu,
+            )?,
+        })
+    }
+}
+
+impl TileSet for SphericalNormalsTileSet {
+    fn kind(&self) -> DataSetDataKind {
+        DataSetDataKind::Normal
+    }
+
+    fn coordinates(&self) -> DataSetCoordinates {
+        DataSetCoordinates::Spherical
+    }
+
+    fn begin_update(&mut self) {
+        self.common.begin_update()
+    }
+
+    fn note_required(&mut self, visible_patch: &VisiblePatch) {
+        self.common.note_required(visible_patch)
+    }
+
+    fn finish_update(
+        &mut self,
+        catalog: Arc<RwLock<Catalog>>,
+        async_rt: &Runtime,
+        gpu: &GPU,
+        tracker: &mut UploadTracker,
+    ) {
+        self.common.finish_update(catalog, async_rt, gpu, tracker)
+    }
+
+    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut GPU) {
+        self.common.snapshot_index(async_rt, gpu)
+    }
+
+    fn paint_atlas_index(&self, encoder: &mut CommandEncoder) {
+        self.common.paint_atlas_index(encoder)
+    }
+
+    fn displace_height<'a>(
+        &'a self,
+        _vertex_count: u32,
+        _mesh_bind_group: &'a BindGroup,
+        cpass: ComputePass<'a>,
+    ) -> Result<ComputePass<'a>> {
+        Ok(cpass)
+    }
+
+    fn bind_group(&self) -> &BindGroup {
+        self.common.bind_group()
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct SphericalTileSetCommon {
+    kind: DataSetDataKind,
+
     index_texture_format: wgpu::TextureFormat,
     index_texture_extent: wgpu::Extent3d,
     index_texture: wgpu::Texture,
-    #[allow(unused)]
     index_texture_view: wgpu::TextureView,
     #[allow(unused)]
     index_texture_sampler: wgpu::Sampler,
@@ -115,12 +371,6 @@ pub(crate) struct TileSet {
     atlas_tile_info: Arc<Box<wgpu::Buffer>>,
 
     bind_group: wgpu::BindGroup,
-    displace_height_pipeline: wgpu::ComputePipeline,
-
-    #[allow(unused)]
-    kind: DataSetDataKind,
-    #[allow(unused)]
-    coordinates: DataSetCoordinates,
 
     // For each offset in the atlas, records the allocation state and the target tile, if allocated.
     atlas_tile_map: Vec<Option<QuadTreeId>>,
@@ -151,41 +401,17 @@ pub(crate) struct TileSet {
     // Tile transfer from the background read thread to the main thread.
     tile_sender: UnboundedSender<(QuadTreeId, Vec<u8>)>,
     tile_receiver: UnboundedReceiver<(QuadTreeId, Vec<u8>)>,
-
-    // Set to true to take a snapshot at the start of the next frame.
-    take_index_snapshot: bool,
 }
 
-impl fmt::Debug for TileSet {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "TileSet")
-    }
-}
-
-impl TileSet {
+impl SphericalTileSetCommon {
     pub(crate) fn new(
-        atlas_tile_info_buffer_size: wgpu::BufferAddress,
-        tile_set_bind_group_layouts: [&wgpu::BindGroupLayout; 2],
-        displace_height_bind_group_layout: &wgpu::BindGroupLayout,
+        bind_group_layouts: &BindGroupLayouts,
         catalog: &Catalog,
-        index_json: json::JsonValue,
+        prefix: &str,
+        kind: DataSetDataKind,
         gpu_detail: &GpuDetail,
-        gpu: &mut GPU,
+        gpu: &GPU,
     ) -> Result<Self> {
-        let prefix = index_json["prefix"]
-            .as_str()
-            .ok_or_else(|| anyhow!("no prefix listed in index"))?;
-        let kind = DataSetDataKind::from_name(
-            index_json["kind"]
-                .as_str()
-                .ok_or_else(|| anyhow!("no kind listed in index"))?,
-        )?;
-        let coordinates = DataSetCoordinates::from_name(
-            index_json["coordinates"]
-                .as_str()
-                .ok_or_else(|| anyhow!("no coordinates listed in index"))?,
-        )?;
-
         let qt_start = Instant::now();
         let tile_tree = QuadTree::from_layers(prefix, catalog)?;
         let qt_time = qt_start.elapsed();
@@ -345,6 +571,8 @@ impl TileSet {
             anisotropy_clamp: None,
             border_color: None,
         });
+        let atlas_tile_info_buffer_size =
+            (mem::size_of::<TileInfo>() as u32 * gpu_detail.tile_cache_size) as wgpu::BufferAddress;
         let atlas_tile_info = Arc::new(Box::new(gpu.device().create_buffer(
             &wgpu::BufferDescriptor {
                 label: Some("terrain-geo-tile-info-buffer"),
@@ -354,31 +582,10 @@ impl TileSet {
             },
         )));
 
-        let displace_height_pipeline =
-            gpu.device()
-                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                    label: Some("terrain-displace-height-pipeline"),
-                    layout: Some(&gpu.device().create_pipeline_layout(
-                        &wgpu::PipelineLayoutDescriptor {
-                            label: Some("terrain-displace-height-pipeline-layout"),
-                            push_constant_ranges: &[],
-                            bind_group_layouts: &[
-                                displace_height_bind_group_layout,
-                                tile_set_bind_group_layouts[0],
-                            ],
-                        },
-                    )),
-                    module: &gpu.create_shader_module(
-                        "displace_spherical_height.comp",
-                        include_bytes!("../../target/displace_spherical_height.comp.spirv"),
-                    )?,
-                    entry_point: "main",
-                });
-
         let layout = if kind == DataSetDataKind::Color {
-            tile_set_bind_group_layouts[1]
+            bind_group_layouts.accumulate_tiled_float
         } else {
-            tile_set_bind_group_layouts[0]
+            bind_group_layouts.accumulate_tiled_sint
         };
         let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("terrain-geo-tile-bind-group"),
@@ -402,7 +609,7 @@ impl TileSet {
                     binding: 3,
                     resource: wgpu::BindingResource::Sampler(&atlas_texture_sampler),
                 },
-                // Tile Metdata
+                // Tile Metadata
                 wgpu::BindGroupEntry {
                     binding: 4,
                     resource: wgpu::BindingResource::Buffer {
@@ -435,10 +642,8 @@ impl TileSet {
             atlas_tile_info,
 
             bind_group,
-            displace_height_pipeline,
 
             kind,
-            coordinates,
 
             atlas_tile_map: vec![None; gpu_detail.tile_cache_size as usize],
             atlas_free_list: (0..gpu_detail.tile_cache_size as usize).collect(),
@@ -449,26 +654,80 @@ impl TileSet {
             tile_read_count: 0,
             tile_sender,
             tile_receiver,
-
-            take_index_snapshot: false,
         })
     }
 
-    #[allow(unused)]
-    pub fn kind(&self) -> DataSetDataKind {
-        self.kind
+    #[allow(clippy::transmute_ptr_to_ptr)]
+    fn capture_and_save_index_snapshot(&mut self, async_rt: &Runtime, gpu: &mut GPU) -> Result<()> {
+        fn write_image(extent: wgpu::Extent3d, _: wgpu::TextureFormat, data: Vec<u8>) {
+            let pix_cnt = extent.width as usize * extent.height as usize;
+            let img_len = pix_cnt * 3;
+            let shorts = LayoutVerified::<&[u8], [u16]>::new_slice(&data).expect("as [u16]");
+            let mut data = vec![0u8; img_len];
+            for x in 0..extent.width as usize {
+                for y in 0..extent.height as usize {
+                    let src_offset = x + (y * extent.width as usize);
+                    let dst_offset = 3 * (x + (y * extent.width as usize));
+                    let a = (shorts[src_offset] & 0x00FF) as u8;
+                    data[dst_offset] = a;
+                    data[dst_offset + 1] = a;
+                    data[dst_offset + 2] = a;
+                }
+            }
+            let img = ImageBuffer::<Rgb<u8>, _>::from_raw(extent.width, extent.height, data)
+                .expect("built image");
+            println!("writing to __dump__/terrain_geo_index_texture.png");
+            img.save("__dump__/terrain_geo_index_texture.png")
+                .expect("wrote file");
+        }
+        GPU::dump_texture(
+            &self.index_texture,
+            self.index_texture_extent,
+            self.index_texture_format,
+            async_rt,
+            gpu,
+            Box::new(write_image),
+        )
     }
 
-    #[allow(unused)]
-    pub fn coordinates(&self) -> DataSetCoordinates {
-        self.coordinates
+    fn allocate_atlas_slot(&mut self, votes: u32, qtid: QuadTreeId) {
+        // If we got an addition, the tile should have been removed by the tree.
+        assert!(!self.tile_state.contains_key(&qtid));
+
+        let state = if let Some(atlas_slot) = self.atlas_free_list.pop() {
+            assert!(self.atlas_tile_map[atlas_slot].is_none());
+            self.atlas_tile_map[atlas_slot] = Some(qtid);
+            self.tile_load_queue.push((votes, qtid));
+            TileState::Pending(atlas_slot)
+        } else {
+            TileState::NoSpace
+        };
+        self.tile_state.insert(qtid, state);
     }
 
-    pub fn begin_update(&mut self) {
+    fn deallocate_atlas_slot(&mut self, qtid: QuadTreeId) {
+        // If the tile went out of scope, it must have been in scope before.
+        assert!(self.tile_state.contains_key(&qtid));
+
+        // Note that this orphans any instances of qtid in the load queue or in the background
+        // read thread. We need to re-check the state any time we would look at it from one of
+        // those sources.
+        let state = self.tile_state.remove(&qtid).unwrap();
+        let atlas_slot = match state {
+            TileState::NoSpace => return,
+            TileState::Pending(slot) => slot,
+            TileState::Reading(slot) => slot,
+            TileState::Active(slot) => slot,
+        };
+        self.atlas_tile_map[atlas_slot] = None;
+        self.atlas_free_list.push(atlas_slot);
+    }
+
+    fn begin_update(&mut self) {
         self.tile_tree.begin_update();
     }
 
-    pub fn note_required(&mut self, visible_patch: &VisiblePatch) {
+    fn note_required(&mut self, visible_patch: &VisiblePatch) {
         // Assuming 30m is 1"
         let angular_resolution = arcseconds!(visible_patch.edge_length.f64() / 30.0);
 
@@ -493,18 +752,13 @@ impl TileSet {
         self.tile_tree.note_required(&aabb, angular_resolution);
     }
 
-    pub fn finish_update(
+    fn finish_update(
         &mut self,
         catalog: Arc<RwLock<Catalog>>,
-        async_rt: &mut Runtime,
-        gpu: &mut GPU,
+        async_rt: &Runtime,
+        gpu: &GPU,
         tracker: &mut UploadTracker,
     ) {
-        if self.take_index_snapshot {
-            self.capture_and_save_index_snapshot(async_rt, gpu).unwrap();
-            self.take_index_snapshot = false;
-        }
-
         let mut additions = Vec::new();
         let mut removals = Vec::new();
         self.tile_tree.finish_update(&mut additions, &mut removals);
@@ -704,81 +958,11 @@ impl TileSet {
         );
     }
 
-    pub fn snapshot_index(&mut self) {
-        self.take_index_snapshot = true;
+    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut GPU) {
+        self.capture_and_save_index_snapshot(async_rt, gpu).unwrap();
     }
 
-    #[allow(clippy::transmute_ptr_to_ptr)]
-    fn capture_and_save_index_snapshot(
-        &mut self,
-        async_rt: &mut Runtime,
-        gpu: &mut GPU,
-    ) -> Result<()> {
-        fn write_image(extent: wgpu::Extent3d, _: wgpu::TextureFormat, data: Vec<u8>) {
-            let pix_cnt = extent.width as usize * extent.height as usize;
-            let img_len = pix_cnt * 3;
-            let shorts = LayoutVerified::<&[u8], [u16]>::new_slice(&data).expect("as [u16]");
-            let mut data = vec![0u8; img_len];
-            for x in 0..extent.width as usize {
-                for y in 0..extent.height as usize {
-                    let src_offset = x + (y * extent.width as usize);
-                    let dst_offset = 3 * (x + (y * extent.width as usize));
-                    let a = (shorts[src_offset] & 0x00FF) as u8;
-                    data[dst_offset] = a;
-                    data[dst_offset + 1] = a;
-                    data[dst_offset + 2] = a;
-                }
-            }
-            let img = ImageBuffer::<Rgb<u8>, _>::from_raw(extent.width, extent.height, data)
-                .expect("built image");
-            println!("writing to __dump__/terrain_geo_index_texture.png");
-            img.save("__dump__/terrain_geo_index_texture.png")
-                .expect("wrote file");
-        }
-        GPU::dump_texture(
-            &self.index_texture,
-            self.index_texture_extent,
-            self.index_texture_format,
-            async_rt,
-            gpu,
-            Box::new(write_image),
-        )
-    }
-
-    fn allocate_atlas_slot(&mut self, votes: u32, qtid: QuadTreeId) {
-        // If we got an addition, the tile should have been removed by the tree.
-        assert!(!self.tile_state.contains_key(&qtid));
-
-        let state = if let Some(atlas_slot) = self.atlas_free_list.pop() {
-            assert!(self.atlas_tile_map[atlas_slot].is_none());
-            self.atlas_tile_map[atlas_slot] = Some(qtid);
-            self.tile_load_queue.push((votes, qtid));
-            TileState::Pending(atlas_slot)
-        } else {
-            TileState::NoSpace
-        };
-        self.tile_state.insert(qtid, state);
-    }
-
-    fn deallocate_atlas_slot(&mut self, qtid: QuadTreeId) {
-        // If the tile went out of scope, it must have been in scope before.
-        assert!(self.tile_state.contains_key(&qtid));
-
-        // Note that this orphans any instances of qtid in the load queue or in the background
-        // read thread. We need to re-check the state any time we would look at it from one of
-        // those sources.
-        let state = self.tile_state.remove(&qtid).unwrap();
-        let atlas_slot = match state {
-            TileState::NoSpace => return,
-            TileState::Pending(slot) => slot,
-            TileState::Reading(slot) => slot,
-            TileState::Active(slot) => slot,
-        };
-        self.atlas_tile_map[atlas_slot] = None;
-        self.atlas_free_list.push(atlas_slot);
-    }
-
-    pub fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) -> Result<()> {
+    fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) {
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("paint-atlas-index-render-pass"),
             color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
@@ -794,27 +978,9 @@ impl TileSet {
         rpass.set_pipeline(&self.index_paint_pipeline);
         rpass.set_vertex_buffer(0, self.index_paint_vert_buffer.slice(..));
         rpass.draw(self.index_paint_range.clone(), 0..1);
-        Ok(())
     }
 
-    pub fn displace_height<'a>(
-        &'a self,
-        vertex_count: u32,
-        mesh_bind_group: &'a wgpu::BindGroup,
-        mut cpass: wgpu::ComputePass<'a>,
-    ) -> Result<wgpu::ComputePass<'a>> {
-        assert_eq!(self.coordinates, DataSetCoordinates::Spherical);
-        if self.kind != DataSetDataKind::Height {
-            return Ok(cpass);
-        }
-        cpass.set_pipeline(&self.displace_height_pipeline);
-        cpass.set_bind_group(0, mesh_bind_group, &[]);
-        cpass.set_bind_group(1, &self.bind_group, &[]);
-        cpass.dispatch(vertex_count, 1, 1);
-        Ok(cpass)
-    }
-
-    pub fn bind_group(&self) -> &wgpu::BindGroup {
+    fn bind_group(&self) -> &wgpu::BindGroup {
         &self.bind_group
     }
 }

@@ -20,7 +20,7 @@ use image::{open, EncodableLayout, ImageBuffer, Rgb};
 use memmap::{Mmap, MmapOptions};
 use parking_lot::RwLock;
 use std::{fs::File, io::Write, ops::RangeInclusive, path::Path, sync::Arc};
-use terrain_geo::tile::TerrainLevel;
+use terrain::tile::TerrainLevel;
 
 type MmapRgbImage = ImageBuffer<Rgb<u8>, Mmap>;
 

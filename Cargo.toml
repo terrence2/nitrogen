@@ -39,7 +39,7 @@ members = [
     "libs/wgpu-buffer/global_data",
     "libs/wgpu-buffer/shader_shared",
     "libs/wgpu-buffer/stars",
-    "libs/wgpu-buffer/terrain_geo",
+    "libs/wgpu-buffer/terrain",
     "libs/wgpu-buffer/ui",
     "libs/wgpu-buffer/widget",
     "libs/wgpu-buffer/world",
@@ -72,7 +72,7 @@ nitrous = { path = "libs/system/nitrous" }
 nitrous_injector = { path = "libs/system/nitrous_injector" }
 orrery = { path = "libs/sim/orrery" }
 stars = { path = "libs/wgpu-buffer/stars" }
-terrain_geo = { path = "libs/wgpu-buffer/terrain_geo" }
+terrain = { path = "libs/wgpu-buffer/terrain" }
 ui = { path = "libs/wgpu-buffer/ui" }
 universe = { path = "libs/sim/universe" }
 widget = { path = "libs/wgpu-buffer/widget" }

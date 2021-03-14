@@ -47,6 +47,7 @@ impl QuadTreeId {
     }
 }
 
+#[derive(Debug)]
 struct QuadTreeNode {
     span: Range<usize>,
     children: [QuadTreeId; 4],
@@ -54,6 +55,7 @@ struct QuadTreeNode {
     level: u8,
 }
 
+#[derive(Debug)]
 struct NodeVotes {
     // Number of times that this node was sampled. This is used to prioritize uploads.
     votes: u32,
@@ -63,6 +65,7 @@ struct NodeVotes {
     generation: u32,
 }
 
+#[derive(Debug)]
 pub(crate) struct QuadTree {
     // An immutable tree discovered based on what nodes are available in catalog at startup.
     root: QuadTreeId,
