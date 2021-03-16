@@ -67,29 +67,29 @@ impl Bindings {
 
     pub fn match_key(
         &self,
-        key: Input,
+        input: Input,
         key_state: ElementState,
         state: &mut State,
         interpreter: &mut Interpreter,
     ) -> Result<()> {
         match key_state {
-            ElementState::Pressed => self.handle_press(key, state, interpreter)?,
-            ElementState::Released => self.handle_release(key, state, interpreter)?,
+            ElementState::Pressed => self.handle_press(input, state, interpreter)?,
+            ElementState::Released => self.handle_release(input, state, interpreter)?,
         }
         Ok(())
     }
 
     fn handle_press(
         &self,
-        key: Input,
+        input: Input,
         state: &mut State,
         interpreter: &mut Interpreter,
     ) -> Result<()> {
         // The press chords gives us a quick map from a key press to all chords which could become
         // active in the case that it is pressed so that we don't have to look at everything.
-        if let Some(possible_chord_list) = self.press_chords.get(&key) {
+        if let Some(possible_chord_list) = self.press_chords.get(&input) {
             for chord in possible_chord_list {
-                if chord.is_pressed(&state) {
+                if chord.is_pressed(Some(input), &state) {
                     self.maybe_activate_chord(chord, state, interpreter)?;
                 }
             }
@@ -172,7 +172,7 @@ impl Bindings {
         // masked commands that were unmasked by this change.
         for released_chord in &released_chords {
             for (chord, script) in &self.script_map {
-                if chord.is_subset_of(released_chord) && chord.is_pressed(&state) {
+                if chord.is_subset_of(released_chord) && chord.is_pressed(None, &state) {
                     state.active_chords.insert(chord.to_owned());
                     self.activate_chord(script, interpreter)?;
                 }
@@ -183,16 +183,18 @@ impl Bindings {
     }
 
     fn activate_chord(&self, script: &Script, interpreter: &mut Interpreter) -> Result<()> {
-        interpreter.with_locals(&[("pressed", Value::True())], |inner| {
-            inner.interpret(script)
-        })?;
+        interpreter.interpret(script)?;
+        // interpreter.with_locals(&[("pressed", Value::True())], |inner| {
+        //     inner.interpret(script)
+        // })?;
         Ok(())
     }
 
     fn deactiveate_chord(&self, script: &Script, interpreter: &mut Interpreter) -> Result<()> {
-        interpreter.with_locals(&[("pressed", Value::False())], |inner| {
-            inner.interpret(script)
-        })?;
+        interpreter.interpret(script)?;
+        // interpreter.with_locals(&[("pressed", Value::False())], |inner| {
+        //     inner.interpret(script)
+        // })?;
         Ok(())
     }
 }

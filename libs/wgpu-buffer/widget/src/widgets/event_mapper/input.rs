@@ -404,7 +404,7 @@ impl KeySet {
         true
     }
 
-    pub fn is_pressed(&self, state: &State) -> bool {
+    pub fn is_pressed(&self, active_input: Option<Input>, state: &State) -> bool {
         // We want to account for:
         //   * `Ctrl+e` && `Ctrl+o` being activated with a single hold of the Ctrl key.
         //   * Multiple actions can run at once: e.g. if someone is holding `w` to walk
@@ -418,6 +418,9 @@ impl KeySet {
         //
         // Simple solution: superset check, with special handling of modifier keys.
         for key in &self.keys {
+            if Some(*key) == active_input {
+                continue;
+            }
             if let Some(current_state) = state.input_states.get(key) {
                 if *current_state == ElementState::Released {
                     return false;
