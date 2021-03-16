@@ -121,13 +121,24 @@ impl Demo {
         if pressed {
             self.show_terminal = !self.show_terminal;
             self.terminal.write().set_visible(self.show_terminal);
-            self.widgets
-                .read()
-                .queue_script("demo.toggle_terminal_bottom()");
+
+            let show_terminal = self.show_terminal;
+            let widgets = self.widgets.clone();
+            rayon::spawn(move || {
+                println!(
+                    "Setting terminal focus: {}",
+                    if show_terminal { "terminal" } else { "mapper" }
+                );
+                widgets
+                    .write()
+                    .set_keyboard_focus(if show_terminal { "terminal" } else { "mapper" })
+                    .ok();
+            })
         }
         Ok(())
     }
 
+    /*
     #[method]
     pub fn toggle_terminal_bottom(&self) -> Result<()> {
         self.widgets
@@ -138,6 +149,7 @@ impl Demo {
                 "mapper"
             })
     }
+     */
 }
 
 make_frame_graph!(
@@ -351,7 +363,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
 
         widgets
             .read()
-            .handle_events(&input_controller.poll_events()?, &mut interpreter.write())?;
+            .handle_events(&input_controller.poll_events()?, interpreter.clone())?;
 
         arcball.write().think();
 

@@ -232,10 +232,10 @@ impl WidgetBuffer {
     pub fn handle_events(
         &self,
         events: &[GenericEvent],
-        interpreter: &mut Interpreter,
+        interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
         for script in self.queued_scripts.write().drain(..) {
-            interpreter.interpret_once(&script)?;
+            interpreter.write().interpret_once(&script)?;
         }
         self.root().write().handle_events(events, interpreter)
     }

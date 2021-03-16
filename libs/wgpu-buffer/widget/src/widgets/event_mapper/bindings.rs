@@ -13,10 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::widgets::event_mapper::{
-    axis::AxisKind,
-    keyset::{Key, KeySet},
-    system::SystemEventKind,
-    window::WindowEventKind,
+    input::{Input, KeySet},
     State,
 };
 use anyhow::Result;
@@ -31,11 +28,8 @@ use std::collections::HashMap;
 #[derive(Debug, NitrousModule)]
 pub struct Bindings {
     pub name: String,
-    press_chords: HashMap<Key, Vec<KeySet>>,
+    press_chords: HashMap<Input, Vec<KeySet>>,
     script_map: HashMap<KeySet, Script>,
-    axis_map: HashMap<AxisKind, Script>,
-    windows_event_map: HashMap<WindowEventKind, Script>,
-    system_event_map: HashMap<SystemEventKind, Script>,
 }
 
 #[inject_nitrous_module]
@@ -45,9 +39,6 @@ impl Bindings {
             name: name.to_owned(),
             press_chords: HashMap::new(),
             script_map: HashMap::new(),
-            axis_map: HashMap::new(),
-            windows_event_map: HashMap::new(),
-            system_event_map: HashMap::new(),
         }
     }
 
@@ -59,24 +50,6 @@ impl Bindings {
     #[method]
     pub fn bind(&mut self, event_name: &str, script_raw: &str) -> Result<()> {
         let script = Script::compile(script_raw)?;
-
-        if let Ok(kind) = SystemEventKind::from_virtual(event_name) {
-            trace!("binding {:?} => {}", kind, script);
-            self.system_event_map.insert(kind, script);
-            return Ok(());
-        }
-
-        if let Ok(kind) = WindowEventKind::from_virtual(event_name) {
-            trace!("binding {:?} => {}", kind, script);
-            self.windows_event_map.insert(kind, script);
-            return Ok(());
-        }
-
-        if let Ok(axis) = AxisKind::from_virtual(event_name) {
-            trace!("binding {:?} => {}", axis, script);
-            self.axis_map.insert(axis, script);
-            return Ok(());
-        }
 
         for ks in KeySet::from_virtual(event_name)?.drain(..) {
             trace!("binding {} => {}", ks, script);
@@ -92,38 +65,9 @@ impl Bindings {
         Ok(())
     }
 
-    pub fn match_system_event(
-        &self,
-        event: SystemEventKind,
-        interpreter: &mut Interpreter,
-    ) -> Result<()> {
-        if let Some(script) = self.system_event_map.get(&event) {
-            interpreter.interpret(script)?;
-        }
-        Ok(())
-    }
-
-    pub fn match_window_event(
-        &self,
-        event: WindowEventKind,
-        interpreter: &mut Interpreter,
-    ) -> Result<()> {
-        if let Some(script) = self.windows_event_map.get(&event) {
-            interpreter.interpret(script)?;
-        }
-        Ok(())
-    }
-
-    pub fn match_axis(&self, axis: AxisKind, interpreter: &mut Interpreter) -> Result<()> {
-        if let Some(script) = self.axis_map.get(&axis) {
-            interpreter.interpret(script)?;
-        }
-        Ok(())
-    }
-
     pub fn match_key(
         &self,
-        key: Key,
+        key: Input,
         key_state: ElementState,
         state: &mut State,
         interpreter: &mut Interpreter,
@@ -137,7 +81,7 @@ impl Bindings {
 
     fn handle_press(
         &self,
-        key: Key,
+        key: Input,
         state: &mut State,
         interpreter: &mut Interpreter,
     ) -> Result<()> {
@@ -205,7 +149,7 @@ impl Bindings {
 
     fn handle_release(
         &self,
-        key: Key,
+        key: Input,
         state: &mut State,
         interpreter: &mut Interpreter,
     ) -> Result<()> {
@@ -314,13 +258,13 @@ mod test {
             .write()
             .put_global("player", Value::Module(player.clone()));
 
-        let w_key = Key::KeyboardKey(VirtualKeyCode::W);
-        let shift_key = Key::KeyboardKey(VirtualKeyCode::LShift);
+        let w_key = Input::KeyboardKey(VirtualKeyCode::W);
+        let shift_key = Input::KeyboardKey(VirtualKeyCode::LShift);
 
         let mut state: State = Default::default();
         let bindings = Bindings::new("test").with_bind("w", "player.never_executed()")?;
 
-        state.key_states.insert(shift_key, ElementState::Pressed);
+        state.input_states.insert(shift_key, ElementState::Pressed);
         state.modifiers_state |= ModifiersState::SHIFT;
         bindings.match_key(
             shift_key,
@@ -330,7 +274,7 @@ mod test {
         )?;
         assert_eq!(player.read().walking, false);
 
-        state.key_states.insert(w_key, ElementState::Pressed);
+        state.input_states.insert(w_key, ElementState::Pressed);
         bindings.match_key(
             w_key,
             ElementState::Pressed,
@@ -350,18 +294,18 @@ mod test {
             .write()
             .put_global("player", Value::Module(player.clone()));
 
-        let w_key = Key::KeyboardKey(VirtualKeyCode::W);
-        let shift_key = Key::KeyboardKey(VirtualKeyCode::LShift);
-        let ctrl_key = Key::KeyboardKey(VirtualKeyCode::RControl);
+        let w_key = Input::KeyboardKey(VirtualKeyCode::W);
+        let shift_key = Input::KeyboardKey(VirtualKeyCode::LShift);
+        let ctrl_key = Input::KeyboardKey(VirtualKeyCode::RControl);
 
         let mut state: State = Default::default();
         let bindings = Bindings::new("test").with_bind("Shift+w", "player.never_executed()")?;
 
-        state.key_states.insert(ctrl_key, ElementState::Pressed);
-        state.key_states.insert(shift_key, ElementState::Pressed);
+        state.input_states.insert(ctrl_key, ElementState::Pressed);
+        state.input_states.insert(shift_key, ElementState::Pressed);
         state.modifiers_state |= ModifiersState::CTRL;
         state.modifiers_state |= ModifiersState::SHIFT;
-        state.key_states.insert(w_key, ElementState::Pressed);
+        state.input_states.insert(w_key, ElementState::Pressed);
         bindings.match_key(
             w_key,
             ElementState::Pressed,
@@ -381,15 +325,15 @@ mod test {
             .write()
             .put_global("player", Value::Module(player.clone()));
 
-        let w_key = Key::KeyboardKey(VirtualKeyCode::W);
-        let shift_key = Key::KeyboardKey(VirtualKeyCode::LShift);
+        let w_key = Input::KeyboardKey(VirtualKeyCode::W);
+        let shift_key = Input::KeyboardKey(VirtualKeyCode::LShift);
 
         let mut state: State = Default::default();
         let bindings = Bindings::new("test")
             .with_bind("w", "player.walk(pressed)")?
             .with_bind("shift+w", "player.run(pressed)")?;
 
-        state.key_states.insert(w_key, ElementState::Pressed);
+        state.input_states.insert(w_key, ElementState::Pressed);
         bindings.match_key(
             w_key,
             ElementState::Pressed,
@@ -399,7 +343,7 @@ mod test {
         assert!(player.read().walking);
         assert!(!player.read().running);
 
-        state.key_states.insert(shift_key, ElementState::Pressed);
+        state.input_states.insert(shift_key, ElementState::Pressed);
         state.modifiers_state |= ModifiersState::SHIFT;
         bindings.match_key(
             shift_key,
@@ -410,7 +354,7 @@ mod test {
         assert!(!player.read().walking);
         assert!(player.read().running);
 
-        state.key_states.insert(shift_key, ElementState::Released);
+        state.input_states.insert(shift_key, ElementState::Released);
         state.modifiers_state -= ModifiersState::SHIFT;
         bindings.match_key(
             shift_key,
@@ -421,7 +365,7 @@ mod test {
         assert!(player.read().walking);
         assert!(!player.read().running);
 
-        state.key_states.insert(shift_key, ElementState::Pressed);
+        state.input_states.insert(shift_key, ElementState::Pressed);
         state.modifiers_state |= ModifiersState::SHIFT;
         bindings.match_key(
             shift_key,
@@ -432,7 +376,7 @@ mod test {
         assert!(!player.read().walking);
         assert!(player.read().running);
 
-        state.key_states.insert(w_key, ElementState::Released);
+        state.input_states.insert(w_key, ElementState::Released);
         bindings.match_key(
             w_key,
             ElementState::Released,
@@ -442,7 +386,7 @@ mod test {
         assert!(!player.read().walking);
         assert!(!player.read().running);
 
-        state.key_states.insert(w_key, ElementState::Pressed);
+        state.input_states.insert(w_key, ElementState::Pressed);
         bindings.match_key(
             w_key,
             ElementState::Pressed,

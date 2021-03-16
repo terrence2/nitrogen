@@ -17,7 +17,8 @@ use anyhow::Result;
 use gpu::GPU;
 use input::GenericEvent;
 use nitrous::Interpreter;
-use std::fmt::Debug;
+use parking_lot::RwLock;
+use std::{fmt::Debug, sync::Arc};
 
 #[derive(Clone, Debug, Default)]
 pub struct UploadMetrics {
@@ -31,6 +32,6 @@ pub trait Widget: Debug + Send + Sync + 'static {
     fn handle_events(
         &mut self,
         events: &[GenericEvent],
-        interpreter: &mut Interpreter,
+        interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()>;
 }

@@ -137,7 +137,7 @@ impl Widget for FloatBox {
     fn handle_events(
         &mut self,
         events: &[GenericEvent],
-        interpreter: &mut Interpreter,
+        interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
         if !self.focus.is_empty() {
             assert!(self.children.contains_key(&self.focus));

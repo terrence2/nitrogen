@@ -15,17 +15,14 @@
 use crate::{
     widget::{UploadMetrics, Widget},
     widgets::event_mapper::{
-        axis::AxisKind,
         bindings::Bindings,
-        keyset::{Key, KeySet},
-        system::SystemEventKind,
-        window::WindowEventKind,
+        input::{Input, KeySet},
     },
     PaintContext,
 };
 use anyhow::{ensure, Result};
 use gpu::GPU;
-use input::{ElementState, GenericEvent, GenericSystemEvent, GenericWindowEvent, ModifiersState};
+use input::{ElementState, GenericEvent, ModifiersState};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use ordered_float::OrderedFloat;
@@ -38,7 +35,7 @@ use std::{
 #[derive(Debug, Default)]
 pub struct State {
     pub modifiers_state: ModifiersState,
-    pub key_states: HashMap<Key, ElementState>,
+    pub input_states: HashMap<Input, ElementState>,
     pub active_chords: HashSet<KeySet>,
 }
 
@@ -80,19 +77,45 @@ impl Widget for EventMapper {
     fn handle_events(
         &mut self,
         events: &[GenericEvent],
-        interpreter: &mut Interpreter,
+        interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
         for event in events {
             if !event.is_window_focused() {
                 continue;
             }
 
+            let input = Input::from_event(event);
+            if input.is_none() {
+                continue;
+            }
+            let input = input.unwrap();
+
+            if let Some(key_state) = event.press_state() {
+                self.state.input_states.insert(input, key_state);
+            }
+
+            if let Some(modifiers_state) = event.modifiers_state() {
+                self.state.modifiers_state = modifiers_state;
+            }
+
+            // TODO: exit early if not processing events
+
+            for bindings in self.bindings.values() {
+                bindings.read().match_key(
+                    input,
+                    event.press_state().unwrap_or(ElementState::Pressed),
+                    &mut self.state,
+                    &mut interpreter.write(),
+                )?;
+            }
+
+            /*
             if let Some(key_state) = event.press_state() {
                 let key = match event {
                     GenericEvent::KeyboardKey {
                         virtual_keycode, ..
-                    } => Key::KeyboardKey(*virtual_keycode),
-                    GenericEvent::MouseButton { button, .. } => Key::MouseButton(*button),
+                    } => Input::KeyboardKey(*virtual_keycode),
+                    GenericEvent::MouseButton { button, .. } => Input::MouseButton(*button),
                     // GenericEvent::JoystickButton { button, .. } => Key::JoystickButton(*button),
                     _ => {
                         panic!("event has a press state, but is not a key or button kind of event")
@@ -104,12 +127,55 @@ impl Widget for EventMapper {
                     event.modifiers_state().expect("modifiers on key press");
 
                 for bindings in self.bindings.values() {
-                    bindings
-                        .read()
-                        .match_key(key, key_state, &mut self.state, interpreter)?;
+                    bindings.read().match_key(
+                        key,
+                        key_state,
+                        &mut self.state,
+                        &mut interpreter.write(),
+                    )?;
                 }
             } else {
                 match event {
+                    GenericEvent::KeyboardKey {
+                        virtual_keycode,
+                        press_state,
+                        modifiers_state,
+                        window_focused,
+                        ..
+                    } => {
+                        let key = Input::KeyboardKey(*virtual_keycode);
+
+                        self.state.key_states.insert(key, *press_state);
+                        self.state.modifiers_state =
+                            event.modifiers_state().expect("modifiers on key press");
+
+                        interpreter.write().with_locals(
+                            &[
+                                (
+                                    "pressed",
+                                    Value::Boolean(press_state == ElementState::Pressed),
+                                ),
+                                ("shift_pressed", Value::Boolean(modifiers_state.shift())),
+                                ("alt_pressed", Value::Boolean(modifiers_state.alt())),
+                                ("ctrl_pressed", Value::Boolean(modifiers_state.ctrl())),
+                                ("logo_pressed", Value::Boolean(modifiers_state.logo())),
+                                ("window_focused", Value::Boolean(*window_focused)),
+                            ],
+                            |inner| {
+                                for bindings in self.bindings.values() {
+                                    bindings.read().match_key(
+                                        key,
+                                        *press_state,
+                                        &mut self.state,
+                                        &mut interpreter.write(),
+                                    )?;
+                                }
+                                Ok(Value::True())
+                            },
+                        )
+                    }
+                    GenericEvent::MouseButton { button, .. } => {}
+                    GenericEvent::JoystickButton { dummy, .. } => {}
                     GenericEvent::MouseMotion {
                         dx,
                         dy,
@@ -117,7 +183,7 @@ impl Widget for EventMapper {
                         in_window,
                         window_focused,
                     } => {
-                        interpreter.with_locals(
+                        interpreter.write().with_locals(
                             &[
                                 ("dx", Value::Float(OrderedFloat(*dx))),
                                 ("dy", Value::Float(OrderedFloat(*dy))),
@@ -144,7 +210,7 @@ impl Widget for EventMapper {
                         in_window,
                         window_focused,
                     } => {
-                        interpreter.with_locals(
+                        interpreter.write().with_locals(
                             &[
                                 (
                                     "horizontal_delta",
@@ -172,7 +238,7 @@ impl Widget for EventMapper {
 
                     GenericEvent::Window(evt) => match evt {
                         GenericWindowEvent::Resized { width, height } => {
-                            interpreter.with_locals(
+                            interpreter.write().with_locals(
                                 &[
                                     ("width", Value::Integer(*width as i64)),
                                     ("height", Value::Integer(*height as i64)),
@@ -189,7 +255,7 @@ impl Widget for EventMapper {
                         }
 
                         GenericWindowEvent::ScaleFactorChanged { scale } => {
-                            interpreter.with_locals(
+                            interpreter.write().with_locals(
                                 &[("scale", Value::Float(OrderedFloat(*scale)))],
                                 |inner| {
                                     for bindings in self.bindings.values() {
@@ -207,14 +273,15 @@ impl Widget for EventMapper {
                     GenericEvent::System(evt) => match evt {
                         GenericSystemEvent::Quit => {
                             for bindings in self.bindings.values() {
-                                bindings
-                                    .read()
-                                    .match_system_event(SystemEventKind::Quit, interpreter)?;
+                                bindings.read().match_system_event(
+                                    SystemEventKind::Quit,
+                                    &mut interpreter.write(),
+                                )?;
                             }
                         }
 
                         GenericSystemEvent::DeviceAdded { dummy } => {
-                            interpreter.with_locals(
+                            interpreter.write().with_locals(
                                 &[("device_id", Value::Integer(*dummy as i64))],
                                 |inner| {
                                     for bindings in self.bindings.values() {
@@ -229,7 +296,7 @@ impl Widget for EventMapper {
                         }
 
                         GenericSystemEvent::DeviceRemoved { dummy } => {
-                            interpreter.with_locals(
+                            interpreter.write().with_locals(
                                 &[("device_id", Value::Integer(*dummy as i64))],
                                 |inner| {
                                     for bindings in self.bindings.values() {
@@ -249,6 +316,7 @@ impl Widget for EventMapper {
                     }
                 };
             }
+             */
         }
         Ok(())
     }

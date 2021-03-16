@@ -45,7 +45,7 @@ impl Terminal {
             .with_default_font(font_context.font_id_for_name("mono"))
             .with_default_color(Color::White)
             .with_default_size_pts(12.0)
-            .with_text("this is some test text for us to highlight")
+            .with_text("demo.toggle_terminal(True)")
             .wrapped();
         edit.write().line_mut().select_all();
         let container = VerticalBox::with_children(&[output, edit.clone()])
@@ -87,7 +87,7 @@ impl Widget for Terminal {
     fn handle_events(
         &mut self,
         events: &[GenericEvent],
-        interpreter: &mut Interpreter,
+        interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
         if self.visible {
             self.edit.write().handle_events(events, interpreter)
