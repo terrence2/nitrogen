@@ -16,7 +16,7 @@ use crate::{
     widget::{UploadMetrics, Widget},
     widgets::event_mapper::{
         bindings::Bindings,
-        input::{Input, KeySet},
+        input::{Input, InputSet},
     },
     PaintContext,
 };
@@ -36,7 +36,7 @@ use std::{
 pub struct State {
     pub modifiers_state: ModifiersState,
     pub input_states: HashMap<Input, ElementState>,
-    pub active_chords: HashSet<KeySet>,
+    pub active_chords: HashSet<InputSet>,
 }
 
 #[derive(Default, Debug, NitrousModule)]
@@ -94,10 +94,7 @@ impl Widget for EventMapper {
 
             if let Some(press_state) = event.press_state() {
                 self.state.input_states.insert(input, press_state);
-                variables.push((
-                    "pressed",
-                    Value::Boolean(press_state == ElementState::Pressed),
-                ));
+                // Note: pressed variable is set later, since we need to disable masked input sets.
             }
 
             if let Some(modifiers_state) = event.modifiers_state() {
@@ -158,15 +155,15 @@ impl Widget for EventMapper {
 
             interpreter.write().with_locals(&variables, |inner| {
                 for bindings in self.bindings.values() {
-                    bindings.read().match_key(
+                    bindings.read().match_input(
                         input,
-                        event.press_state().unwrap_or(ElementState::Pressed),
+                        event.press_state(),
                         &mut self.state,
                         inner,
                     )?
                 }
                 Ok(Value::True())
-            });
+            })?;
         }
         Ok(())
     }

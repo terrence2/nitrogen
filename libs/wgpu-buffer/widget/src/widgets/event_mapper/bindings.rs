@@ -13,12 +13,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::widgets::event_mapper::{
-    input::{Input, KeySet},
+    input::{Input, InputSet},
     State,
 };
 use anyhow::Result;
 use input::ElementState;
-use log::trace;
+use log::{debug, trace};
 use nitrous::{Interpreter, Script, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use smallvec::{smallvec, SmallVec};
@@ -28,8 +28,8 @@ use std::collections::HashMap;
 #[derive(Debug, NitrousModule)]
 pub struct Bindings {
     pub name: String,
-    press_chords: HashMap<Input, Vec<KeySet>>,
-    script_map: HashMap<KeySet, Script>,
+    press_chords: HashMap<Input, Vec<InputSet>>,
+    script_map: HashMap<InputSet, Script>,
 }
 
 #[inject_nitrous_module]
@@ -51,7 +51,7 @@ impl Bindings {
     pub fn bind(&mut self, event_name: &str, script_raw: &str) -> Result<()> {
         let script = Script::compile(script_raw)?;
 
-        for ks in KeySet::from_virtual(event_name)?.drain(..) {
+        for ks in InputSet::from_binding(event_name)?.drain(..) {
             trace!("binding {} => {}", ks, script);
             self.script_map.insert(ks.clone(), script.clone());
 
@@ -65,16 +65,33 @@ impl Bindings {
         Ok(())
     }
 
-    pub fn match_key(
+    pub fn match_input(
         &self,
         input: Input,
-        key_state: ElementState,
+        press_state: Option<ElementState>,
         state: &mut State,
         interpreter: &mut Interpreter,
     ) -> Result<()> {
-        match key_state {
-            ElementState::Pressed => self.handle_press(input, state, interpreter)?,
-            ElementState::Released => self.handle_release(input, state, interpreter)?,
+        match press_state {
+            Some(ElementState::Pressed) => self.handle_press(input, state, interpreter)?,
+            Some(ElementState::Released) => self.handle_release(input, state, interpreter)?,
+            None => self.handle_edge(input, state, interpreter)?,
+        }
+        Ok(())
+    }
+
+    fn handle_edge(
+        &self,
+        input: Input,
+        state: &mut State,
+        interpreter: &mut Interpreter,
+    ) -> Result<()> {
+        if let Some(possible_chord_list) = self.press_chords.get(&input) {
+            for chord in possible_chord_list {
+                if chord.is_pressed(Some(input), &state) {
+                    interpreter.interpret(&self.script_map[chord])?;
+                }
+            }
         }
         Ok(())
     }
@@ -89,7 +106,7 @@ impl Bindings {
         // active in the case that it is pressed so that we don't have to look at everything.
         if let Some(possible_chord_list) = self.press_chords.get(&input) {
             for chord in possible_chord_list {
-                if chord.is_pressed(Some(input), &state) {
+                if chord.is_pressed(None, &state) {
                     self.maybe_activate_chord(chord, state, interpreter)?;
                 }
             }
@@ -97,7 +114,7 @@ impl Bindings {
         Ok(())
     }
 
-    fn chord_is_masked(chord: &KeySet, state: &State) -> bool {
+    fn chord_is_masked(chord: &InputSet, state: &State) -> bool {
         for active_chord in &state.active_chords {
             if chord.is_subset_of(active_chord) {
                 return true;
@@ -108,13 +125,14 @@ impl Bindings {
 
     fn maybe_activate_chord(
         &self,
-        chord: &KeySet,
+        chord: &InputSet,
         state: &mut State,
         interpreter: &mut Interpreter,
     ) -> Result<()> {
         // We may have multiple binding sets active for the same KeySet, in which case the first
         // binding in the set wins and checks for subsequent activations should exit early.
         if state.active_chords.contains(&chord) {
+            debug!("chord {} is already active", chord);
             return Ok(());
         }
 
@@ -123,13 +141,15 @@ impl Bindings {
 
         // If the chord is masked, do not activate.
         if Self::chord_is_masked(chord, state) {
+            debug!("chord {} is masked", chord);
             return Ok(());
         }
 
         // If any chord will become masked, deactivate it.
-        let mut masked_chords: SmallVec<[KeySet; 4]> = smallvec![];
+        let mut masked_chords: SmallVec<[InputSet; 4]> = smallvec![];
         for active_chord in &state.active_chords {
             if active_chord.is_subset_of(chord) {
+                debug!("masking chord: {}", active_chord);
                 masked_chords.push(active_chord.to_owned());
             }
         }
@@ -154,7 +174,7 @@ impl Bindings {
         interpreter: &mut Interpreter,
     ) -> Result<()> {
         // Remove any chords that have been released.
-        let mut released_chords: SmallVec<[KeySet; 4]> = smallvec![];
+        let mut released_chords: SmallVec<[InputSet; 4]> = smallvec![];
         for active_chord in &state.active_chords {
             if active_chord.contains_key(&key) {
                 // Note: unlike with press, we do not implicitly filter out keys we don't care about.
@@ -183,18 +203,16 @@ impl Bindings {
     }
 
     fn activate_chord(&self, script: &Script, interpreter: &mut Interpreter) -> Result<()> {
-        interpreter.interpret(script)?;
-        // interpreter.with_locals(&[("pressed", Value::True())], |inner| {
-        //     inner.interpret(script)
-        // })?;
+        interpreter.with_locals(&[("pressed", Value::True())], |inner| {
+            inner.interpret(script)
+        })?;
         Ok(())
     }
 
     fn deactiveate_chord(&self, script: &Script, interpreter: &mut Interpreter) -> Result<()> {
-        interpreter.interpret(script)?;
-        // interpreter.with_locals(&[("pressed", Value::False())], |inner| {
-        //     inner.interpret(script)
-        // })?;
+        interpreter.with_locals(&[("pressed", Value::False())], |inner| {
+            inner.interpret(script)
+        })?;
         Ok(())
     }
 }
@@ -268,18 +286,18 @@ mod test {
 
         state.input_states.insert(shift_key, ElementState::Pressed);
         state.modifiers_state |= ModifiersState::SHIFT;
-        bindings.match_key(
+        bindings.match_input(
             shift_key,
-            ElementState::Pressed,
+            Some(ElementState::Pressed),
             &mut state,
             &mut interpreter.write(),
         )?;
         assert_eq!(player.read().walking, false);
 
         state.input_states.insert(w_key, ElementState::Pressed);
-        bindings.match_key(
+        bindings.match_input(
             w_key,
-            ElementState::Pressed,
+            Some(ElementState::Pressed),
             &mut state,
             &mut interpreter.write(),
         )?;
@@ -308,9 +326,9 @@ mod test {
         state.modifiers_state |= ModifiersState::CTRL;
         state.modifiers_state |= ModifiersState::SHIFT;
         state.input_states.insert(w_key, ElementState::Pressed);
-        bindings.match_key(
+        bindings.match_input(
             w_key,
-            ElementState::Pressed,
+            Some(ElementState::Pressed),
             &mut state,
             &mut interpreter.write(),
         )?;
@@ -336,9 +354,9 @@ mod test {
             .with_bind("shift+w", "player.run(pressed)")?;
 
         state.input_states.insert(w_key, ElementState::Pressed);
-        bindings.match_key(
+        bindings.match_input(
             w_key,
-            ElementState::Pressed,
+            Some(ElementState::Pressed),
             &mut state,
             &mut interpreter.write(),
         )?;
@@ -347,20 +365,20 @@ mod test {
 
         state.input_states.insert(shift_key, ElementState::Pressed);
         state.modifiers_state |= ModifiersState::SHIFT;
-        bindings.match_key(
+        bindings.match_input(
             shift_key,
-            ElementState::Pressed,
+            Some(ElementState::Pressed),
             &mut state,
             &mut interpreter.write(),
         )?;
-        assert!(!player.read().walking);
         assert!(player.read().running);
+        assert!(!player.read().walking);
 
         state.input_states.insert(shift_key, ElementState::Released);
         state.modifiers_state -= ModifiersState::SHIFT;
-        bindings.match_key(
+        bindings.match_input(
             shift_key,
-            ElementState::Released,
+            Some(ElementState::Released),
             &mut state,
             &mut interpreter.write(),
         )?;
@@ -369,9 +387,9 @@ mod test {
 
         state.input_states.insert(shift_key, ElementState::Pressed);
         state.modifiers_state |= ModifiersState::SHIFT;
-        bindings.match_key(
+        bindings.match_input(
             shift_key,
-            ElementState::Pressed,
+            Some(ElementState::Pressed),
             &mut state,
             &mut interpreter.write(),
         )?;
@@ -379,9 +397,9 @@ mod test {
         assert!(player.read().running);
 
         state.input_states.insert(w_key, ElementState::Released);
-        bindings.match_key(
+        bindings.match_input(
             w_key,
-            ElementState::Released,
+            Some(ElementState::Released),
             &mut state,
             &mut interpreter.write(),
         )?;
@@ -389,9 +407,9 @@ mod test {
         assert!(!player.read().running);
 
         state.input_states.insert(w_key, ElementState::Pressed);
-        bindings.match_key(
+        bindings.match_input(
             w_key,
-            ElementState::Pressed,
+            Some(ElementState::Pressed),
             &mut state,
             &mut interpreter.write(),
         )?;

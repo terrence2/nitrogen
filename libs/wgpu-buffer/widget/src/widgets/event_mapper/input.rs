@@ -337,19 +337,19 @@ impl Input {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
-pub struct KeySet {
+pub struct InputSet {
     pub keys: SmallVec<[Input; 2]>,
     pub modifiers: ModifiersState,
 }
 
-impl KeySet {
+impl InputSet {
     // Parse keysets of the form a+b+c; e.g. LControl+RControl+Space into
     // a discreet keyset.
     //
     // Note that there is a special case for the 4 modifiers in which we
     // expect to be able to refer to "Control" and not care what key it is.
     // In this case we emit all possible keysets, combinatorially.
-    pub fn from_virtual(keyset: &str) -> Result<Vec<Self>> {
+    pub fn from_binding(keyset: &str) -> Result<Vec<Self>> {
         let mut out = vec![SmallVec::<[Input; 2]>::new()];
         for keyname in keyset.split('+') {
             if let Ok(key) = Input::from_binding(keyname) {
@@ -392,7 +392,7 @@ impl KeySet {
         false
     }
 
-    pub fn is_subset_of(&self, other: &KeySet) -> bool {
+    pub fn is_subset_of(&self, other: &InputSet) -> bool {
         if self.keys.len() >= other.keys.len() {
             return false;
         }
@@ -404,7 +404,7 @@ impl KeySet {
         true
     }
 
-    pub fn is_pressed(&self, active_input: Option<Input>, state: &State) -> bool {
+    pub fn is_pressed(&self, edge_input: Option<Input>, state: &State) -> bool {
         // We want to account for:
         //   * `Ctrl+e` && `Ctrl+o` being activated with a single hold of the Ctrl key.
         //   * Multiple actions can run at once: e.g. if someone is holding `w` to walk
@@ -418,7 +418,7 @@ impl KeySet {
         //
         // Simple solution: superset check, with special handling of modifier keys.
         for key in &self.keys {
-            if Some(*key) == active_input {
+            if Some(*key) == edge_input {
                 continue;
             }
             if let Some(current_state) = state.input_states.get(key) {
@@ -440,7 +440,7 @@ impl KeySet {
     }
 }
 
-impl fmt::Display for KeySet {
+impl fmt::Display for InputSet {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{{")?;
         for (i, key) in self.keys.iter().enumerate() {
@@ -484,15 +484,15 @@ mod test {
 
     #[test]
     fn test_can_create_mouse() -> Result<()> {
-        assert_eq!(Input::from_binding("MoUsE5000")?, Input::MouseButton(5000));
+        assert_eq!(Input::from_binding("MoUsE50")?, Input::MouseButton(50));
         Ok(())
     }
 
     #[test]
     fn test_can_create_keysets() -> Result<()> {
-        assert_eq!(KeySet::from_virtual("a+b")?.len(), 1);
-        assert_eq!(KeySet::from_virtual("Control+Win+a")?.len(), 4);
-        assert_eq!(KeySet::from_virtual("Control+b+Shift")?.len(), 4);
+        assert_eq!(InputSet::from_binding("a+b")?.len(), 1);
+        assert_eq!(InputSet::from_binding("Control+Win+a")?.len(), 4);
+        assert_eq!(InputSet::from_binding("Control+b+Shift")?.len(), 4);
         Ok(())
     }
 }
