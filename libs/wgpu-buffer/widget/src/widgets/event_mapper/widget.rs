@@ -15,11 +15,8 @@
 use crate::{
     widget::{UploadMetrics, Widget},
     widgets::event_mapper::{
-        axis::AxisKind,
         bindings::Bindings,
-        keyset::{Key, KeySet},
-        system::SystemEventKind,
-        window::WindowEventKind,
+        input::{Input, InputSet},
     },
     PaintContext,
 };
@@ -38,8 +35,8 @@ use std::{
 #[derive(Debug, Default)]
 pub struct State {
     pub modifiers_state: ModifiersState,
-    pub key_states: HashMap<Key, ElementState>,
-    pub active_chords: HashSet<KeySet>,
+    pub input_states: HashMap<Input, ElementState>,
+    pub active_chords: HashSet<InputSet>,
 }
 
 #[derive(Default, Debug, NitrousModule)]
@@ -80,175 +77,93 @@ impl Widget for EventMapper {
     fn handle_events(
         &mut self,
         events: &[GenericEvent],
-        interpreter: &mut Interpreter,
+        interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
         for event in events {
             if !event.is_window_focused() {
                 continue;
             }
 
-            if let Some(key_state) = event.press_state() {
-                let key = match event {
-                    GenericEvent::KeyboardKey {
-                        virtual_keycode, ..
-                    } => Key::KeyboardKey(*virtual_keycode),
-                    GenericEvent::MouseButton { button, .. } => Key::MouseButton(*button),
-                    // GenericEvent::JoystickButton { button, .. } => Key::JoystickButton(*button),
-                    _ => {
-                        panic!("event has a press state, but is not a key or button kind of event")
-                    }
-                };
-
-                self.state.key_states.insert(key, key_state);
-                self.state.modifiers_state =
-                    event.modifiers_state().expect("modifiers on key press");
-
-                for bindings in self.bindings.values() {
-                    bindings
-                        .read()
-                        .match_key(key, key_state, &mut self.state, interpreter)?;
-                }
-            } else {
-                match event {
-                    GenericEvent::MouseMotion {
-                        dx,
-                        dy,
-                        modifiers_state,
-                        in_window,
-                        window_focused,
-                    } => {
-                        interpreter.with_locals(
-                            &[
-                                ("dx", Value::Float(OrderedFloat(*dx))),
-                                ("dy", Value::Float(OrderedFloat(*dy))),
-                                ("shift_pressed", Value::Boolean(modifiers_state.shift())),
-                                ("alt_pressed", Value::Boolean(modifiers_state.alt())),
-                                ("ctrl_pressed", Value::Boolean(modifiers_state.ctrl())),
-                                ("logo_pressed", Value::Boolean(modifiers_state.logo())),
-                                ("in_window", Value::Boolean(*in_window)),
-                                ("window_focused", Value::Boolean(*window_focused)),
-                            ],
-                            |inner| {
-                                for bindings in self.bindings.values() {
-                                    bindings.read().match_axis(AxisKind::MouseMotion, inner)?;
-                                }
-                                Ok(Value::True())
-                            },
-                        )?;
-                    }
-
-                    GenericEvent::MouseWheel {
-                        horizontal_delta,
-                        vertical_delta,
-                        modifiers_state,
-                        in_window,
-                        window_focused,
-                    } => {
-                        interpreter.with_locals(
-                            &[
-                                (
-                                    "horizontal_delta",
-                                    Value::Float(OrderedFloat(*horizontal_delta)),
-                                ),
-                                (
-                                    "vertical_delta",
-                                    Value::Float(OrderedFloat(*vertical_delta)),
-                                ),
-                                ("shift_pressed", Value::Boolean(modifiers_state.shift())),
-                                ("alt_pressed", Value::Boolean(modifiers_state.alt())),
-                                ("ctrl_pressed", Value::Boolean(modifiers_state.ctrl())),
-                                ("logo_pressed", Value::Boolean(modifiers_state.logo())),
-                                ("in_window", Value::Boolean(*in_window)),
-                                ("window_focused", Value::Boolean(*window_focused)),
-                            ],
-                            |inner| {
-                                for bindings in self.bindings.values() {
-                                    bindings.read().match_axis(AxisKind::MouseWheel, inner)?;
-                                }
-                                Ok(Value::True())
-                            },
-                        )?;
-                    }
-
-                    GenericEvent::Window(evt) => match evt {
-                        GenericWindowEvent::Resized { width, height } => {
-                            interpreter.with_locals(
-                                &[
-                                    ("width", Value::Integer(*width as i64)),
-                                    ("height", Value::Integer(*height as i64)),
-                                ],
-                                |inner| {
-                                    for bindings in self.bindings.values() {
-                                        bindings
-                                            .read()
-                                            .match_window_event(WindowEventKind::Resize, inner)?;
-                                    }
-                                    Ok(Value::True())
-                                },
-                            )?;
-                        }
-
-                        GenericWindowEvent::ScaleFactorChanged { scale } => {
-                            interpreter.with_locals(
-                                &[("scale", Value::Float(OrderedFloat(*scale)))],
-                                |inner| {
-                                    for bindings in self.bindings.values() {
-                                        bindings.read().match_window_event(
-                                            WindowEventKind::DpiChange,
-                                            inner,
-                                        )?;
-                                    }
-                                    Ok(Value::True())
-                                },
-                            )?;
-                        }
-                    },
-
-                    GenericEvent::System(evt) => match evt {
-                        GenericSystemEvent::Quit => {
-                            for bindings in self.bindings.values() {
-                                bindings
-                                    .read()
-                                    .match_system_event(SystemEventKind::Quit, interpreter)?;
-                            }
-                        }
-
-                        GenericSystemEvent::DeviceAdded { dummy } => {
-                            interpreter.with_locals(
-                                &[("device_id", Value::Integer(*dummy as i64))],
-                                |inner| {
-                                    for bindings in self.bindings.values() {
-                                        bindings.read().match_system_event(
-                                            SystemEventKind::DeviceAdded,
-                                            inner,
-                                        )?;
-                                    }
-                                    Ok(Value::True())
-                                },
-                            )?;
-                        }
-
-                        GenericSystemEvent::DeviceRemoved { dummy } => {
-                            interpreter.with_locals(
-                                &[("device_id", Value::Integer(*dummy as i64))],
-                                |inner| {
-                                    for bindings in self.bindings.values() {
-                                        bindings.read().match_system_event(
-                                            SystemEventKind::DeviceRemoved,
-                                            inner,
-                                        )?;
-                                    }
-                                    Ok(Value::True())
-                                },
-                            )?;
-                        }
-                    },
-
-                    _ => {
-                        //println!("unexpected event: {:?}", event);
-                    }
-                };
+            let input = Input::from_event(event);
+            if input.is_none() {
+                continue;
             }
+            let input = input.unwrap();
+
+            let mut variables = vec![("window_focused", Value::Boolean(true))];
+
+            if let Some(press_state) = event.press_state() {
+                self.state.input_states.insert(input, press_state);
+                // Note: pressed variable is set later, since we need to disable masked input sets.
+            }
+
+            if let Some(modifiers_state) = event.modifiers_state() {
+                self.state.modifiers_state = modifiers_state;
+                variables.push(("shift_pressed", Value::Boolean(modifiers_state.shift())));
+                variables.push(("alt_pressed", Value::Boolean(modifiers_state.alt())));
+                variables.push(("ctrl_pressed", Value::Boolean(modifiers_state.ctrl())));
+                variables.push(("logo_pressed", Value::Boolean(modifiers_state.logo())));
+            }
+
+            // TODO: exit early if not processing events
+
+            // Collect variables to inject.
+            match event {
+                GenericEvent::MouseMotion {
+                    dx, dy, in_window, ..
+                } => {
+                    variables.push(("dx", Value::Float(OrderedFloat(*dx))));
+                    variables.push(("dy", Value::Float(OrderedFloat(*dy))));
+                    variables.push(("in_window", Value::Boolean(*in_window)));
+                }
+                GenericEvent::MouseWheel {
+                    horizontal_delta,
+                    vertical_delta,
+                    in_window,
+                    ..
+                } => {
+                    variables.push((
+                        "horizontal_delta",
+                        Value::Float(OrderedFloat(*horizontal_delta)),
+                    ));
+                    variables.push((
+                        "vertical_delta",
+                        Value::Float(OrderedFloat(*vertical_delta)),
+                    ));
+                    variables.push(("in_window", Value::Boolean(*in_window)));
+                }
+                GenericEvent::Window(evt) => match evt {
+                    GenericWindowEvent::Resized { width, height } => {
+                        variables.push(("width", Value::Integer(*width as i64)));
+                        variables.push(("height", Value::Integer(*height as i64)));
+                    }
+                    GenericWindowEvent::ScaleFactorChanged { scale } => {
+                        variables.push(("scale", Value::Float(OrderedFloat(*scale))));
+                    }
+                },
+                GenericEvent::System(evt) => match evt {
+                    GenericSystemEvent::Quit => {}
+                    GenericSystemEvent::DeviceAdded { dummy } => {
+                        variables.push(("device_id", Value::Integer(*dummy as i64)));
+                    }
+                    GenericSystemEvent::DeviceRemoved { dummy } => {
+                        variables.push(("device_id", Value::Integer(*dummy as i64)));
+                    }
+                },
+                _ => {}
+            }
+
+            interpreter.write().with_locals(&variables, |inner| {
+                for bindings in self.bindings.values() {
+                    bindings.read().match_input(
+                        input,
+                        event.press_state(),
+                        &mut self.state,
+                        inner,
+                    )?
+                }
+                Ok(Value::True())
+            })?;
         }
         Ok(())
     }

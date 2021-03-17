@@ -13,15 +13,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::widgets::event_mapper::{
-    axis::AxisKind,
-    keyset::{Key, KeySet},
-    system::SystemEventKind,
-    window::WindowEventKind,
+    input::{Input, InputSet},
     State,
 };
 use anyhow::Result;
 use input::ElementState;
-use log::trace;
+use log::{debug, trace};
 use nitrous::{Interpreter, Script, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use smallvec::{smallvec, SmallVec};
@@ -31,11 +28,8 @@ use std::collections::HashMap;
 #[derive(Debug, NitrousModule)]
 pub struct Bindings {
     pub name: String,
-    press_chords: HashMap<Key, Vec<KeySet>>,
-    script_map: HashMap<KeySet, Script>,
-    axis_map: HashMap<AxisKind, Script>,
-    windows_event_map: HashMap<WindowEventKind, Script>,
-    system_event_map: HashMap<SystemEventKind, Script>,
+    press_chords: HashMap<Input, Vec<InputSet>>,
+    script_map: HashMap<InputSet, Script>,
 }
 
 #[inject_nitrous_module]
@@ -45,9 +39,6 @@ impl Bindings {
             name: name.to_owned(),
             press_chords: HashMap::new(),
             script_map: HashMap::new(),
-            axis_map: HashMap::new(),
-            windows_event_map: HashMap::new(),
-            system_event_map: HashMap::new(),
         }
     }
 
@@ -60,25 +51,7 @@ impl Bindings {
     pub fn bind(&mut self, event_name: &str, script_raw: &str) -> Result<()> {
         let script = Script::compile(script_raw)?;
 
-        if let Ok(kind) = SystemEventKind::from_virtual(event_name) {
-            trace!("binding {:?} => {}", kind, script);
-            self.system_event_map.insert(kind, script);
-            return Ok(());
-        }
-
-        if let Ok(kind) = WindowEventKind::from_virtual(event_name) {
-            trace!("binding {:?} => {}", kind, script);
-            self.windows_event_map.insert(kind, script);
-            return Ok(());
-        }
-
-        if let Ok(axis) = AxisKind::from_virtual(event_name) {
-            trace!("binding {:?} => {}", axis, script);
-            self.axis_map.insert(axis, script);
-            return Ok(());
-        }
-
-        for ks in KeySet::from_virtual(event_name)?.drain(..) {
+        for ks in InputSet::from_binding(event_name)?.drain(..) {
             trace!("binding {} => {}", ks, script);
             self.script_map.insert(ks.clone(), script.clone());
 
@@ -92,60 +65,48 @@ impl Bindings {
         Ok(())
     }
 
-    pub fn match_system_event(
+    pub fn match_input(
         &self,
-        event: SystemEventKind,
-        interpreter: &mut Interpreter,
-    ) -> Result<()> {
-        if let Some(script) = self.system_event_map.get(&event) {
-            interpreter.interpret(script)?;
-        }
-        Ok(())
-    }
-
-    pub fn match_window_event(
-        &self,
-        event: WindowEventKind,
-        interpreter: &mut Interpreter,
-    ) -> Result<()> {
-        if let Some(script) = self.windows_event_map.get(&event) {
-            interpreter.interpret(script)?;
-        }
-        Ok(())
-    }
-
-    pub fn match_axis(&self, axis: AxisKind, interpreter: &mut Interpreter) -> Result<()> {
-        if let Some(script) = self.axis_map.get(&axis) {
-            interpreter.interpret(script)?;
-        }
-        Ok(())
-    }
-
-    pub fn match_key(
-        &self,
-        key: Key,
-        key_state: ElementState,
+        input: Input,
+        press_state: Option<ElementState>,
         state: &mut State,
         interpreter: &mut Interpreter,
     ) -> Result<()> {
-        match key_state {
-            ElementState::Pressed => self.handle_press(key, state, interpreter)?,
-            ElementState::Released => self.handle_release(key, state, interpreter)?,
+        match press_state {
+            Some(ElementState::Pressed) => self.handle_press(input, state, interpreter)?,
+            Some(ElementState::Released) => self.handle_release(input, state, interpreter)?,
+            None => self.handle_edge(input, state, interpreter)?,
+        }
+        Ok(())
+    }
+
+    fn handle_edge(
+        &self,
+        input: Input,
+        state: &mut State,
+        interpreter: &mut Interpreter,
+    ) -> Result<()> {
+        if let Some(possible_chord_list) = self.press_chords.get(&input) {
+            for chord in possible_chord_list {
+                if chord.is_pressed(Some(input), &state) {
+                    interpreter.interpret(&self.script_map[chord])?;
+                }
+            }
         }
         Ok(())
     }
 
     fn handle_press(
         &self,
-        key: Key,
+        input: Input,
         state: &mut State,
         interpreter: &mut Interpreter,
     ) -> Result<()> {
         // The press chords gives us a quick map from a key press to all chords which could become
         // active in the case that it is pressed so that we don't have to look at everything.
-        if let Some(possible_chord_list) = self.press_chords.get(&key) {
+        if let Some(possible_chord_list) = self.press_chords.get(&input) {
             for chord in possible_chord_list {
-                if chord.is_pressed(&state) {
+                if chord.is_pressed(None, &state) {
                     self.maybe_activate_chord(chord, state, interpreter)?;
                 }
             }
@@ -153,7 +114,7 @@ impl Bindings {
         Ok(())
     }
 
-    fn chord_is_masked(chord: &KeySet, state: &State) -> bool {
+    fn chord_is_masked(chord: &InputSet, state: &State) -> bool {
         for active_chord in &state.active_chords {
             if chord.is_subset_of(active_chord) {
                 return true;
@@ -164,13 +125,14 @@ impl Bindings {
 
     fn maybe_activate_chord(
         &self,
-        chord: &KeySet,
+        chord: &InputSet,
         state: &mut State,
         interpreter: &mut Interpreter,
     ) -> Result<()> {
         // We may have multiple binding sets active for the same KeySet, in which case the first
         // binding in the set wins and checks for subsequent activations should exit early.
         if state.active_chords.contains(&chord) {
+            debug!("chord {} is already active", chord);
             return Ok(());
         }
 
@@ -179,13 +141,15 @@ impl Bindings {
 
         // If the chord is masked, do not activate.
         if Self::chord_is_masked(chord, state) {
+            debug!("chord {} is masked", chord);
             return Ok(());
         }
 
         // If any chord will become masked, deactivate it.
-        let mut masked_chords: SmallVec<[KeySet; 4]> = smallvec![];
+        let mut masked_chords: SmallVec<[InputSet; 4]> = smallvec![];
         for active_chord in &state.active_chords {
             if active_chord.is_subset_of(chord) {
+                debug!("masking chord: {}", active_chord);
                 masked_chords.push(active_chord.to_owned());
             }
         }
@@ -205,12 +169,12 @@ impl Bindings {
 
     fn handle_release(
         &self,
-        key: Key,
+        key: Input,
         state: &mut State,
         interpreter: &mut Interpreter,
     ) -> Result<()> {
         // Remove any chords that have been released.
-        let mut released_chords: SmallVec<[KeySet; 4]> = smallvec![];
+        let mut released_chords: SmallVec<[InputSet; 4]> = smallvec![];
         for active_chord in &state.active_chords {
             if active_chord.contains_key(&key) {
                 // Note: unlike with press, we do not implicitly filter out keys we don't care about.
@@ -228,7 +192,7 @@ impl Bindings {
         // masked commands that were unmasked by this change.
         for released_chord in &released_chords {
             for (chord, script) in &self.script_map {
-                if chord.is_subset_of(released_chord) && chord.is_pressed(&state) {
+                if chord.is_subset_of(released_chord) && chord.is_pressed(None, &state) {
                     state.active_chords.insert(chord.to_owned());
                     self.activate_chord(script, interpreter)?;
                 }
@@ -314,26 +278,26 @@ mod test {
             .write()
             .put_global("player", Value::Module(player.clone()));
 
-        let w_key = Key::KeyboardKey(VirtualKeyCode::W);
-        let shift_key = Key::KeyboardKey(VirtualKeyCode::LShift);
+        let w_key = Input::KeyboardKey(VirtualKeyCode::W);
+        let shift_key = Input::KeyboardKey(VirtualKeyCode::LShift);
 
         let mut state: State = Default::default();
         let bindings = Bindings::new("test").with_bind("w", "player.never_executed()")?;
 
-        state.key_states.insert(shift_key, ElementState::Pressed);
+        state.input_states.insert(shift_key, ElementState::Pressed);
         state.modifiers_state |= ModifiersState::SHIFT;
-        bindings.match_key(
+        bindings.match_input(
             shift_key,
-            ElementState::Pressed,
+            Some(ElementState::Pressed),
             &mut state,
             &mut interpreter.write(),
         )?;
         assert_eq!(player.read().walking, false);
 
-        state.key_states.insert(w_key, ElementState::Pressed);
-        bindings.match_key(
+        state.input_states.insert(w_key, ElementState::Pressed);
+        bindings.match_input(
             w_key,
-            ElementState::Pressed,
+            Some(ElementState::Pressed),
             &mut state,
             &mut interpreter.write(),
         )?;
@@ -350,21 +314,21 @@ mod test {
             .write()
             .put_global("player", Value::Module(player.clone()));
 
-        let w_key = Key::KeyboardKey(VirtualKeyCode::W);
-        let shift_key = Key::KeyboardKey(VirtualKeyCode::LShift);
-        let ctrl_key = Key::KeyboardKey(VirtualKeyCode::RControl);
+        let w_key = Input::KeyboardKey(VirtualKeyCode::W);
+        let shift_key = Input::KeyboardKey(VirtualKeyCode::LShift);
+        let ctrl_key = Input::KeyboardKey(VirtualKeyCode::RControl);
 
         let mut state: State = Default::default();
         let bindings = Bindings::new("test").with_bind("Shift+w", "player.never_executed()")?;
 
-        state.key_states.insert(ctrl_key, ElementState::Pressed);
-        state.key_states.insert(shift_key, ElementState::Pressed);
+        state.input_states.insert(ctrl_key, ElementState::Pressed);
+        state.input_states.insert(shift_key, ElementState::Pressed);
         state.modifiers_state |= ModifiersState::CTRL;
         state.modifiers_state |= ModifiersState::SHIFT;
-        state.key_states.insert(w_key, ElementState::Pressed);
-        bindings.match_key(
+        state.input_states.insert(w_key, ElementState::Pressed);
+        bindings.match_input(
             w_key,
-            ElementState::Pressed,
+            Some(ElementState::Pressed),
             &mut state,
             &mut interpreter.write(),
         )?;
@@ -381,71 +345,71 @@ mod test {
             .write()
             .put_global("player", Value::Module(player.clone()));
 
-        let w_key = Key::KeyboardKey(VirtualKeyCode::W);
-        let shift_key = Key::KeyboardKey(VirtualKeyCode::LShift);
+        let w_key = Input::KeyboardKey(VirtualKeyCode::W);
+        let shift_key = Input::KeyboardKey(VirtualKeyCode::LShift);
 
         let mut state: State = Default::default();
         let bindings = Bindings::new("test")
             .with_bind("w", "player.walk(pressed)")?
             .with_bind("shift+w", "player.run(pressed)")?;
 
-        state.key_states.insert(w_key, ElementState::Pressed);
-        bindings.match_key(
+        state.input_states.insert(w_key, ElementState::Pressed);
+        bindings.match_input(
             w_key,
-            ElementState::Pressed,
+            Some(ElementState::Pressed),
             &mut state,
             &mut interpreter.write(),
         )?;
         assert!(player.read().walking);
         assert!(!player.read().running);
 
-        state.key_states.insert(shift_key, ElementState::Pressed);
+        state.input_states.insert(shift_key, ElementState::Pressed);
         state.modifiers_state |= ModifiersState::SHIFT;
-        bindings.match_key(
+        bindings.match_input(
             shift_key,
-            ElementState::Pressed,
+            Some(ElementState::Pressed),
             &mut state,
             &mut interpreter.write(),
         )?;
-        assert!(!player.read().walking);
         assert!(player.read().running);
+        assert!(!player.read().walking);
 
-        state.key_states.insert(shift_key, ElementState::Released);
+        state.input_states.insert(shift_key, ElementState::Released);
         state.modifiers_state -= ModifiersState::SHIFT;
-        bindings.match_key(
+        bindings.match_input(
             shift_key,
-            ElementState::Released,
+            Some(ElementState::Released),
             &mut state,
             &mut interpreter.write(),
         )?;
         assert!(player.read().walking);
         assert!(!player.read().running);
 
-        state.key_states.insert(shift_key, ElementState::Pressed);
+        state.input_states.insert(shift_key, ElementState::Pressed);
         state.modifiers_state |= ModifiersState::SHIFT;
-        bindings.match_key(
+        bindings.match_input(
             shift_key,
-            ElementState::Pressed,
+            Some(ElementState::Pressed),
             &mut state,
             &mut interpreter.write(),
         )?;
         assert!(!player.read().walking);
         assert!(player.read().running);
 
-        state.key_states.insert(w_key, ElementState::Released);
-        bindings.match_key(
+        state.input_states.insert(w_key, ElementState::Released);
+        bindings.match_input(
             w_key,
-            ElementState::Released,
+            Some(ElementState::Released),
             &mut state,
             &mut interpreter.write(),
         )?;
         assert!(!player.read().walking);
         assert!(!player.read().running);
 
-        state.key_states.insert(w_key, ElementState::Pressed);
-        bindings.match_key(
+        state.input_states.insert(w_key, ElementState::Pressed);
+        bindings.match_input(
             w_key,
-            ElementState::Pressed,
+            Some(ElementState::Pressed),
             &mut state,
             &mut interpreter.write(),
         )?;

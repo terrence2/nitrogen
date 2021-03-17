@@ -42,9 +42,9 @@ impl Interpreter {
         Arc::new(RwLock::new(Self::default()))
     }
 
-    pub fn with_locals<F>(&mut self, locals: &[(&str, Value)], callback: F) -> Result<Value>
+    pub fn with_locals<F>(&mut self, locals: &[(&str, Value)], mut callback: F) -> Result<Value>
     where
-        F: Fn(&mut Interpreter) -> Result<Value>,
+        F: FnMut(&mut Interpreter) -> Result<Value>,
     {
         for (name, value) in locals {
             self.locals.insert((*name).to_owned(), value.to_owned());

@@ -82,7 +82,7 @@ impl LineEdit {
         &mut self,
         virtual_keycode: &VirtualKeyCode,
         modifiers: &ModifiersState,
-        interpreter: &mut Interpreter,
+        interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
         match virtual_keycode {
             // Move to actions.
@@ -93,7 +93,14 @@ impl LineEdit {
             VirtualKeyCode::Left => self.line.move_left(modifiers),
             VirtualKeyCode::Right => self.line.move_right(modifiers),
             VirtualKeyCode::Return | VirtualKeyCode::NumpadEnter => {
-                interpreter.interpret_once(&self.line.flatten())?;
+                let line = self.line.flatten();
+                rayon::spawn(move || match interpreter.write().interpret_once(&line) {
+                    Ok(_value) => {}
+                    Err(err) => {
+                        println!("failed to execute '{}'", line);
+                        println!("  Error: {:?}", err);
+                    }
+                });
             }
             _ => {}
         }
@@ -121,7 +128,7 @@ impl Widget for LineEdit {
     fn handle_events(
         &mut self,
         events: &[GenericEvent],
-        interpreter: &mut Interpreter,
+        interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
         for event in events {
             if let GenericEvent::KeyboardKey {
@@ -149,7 +156,7 @@ impl Widget for LineEdit {
                         }
                         self.line.insert(&c.to_string());
                     } else {
-                        self.take_action(virtual_keycode, modifiers_state, interpreter)?;
+                        self.take_action(virtual_keycode, modifiers_state, interpreter.clone())?;
                     }
                 }
             }
