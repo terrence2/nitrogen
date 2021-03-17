@@ -66,6 +66,10 @@ impl LineEdit {
         self
     }
 
+    pub fn line(&self) -> &TextRun {
+        &self.line
+    }
+
     pub fn line_mut(&mut self) -> &mut TextRun {
         &mut self.line
     }
@@ -82,7 +86,6 @@ impl LineEdit {
         &mut self,
         virtual_keycode: &VirtualKeyCode,
         modifiers: &ModifiersState,
-        interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
         match virtual_keycode {
             // Move to actions.
@@ -92,16 +95,6 @@ impl LineEdit {
             VirtualKeyCode::End => self.line.move_end(modifiers),
             VirtualKeyCode::Left => self.line.move_left(modifiers),
             VirtualKeyCode::Right => self.line.move_right(modifiers),
-            VirtualKeyCode::Return | VirtualKeyCode::NumpadEnter => {
-                let line = self.line.flatten();
-                rayon::spawn(move || match interpreter.write().interpret_once(&line) {
-                    Ok(_value) => {}
-                    Err(err) => {
-                        println!("failed to execute '{}'", line);
-                        println!("  Error: {:?}", err);
-                    }
-                });
-            }
             _ => {}
         }
         Ok(())
@@ -125,39 +118,39 @@ impl Widget for LineEdit {
         })
     }
 
-    fn handle_events(
+    fn handle_event(
         &mut self,
-        events: &[GenericEvent],
-        interpreter: Arc<RwLock<Interpreter>>,
+        event: &GenericEvent,
+        _focus: &str,
+        _interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
-        for event in events {
-            if let GenericEvent::KeyboardKey {
-                virtual_keycode,
-                press_state,
-                modifiers_state,
-                window_focused,
-                ..
-            } = event
-            {
-                if !window_focused {
-                    continue;
-                }
+        // FIXME: add name to widget and obey focus
+        if let GenericEvent::KeyboardKey {
+            virtual_keycode,
+            press_state,
+            modifiers_state,
+            window_focused,
+            ..
+        } = event
+        {
+            if !window_focused {
+                return Ok(());
+            }
 
-                // Reserved for window manager.
-                if modifiers_state.alt() || modifiers_state.logo() {
-                    continue;
-                }
+            // Reserved for window manager.
+            if modifiers_state.alt() || modifiers_state.logo() {
+                return Ok(());
+            }
 
-                if *press_state == ElementState::Pressed {
-                    let (base, shifted) = code_to_char(virtual_keycode);
-                    if let Some(mut c) = base {
-                        if modifiers_state.shift() {
-                            c = shifted.unwrap_or(c);
-                        }
-                        self.line.insert(&c.to_string());
-                    } else {
-                        self.take_action(virtual_keycode, modifiers_state, interpreter.clone())?;
+            if *press_state == ElementState::Pressed {
+                let (base, shifted) = code_to_char(virtual_keycode);
+                if let Some(mut c) = base {
+                    if modifiers_state.shift() {
+                        c = shifted.unwrap_or(c);
                     }
+                    self.line.insert(&c.to_string());
+                } else {
+                    self.take_action(virtual_keycode, modifiers_state)?;
                 }
             }
         }

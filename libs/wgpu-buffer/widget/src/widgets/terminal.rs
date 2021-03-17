@@ -21,7 +21,7 @@ use crate::{
 };
 use anyhow::Result;
 use gpu::GPU;
-use input::GenericEvent;
+use input::{ElementState, GenericEvent, VirtualKeyCode};
 use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::sync::Arc;
@@ -30,6 +30,7 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub struct Terminal {
     edit: Arc<RwLock<LineEdit>>,
+    output: Arc<RwLock<TextEdit>>,
     container: Arc<RwLock<VerticalBox>>,
     visible: bool,
 }
@@ -48,7 +49,7 @@ impl Terminal {
             .with_text("demo.toggle_terminal(True)")
             .wrapped();
         edit.write().line_mut().select_all();
-        let container = VerticalBox::with_children(&[output, edit.clone()])
+        let container = VerticalBox::with_children(&[output.clone(), edit.clone()])
             .with_background_color(Color::Gray.darken(3.).opacity(0.8))
             .with_width(2.0)
             .with_height(0.9)
@@ -56,6 +57,7 @@ impl Terminal {
         container.write().info_mut().set_glass_background(true);
         Self {
             edit,
+            output,
             container,
             visible: true,
         }
@@ -73,6 +75,10 @@ impl Terminal {
     pub fn wrapped(self) -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(self))
     }
+
+    pub fn println(&self, line: &str) {
+        self.output.write().append_line(line);
+    }
 }
 
 impl Widget for Terminal {
@@ -84,15 +90,67 @@ impl Widget for Terminal {
         }
     }
 
-    fn handle_events(
+    fn handle_event(
         &mut self,
-        events: &[GenericEvent],
+        event: &GenericEvent,
+        focus: &str,
         interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
-        if self.visible {
-            self.edit.write().handle_events(events, interpreter)
-        } else {
-            Ok(())
+        // FIXME: don't hard-code the name
+        if focus != "terminal" {
+            return Ok(());
         }
+
+        // FIXME: set focus parameter here equal to whatever we call the line_edit child
+        self.edit
+            .write()
+            .handle_event(event, focus, interpreter.clone())?;
+
+        // Intercept the enter key and process the command in edit into the terminal.
+        if let GenericEvent::KeyboardKey {
+            virtual_keycode,
+            press_state,
+            modifiers_state,
+            window_focused,
+            ..
+        } = event
+        {
+            if !window_focused {
+                return Ok(());
+            }
+
+            // Reserved for window manager.
+            if modifiers_state.alt() || modifiers_state.logo() {
+                return Ok(());
+            }
+
+            if *press_state == ElementState::Pressed {
+                match virtual_keycode {
+                    VirtualKeyCode::Return | VirtualKeyCode::NumpadEnter => {
+                        let command = self.edit.read().line().flatten();
+                        self.edit.write().line_mut().select_all();
+                        self.edit.write().line_mut().delete();
+
+                        let output = self.output.clone();
+                        rayon::spawn(move || match interpreter.write().interpret_once(&command) {
+                            Ok(value) => {
+                                output.write().append_line(&format!("{}", value));
+                            }
+                            Err(err) => {
+                                println!("failed to execute '{}'", command);
+                                println!("  Error: {:?}", err);
+                                output
+                                    .write()
+                                    .append_line(&format!("failed to execute '{}'", command));
+                                output.write().append_line(&format!("  Error: {:?}", err));
+                            }
+                        });
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        Ok(())
     }
 }

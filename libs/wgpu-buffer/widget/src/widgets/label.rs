@@ -93,9 +93,10 @@ impl Widget for Label {
         })
     }
 
-    fn handle_events(
+    fn handle_event(
         &mut self,
-        _events: &[GenericEvent],
+        _event: &GenericEvent,
+        _focus: &str,
         _interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
         Ok(())

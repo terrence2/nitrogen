@@ -173,18 +173,18 @@ impl GPU {
 
         interpreter.put_global("gpu", Value::Module(gpu.clone()));
 
-        // The GPU requires some non-optional bindings for various system events.
-        if interpreter.get_global("mapper").is_some() {
-            interpreter.interpret_once(
-                r#"
-                let bindings := mapper.create_bindings("gpu");
-                bindings.bind("windowResize", "gpu.on_resize(width, height)");
-                bindings.bind("windowDpiChange", "gpu.on_dpi_change(scale)");
-            "#,
-            )?;
-        }
-
         Ok(gpu)
+    }
+
+    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
+        interpreter.interpret_once(
+            r#"
+                let bindings := mapper.create_bindings("gpu");
+                bindings.bind("windowResized", "gpu.on_resize(width, height)");
+                bindings.bind("windowDpiChanged", "gpu.on_dpi_change(scale)");
+            "#,
+        )?;
+        Ok(())
     }
 
     #[method]

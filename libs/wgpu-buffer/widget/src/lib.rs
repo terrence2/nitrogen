@@ -45,7 +45,7 @@ use anyhow::{ensure, Result};
 use font_common::FontInterface;
 use font_ttf::TtfFont;
 use gpu::{UploadTracker, GPU};
-use input::GenericEvent;
+use input::{ElementState, GenericEvent, ModifiersState, VirtualKeyCode};
 use log::trace;
 use nitrous::Interpreter;
 use parking_lot::RwLock;
@@ -81,7 +81,12 @@ pub struct WidgetBuffer {
     // Widget state.
     root: Arc<RwLock<FloatBox>>,
     paint_context: PaintContext,
-    queued_scripts: Arc<RwLock<Vec<String>>>,
+    keyboard_focus: String,
+
+    // Auto-inserted widgets.
+    terminal: Arc<RwLock<Terminal>>,
+    mapper: Arc<RwLock<EventMapper>>,
+    show_terminal: bool,
 
     // The four key buffers.
     widget_info_buffer: Arc<Box<wgpu::Buffer>>,
@@ -100,7 +105,7 @@ impl WidgetBuffer {
     const MAX_BACKGROUND_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6; // note: rounded corners
     const MAX_IMAGE_VERTICES: usize = Self::MAX_WIDGETS * 4 * 6;
 
-    pub fn new(gpu: &mut GPU) -> Result<Arc<RwLock<Self>>> {
+    pub fn new(gpu: &mut GPU, interpreter: &mut Interpreter) -> Result<Arc<RwLock<Self>>> {
         trace!("WidgetBuffer::new");
 
         let mut paint_context = PaintContext::new(gpu.device());
@@ -190,10 +195,22 @@ impl WidgetBuffer {
                     ],
                 });
 
+        let root = FloatBox::new();
+        let mapper = EventMapper::new(interpreter);
+        let terminal = Terminal::new(&paint_context.font_context)
+            .with_visible(false)
+            .wrapped();
+        root.write().add_child("mapper", mapper.clone());
+        root.write().add_child("terminal", terminal.clone());
+
         Ok(Arc::new(RwLock::new(Self {
-            root: FloatBox::new(),
+            root,
             paint_context,
-            queued_scripts: Arc::new(RwLock::new(Vec::new())),
+            keyboard_focus: "mapper".to_owned(),
+
+            terminal,
+            mapper,
+            show_terminal: false,
 
             widget_info_buffer,
             background_vertex_buffer,
@@ -209,8 +226,8 @@ impl WidgetBuffer {
         self.root.clone()
     }
 
-    pub fn set_keyboard_focus(&self, name: &str) -> Result<()> {
-        self.root.write().set_keyboard_focus(name)
+    pub fn set_keyboard_focus(&mut self, name: &str) {
+        self.keyboard_focus = name.to_owned();
     }
 
     pub fn add_font<S: Borrow<str> + Into<String>>(
@@ -225,19 +242,38 @@ impl WidgetBuffer {
         &self.paint_context.font_context
     }
 
-    pub fn queue_script(&self, script: &str) {
-        self.queued_scripts.write().push(script.to_owned());
-    }
-
     pub fn handle_events(
-        &self,
+        &mut self,
         events: &[GenericEvent],
         interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
-        for script in self.queued_scripts.write().drain(..) {
-            interpreter.write().interpret_once(&script)?;
+        for event in events {
+            if let GenericEvent::KeyboardKey {
+                virtual_keycode,
+                press_state,
+                modifiers_state,
+                ..
+            } = event
+            {
+                if *virtual_keycode == VirtualKeyCode::Grave
+                    && *modifiers_state == ModifiersState::SHIFT
+                    && *press_state == ElementState::Pressed
+                {
+                    self.show_terminal = !self.show_terminal;
+                    self.set_keyboard_focus(if self.show_terminal {
+                        "terminal"
+                    } else {
+                        "mapper"
+                    });
+                    self.terminal.write().set_visible(self.show_terminal);
+                    continue;
+                }
+            }
+            self.root()
+                .write()
+                .handle_event(event, &self.keyboard_focus, interpreter.clone())?;
         }
-        self.root().write().handle_events(events, interpreter)
+        Ok(())
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
@@ -359,7 +395,7 @@ mod test {
         let interpreter = Interpreter::new();
         let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
 
-        let widgets = WidgetBuffer::new(&mut gpu.write())?;
+        let widgets = WidgetBuffer::new(&mut gpu.write(), &mut interpreter.write())?;
         let label = Label::new(
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\
             สิบสองกษัตริย์ก่อนหน้าแลถัดไป       สององค์ไซร้โง่เขลาเบาปัญญา\
