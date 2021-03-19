@@ -241,6 +241,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     ///////////////////////////////////////////////////////////
 
     let version_label = Label::new("Nitrogen v0.1")
+        .with_font(widgets.read().font_context().font_id_for_name("fira-sans"))
         .with_color(Color::Green)
         .with_size(8.0)
         .with_pre_blended_text()
@@ -253,6 +254,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         .set_float(PositionH::End, PositionV::Top);
 
     let fps_label = Label::new("fps")
+        .with_font(widgets.read().font_context().font_id_for_name("sans"))
         .with_color(Color::Red)
         .with_size(13.0)
         .with_pre_blended_text()

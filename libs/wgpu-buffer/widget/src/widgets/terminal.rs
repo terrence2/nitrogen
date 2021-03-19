@@ -22,7 +22,7 @@ use crate::{
 use anyhow::Result;
 use gpu::GPU;
 use input::{ElementState, GenericEvent, VirtualKeyCode};
-use nitrous::Interpreter;
+use nitrous::{Interpreter, Value};
 use parking_lot::RwLock;
 use std::sync::Arc;
 
@@ -38,7 +38,7 @@ pub struct Terminal {
 impl Terminal {
     pub fn new(font_context: &FontContext) -> Self {
         let output = TextEdit::new("")
-            .with_default_font(font_context.font_id_for_name("mono"))
+            .with_default_font(font_context.font_id_for_name("dejavu-mono"))
             .with_default_color(Color::Green)
             .with_text("Nitrogen Terminal\nType `help` for help.")
             .wrapped();
@@ -134,7 +134,13 @@ impl Widget for Terminal {
                         let output = self.output.clone();
                         rayon::spawn(move || match interpreter.write().interpret_once(&command) {
                             Ok(value) => {
-                                output.write().append_line(&format!("{}", value));
+                                let s = match value {
+                                    Value::String(s) => s,
+                                    v => format!("{}", v),
+                                };
+                                for line in s.lines() {
+                                    output.write().append_line(line);
+                                }
                             }
                             Err(err) => {
                                 println!("failed to execute '{}'", command);

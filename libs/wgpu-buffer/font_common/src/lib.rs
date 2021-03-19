@@ -14,4 +14,4 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 mod font_interface;
 
-pub use crate::font_interface::FontInterface;
+pub use crate::font_interface::{FontAdvance, FontInterface};

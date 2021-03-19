@@ -20,7 +20,7 @@ use crate::{
 };
 use anyhow::Result;
 use atlas::{AtlasPacker, Frame};
-use font_common::FontInterface;
+use font_common::{FontAdvance, FontInterface};
 use gpu::{UploadTracker, GPU};
 use image::Luma;
 use ordered_float::OrderedFloat;
@@ -215,6 +215,7 @@ impl FontContext {
         let descent = font.read().descent(scale_px);
         let ascent = font.read().ascent(scale_px);
         let line_gap = font.read().line_gap(scale_px);
+        let advance = font.read().advance_style();
 
         let mut x_pos = 0f32;
         let mut prior = None;
@@ -229,7 +230,9 @@ impl FontContext {
                 .unwrap_or(0f32);
             prior = Some(c);
 
-            x_pos += kerning;
+            if advance != FontAdvance::Mono {
+                x_pos += kerning;
+            }
             x_pos = (x_pos * phys_w).floor() / phys_w;
 
             let px0 = x_pos + lo_x as f32;
@@ -299,7 +302,10 @@ impl FontContext {
                 }
             }
 
-            x_pos += adv - lsb;
+            x_pos += match advance {
+                FontAdvance::Mono => adv,
+                FontAdvance::Sans => adv - lsb,
+            };
         }
 
         if let SpanSelection::Cursor { position } = selection_area {

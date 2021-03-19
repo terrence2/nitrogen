@@ -15,9 +15,16 @@
 use image::GrayImage;
 use std::fmt::Debug;
 
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum FontAdvance {
+    Mono,
+    Sans,
+}
+
 pub trait FontInterface: Debug + Send + Sync + 'static {
     // global metrics
     fn units_per_em(&self) -> f32;
+    fn advance_style(&self) -> FontAdvance;
 
     // vertical metrics
     fn ascent(&self, scale: f32) -> f32;

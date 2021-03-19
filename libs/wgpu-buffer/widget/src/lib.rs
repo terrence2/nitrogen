@@ -42,7 +42,7 @@ pub use crate::{
 
 use crate::font_context::FontContext;
 use anyhow::{ensure, Result};
-use font_common::FontInterface;
+use font_common::{FontAdvance, FontInterface};
 use font_ttf::TtfFont;
 use gpu::{UploadTracker, GPU};
 use input::{ElementState, GenericEvent, ModifiersState, VirtualKeyCode};
@@ -109,14 +109,14 @@ impl WidgetBuffer {
         trace!("WidgetBuffer::new");
 
         let mut paint_context = PaintContext::new(gpu.device());
-        let fira_mono = TtfFont::from_bytes(&FIRA_MONO_REGULAR_TTF_DATA)?;
-        let fira_sans = TtfFont::from_bytes(&FIRA_SANS_REGULAR_TTF_DATA)?;
-        let dejavu_mono = TtfFont::from_bytes(&DEJAVU_MONO_REGULAR_TTF_DATA)?;
-        let dejavu_sans = TtfFont::from_bytes(&DEJAVU_SANS_REGULAR_TTF_DATA)?;
-        paint_context.add_font("fira-mono", fira_mono.clone());
-        paint_context.add_font("fira-sans", fira_sans);
-        paint_context.add_font("dejavu-mono", dejavu_mono);
+        let fira_mono = TtfFont::from_bytes(&FIRA_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
+        let fira_sans = TtfFont::from_bytes(&FIRA_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
+        let dejavu_mono = TtfFont::from_bytes(&DEJAVU_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
+        let dejavu_sans = TtfFont::from_bytes(&DEJAVU_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
         paint_context.add_font("dejavu-sans", dejavu_sans.clone());
+        paint_context.add_font("dejavu-mono", dejavu_mono);
+        paint_context.add_font("fira-sans", fira_sans);
+        paint_context.add_font("fira-mono", fira_mono.clone());
         paint_context.add_font("mono", fira_mono);
         paint_context.add_font("sans", dejavu_sans);
 

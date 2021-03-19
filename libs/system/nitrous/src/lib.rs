@@ -19,9 +19,10 @@ mod value;
 pub use crate::{script::Script, value::Value};
 
 use crate::ir::{Expr, Operator, Stmt, Term};
-use anyhow::{bail, Result};
+use anyhow::{bail, ensure, Result};
+use log::debug;
 use parking_lot::RwLock;
-use std::{collections::HashMap, fmt::Debug, sync::Arc};
+use std::{borrow::Borrow, collections::HashMap, fmt::Debug, sync::Arc};
 
 // Note: manually passing the module until we have arbitrary self.
 pub trait Module: Debug + Send + Sync + 'static {
@@ -31,15 +32,18 @@ pub trait Module: Debug + Send + Sync + 'static {
     fn get(&self, module: Arc<RwLock<dyn Module>>, name: &str) -> Result<Value>;
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Interpreter {
-    memory: HashMap<String, Value>,
     locals: HashMap<String, Value>,
+    globals: Arc<RwLock<GlobalNamespace>>,
 }
 
 impl Interpreter {
     pub fn new() -> Arc<RwLock<Self>> {
-        Arc::new(RwLock::new(Self::default()))
+        Arc::new(RwLock::new(Self {
+            locals: HashMap::new(),
+            globals: GlobalNamespace::new(),
+        }))
     }
 
     pub fn with_locals<F>(&mut self, locals: &[(&str, Value)], mut callback: F) -> Result<Value>
@@ -57,11 +61,11 @@ impl Interpreter {
     }
 
     pub fn put_global(&mut self, name: &str, value: Value) {
-        self.memory.insert(name.to_owned(), value);
+        self.globals.write().put_global(name, value);
     }
 
-    pub fn get_global(&self, name: &str) -> Option<&Value> {
-        self.memory.get(name)
+    pub fn get_global(&self, name: &str) -> Option<Value> {
+        self.globals.write().get_global(name)
     }
 
     pub fn interpret_once(&mut self, raw_script: &str) -> Result<Value> {
@@ -69,7 +73,7 @@ impl Interpreter {
     }
 
     pub fn interpret(&mut self, script: &Script) -> Result<Value> {
-        use std::borrow::Borrow;
+        debug!("Interpret: {}", script);
         let mut out = Value::True();
         for stmt in script.statements() {
             match stmt.borrow() {
@@ -97,8 +101,8 @@ impl Interpreter {
                 Term::Symbol(sym) => {
                     if let Some(v) = self.locals.get(sym) {
                         v.clone()
-                    } else if let Some(v) = self.memory.get(sym) {
-                        v.clone()
+                    } else if let Ok(v) = self.globals.read().get(self.globals.clone(), sym) {
+                        v
                     } else {
                         bail!("Unknown symbol '{}'", sym)
                     }
@@ -138,14 +142,76 @@ impl Interpreter {
     }
 }
 
-// The interpreter is also the root namespace.
-impl Module for Interpreter {
+#[derive(Debug)]
+pub struct GlobalNamespace {
+    memory: HashMap<String, Value>,
+}
+
+impl GlobalNamespace {
+    pub fn new() -> Arc<RwLock<Self>> {
+        let obj = Arc::new(RwLock::new(Self {
+            memory: HashMap::new(),
+        }));
+        obj.write().memory.insert(
+            "help".to_owned(),
+            Value::Method(obj.clone(), "help".to_owned()),
+        );
+        obj
+    }
+
+    pub fn put_global(&mut self, name: &str, value: Value) {
+        self.memory.insert(name.to_owned(), value);
+    }
+
+    pub fn get_global(&self, name: &str) -> Option<Value> {
+        self.memory.get(name).cloned()
+    }
+
+    pub fn format_help(&self) -> Value {
+        let mut records = self
+            .memory
+            .iter()
+            .map(|(k, v)| match v {
+                Value::Module(m) => (0, k.to_owned(), format!("[{}]", k), m.read().module_name()),
+                Value::Method(_, name) => (
+                    1,
+                    k.to_owned(),
+                    if name == "help" {
+                        name.to_owned()
+                    } else {
+                        v.to_string()
+                    },
+                    "show this message".to_owned(),
+                ),
+                _ => (1, k.to_owned(), k.to_owned(), v.to_string()),
+            })
+            .collect::<Vec<_>>();
+        records.sort();
+
+        let mut width = 0;
+        for (_, _, k, _) in &records {
+            width = width.max(k.len());
+        }
+
+        let mut out = String::new();
+        for (_, _, k, v) in &records {
+            out += &format!("{:0width$} - {}\n", k, v, width = width);
+        }
+        Value::String(out)
+    }
+}
+
+impl Module for GlobalNamespace {
     fn module_name(&self) -> String {
         "Interpreter".to_owned()
     }
 
-    fn call_method(&mut self, _name: &str, _args: &[Value]) -> Result<Value> {
-        bail!("no methods are defined on the interpreter")
+    fn call_method(&mut self, name: &str, _args: &[Value]) -> Result<Value> {
+        ensure!(self.memory.contains_key(name));
+        Ok(match name {
+            "help" => self.format_help(),
+            _ => bail!("unknown method named: {}", name),
+        })
     }
 
     fn put(&mut self, _module: Arc<RwLock<dyn Module>>, name: &str, value: Value) -> Result<()> {
@@ -171,9 +237,9 @@ mod test {
 
     #[test]
     fn test_interpret_basic() -> Result<()> {
-        let mut interpreter = Interpreter::default();
+        let interpreter = Interpreter::new();
         let script = Script::compile("2 + 2")?;
-        assert_eq!(interpreter.interpret(&script)?, Value::Integer(4));
+        assert_eq!(interpreter.write().interpret(&script)?, Value::Integer(4));
         Ok(())
     }
 }

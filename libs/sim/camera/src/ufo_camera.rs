@@ -17,7 +17,7 @@ use nalgebra::{
     Isometry3, Matrix4, Perspective3, Point3, Similarity3, Translation3, Unit, UnitQuaternion,
     Vector3,
 };
-use nitrous::{Interpreter, Module, Value};
+use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use std::{f64::consts::PI, sync::Arc};
@@ -63,7 +63,7 @@ impl UfoCamera {
         let ufo = Arc::new(RwLock::new(self));
         interpreter
             .write()
-            .put(interpreter.clone(), "camera", Value::Module(ufo.clone()))?;
+            .put_global("camera", Value::Module(ufo.clone()));
         Ok(ufo)
     }
 

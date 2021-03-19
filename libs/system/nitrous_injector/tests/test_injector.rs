@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
-use nitrous::{Interpreter, Module, Value};
+use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
@@ -90,9 +90,7 @@ impl TestInjector {
 fn test_it_works() -> Result<()> {
     let interpreter = Interpreter::new();
     let inj = Arc::new(RwLock::new(TestInjector {}));
-    interpreter
-        .write()
-        .put(interpreter.clone(), "test", Value::Module(inj))?;
+    interpreter.write().put_global("test", Value::Module(inj));
 
     assert_eq!(
         interpreter.write().interpret_once("test.plain()")?,

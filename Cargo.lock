@@ -2028,6 +2028,7 @@ dependencies = [
  "anyhow",
  "lalrpop",
  "lalrpop-util",
+ "log",
  "ordered-float",
  "parking_lot",
  "regex",
