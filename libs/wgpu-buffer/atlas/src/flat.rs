@@ -105,6 +105,7 @@ pub struct AtlasPacker<P: Pixel + 'static> {
     texture_view: wgpu::TextureView,
     sampler: wgpu::Sampler,
     dump_texture: Option<String>,
+    next_texture: Option<Arc<Box<wgpu::Texture>>>,
 }
 
 impl<P: Pixel + 'static> AtlasPacker<P>
@@ -187,6 +188,7 @@ where
             texture_view,
             sampler,
             dump_texture: None,
+            next_texture: None,
         }
     }
 
@@ -347,6 +349,24 @@ where
         async_rt: &Runtime,
         tracker: &mut UploadTracker,
     ) -> Result<()> {
+        // If we started a texture upload last frame, replace the prior texture with the new.
+        // Any glyphs in the new region will have an oob Frame for one frame, but that's better
+        // than having the entire glyph texture be noise for one frame.
+        if let Some(texture) = &self.next_texture {
+            self.texture = texture.to_owned();
+            self.texture_view = self.texture.create_view(&wgpu::TextureViewDescriptor {
+                label: Some("atlas-texture-view"),
+                format: None,
+                dimension: None,
+                aspect: wgpu::TextureAspect::All,
+                base_mip_level: 0,
+                level_count: None, // mip_
+                base_array_layer: 0,
+                array_layer_count: None,
+            });
+        }
+        self.next_texture = None;
+
         match self.dirty_region {
             DirtyState::Clean => {}
             DirtyState::Dirty(((mut lo_x, lo_y), (hi_x, hi_y))) => {
@@ -394,7 +414,10 @@ where
                 // When we enter here, the CPU `buffer` is already resized. The width/height fields
                 // are updated with the new requested size. We need to copy from 0,0 up to whatever
                 // else has been packed this frame, which are tracked in hiX,hiY.
-                self.texture = Arc::new(Box::new(gpu.device().create_texture(
+                // We create a fresh binding every frame so that we can drop in a new texture
+                // here easily, however, the content is going to take a frame to upload, so we
+                // need to actually delay replacing it until the next frame.
+                let next_texture = Arc::new(Box::new(gpu.device().create_texture(
                     &wgpu::TextureDescriptor {
                         label: Some("atlas-texture"),
                         size: wgpu::Extent3d {
@@ -409,17 +432,6 @@ where
                         usage: self.usage,
                     },
                 )));
-                self.texture_view = self.texture.create_view(&wgpu::TextureViewDescriptor {
-                    label: Some("atlas-texture-view"),
-                    format: None,
-                    dimension: None,
-                    aspect: wgpu::TextureAspect::All,
-                    base_mip_level: 0,
-                    level_count: None, // mip_
-                    base_array_layer: 0,
-                    array_layer_count: None,
-                });
-
                 let upload_width = GPU::stride_for_row_size(hi_x * mem::size_of::<P>() as u32)
                     / mem::size_of::<P>() as u32;
                 let contiguous = self.buffer.sub_image(0, 0, upload_width, hi_y).to_image();
@@ -430,7 +442,7 @@ where
                 );
                 tracker.upload_to_texture(
                     buffer,
-                    self.texture.clone(),
+                    next_texture.clone(),
                     wgpu::Extent3d {
                         width: upload_width,
                         height: hi_y,
@@ -440,6 +452,7 @@ where
                     1,
                     wgpu::Origin3d::ZERO,
                 );
+                self.next_texture = Some(next_texture);
             }
         }
         self.dirty_region = DirtyState::Clean;

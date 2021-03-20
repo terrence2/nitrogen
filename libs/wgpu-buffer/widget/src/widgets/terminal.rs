@@ -40,13 +40,13 @@ impl Terminal {
         let output = TextEdit::new("")
             .with_default_font(font_context.font_id_for_name("dejavu-mono"))
             .with_default_color(Color::Green)
-            .with_text("Nitrogen Terminal\nType `help` for help.")
+            .with_text("Nitrogen Terminal\nType `help()` for help.")
             .wrapped();
         let edit = LineEdit::empty()
             .with_default_font(font_context.font_id_for_name("mono"))
             .with_default_color(Color::White)
             .with_default_size_pts(12.0)
-            .with_text("demo.toggle_terminal(True)")
+            .with_text("help()")
             .wrapped();
         edit.write().line_mut().select_all();
         let container = VerticalBox::with_children(&[output.clone(), edit.clone()])
