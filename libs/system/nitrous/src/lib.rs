@@ -182,7 +182,7 @@ impl GlobalNamespace {
                     1,
                     k.to_owned(),
                     if name == "help" {
-                        name.to_owned()
+                        "help()".to_owned()
                     } else {
                         v.to_string()
                     },

@@ -184,6 +184,11 @@ impl Widget for Terminal {
                         self.edit.write().line_mut().select_all();
                         self.edit.write().line_mut().delete();
 
+                        // Echo the command into the output buffer as a literal.
+                        self.output
+                            .write()
+                            .append_line(&("> ".to_owned() + &command));
+
                         let output = self.output.clone();
                         rayon::spawn(move || match interpreter.write().interpret_once(&command) {
                             Ok(value) => {
