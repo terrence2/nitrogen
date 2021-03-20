@@ -26,6 +26,7 @@ use image::Luma;
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
 use std::{borrow::Borrow, collections::HashMap, sync::Arc};
+use tokio::runtime::Runtime;
 
 #[derive(Debug)]
 pub struct GlyphTracker {
@@ -90,8 +91,13 @@ impl FontContext {
         }
     }
 
-    pub fn upload(&mut self, gpu: &GPU, tracker: &mut UploadTracker) {
-        self.glyph_sheet.upload(gpu, tracker);
+    pub fn upload(
+        &mut self,
+        gpu: &mut GPU,
+        async_rt: &Runtime,
+        tracker: &mut UploadTracker,
+    ) -> Result<()> {
+        self.glyph_sheet.upload(gpu, async_rt, tracker)
     }
 
     pub fn glyph_sheet_width(&self) -> u32 {
@@ -163,6 +169,10 @@ impl FontContext {
 
     pub fn font_name_for_id(&self, font_id: FontId) -> &str {
         self.name_manager.lookup_by_id(font_id)
+    }
+
+    pub fn dump_glyphs(&mut self) {
+        self.glyph_sheet.dump("__dump__/font_context_glyphs.png");
     }
 
     // Because of the indirection when rendering, we can't easily take advantage of sub-pixel

@@ -13,9 +13,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
+use geometry::AABB2;
 use gpu::{texture_format_size, UploadTracker, GPU};
-use image::{GenericImage, ImageBuffer, Pixel};
+use image::{GenericImage, ImageBuffer, Luma, Pixel};
+use log::debug;
 use std::{mem, sync::Arc};
+use tokio::runtime::Runtime;
 
 // Each column indicates the filled height up to the given offset.
 #[derive(Debug)]
@@ -101,6 +104,7 @@ pub struct AtlasPacker<P: Pixel + 'static> {
     texture: Arc<Box<wgpu::Texture>>,
     texture_view: wgpu::TextureView,
     sampler: wgpu::Sampler,
+    dump_texture: Option<String>,
 }
 
 impl<P: Pixel + 'static> AtlasPacker<P>
@@ -117,7 +121,7 @@ where
         mut usage: wgpu::TextureUsage,
         filter: wgpu::FilterMode,
     ) -> Self {
-        usage |= wgpu::TextureUsage::COPY_DST;
+        usage |= wgpu::TextureUsage::COPY_SRC | wgpu::TextureUsage::COPY_DST;
         assert_eq!(texture_format_size(format) as usize, mem::size_of::<P>());
         let pix_size = mem::size_of::<P>() as u32;
         assert_eq!(
@@ -182,6 +186,7 @@ where
             texture,
             texture_view,
             sampler,
+            dump_texture: None,
         }
     }
 
@@ -198,6 +203,10 @@ where
         self
     }
 
+    pub fn dump(&mut self, path: &str) {
+        self.dump_texture = Some(path.to_owned());
+    }
+
     pub fn push_image(&mut self, image: &ImageBuffer<P, Vec<P::Subpixel>>) -> Result<Frame> {
         let w = image.width() + self.padding;
         let h = image.height() + self.padding;
@@ -208,23 +217,32 @@ where
 
         // Pack into the first segment that can take our height, adjusting the column as necessary.
         let mut position = None;
-        for c in self.columns.iter_mut() {
+        let mut adjust = None;
+        for (i, c) in self.columns.iter_mut().enumerate() {
             if h + self.padding <= self.height - c.fill_height {
                 if w + self.padding <= c.x_end - x_column_start {
-                    // Fits above this corner, place and expand corner up.
+                    // Fits below this corner, place and expand corner down.
                     position = Some((x_column_start, c.fill_height));
-                    c.fill_height += h;
+                    adjust = Some((i, c.x_end, c.fill_height + h));
                     break;
                 } else if c.x_end == x_last && x_column_start + w < self.width {
                     // Does not fit width-wise, but we can expand since we are the last column.
                     position = Some((x_column_start, c.fill_height));
-                    c.x_end = x_column_start + w;
-                    c.fill_height += h;
+                    adjust = Some((i, x_column_start + w, c.fill_height + h));
                     break;
+                } else {
+                    x_column_start = c.x_end;
                 }
             } else {
                 x_column_start = c.x_end;
             }
+        }
+        if let Some((x, y)) = position {
+            self.assert_non_overlapping(x, y, w, h);
+        }
+        if let Some((offset, x_end, fill_height)) = adjust {
+            self.columns[offset].x_end = x_end;
+            self.columns[offset].fill_height = fill_height;
         }
 
         if position.is_none() {
@@ -239,6 +257,7 @@ where
         self.assert_column_constraints();
 
         Ok(if let Some((x, y)) = position {
+            debug!("push image {}x{} @ {}x{}", w, h, x, y);
             self.mark_dirty_region(x, y, w + self.padding, h + self.padding);
             self.blit(image, x + self.padding, y + self.padding)?;
             Frame::new(
@@ -322,10 +341,16 @@ where
 
     /// Upload the current contents to the GPU. Note that this is non-destructive. If needed,
     /// the builder can accumulate more textures and upload again later.
-    pub fn upload(&mut self, gpu: &GPU, tracker: &mut UploadTracker) {
+    pub fn upload(
+        &mut self,
+        gpu: &mut GPU,
+        async_rt: &Runtime,
+        tracker: &mut UploadTracker,
+    ) -> Result<()> {
         match self.dirty_region {
             DirtyState::Clean => {}
             DirtyState::Dirty(((mut lo_x, lo_y), (hi_x, hi_y))) => {
+                debug!("upload dirty {}x{} - {}x{}", lo_x, lo_y, hi_x, hi_y);
                 // Note: even sub-region uploads need to obey row stride constraints.
                 // Note: this cannot overflow width because full width is aligned to row stride and
                 //       we never overflow our width when dirtying.
@@ -364,6 +389,7 @@ where
                 );
             }
             DirtyState::RecreateTexture((hi_x, hi_y)) => {
+                debug!("upload recreate {}x{}", hi_x, hi_y);
                 // We are not in upload when we need to resize.
                 // When we enter here, the CPU `buffer` is already resized. The width/height fields
                 // are updated with the new requested size. We need to copy from 0,0 up to whatever
@@ -417,20 +443,52 @@ where
             }
         }
         self.dirty_region = DirtyState::Clean;
+
+        if let Some(path_ref) = self.dump_texture.as_ref() {
+            let path = path_ref.to_owned();
+            let write_img = |extent: wgpu::Extent3d, _: wgpu::TextureFormat, data: Vec<u8>| {
+                let img = ImageBuffer::<Luma<u8>, _>::from_raw(extent.width, extent.height, data)
+                    .expect("built image");
+                println!("writing to {}", path);
+                img.save(path).expect("wrote file");
+            };
+            GPU::dump_texture(
+                &self.texture,
+                wgpu::Extent3d {
+                    width: self.width,
+                    height: self.height,
+                    depth: 1,
+                },
+                self.format,
+                async_rt,
+                gpu,
+                Box::new(write_img),
+            )?;
+        }
+        self.dump_texture = None;
+
+        Ok(())
     }
 
     /// Upload and then steal the texture. Useful when used as a one-shot atlas.
     pub fn finish(
         mut self,
-        gpu: &GPU,
+        gpu: &mut GPU,
+        async_rt: &Runtime,
         tracker: &mut UploadTracker,
-    ) -> (wgpu::TextureView, wgpu::Sampler) {
-        self.upload(gpu, tracker);
-        (self.texture_view, self.sampler)
+    ) -> Result<(wgpu::TextureView, wgpu::Sampler)> {
+        self.upload(gpu, async_rt, tracker)?;
+        Ok((self.texture_view, self.sampler))
     }
 
     fn grow(&mut self) -> Result<()> {
-        // panic!("Cannot safely grow");
+        debug!(
+            "grow {}x{} => {}x{}",
+            self.width,
+            self.height,
+            self.width + self.initial_width,
+            self.height + self.initial_height
+        );
         self.width += self.initial_width;
         self.height += self.initial_height;
         let mut next_buffer = ImageBuffer::<P, Vec<P::Subpixel>>::from_pixel(
@@ -448,6 +506,16 @@ where
     fn blit(&mut self, other: &ImageBuffer<P, Vec<P::Subpixel>>, x: u32, y: u32) -> Result<()> {
         self.buffer.copy_from(other, x, y)?;
         Ok(())
+    }
+
+    fn assert_non_overlapping(&self, lo_x: u32, lo_y: u32, w: u32, h: u32) {
+        let img = AABB2::new([lo_x + 1, lo_y + 1], [lo_x + w, lo_y + h]);
+        let mut c_x_start = 0;
+        for c in self.columns.iter() {
+            let col = AABB2::new([c_x_start, 0], [c.x_end, c.fill_height]);
+            c_x_start = c.x_end;
+            assert!(!img.overlaps(&col));
+        }
     }
 
     fn assert_column_constraints(&self) {
@@ -528,6 +596,7 @@ mod test {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
+        let async_rt = Runtime::new()?;
         let interpreter = Interpreter::new();
         let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
 
@@ -552,7 +621,7 @@ mod test {
                 .unwrap();
         }
 
-        let _ = packer.finish(&gpu.read(), &mut Default::default());
+        let _ = packer.finish(&mut gpu.write(), &async_rt, &mut Default::default());
         Ok(())
     }
 
@@ -560,6 +629,7 @@ mod test {
     #[test]
     fn test_incremental_upload() -> Result<()> {
         use winit::platform::unix::EventLoopExtUnix;
+        let async_rt = Runtime::new()?;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
         let interpreter = Interpreter::new();
@@ -581,7 +651,7 @@ mod test {
             254,
             *Rgba::from_slice(&[255, 0, 0, 255]),
         ))?;
-        packer.upload(&gpu.read(), &mut Default::default());
+        packer.upload(&mut gpu.write(), &async_rt, &mut Default::default())?;
         let _ = packer.texture();
 
         // Grow
@@ -590,7 +660,7 @@ mod test {
             254,
             *Rgba::from_slice(&[255, 0, 0, 255]),
         ))?;
-        packer.upload(&gpu.read(), &mut Default::default());
+        packer.upload(&mut gpu.write(), &async_rt, &mut Default::default())?;
         let _ = packer.texture();
 
         // Reuse
@@ -599,7 +669,7 @@ mod test {
             254,
             *Rgba::from_slice(&[255, 0, 0, 255]),
         ))?;
-        packer.upload(&gpu.read(), &mut Default::default());
+        packer.upload(&mut gpu.write(), &async_rt, &mut Default::default())?;
         let _ = packer.texture();
         Ok(())
     }

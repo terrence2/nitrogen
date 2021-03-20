@@ -12,6 +12,8 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+
+#[derive(Debug)]
 pub struct AABB2<T: PartialOrd> {
     lo: [T; 2],
     hi: [T; 2],

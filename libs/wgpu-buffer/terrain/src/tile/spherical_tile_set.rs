@@ -657,7 +657,6 @@ impl SphericalTileSetCommon {
         })
     }
 
-    #[allow(clippy::transmute_ptr_to_ptr)]
     fn capture_and_save_index_snapshot(&mut self, async_rt: &Runtime, gpu: &mut GPU) -> Result<()> {
         fn write_image(extent: wgpu::Extent3d, _: wgpu::TextureFormat, data: Vec<u8>) {
             let pix_cnt = extent.width as usize * extent.height as usize;

@@ -86,6 +86,7 @@ impl Demo {
                 bindings.bind("Escape", "demo.exit()");
                 bindings.bind("q", "demo.exit()");
                 bindings.bind("p", "demo.toggle_pin_camera(pressed)");
+                bindings.bind("l", "widget.dump_glyphs(pressed)");
             "#,
         )?;
         Ok(())
@@ -336,10 +337,11 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
             &mut gpu.write(),
             &mut tracker,
         )?;
-        frame_graph
-            .widgets
-            .write()
-            .make_upload_buffer(&gpu.read(), &mut tracker)?;
+        frame_graph.widgets.write().make_upload_buffer(
+            &mut gpu.write(),
+            &async_rt,
+            &mut tracker,
+        )?;
         if !frame_graph.run(&mut gpu.write(), tracker)? {
             let sz = gpu.read().physical_size();
             gpu.write().on_resize(sz.width as i64, sz.height as i64)?;

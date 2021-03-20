@@ -47,9 +47,11 @@ use font_ttf::TtfFont;
 use gpu::{UploadTracker, GPU};
 use input::{ElementState, GenericEvent, ModifiersState, VirtualKeyCode};
 use log::trace;
-use nitrous::Interpreter;
+use nitrous::{Interpreter, Value};
+use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use std::{borrow::Borrow, mem, num::NonZeroU64, ops::Range, sync::Arc};
+use tokio::runtime::Runtime;
 
 // Drawing UI efficiently:
 //
@@ -76,7 +78,7 @@ const FIRA_SANS_REGULAR_TTF_DATA: &[u8] =
 const FIRA_MONO_REGULAR_TTF_DATA: &[u8] =
     include_bytes!("../../../../assets/font/FiraMono-Regular.ttf");
 
-#[derive(Debug)]
+#[derive(Debug, NitrousModule)]
 pub struct WidgetBuffer {
     // Widget state.
     root: Arc<RwLock<FloatBox>>,
@@ -99,6 +101,7 @@ pub struct WidgetBuffer {
     bind_group: Option<wgpu::BindGroup>,
 }
 
+#[inject_nitrous_module]
 impl WidgetBuffer {
     const MAX_WIDGETS: usize = 512;
     const MAX_TEXT_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6;
@@ -203,7 +206,7 @@ impl WidgetBuffer {
         root.write().add_child("mapper", mapper.clone());
         root.write().add_child("terminal", terminal.clone());
 
-        Ok(Arc::new(RwLock::new(Self {
+        let widget = Arc::new(RwLock::new(Self {
             root,
             paint_context,
             keyboard_focus: "mapper".to_owned(),
@@ -219,7 +222,11 @@ impl WidgetBuffer {
 
             bind_group_layout,
             bind_group: None,
-        })))
+        }));
+
+        interpreter.put_global("widget", Value::Module(widget.clone()));
+
+        Ok(widget)
     }
 
     pub fn root(&self) -> Arc<RwLock<FloatBox>> {
@@ -240,6 +247,11 @@ impl WidgetBuffer {
 
     pub fn font_context(&self) -> &FontContext {
         &self.paint_context.font_context
+    }
+
+    #[method]
+    pub fn dump_glyphs(&mut self) {
+        self.paint_context.dump_glyphs();
     }
 
     pub fn handle_events(
@@ -306,11 +318,18 @@ impl WidgetBuffer {
         0u32..self.paint_context.text_pool.len() as u32
     }
 
-    pub fn make_upload_buffer(&mut self, gpu: &GPU, tracker: &mut UploadTracker) -> Result<()> {
+    pub fn make_upload_buffer(
+        &mut self,
+        gpu: &mut GPU,
+        async_rt: &Runtime,
+        tracker: &mut UploadTracker,
+    ) -> Result<()> {
         self.paint_context.reset_for_frame();
         self.root.read().upload(gpu, &mut self.paint_context)?;
 
-        self.paint_context.font_context.upload(gpu, tracker);
+        self.paint_context
+            .font_context
+            .upload(gpu, async_rt, tracker)?;
 
         if !self.paint_context.widget_info_pool.is_empty() {
             ensure!(self.paint_context.widget_info_pool.len() <= Self::MAX_WIDGETS);
@@ -385,6 +404,7 @@ impl WidgetBuffer {
 #[cfg(test)]
 mod test {
     use super::*;
+    use tokio::runtime::Runtime;
     use winit::{event_loop::EventLoop, window::Window};
 
     #[test]
@@ -392,6 +412,7 @@ mod test {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;
+        let async_rt = Runtime::new()?;
         let interpreter = Interpreter::new();
         let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
 
@@ -412,7 +433,7 @@ mod test {
         let mut tracker = Default::default();
         widgets
             .write()
-            .make_upload_buffer(&gpu.read(), &mut tracker)?;
+            .make_upload_buffer(&mut gpu.write(), &async_rt, &mut tracker)?;
 
         Ok(())
     }

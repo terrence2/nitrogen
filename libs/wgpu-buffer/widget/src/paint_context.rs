@@ -68,6 +68,10 @@ impl PaintContext {
         self.font_context.add_font(font_name, font);
     }
 
+    pub fn dump_glyphs(&mut self) {
+        self.font_context.dump_glyphs();
+    }
+
     pub fn enter_box(&mut self) {
         self.current_depth += Self::BOX_DEPTH_SIZE;
     }
