@@ -268,6 +268,10 @@ mod test {
                 _ => bail!("get unknown '{}'", name),
             })
         }
+
+        fn names(&self) -> Vec<&str> {
+            vec!["walk", "run"]
+        }
     }
 
     #[test]

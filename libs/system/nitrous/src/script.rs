@@ -40,6 +40,10 @@ impl Script {
     pub fn statements(&self) -> &[Box<Stmt>] {
         &self.stmts
     }
+
+    pub fn statements_mut(&mut self) -> &mut [Box<Stmt>] {
+        &mut self.stmts
+    }
 }
 
 impl fmt::Display for Script {

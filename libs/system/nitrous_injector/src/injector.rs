@@ -43,6 +43,10 @@ pub(crate) fn make_derive_nitrous_module(item: DeriveInput) -> TokenStream2 {
             fn get(&self, module: ::std::sync::Arc<::parking_lot::RwLock<dyn ::nitrous::Module>>, name: &str) -> ::anyhow::Result<::nitrous::Value> {
                 self.__get_inner__(module, name)
             }
+
+            fn names(&self) -> Vec<&str> {
+                self.__names_inner__()
+            }
         }
     }
 }
@@ -64,9 +68,11 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
     let mut method_arms = Vec::new();
     let mut get_arms = Vec::new();
     let mut put_arms = Vec::new();
+    let mut names = Vec::new();
 
     for (item, args, ret) in visitor.methods {
         let name = format!("{}", item);
+        names.push(name.clone());
 
         let mut arg_items = Vec::new();
         for (i, arg) in args.iter().enumerate() {
@@ -185,6 +191,11 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
                         ::anyhow::bail!("Unknown put '{}' passed to {}", name, stringify!(#ty));
                     }
                 }
+            }
+
+            fn __names_inner__(&self) -> Vec<&str> {
+
+                vec![#(#names),*]
             }
         }
 

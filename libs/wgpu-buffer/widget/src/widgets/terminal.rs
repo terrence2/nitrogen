@@ -22,7 +22,10 @@ use crate::{
 use anyhow::Result;
 use gpu::GPU;
 use input::{ElementState, GenericEvent, VirtualKeyCode};
-use nitrous::{Interpreter, Value};
+use nitrous::{
+    ir::{Expr, Stmt, Term},
+    Interpreter, Module, Script, Value,
+};
 use parking_lot::RwLock;
 use std::sync::Arc;
 
@@ -79,6 +82,47 @@ impl Terminal {
     pub fn println(&self, line: &str) {
         self.output.write().append_line(line);
     }
+
+    pub fn try_completion(
+        &self,
+        mut partial: Script,
+        interpreter: Arc<RwLock<Interpreter>>,
+    ) -> Option<String> {
+        if partial.statements().len() != 1 {
+            return None;
+        }
+        if let Stmt::Expr(e) = partial.statements_mut()[0].as_mut() {
+            if let Expr::Term(Term::Symbol(sym)) = e.as_mut() {
+                let pin = interpreter.read().globals();
+                let globals = pin.read();
+                let sim = globals
+                    .names()
+                    .iter()
+                    .filter(|&s| s.starts_with(sym.as_str()))
+                    .cloned()
+                    .collect::<Vec<&str>>();
+                if sim.len() == 1 {
+                    return Some(sim[0].to_string());
+                }
+            } else if let Expr::Attr(mod_name_term, Term::Symbol(sym)) = e.as_mut() {
+                if let Expr::Term(Term::Symbol(mod_name)) = mod_name_term.as_ref() {
+                    if let Some(Value::Module(pin)) = interpreter.read().get_global(&mod_name) {
+                        let ns = pin.read();
+                        let sim = ns
+                            .names()
+                            .iter()
+                            .filter(|&s| s.starts_with(sym.as_str()))
+                            .cloned()
+                            .collect::<Vec<&str>>();
+                        if sim.len() == 1 {
+                            return Some(format!("{}.{}", mod_name, sim[0]));
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
 }
 
 impl Widget for Terminal {
@@ -126,6 +170,15 @@ impl Widget for Terminal {
 
             if *press_state == ElementState::Pressed {
                 match virtual_keycode {
+                    VirtualKeyCode::Tab => {
+                        let incomplete = self.edit.read().line().flatten();
+                        if let Ok(partial) = Script::compile(&incomplete) {
+                            if let Some(full) = self.try_completion(partial, interpreter) {
+                                self.edit.write().line_mut().select_all();
+                                self.edit.write().line_mut().insert(&full);
+                            }
+                        }
+                    }
                     VirtualKeyCode::Return | VirtualKeyCode::NumpadEnter => {
                         let command = self.edit.read().line().flatten();
                         self.edit.write().line_mut().select_all();

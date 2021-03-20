@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-mod ir;
+pub mod ir;
 mod script;
 mod value;
 
@@ -30,6 +30,7 @@ pub trait Module: Debug + Send + Sync + 'static {
     fn call_method(&mut self, name: &str, args: &[Value]) -> Result<Value>;
     fn put(&mut self, module: Arc<RwLock<dyn Module>>, name: &str, value: Value) -> Result<()>;
     fn get(&self, module: Arc<RwLock<dyn Module>>, name: &str) -> Result<Value>;
+    fn names(&self) -> Vec<&str>;
 }
 
 #[derive(Debug)]
@@ -66,6 +67,10 @@ impl Interpreter {
 
     pub fn get_global(&self, name: &str) -> Option<Value> {
         self.globals.write().get_global(name)
+    }
+
+    pub fn globals(&self) -> Arc<RwLock<GlobalNamespace>> {
+        self.globals.clone()
     }
 
     pub fn interpret_once(&mut self, raw_script: &str) -> Result<Value> {
@@ -228,6 +233,10 @@ impl Module for GlobalNamespace {
                 self.module_name()
             ),
         }
+    }
+
+    fn names(&self) -> Vec<&str> {
+        self.memory.keys().map(|v| v.as_str()).collect()
     }
 }
 
