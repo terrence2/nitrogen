@@ -33,9 +33,9 @@ pub struct TextSpan {
 }
 
 impl TextSpan {
-    pub fn new(text: &str, size_pts: f32, font_id: FontId, color: Color) -> Self {
+    pub fn new<S: Into<String>>(text: S, size_pts: f32, font_id: FontId, color: Color) -> Self {
         Self {
-            text: text.to_owned(),
+            text: text.into(),
             color,
             size_pts,
             font_id,

@@ -20,12 +20,13 @@ use crate::{
 };
 use anyhow::Result;
 use atlas::{AtlasPacker, Frame};
-use font_common::FontInterface;
+use font_common::{FontAdvance, FontInterface};
 use gpu::{UploadTracker, GPU};
 use image::Luma;
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
 use std::{borrow::Borrow, collections::HashMap, sync::Arc};
+use tokio::runtime::Runtime;
 
 #[derive(Debug)]
 pub struct GlyphTracker {
@@ -90,8 +91,13 @@ impl FontContext {
         }
     }
 
-    pub fn upload(&mut self, gpu: &GPU, tracker: &mut UploadTracker) {
-        self.glyph_sheet.upload(gpu, tracker);
+    pub fn upload(
+        &mut self,
+        gpu: &mut GPU,
+        async_rt: &Runtime,
+        tracker: &mut UploadTracker,
+    ) -> Result<()> {
+        self.glyph_sheet.upload(gpu, async_rt, tracker)
     }
 
     pub fn glyph_sheet_width(&self) -> u32 {
@@ -165,6 +171,10 @@ impl FontContext {
         self.name_manager.lookup_by_id(font_id)
     }
 
+    pub fn dump_glyphs(&mut self) {
+        self.glyph_sheet.dump("__dump__/font_context_glyphs.png");
+    }
+
     // Because of the indirection when rendering, we can't easily take advantage of sub-pixel
     // techniques, or even guarantee pixel-perfect placement. To help with text clarity, we thus
     // double our render size and use linear filtering. This is wasteful, however, so we scale
@@ -215,6 +225,7 @@ impl FontContext {
         let descent = font.read().descent(scale_px);
         let ascent = font.read().ascent(scale_px);
         let line_gap = font.read().line_gap(scale_px);
+        let advance = font.read().advance_style();
 
         let mut x_pos = 0f32;
         let mut prior = None;
@@ -229,7 +240,9 @@ impl FontContext {
                 .unwrap_or(0f32);
             prior = Some(c);
 
-            x_pos += kerning;
+            if advance != FontAdvance::Mono {
+                x_pos += kerning;
+            }
             x_pos = (x_pos * phys_w).floor() / phys_w;
 
             let px0 = x_pos + lo_x as f32;
@@ -299,7 +312,10 @@ impl FontContext {
                 }
             }
 
-            x_pos += adv - lsb;
+            x_pos += match advance {
+                FontAdvance::Mono => adv,
+                FontAdvance::Sans => adv - lsb,
+            };
         }
 
         if let SpanSelection::Cursor { position } = selection_area {

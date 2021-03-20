@@ -29,9 +29,10 @@ pub struct UploadMetrics {
 
 pub trait Widget: Debug + Send + Sync + 'static {
     fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Result<UploadMetrics>;
-    fn handle_events(
+    fn handle_event(
         &mut self,
-        events: &[GenericEvent],
+        event: &GenericEvent,
+        focus: &str,
         interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()>;
 }

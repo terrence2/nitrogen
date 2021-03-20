@@ -147,10 +147,13 @@ name = "atlas"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "geometry",
  "gpu",
  "image",
+ "log",
  "nitrous",
  "rand 0.8.3",
+ "tokio",
  "wgpu",
  "winit",
 ]
@@ -2028,6 +2031,7 @@ dependencies = [
  "anyhow",
  "lalrpop",
  "lalrpop-util",
+ "log",
  "ordered-float",
  "parking_lot",
  "regex",
@@ -3505,6 +3509,7 @@ dependencies = [
  "shader_shared",
  "smallvec",
  "strsim 0.10.0",
+ "tokio",
  "unicase",
  "wgpu",
  "winit",

@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::{anyhow, Result};
-use font_common::FontInterface;
+use font_common::{FontAdvance, FontInterface};
 use image::{GrayImage, Luma};
 use parking_lot::RwLock;
 use rusttype::{Font, Point, Scale};
@@ -22,11 +22,16 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub struct TtfFont {
     font: Font<'static>,
+    advance: FontAdvance,
 }
 
 impl FontInterface for TtfFont {
     fn units_per_em(&self) -> f32 {
         self.font.units_per_em() as f32
+    }
+
+    fn advance_style(&self) -> FontAdvance {
+        self.advance
     }
 
     fn ascent(&self, scale: f32) -> f32 {
@@ -106,10 +111,14 @@ impl FontInterface for TtfFont {
 }
 
 impl TtfFont {
-    pub fn from_bytes(bytes: &'static [u8]) -> Result<Arc<RwLock<dyn FontInterface>>> {
+    pub fn from_bytes(
+        bytes: &'static [u8],
+        advance: FontAdvance,
+    ) -> Result<Arc<RwLock<dyn FontInterface>>> {
         Ok(Arc::new(RwLock::new(Self {
             font: Font::try_from_bytes(bytes)
                 .ok_or_else(|| anyhow!("failed to load font from bytes"))?,
+            advance,
         })))
     }
 }

@@ -36,7 +36,7 @@ use structopt::StructOpt;
 use terrain::{CpuDetailLevel, GpuDetailLevel, TerrainBuffer};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use ui::UiRenderPass;
-use widget::{Color, EventMapper, Label, PositionH, PositionV, Terminal, WidgetBuffer};
+use widget::{Color, Label, PositionH, PositionV, WidgetBuffer};
 use winit::window::Window;
 use world::WorldRenderPass;
 
@@ -59,14 +59,12 @@ struct Demo {
     show_terminal: bool,
     camera: Camera,
     widgets: Arc<RwLock<WidgetBuffer>>,
-    terminal: Arc<RwLock<Terminal>>,
 }
 
 #[inject_nitrous_module]
 impl Demo {
     pub fn new(
         widgets: Arc<RwLock<WidgetBuffer>>,
-        terminal: Arc<RwLock<Terminal>>,
         interpreter: &mut Interpreter,
     ) -> Arc<RwLock<Self>> {
         let demo = Arc::new(RwLock::new(Self {
@@ -75,7 +73,6 @@ impl Demo {
             show_terminal: false,
             camera: Default::default(),
             widgets,
-            terminal,
         }));
         interpreter.put_global("demo", Value::Module(demo.clone()));
         demo
@@ -89,7 +86,7 @@ impl Demo {
                 bindings.bind("Escape", "demo.exit()");
                 bindings.bind("q", "demo.exit()");
                 bindings.bind("p", "demo.toggle_pin_camera(pressed)");
-                bindings.bind("Shift+Grave", "demo.toggle_terminal(pressed)");
+                bindings.bind("l", "widget.dump_glyphs(pressed)");
             "#,
         )?;
         Ok(())
@@ -115,41 +112,6 @@ impl Demo {
         }
         &self.camera
     }
-
-    #[method]
-    pub fn toggle_terminal(&mut self, pressed: bool) -> Result<()> {
-        if pressed {
-            self.show_terminal = !self.show_terminal;
-            self.terminal.write().set_visible(self.show_terminal);
-
-            let show_terminal = self.show_terminal;
-            let widgets = self.widgets.clone();
-            rayon::spawn(move || {
-                println!(
-                    "Setting terminal focus: {}",
-                    if show_terminal { "terminal" } else { "mapper" }
-                );
-                widgets
-                    .write()
-                    .set_keyboard_focus(if show_terminal { "terminal" } else { "mapper" })
-                    .ok();
-            })
-        }
-        Ok(())
-    }
-
-    /*
-    #[method]
-    pub fn toggle_terminal_bottom(&self) -> Result<()> {
-        self.widgets
-            .read()
-            .set_keyboard_focus(if self.show_terminal {
-                "terminal"
-            } else {
-                "mapper"
-            })
-    }
-     */
 }
 
 make_frame_graph!(
@@ -219,8 +181,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     }
 
     let interpreter = Interpreter::new();
-    let mapper = EventMapper::new(&mut interpreter.write());
-
     let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
 
     let orrery = Orrery::new(
@@ -245,8 +205,8 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         &mut gpu.write(),
         &mut interpreter.write(),
     )?;
-    let widgets = WidgetBuffer::new(&mut gpu.write())?;
     let catalog = Arc::new(AsyncRwLock::new(catalog));
+    let widgets = WidgetBuffer::new(&mut gpu.write(), &mut interpreter.write())?;
     let world = WorldRenderPass::new(
         &mut gpu.write(),
         &mut interpreter.write(),
@@ -281,9 +241,8 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     )?;
     ///////////////////////////////////////////////////////////
 
-    widgets.read().root().write().add_child("mapper", mapper);
-
     let version_label = Label::new("Nitrogen v0.1")
+        .with_font(widgets.read().font_context().font_id_for_name("fira-sans"))
         .with_color(Color::Green)
         .with_size(8.0)
         .with_pre_blended_text()
@@ -296,6 +255,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         .set_float(PositionH::End, PositionV::Top);
 
     let fps_label = Label::new("fps")
+        .with_font(widgets.read().font_context().font_id_for_name("sans"))
         .with_color(Color::Red)
         .with_size(13.0)
         .with_pre_blended_text()
@@ -306,16 +266,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         .write()
         .add_child("fps", fps_label.clone())
         .set_float(PositionH::Start, PositionV::Bottom);
-
-    let terminal = Terminal::new(frame_graph.widgets.read().font_context())
-        .with_visible(false)
-        .wrapped();
-    widgets
-        .read()
-        .root()
-        .write()
-        .add_child("terminal", terminal.clone())
-        .set_float(PositionH::Start, PositionV::Top);
 
     /*
     let mut camera = UfoCamera::new(gpu.read().aspect_ratio(), 0.1f64, 3.4e+38f64);
@@ -347,10 +297,11 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     //     meters!(1308.7262),
     // ))?;
 
-    let demo = Demo::new(widgets.clone(), terminal, &mut interpreter.write());
+    let demo = Demo::new(widgets.clone(), &mut interpreter.write());
 
     {
         let interp = &mut interpreter.write();
+        gpu.write().add_default_bindings(interp)?;
         orrery.write().add_default_bindings(interp)?;
         arcball.write().add_default_bindings(interp)?;
         globals.write().add_default_bindings(interp)?;
@@ -362,7 +313,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         let loop_start = Instant::now();
 
         widgets
-            .read()
+            .write()
             .handle_events(&input_controller.poll_events()?, interpreter.clone())?;
 
         arcball.write().think();
@@ -386,10 +337,11 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
             &mut gpu.write(),
             &mut tracker,
         )?;
-        frame_graph
-            .widgets
-            .write()
-            .make_upload_buffer(&gpu.read(), &mut tracker)?;
+        frame_graph.widgets.write().make_upload_buffer(
+            &mut gpu.write(),
+            &async_rt,
+            &mut tracker,
+        )?;
         if !frame_graph.run(&mut gpu.write(), tracker)? {
             let sz = gpu.read().physical_size();
             gpu.write().on_resize(sz.width as i64, sz.height as i64)?;

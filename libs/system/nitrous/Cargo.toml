@@ -10,6 +10,7 @@ lalrpop = "0.19.4"
 [dependencies]
 anyhow = "^ 1"
 lalrpop-util = "0.19.4"
+log = "^ 0.4"
 ordered-float = "^ 2"
 parking_lot = "^ 0.11"
 regex = "1"

@@ -42,14 +42,16 @@ pub use crate::{
 
 use crate::font_context::FontContext;
 use anyhow::{ensure, Result};
-use font_common::FontInterface;
+use font_common::{FontAdvance, FontInterface};
 use font_ttf::TtfFont;
 use gpu::{UploadTracker, GPU};
-use input::GenericEvent;
+use input::{ElementState, GenericEvent, ModifiersState, VirtualKeyCode};
 use log::trace;
-use nitrous::Interpreter;
+use nitrous::{Interpreter, Value};
+use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use std::{borrow::Borrow, mem, num::NonZeroU64, ops::Range, sync::Arc};
+use tokio::runtime::Runtime;
 
 // Drawing UI efficiently:
 //
@@ -76,12 +78,17 @@ const FIRA_SANS_REGULAR_TTF_DATA: &[u8] =
 const FIRA_MONO_REGULAR_TTF_DATA: &[u8] =
     include_bytes!("../../../../assets/font/FiraMono-Regular.ttf");
 
-#[derive(Debug)]
+#[derive(Debug, NitrousModule)]
 pub struct WidgetBuffer {
     // Widget state.
     root: Arc<RwLock<FloatBox>>,
     paint_context: PaintContext,
-    queued_scripts: Arc<RwLock<Vec<String>>>,
+    keyboard_focus: String,
+
+    // Auto-inserted widgets.
+    terminal: Arc<RwLock<Terminal>>,
+    mapper: Arc<RwLock<EventMapper>>,
+    show_terminal: bool,
 
     // The four key buffers.
     widget_info_buffer: Arc<Box<wgpu::Buffer>>,
@@ -94,24 +101,25 @@ pub struct WidgetBuffer {
     bind_group: Option<wgpu::BindGroup>,
 }
 
+#[inject_nitrous_module]
 impl WidgetBuffer {
     const MAX_WIDGETS: usize = 512;
     const MAX_TEXT_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6;
     const MAX_BACKGROUND_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6; // note: rounded corners
     const MAX_IMAGE_VERTICES: usize = Self::MAX_WIDGETS * 4 * 6;
 
-    pub fn new(gpu: &mut GPU) -> Result<Arc<RwLock<Self>>> {
+    pub fn new(gpu: &mut GPU, interpreter: &mut Interpreter) -> Result<Arc<RwLock<Self>>> {
         trace!("WidgetBuffer::new");
 
         let mut paint_context = PaintContext::new(gpu.device());
-        let fira_mono = TtfFont::from_bytes(&FIRA_MONO_REGULAR_TTF_DATA)?;
-        let fira_sans = TtfFont::from_bytes(&FIRA_SANS_REGULAR_TTF_DATA)?;
-        let dejavu_mono = TtfFont::from_bytes(&DEJAVU_MONO_REGULAR_TTF_DATA)?;
-        let dejavu_sans = TtfFont::from_bytes(&DEJAVU_SANS_REGULAR_TTF_DATA)?;
-        paint_context.add_font("fira-mono", fira_mono.clone());
-        paint_context.add_font("fira-sans", fira_sans);
-        paint_context.add_font("dejavu-mono", dejavu_mono);
+        let fira_mono = TtfFont::from_bytes(&FIRA_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
+        let fira_sans = TtfFont::from_bytes(&FIRA_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
+        let dejavu_mono = TtfFont::from_bytes(&DEJAVU_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
+        let dejavu_sans = TtfFont::from_bytes(&DEJAVU_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
         paint_context.add_font("dejavu-sans", dejavu_sans.clone());
+        paint_context.add_font("dejavu-mono", dejavu_mono);
+        paint_context.add_font("fira-sans", fira_sans);
+        paint_context.add_font("fira-mono", fira_mono.clone());
         paint_context.add_font("mono", fira_mono);
         paint_context.add_font("sans", dejavu_sans);
 
@@ -190,10 +198,22 @@ impl WidgetBuffer {
                     ],
                 });
 
-        Ok(Arc::new(RwLock::new(Self {
-            root: FloatBox::new(),
+        let root = FloatBox::new();
+        let mapper = EventMapper::new(interpreter);
+        let terminal = Terminal::new(&paint_context.font_context)
+            .with_visible(false)
+            .wrapped();
+        root.write().add_child("mapper", mapper.clone());
+        root.write().add_child("terminal", terminal.clone());
+
+        let widget = Arc::new(RwLock::new(Self {
+            root,
             paint_context,
-            queued_scripts: Arc::new(RwLock::new(Vec::new())),
+            keyboard_focus: "mapper".to_owned(),
+
+            terminal,
+            mapper,
+            show_terminal: false,
 
             widget_info_buffer,
             background_vertex_buffer,
@@ -202,15 +222,19 @@ impl WidgetBuffer {
 
             bind_group_layout,
             bind_group: None,
-        })))
+        }));
+
+        interpreter.put_global("widget", Value::Module(widget.clone()));
+
+        Ok(widget)
     }
 
     pub fn root(&self) -> Arc<RwLock<FloatBox>> {
         self.root.clone()
     }
 
-    pub fn set_keyboard_focus(&self, name: &str) -> Result<()> {
-        self.root.write().set_keyboard_focus(name)
+    pub fn set_keyboard_focus(&mut self, name: &str) {
+        self.keyboard_focus = name.to_owned();
     }
 
     pub fn add_font<S: Borrow<str> + Into<String>>(
@@ -225,19 +249,43 @@ impl WidgetBuffer {
         &self.paint_context.font_context
     }
 
-    pub fn queue_script(&self, script: &str) {
-        self.queued_scripts.write().push(script.to_owned());
+    #[method]
+    pub fn dump_glyphs(&mut self) {
+        self.paint_context.dump_glyphs();
     }
 
     pub fn handle_events(
-        &self,
+        &mut self,
         events: &[GenericEvent],
         interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
-        for script in self.queued_scripts.write().drain(..) {
-            interpreter.write().interpret_once(&script)?;
+        for event in events {
+            if let GenericEvent::KeyboardKey {
+                virtual_keycode,
+                press_state,
+                modifiers_state,
+                ..
+            } = event
+            {
+                if *virtual_keycode == VirtualKeyCode::Grave
+                    && *modifiers_state == ModifiersState::SHIFT
+                    && *press_state == ElementState::Pressed
+                {
+                    self.show_terminal = !self.show_terminal;
+                    self.set_keyboard_focus(if self.show_terminal {
+                        "terminal"
+                    } else {
+                        "mapper"
+                    });
+                    self.terminal.write().set_visible(self.show_terminal);
+                    continue;
+                }
+            }
+            self.root()
+                .write()
+                .handle_event(event, &self.keyboard_focus, interpreter.clone())?;
         }
-        self.root().write().handle_events(events, interpreter)
+        Ok(())
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
@@ -270,11 +318,18 @@ impl WidgetBuffer {
         0u32..self.paint_context.text_pool.len() as u32
     }
 
-    pub fn make_upload_buffer(&mut self, gpu: &GPU, tracker: &mut UploadTracker) -> Result<()> {
+    pub fn make_upload_buffer(
+        &mut self,
+        gpu: &mut GPU,
+        async_rt: &Runtime,
+        tracker: &mut UploadTracker,
+    ) -> Result<()> {
         self.paint_context.reset_for_frame();
         self.root.read().upload(gpu, &mut self.paint_context)?;
 
-        self.paint_context.font_context.upload(gpu, tracker);
+        self.paint_context
+            .font_context
+            .upload(gpu, async_rt, tracker)?;
 
         if !self.paint_context.widget_info_pool.is_empty() {
             ensure!(self.paint_context.widget_info_pool.len() <= Self::MAX_WIDGETS);
@@ -349,6 +404,7 @@ impl WidgetBuffer {
 #[cfg(test)]
 mod test {
     use super::*;
+    use tokio::runtime::Runtime;
     use winit::{event_loop::EventLoop, window::Window};
 
     #[test]
@@ -356,10 +412,11 @@ mod test {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;
+        let async_rt = Runtime::new()?;
         let interpreter = Interpreter::new();
         let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
 
-        let widgets = WidgetBuffer::new(&mut gpu.write())?;
+        let widgets = WidgetBuffer::new(&mut gpu.write(), &mut interpreter.write())?;
         let label = Label::new(
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\
             สิบสองกษัตริย์ก่อนหน้าแลถัดไป       สององค์ไซร้โง่เขลาเบาปัญญา\
@@ -376,7 +433,7 @@ mod test {
         let mut tracker = Default::default();
         widgets
             .write()
-            .make_upload_buffer(&gpu.read(), &mut tracker)?;
+            .make_upload_buffer(&mut gpu.write(), &async_rt, &mut tracker)?;
 
         Ok(())
     }

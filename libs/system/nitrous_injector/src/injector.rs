@@ -43,6 +43,10 @@ pub(crate) fn make_derive_nitrous_module(item: DeriveInput) -> TokenStream2 {
             fn get(&self, module: ::std::sync::Arc<::parking_lot::RwLock<dyn ::nitrous::Module>>, name: &str) -> ::anyhow::Result<::nitrous::Value> {
                 self.__get_inner__(module, name)
             }
+
+            fn names(&self) -> Vec<&str> {
+                self.__names_inner__()
+            }
         }
     }
 }
@@ -64,10 +68,29 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
     let mut method_arms = Vec::new();
     let mut get_arms = Vec::new();
     let mut put_arms = Vec::new();
+    let mut names = Vec::new();
+    let mut help_items = Vec::new();
+
+    // Auto-inject a "help" method.
+    {
+        let call_arm: Arm = parse2(quote! { "help" => { self.__show_help__() } }).unwrap();
+        method_arms.push(call_arm);
+
+        let lookup_arm: Arm = parse2(
+            quote! { "help" => { Ok(::nitrous::Value::Method(module, "help".to_owned())) } },
+        )
+        .unwrap();
+        get_arms.push(lookup_arm);
+
+        help_items.push("help()".to_owned());
+    }
 
     for (item, args, ret) in visitor.methods {
         let name = format!("{}", item);
+        names.push(name.clone());
 
+        let mut help_item = name.clone();
+        help_item += "(";
         let mut arg_items = Vec::new();
         for (i, arg) in args.iter().enumerate() {
             let expr: Expr = match arg.ty {
@@ -80,7 +103,12 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
                 Scalar::Unit => parse2(quote! { Value::True() }).unwrap(),
             };
             arg_items.push(expr);
+            if i != 0 {
+                help_item += ", ";
+            }
+            help_item += &arg.name.to_string();
         }
+        help_item += ")";
 
         let toks = match ret {
             RetType::Nothing => {
@@ -141,6 +169,8 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
             parse2(quote! { #name => { Ok(::nitrous::Value::Method(module, #name.to_owned())) } })
                 .unwrap();
         get_arms.push(lookup_arm);
+
+        help_items.push(help_item);
     }
 
     for item in visitor.getters {
@@ -185,6 +215,16 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
                         ::anyhow::bail!("Unknown put '{}' passed to {}", name, stringify!(#ty));
                     }
                 }
+            }
+
+            fn __names_inner__(&self) -> Vec<&str> {
+                vec![#(#names),*]
+            }
+
+            fn __show_help__(&self) -> ::anyhow::Result<::nitrous::Value> {
+                let items = vec![#(#help_items),*];
+                let out = items.join("\n");
+                Ok(Value::String(out))
             }
         }
 
