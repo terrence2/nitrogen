@@ -56,23 +56,16 @@ struct Opt {
 struct Demo {
     exit: bool,
     pin_camera: bool,
-    show_terminal: bool,
     camera: Camera,
-    widgets: Arc<RwLock<WidgetBuffer>>,
 }
 
 #[inject_nitrous_module]
 impl Demo {
-    pub fn new(
-        widgets: Arc<RwLock<WidgetBuffer>>,
-        interpreter: &mut Interpreter,
-    ) -> Arc<RwLock<Self>> {
+    pub fn new(interpreter: &mut Interpreter) -> Arc<RwLock<Self>> {
         let demo = Arc::new(RwLock::new(Self {
             exit: false,
             pin_camera: false,
-            show_terminal: false,
             camera: Default::default(),
-            widgets,
         }));
         interpreter.put_global("demo", Value::Module(demo.clone()));
         demo
@@ -100,8 +93,6 @@ impl Demo {
     #[method]
     pub fn toggle_pin_camera(&mut self, pressed: bool) {
         if pressed {
-            // println!("eye_rel: {}", arcball.read().get_eye_relative());
-            // println!("target:  {}", arcball.read().get_target());
             self.pin_camera = !self.pin_camera;
         }
     }
@@ -297,7 +288,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     //     meters!(1308.7262),
     // ))?;
 
-    let demo = Demo::new(widgets.clone(), &mut interpreter.write());
+    let demo = Demo::new(&mut interpreter.write());
 
     {
         let interp = &mut interpreter.write();
