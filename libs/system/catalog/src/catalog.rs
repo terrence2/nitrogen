@@ -385,10 +385,10 @@ mod tests {
 
         // Expect success
         let meta = catalog.stat_name_sync("a.txt")?;
-        assert_eq!(meta.name, "a.txt");
+        assert_eq!(meta.name(), "a.txt");
         assert_eq!(
-            meta.path,
-            Some(PathBuf::from("./masking_test_data/a/a.txt"))
+            meta.path(),
+            Some(PathBuf::from("./masking_test_data/a/a.txt").as_path())
         );
         let data = catalog.read_name_sync("a.txt")?;
         assert_eq!(data, b"hello" as &[u8]);
@@ -404,10 +404,10 @@ mod tests {
             "./masking_test_data/b",
         )?)?;
         let meta = catalog.stat_name_sync("a.txt")?;
-        assert_eq!(meta.name, "a.txt");
+        assert_eq!(meta.name(), "a.txt");
         assert_eq!(
-            meta.path,
-            Some(PathBuf::from("./masking_test_data/a/a.txt"))
+            meta.path(),
+            Some(PathBuf::from("./masking_test_data/a/a.txt").as_path())
         );
         let data = catalog.read_name_sync("a.txt")?;
         assert_eq!(data, b"hello" as &[u8]);
@@ -415,10 +415,10 @@ mod tests {
         // Add a third drawer with higher priority.
         catalog.add_drawer(DirectoryDrawer::from_directory(1, "./masking_test_data/b")?)?;
         let meta = catalog.stat_name_sync("a.txt")?;
-        assert_eq!(meta.name, "a.txt");
+        assert_eq!(meta.name(), "a.txt");
         assert_eq!(
-            meta.path,
-            Some(PathBuf::from("./masking_test_data/b/a.txt"))
+            meta.path(),
+            Some(PathBuf::from("./masking_test_data/b/a.txt").as_path())
         );
         let data = catalog.read_name_sync("a.txt")?;
         assert_eq!(data, b"world" as &[u8]);
@@ -434,7 +434,7 @@ mod tests {
         )?])?;
 
         let meta = catalog.stat_name_sync("a.txt")?;
-        let data = catalog.read(meta.id).await?;
+        let data = catalog.read(meta.id()).await?;
         assert_eq!(data, b"hello" as &[u8]);
 
         Ok(())

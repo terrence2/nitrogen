@@ -13,16 +13,17 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{DrawerFileMetadata, FileId};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // Information about a "file" in the catalog.
+#[derive(Debug)]
 pub struct FileMetadata {
-    pub id: FileId,
-    pub name: String,
-    pub compression: Option<&'static str>,
-    pub packed_size: u64,
-    pub unpacked_size: u64,
-    pub path: Option<PathBuf>,
+    id: FileId,
+    name: String,
+    compression: Option<&'static str>,
+    packed_size: u64,
+    unpacked_size: u64,
+    path: Option<PathBuf>,
 }
 
 impl FileMetadata {
@@ -35,5 +36,29 @@ impl FileMetadata {
             unpacked_size: drawer_meta.unpacked_size,
             path: drawer_meta.path,
         }
+    }
+
+    pub fn id(&self) -> FileId {
+        self.id
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn compression(&self) -> Option<&'static str> {
+        self.compression
+    }
+
+    pub fn packed_size(&self) -> u64 {
+        self.packed_size
+    }
+
+    pub fn unpacked_size(&self) -> u64 {
+        self.unpacked_size
+    }
+
+    pub fn path(&self) -> Option<&Path> {
+        self.path.as_deref()
     }
 }
