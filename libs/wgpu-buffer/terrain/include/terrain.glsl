@@ -70,24 +70,37 @@ terrain_atlas_slot_for_graticule(vec2 graticule_rad, utexture2D index_texture, s
     return index_texel.r;
 }
 
-ivec4
-terrain_sample_in_tile(vec2 graticule_rad, TileInfo tile, itexture2DArray atlas_texture, sampler atlas_sampler) {
-    // Tile metadata is stored in arcseconds for maximum precision.
+vec2
+terrain_graticule_to_st(vec2 graticule_rad, TileInfo tile) {
+    // Tile metadata is stored with arcseconds as maximum precision.
     vec2 graticule_deg = degrees(graticule_rad);
     vec2 graticule_as = graticule_deg * 60.0 * 60.0;
 
-    // Look up the information in the tile.
-    float tile_t = (graticule_as.x - tile.base_as[0]) / tile.angular_extent_as;
-    float tile_s = (graticule_as.y - tile.base_as[1]) / tile.angular_extent_as;
-    ivec4 atlas_texel = texture(
+    // MipTiles have size 512x512, but the edge is overlapped by one pixel with adjacent tiles so that
+    // we can always do linear filtering locally. The upshot is that angular_extent below is over the
+    // middle 510 pixels (509 gaps) and the base_as is located offset 1x1 into the image.
+
+    // Compute s/t in the "tile".
+    vec2 tile_st = vec2(
+        (graticule_as.y - tile.base_as[1]) / tile.angular_extent_as,
+        (graticule_as.x - tile.base_as[0]) / tile.angular_extent_as
+    );
+
+    // Project the tile s/t into the image as a whole.
+    vec2 img_st = (tile_st * vec2(509.0) / vec2(512.0)) + vec2(1.0 / 512.0);
+
+    return img_st;
+}
+
+ivec4
+terrain_sample_in_tile(vec2 graticule_rad, TileInfo tile, itexture2DArray atlas_texture, sampler atlas_sampler) {
+    return texture(
         isampler2DArray(atlas_texture, atlas_sampler),
         vec3(
-            tile_s,
-            tile_t,
+            terrain_graticule_to_st(graticule_rad, tile),
             tile.atlas_slot
         )
     );
-    return atlas_texel;
 }
 
 int
@@ -102,21 +115,12 @@ terrain_normal_in_tile(vec2 graticule_rad, TileInfo tile, itexture2DArray atlas_
 
 vec4
 terrain_color_in_tile(vec2 graticule_rad, TileInfo tile, texture2DArray atlas_texture, sampler atlas_sampler) {
-    // Tile metadata is stored in arcseconds for maximum precision.
-    vec2 graticule_deg = degrees(graticule_rad);
-    vec2 graticule_as = graticule_deg * 60.0 * 60.0;
-
-    // Look up the information in the tile.
-    float tile_t = (graticule_as.x - tile.base_as[0]) / tile.angular_extent_as;
-    float tile_s = (graticule_as.y - tile.base_as[1]) / tile.angular_extent_as;
-    vec4 atlas_texel = texture(
+    return texture(
         sampler2DArray(atlas_texture, atlas_sampler),
         vec3(
-            tile_s,
-            tile_t,
+            terrain_graticule_to_st(graticule_rad, tile),
             tile.atlas_slot
         )
     );
-    return atlas_texel;
 }
 ///////////////////////////////////////////////////////////////////////////////

@@ -125,6 +125,19 @@ impl ArcBallCamera {
         self.eye.distance = meters!(distance);
     }
 
+    #[method]
+    pub fn show_parameters(&self) -> String {
+        let mut out = String::new();
+        out += &format!("tgt lat: {}\n", self.target.latitude.f64());
+        out += &format!("tgt lon: {}\n", self.target.longitude.f64());
+        out += &format!("tgt dst: {}\n", self.target.distance.f64());
+        out += &format!("eye lat: {}\n", self.eye.latitude.f64());
+        out += &format!("eye lon: {}\n", self.eye.longitude.f64());
+        out += &format!("eye dst: {}\n", self.eye.distance.f64());
+        println!("{}", out);
+        out
+    }
+
     fn cartesian_target_position<Unit: LengthUnit>(&self) -> Cartesian<GeoCenter, Unit> {
         Cartesian::<GeoCenter, Unit>::from(Graticule::<GeoCenter>::from(self.target))
     }
