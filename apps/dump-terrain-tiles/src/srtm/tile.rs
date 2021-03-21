@@ -31,7 +31,7 @@ pub struct Tile {
     // Row major, i16, big-endian, meters
     // Voids are marked with i16::MIN
     // Rows are west to east, columns are north to south.
-    // Even though the tile origin is on the south side, the data stored north to south.
+    // Even though the tile origin is on the south side, the data is stored north to south.
     data: Mmap,
 
     // The individual samples represent one arcsecond of terrain. However the tiles are
