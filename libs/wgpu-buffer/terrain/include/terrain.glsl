@@ -14,8 +14,16 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 
 struct TerrainVertex {
-    // Note that we cannot use vec3 here as that packs into vec4 in a struct storage buffer context, unlike in a
-    // vertex context where it packs properly. :shrug:
+    // Note that we cannot use vec3 here as that packs into vec4 in a struct storage buffer context,
+    // unlike in a vertex context where it packs properly.
+    float surface_position[3];
+    float position[3];
+    float normal[3];
+    float graticule[2];
+};
+
+// Use a more densely packed representation during upload.
+struct TerrainUploadVertex {
     float position[3];
     float normal[3];
     float graticule[2];

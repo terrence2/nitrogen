@@ -36,6 +36,6 @@ main()
     int height = terrain_height_in_tile(v_graticule, tile_info[atlas_slot], atlas_texture, atlas_sampler);
 
     vec3 v_normal = arr_to_vec3(vertices[i].normal);
-    vec3 v_position = arr_to_vec3(vertices[i].position);
+    vec3 v_position = arr_to_vec3(vertices[i].surface_position);
     vertices[i].position = vec3_to_arr(v_position + (float(height) * v_normal));
 }

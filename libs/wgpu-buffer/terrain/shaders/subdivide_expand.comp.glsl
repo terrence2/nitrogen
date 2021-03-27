@@ -51,7 +51,7 @@ main()
     // crop up in tall and steep slopes, leading to obvious gaps between patches, even with correctly wound strips.
     // HACK: process all pairs in the same order by sorting on x; edges lying exactly in the y-z
     //       plane are unlikely enough in combination that we can get away with a single compare.
-    if (tva.position[0] > tvb.position[0]) {
+    if (tva.surface_position[0] > tvb.surface_position[0]) {
         TerrainVertex tmp = tva;
         tva = tvb;
         tvb = tmp;
@@ -85,8 +85,8 @@ main()
     float theta_t = theta_a + atan(beta_y, cos(phi_a) + beta_x);
 
     // Use the clever tan method from figure 35.
-    vec3 pa = arr_to_vec3(tva.position);
-    vec3 pb = arr_to_vec3(tvb.position);
+    vec3 pa = arr_to_vec3(tva.surface_position);
+    vec3 pb = arr_to_vec3(tvb.surface_position);
     float x = length(pb - pa) / 2.0;
     // Note that the angle we get is not the same as the opposite-over-adjacent angle we want.
     // It seems to be related to that angle though, by being 2x that angle; thus, divide by 2.
@@ -94,9 +94,9 @@ main()
     vec3 midpoint = (pa + pb) / 2.0;
     vec3 pt = midpoint + y * nt;
 
-    target_vertices[offset].position[0] = pt.x;
-    target_vertices[offset].position[1] = pt.y;
-    target_vertices[offset].position[2] = pt.z;
+    target_vertices[offset].surface_position[0] = pt.x;
+    target_vertices[offset].surface_position[1] = pt.y;
+    target_vertices[offset].surface_position[2] = pt.z;
     target_vertices[offset].normal[0] = nt.x;
     target_vertices[offset].normal[1] = nt.y;
     target_vertices[offset].normal[2] = nt.z;

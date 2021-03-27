@@ -892,6 +892,10 @@ impl TerrainBuffer {
         &self.composite_bind_group
     }
 
+    pub fn mesh_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+        self.patch_manager.displace_height_bind_group_layout()
+    }
+
     pub fn num_patches(&self) -> i32 {
         self.patch_manager.num_patches()
     }

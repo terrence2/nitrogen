@@ -18,7 +18,7 @@
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 layout(binding = 0) uniform SubdivisionCtx { SubdivisionContext context; };
 layout(binding = 1) buffer TargetVertices { TerrainVertex target_vertices[]; };
-layout(binding = 2) buffer UploadVertices { TerrainVertex patch_upload_vertices[]; };
+layout(binding = 2) buffer UploadVertices { TerrainUploadVertex patch_upload_vertices[]; };
 
 // We upload the frame's patches in one big block for performance, but we need to
 // expand into a much bigger buffer where those cannot be adjacent. Copying patch
@@ -34,5 +34,8 @@ main()
     uint offset = i % PATCH_UPLOAD_STRIDE;
 
     // Project our input into the target patch.
-    target_vertices[patch_id * context.target_stride + offset] = patch_upload_vertices[i];
+    target_vertices[patch_id * context.target_stride + offset].surface_position = patch_upload_vertices[i].position;
+    //target_vertices[patch_id * context.target_stride + offset].position = patch_upload_vertices[i].position;
+    target_vertices[patch_id * context.target_stride + offset].normal = patch_upload_vertices[i].normal;
+    target_vertices[patch_id * context.target_stride + offset].graticule = patch_upload_vertices[i].graticule;
 }

@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    patch::{PatchIndex, PatchTree, PatchWinding, TerrainVertex},
+    patch::{PatchIndex, PatchTree, PatchWinding, TerrainUploadVertex, TerrainVertex},
     tables::{get_index_dependency_lut, get_tri_strip_index_buffer, get_wireframe_index_buffer},
     GpuDetailLevel, VisiblePatch,
 };
@@ -66,7 +66,7 @@ pub(crate) struct PatchManager {
     // for patch-winding when doing the draw later.
     desired_patch_count: usize,
     live_patches: Vec<(PatchIndex, PatchWinding)>,
-    live_vertices: Vec<TerrainVertex>,
+    live_vertices: Vec<TerrainUploadVertex>,
 
     // CPU generated patch corner vertices. Input to subdivision.
     patch_upload_buffer: Arc<Box<wgpu::Buffer>>,
@@ -112,7 +112,7 @@ impl PatchManager {
         gpu: &mut GPU,
     ) -> Result<Self> {
         let patch_upload_stride = 3; // 3 vertices per patch in the upload buffer.
-        let patch_upload_byte_size = TerrainVertex::mem_size() * patch_upload_stride;
+        let patch_upload_byte_size = TerrainUploadVertex::mem_size() * patch_upload_stride;
         let patch_upload_buffer_size =
             (patch_upload_byte_size * desired_patch_count) as wgpu::BufferAddress;
         let patch_upload_buffer = Arc::new(Box::new(gpu.device().create_buffer(
@@ -138,7 +138,7 @@ impl PatchManager {
         // Create target vertex buffer.
         let target_vertex_count = subdivide_context.target_stride * desired_patch_count as u32;
         let target_patch_byte_size =
-            mem::size_of::<TerrainVertex>() * subdivide_context.target_stride as usize;
+            TerrainVertex::mem_size(0) * subdivide_context.target_stride as usize;
         assert_eq!(target_patch_byte_size % 4, 0);
         let target_vertex_buffer_size =
             (target_patch_byte_size * desired_patch_count) as wgpu::BufferAddress;
@@ -571,14 +571,14 @@ impl PatchManager {
             });
 
             self.live_vertices
-                .push(TerrainVertex::new(&pv0, &nv0.xyz(), &g0));
+                .push(TerrainUploadVertex::new(&pv0, &nv0.xyz(), &g0));
             self.live_vertices
-                .push(TerrainVertex::new(&pv1, &nv1.xyz(), &g1));
+                .push(TerrainUploadVertex::new(&pv1, &nv1.xyz(), &g1));
             self.live_vertices
-                .push(TerrainVertex::new(&pv2, &nv2.xyz(), &g2));
+                .push(TerrainUploadVertex::new(&pv2, &nv2.xyz(), &g2));
         }
         while self.live_vertices.len() < 3 * self.desired_patch_count {
-            self.live_vertices.push(TerrainVertex::empty());
+            self.live_vertices.push(TerrainUploadVertex::empty());
         }
         gpu.upload_slice_to(
             "terrain-geo-patch-vertex-upload-buffer",

@@ -19,10 +19,12 @@ mod patch_tree;
 mod queue;
 
 pub mod patch_winding;
+pub mod terrain_upload_vertex;
 pub mod terrain_vertex;
 
 pub(crate) use crate::patch::{
     patch_manager::PatchManager,
     patch_tree::{PatchIndex, PatchTree},
+    terrain_upload_vertex::TerrainUploadVertex,
 };
 pub use crate::patch::{patch_winding::PatchWinding, terrain_vertex::TerrainVertex};
