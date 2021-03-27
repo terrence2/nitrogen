@@ -18,7 +18,7 @@ use camera::ArcBallCamera;
 //use fullscreen::FullscreenBuffer;
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
-use gpu::GPU;
+use gpu::Gpu;
 use input::{GenericEvent, InputController, InputSystem, VirtualKeyCode};
 //use legion::*;
 // use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
@@ -48,7 +48,7 @@ async fn async_trampoline() {
 #[allow(unused)]
 struct AppContext {
     interpreter: Arc<RwLock<Interpreter>>,
-    gpu: Arc<RwLock<GPU>>,
+    gpu: Arc<RwLock<Gpu>>,
     arcball: Arc<RwLock<ArcBallCamera>>,
     // //async_rt: Runtime,
     // //legion: World,
@@ -72,7 +72,7 @@ async fn async_main() -> Result<()> {
     }
 
     let interpreter = Interpreter::new();
-    let gpu = GPU::new_async(&window, Default::default(), &mut interpreter.write()).await?;
+    let gpu = Gpu::new_async(&window, Default::default(), &mut interpreter.write()).await?;
     //let mut async_rt = Runtime::new()?;
     //let legion = World::default();
 

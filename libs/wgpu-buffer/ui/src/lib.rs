@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
 use global_data::GlobalParametersBuffer;
-use gpu::{ResizeHint, GPU};
+use gpu::{Gpu, ResizeHint};
 use log::trace;
 use parking_lot::RwLock;
 use shader_shared::Group;
@@ -38,7 +38,7 @@ pub struct UiRenderPass {
 
 impl UiRenderPass {
     pub fn new(
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
         global_data: &GlobalParametersBuffer,
         widget_buffer: &WidgetBuffer,
         world_render_pass: &WorldRenderPass,
@@ -130,7 +130,7 @@ impl UiRenderPass {
                         )?,
                         entry_point: "main",
                         targets: &[wgpu::ColorTargetState {
-                            format: GPU::SCREEN_FORMAT,
+                            format: Gpu::SCREEN_FORMAT,
                             color_blend: wgpu::BlendState {
                                 src_factor: wgpu::BlendFactor::SrcAlpha,
                                 dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
@@ -148,7 +148,7 @@ impl UiRenderPass {
                         polygon_mode: wgpu::PolygonMode::Fill,
                     },
                     depth_stencil: Some(wgpu::DepthStencilState {
-                        format: GPU::DEPTH_FORMAT,
+                        format: Gpu::DEPTH_FORMAT,
                         depth_write_enabled: true,
                         depth_compare: wgpu::CompareFunction::Greater,
                         stencil: wgpu::StencilState {
@@ -191,7 +191,7 @@ impl UiRenderPass {
                     )?,
                     entry_point: "main",
                     targets: &[wgpu::ColorTargetState {
-                        format: GPU::SCREEN_FORMAT,
+                        format: Gpu::SCREEN_FORMAT,
                         alpha_blend: wgpu::BlendState {
                             src_factor: wgpu::BlendFactor::SrcAlpha,
                             dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
@@ -213,7 +213,7 @@ impl UiRenderPass {
                     polygon_mode: wgpu::PolygonMode::Fill,
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
-                    format: GPU::DEPTH_FORMAT,
+                    format: Gpu::DEPTH_FORMAT,
                     depth_write_enabled: false,
                     depth_compare: wgpu::CompareFunction::Always,
                     stencil: wgpu::StencilState {
@@ -252,7 +252,7 @@ impl UiRenderPass {
         Ok(ui)
     }
 
-    fn _make_deferred_texture_targets(gpu: &GPU) -> (wgpu::Texture, wgpu::TextureView) {
+    fn _make_deferred_texture_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
         let sz = gpu.physical_size();
         let target = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("world-offscreen-texture-target"),
@@ -264,7 +264,7 @@ impl UiRenderPass {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: GPU::SCREEN_FORMAT,
+            format: Gpu::SCREEN_FORMAT,
             usage: wgpu::TextureUsage::RENDER_ATTACHMENT
                 | wgpu::TextureUsage::COPY_SRC
                 | wgpu::TextureUsage::SAMPLED,
@@ -282,7 +282,7 @@ impl UiRenderPass {
         (target, view)
     }
 
-    fn _make_deferred_depth_targets(gpu: &GPU) -> (wgpu::Texture, wgpu::TextureView) {
+    fn _make_deferred_depth_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
         let sz = gpu.physical_size();
         let depth_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("world-offscreen-depth-texture"),
@@ -294,7 +294,7 @@ impl UiRenderPass {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: GPU::DEPTH_FORMAT,
+            format: Gpu::DEPTH_FORMAT,
             usage: wgpu::TextureUsage::RENDER_ATTACHMENT
                 | wgpu::TextureUsage::COPY_SRC
                 | wgpu::TextureUsage::SAMPLED,
@@ -313,7 +313,7 @@ impl UiRenderPass {
     }
 
     fn _make_deferred_bind_group(
-        gpu: &GPU,
+        gpu: &Gpu,
         deferred_bind_group_layout: &wgpu::BindGroupLayout,
         deferred_texture_view: &wgpu::TextureView,
         deferred_sampler: &wgpu::Sampler,
@@ -378,7 +378,7 @@ impl UiRenderPass {
         // Background
         rpass.set_pipeline(&self.background_pipeline);
         rpass.set_bind_group(Group::Globals.index(), &global_data.bind_group(), &[]);
-        rpass.set_bind_group(Group::UI.index(), widget_buffer.bind_group(), &[]);
+        rpass.set_bind_group(Group::Ui.index(), widget_buffer.bind_group(), &[]);
         rpass.set_bind_group(Group::OffScreenWorld.index(), world.bind_group(), &[]);
         rpass.set_vertex_buffer(0, widget_buffer.background_vertex_buffer());
         rpass.draw(widget_buffer.background_vertex_range(), 0..1);
@@ -386,7 +386,7 @@ impl UiRenderPass {
         // Text
         rpass.set_pipeline(&self.text_pipeline);
         rpass.set_bind_group(Group::Globals.index(), &global_data.bind_group(), &[]);
-        rpass.set_bind_group(Group::UI.index(), widget_buffer.bind_group(), &[]);
+        rpass.set_bind_group(Group::Ui.index(), widget_buffer.bind_group(), &[]);
         rpass.set_vertex_buffer(0, widget_buffer.text_vertex_buffer());
         rpass.draw(widget_buffer.text_vertex_range(), 0..1);
 
@@ -395,7 +395,7 @@ impl UiRenderPass {
 }
 
 impl ResizeHint for UiRenderPass {
-    fn note_resize(&mut self, gpu: &GPU) -> Result<()> {
+    fn note_resize(&mut self, gpu: &Gpu) -> Result<()> {
         self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
         self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
         self.deferred_bind_group = Self::_make_deferred_bind_group(

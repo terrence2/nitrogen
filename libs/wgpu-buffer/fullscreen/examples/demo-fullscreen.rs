@@ -18,7 +18,7 @@ use camera::ArcBallCamera;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
-use gpu::GPU;
+use gpu::Gpu;
 use input::{
     GenericEvent, GenericSystemEvent, GenericWindowEvent, InputController, InputSystem,
     VirtualKeyCode,
@@ -32,7 +32,7 @@ fn main() -> Result<()> {
 
 fn window_main(window: Window, input_controller: &InputController) -> Result<()> {
     let interpreter = Interpreter::new();
-    let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
+    let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
 
     let globals_buffer = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter.write());
     let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
@@ -69,7 +69,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
                 module: &frag_shader,
                 entry_point: "main",
                 targets: &[wgpu::ColorTargetState {
-                    format: GPU::SCREEN_FORMAT,
+                    format: Gpu::SCREEN_FORMAT,
                     color_blend: wgpu::BlendState::REPLACE,
                     alpha_blend: wgpu::BlendState::REPLACE,
                     write_mask: wgpu::ColorWrite::ALL,
@@ -83,7 +83,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
                 polygon_mode: wgpu::PolygonMode::Fill,
             },
             depth_stencil: Some(wgpu::DepthStencilState {
-                format: GPU::DEPTH_FORMAT,
+                format: Gpu::DEPTH_FORMAT,
                 depth_write_enabled: false,
                 depth_compare: wgpu::CompareFunction::Always,
                 stencil: wgpu::StencilState {
@@ -168,7 +168,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: None,
-                color_attachments: &[GPU::color_attachment(&framebuffer.output.view)],
+                color_attachments: &[Gpu::color_attachment(&framebuffer.output.view)],
                 depth_stencil_attachment: Some(gpu.depth_stencil_attachment()),
             });
             rpass.set_pipeline(&pipeline);

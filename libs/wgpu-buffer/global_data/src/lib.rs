@@ -16,7 +16,7 @@ use absolute_unit::{Kilometers, Meters};
 use anyhow::Result;
 use camera::Camera;
 use core::num::NonZeroU64;
-use gpu::{UploadTracker, GPU};
+use gpu::{Gpu, UploadTracker};
 use nalgebra::{convert, Matrix3, Matrix4, Point3, Vector3, Vector4};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -96,7 +96,7 @@ impl Globals {
     // cutouts or left-right cutouts, depending on the aspect. This lets our screen drawing
     // routines (e.g. for text) assume that everything is undistorted, even if coordinates at
     // the edges go outside the +/- 1 range.
-    pub fn with_screen_overlay_projection(mut self, gpu: &GPU) -> Self {
+    pub fn with_screen_overlay_projection(mut self, gpu: &Gpu) -> Self {
         let dim = gpu.physical_size();
         let aspect = gpu.aspect_ratio_f32() * 4f32 / 3f32;
         let (w, h) = if dim.width > dim.height {
@@ -247,7 +247,7 @@ impl GlobalParametersBuffer {
     pub fn make_upload_buffer(
         &self,
         camera: &Camera,
-        gpu: &GPU,
+        gpu: &Gpu,
         tracker: &mut UploadTracker,
     ) -> Result<()> {
         let globals: Globals = Default::default();
@@ -378,7 +378,7 @@ impl GlobalParametersBuffer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpu::GPU;
+    use gpu::Gpu;
     use winit::{event_loop::EventLoop, window::Window};
 
     #[cfg(unix)]
@@ -388,7 +388,7 @@ mod tests {
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;
         let interpreter = Interpreter::new();
-        let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
+        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
         let _globals_buffer =
             GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter.write());
         Ok(())

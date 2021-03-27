@@ -13,20 +13,19 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    tile::{
-        spherical_common::SphericalTileSetCommon, tile_manager::TileSet, DataSetCoordinates,
-        DataSetDataKind,
-    },
+    tile::{spherical_common::SphericalTileSetCommon, tile_manager::TileSet, DataSetDataKind},
     GpuDetail, VisiblePatch,
 };
 use anyhow::Result;
 use catalog::Catalog;
 use global_data::GlobalParametersBuffer;
 use gpu::wgpu::{BindGroup, CommandEncoder, ComputePass};
-use gpu::{UploadTracker, GPU};
+use gpu::{Gpu, UploadTracker};
 use shader_shared::Group;
 use std::sync::Arc;
 use tokio::{runtime::Runtime, sync::RwLock};
+
+// TODO: tweak load depth of each type of tile... we don't need as much height data as normal data
 
 #[derive(Debug)]
 pub(crate) struct SphericalHeightTileSet {
@@ -41,7 +40,7 @@ impl SphericalHeightTileSet {
         catalog: &Catalog,
         prefix: &str,
         gpu_detail: &GpuDetail,
-        gpu: &GPU,
+        gpu: &Gpu,
     ) -> Result<Self> {
         let common =
             SphericalTileSetCommon::new(catalog, prefix, DataSetDataKind::Height, gpu_detail, gpu)?;
@@ -75,14 +74,6 @@ impl SphericalHeightTileSet {
 }
 
 impl TileSet for SphericalHeightTileSet {
-    fn kind(&self) -> DataSetDataKind {
-        DataSetDataKind::Height
-    }
-
-    fn coordinates(&self) -> DataSetCoordinates {
-        DataSetCoordinates::Spherical
-    }
-
     fn begin_update(&mut self) {
         self.common.begin_update()
     }
@@ -95,13 +86,13 @@ impl TileSet for SphericalHeightTileSet {
         &mut self,
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &Runtime,
-        gpu: &GPU,
+        gpu: &Gpu,
         tracker: &mut UploadTracker,
     ) {
         self.common.finish_update(catalog, async_rt, gpu, tracker)
     }
 
-    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut GPU) {
+    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut Gpu) {
         self.common.snapshot_index(async_rt, gpu)
     }
 
@@ -116,30 +107,34 @@ impl TileSet for SphericalHeightTileSet {
         mut cpass: ComputePass<'a>,
     ) -> Result<ComputePass<'a>> {
         cpass.set_pipeline(&self.displace_height_pipeline);
-        cpass.set_bind_group(0, mesh_bind_group, &[]);
-        cpass.set_bind_group(1, self.common.bind_group(), &[]);
+        cpass.set_bind_group(Group::TerrainDisplaceMesh.index(), mesh_bind_group, &[]);
+        cpass.set_bind_group(
+            Group::TerrainDisplaceTileSet.index(),
+            self.common.bind_group(),
+            &[],
+        );
         cpass.dispatch(vertex_count, 1, 1);
         Ok(cpass)
     }
 
     fn accumulate_normals<'a>(
         &'a self,
-        _cpass: ComputePass<'a>,
         _extent: &wgpu::Extent3d,
         _globals_buffer: &'a GlobalParametersBuffer,
         _accumulate_common_bind_group: &'a wgpu::BindGroup,
+        cpass: ComputePass<'a>,
     ) -> Result<ComputePass<'a>> {
-        unimplemented!()
+        Ok(cpass)
     }
 
     fn accumulate_colors<'a>(
         &'a self,
-        _cpass: ComputePass<'a>,
         _extent: &wgpu::Extent3d,
         _globals_buffer: &'a GlobalParametersBuffer,
         _accumulate_common_bind_group: &'a wgpu::BindGroup,
+        cpass: ComputePass<'a>,
     ) -> Result<ComputePass<'a>> {
-        unimplemented!()
+        Ok(cpass)
     }
 }
 
@@ -156,7 +151,7 @@ impl SphericalColorTileSet {
         prefix: &str,
         globals_buffer: &GlobalParametersBuffer,
         gpu_detail: &GpuDetail,
-        gpu: &GPU,
+        gpu: &Gpu,
     ) -> Result<Self> {
         let common =
             SphericalTileSetCommon::new(catalog, prefix, DataSetDataKind::Color, gpu_detail, gpu)?;
@@ -167,7 +162,7 @@ impl SphericalColorTileSet {
                     label: Some("terrain-accumulate-spherical-colors-pipeline"),
                     layout: Some(&gpu.device().create_pipeline_layout(
                         &wgpu::PipelineLayoutDescriptor {
-                            label: Some("terrain-accumulate-pipeline-layout"),
+                            label: Some("terrain-accumulate-colors-pipeline-layout"),
                             push_constant_ranges: &[],
                             bind_group_layouts: &[
                                 globals_buffer.bind_group_layout(),
@@ -191,14 +186,6 @@ impl SphericalColorTileSet {
 }
 
 impl TileSet for SphericalColorTileSet {
-    fn kind(&self) -> DataSetDataKind {
-        DataSetDataKind::Color
-    }
-
-    fn coordinates(&self) -> DataSetCoordinates {
-        DataSetCoordinates::Spherical
-    }
-
     fn begin_update(&mut self) {
         self.common.begin_update()
     }
@@ -211,13 +198,13 @@ impl TileSet for SphericalColorTileSet {
         &mut self,
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &Runtime,
-        gpu: &GPU,
+        gpu: &Gpu,
         tracker: &mut UploadTracker,
     ) {
         self.common.finish_update(catalog, async_rt, gpu, tracker)
     }
 
-    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut GPU) {
+    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut Gpu) {
         self.common.snapshot_index(async_rt, gpu)
     }
 
@@ -229,32 +216,40 @@ impl TileSet for SphericalColorTileSet {
         &'a self,
         _vertex_count: u32,
         _mesh_bind_group: &'a BindGroup,
-        _cpass: ComputePass<'a>,
+        cpass: ComputePass<'a>,
     ) -> Result<ComputePass<'a>> {
-        unimplemented!()
+        Ok(cpass)
     }
 
     fn accumulate_normals<'a>(
         &'a self,
-        _cpass: ComputePass<'a>,
         _extent: &wgpu::Extent3d,
         _globals_buffer: &'a GlobalParametersBuffer,
         _accumulate_common_bind_group: &'a wgpu::BindGroup,
+        cpass: ComputePass<'a>,
     ) -> Result<ComputePass<'a>> {
-        unimplemented!()
+        Ok(cpass)
     }
 
     fn accumulate_colors<'a>(
         &'a self,
-        mut cpass: ComputePass<'a>,
         extent: &wgpu::Extent3d,
         globals_buffer: &'a GlobalParametersBuffer,
         accumulate_common_bind_group: &'a wgpu::BindGroup,
+        mut cpass: ComputePass<'a>,
     ) -> Result<ComputePass<'a>> {
         cpass.set_pipeline(&self.accumulate_spherical_colors_pipeline);
         cpass.set_bind_group(Group::Globals.index(), globals_buffer.bind_group(), &[]);
-        cpass.set_bind_group(Group::TerrainAcc.index(), accumulate_common_bind_group, &[]);
-        cpass.set_bind_group(Group::TerrainTileSet.index(), self.common.bind_group(), &[]);
+        cpass.set_bind_group(
+            Group::TerrainAccumulateCommon.index(),
+            accumulate_common_bind_group,
+            &[],
+        );
+        cpass.set_bind_group(
+            Group::TerrainAccumulateTileSet.index(),
+            self.common.bind_group(),
+            &[],
+        );
         cpass.dispatch(extent.width / 8, extent.height / 8, 1);
         Ok(cpass)
     }
@@ -273,7 +268,7 @@ impl SphericalNormalsTileSet {
         prefix: &str,
         globals_buffer: &GlobalParametersBuffer,
         gpu_detail: &GpuDetail,
-        gpu: &GPU,
+        gpu: &Gpu,
     ) -> Result<Self> {
         let common =
             SphericalTileSetCommon::new(catalog, prefix, DataSetDataKind::Normal, gpu_detail, gpu)?;
@@ -284,7 +279,7 @@ impl SphericalNormalsTileSet {
                     label: Some("terrain-accumulate-spherical-normals-pipeline"),
                     layout: Some(&gpu.device().create_pipeline_layout(
                         &wgpu::PipelineLayoutDescriptor {
-                            label: Some("terrain-accumulate-pipeline-layout"),
+                            label: Some("terrain-accumulate-normals-pipeline-layout"),
                             push_constant_ranges: &[],
                             bind_group_layouts: &[
                                 globals_buffer.bind_group_layout(),
@@ -308,14 +303,6 @@ impl SphericalNormalsTileSet {
 }
 
 impl TileSet for SphericalNormalsTileSet {
-    fn kind(&self) -> DataSetDataKind {
-        DataSetDataKind::Normal
-    }
-
-    fn coordinates(&self) -> DataSetCoordinates {
-        DataSetCoordinates::Spherical
-    }
-
     fn begin_update(&mut self) {
         self.common.begin_update()
     }
@@ -328,13 +315,13 @@ impl TileSet for SphericalNormalsTileSet {
         &mut self,
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &Runtime,
-        gpu: &GPU,
+        gpu: &Gpu,
         tracker: &mut UploadTracker,
     ) {
         self.common.finish_update(catalog, async_rt, gpu, tracker)
     }
 
-    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut GPU) {
+    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut Gpu) {
         self.common.snapshot_index(async_rt, gpu)
     }
 
@@ -346,23 +333,27 @@ impl TileSet for SphericalNormalsTileSet {
         &'a self,
         _vertex_count: u32,
         _mesh_bind_group: &'a BindGroup,
-        _cpass: ComputePass<'a>,
+        cpass: ComputePass<'a>,
     ) -> Result<ComputePass<'a>> {
-        unimplemented!()
+        Ok(cpass)
     }
 
     fn accumulate_normals<'a>(
         &'a self,
-        mut cpass: ComputePass<'a>,
         extent: &wgpu::Extent3d,
         globals_buffer: &'a GlobalParametersBuffer,
         accumulate_common_bind_group: &'a wgpu::BindGroup,
+        mut cpass: ComputePass<'a>,
     ) -> Result<ComputePass<'a>> {
         cpass.set_pipeline(&self.accumulate_spherical_normals_pipeline);
         cpass.set_bind_group(Group::Globals.index(), globals_buffer.bind_group(), &[]);
-        cpass.set_bind_group(Group::TerrainAcc.index(), accumulate_common_bind_group, &[]);
         cpass.set_bind_group(
-            Group::TerrainTileSet.index(),
+            Group::TerrainAccumulateCommon.index(),
+            accumulate_common_bind_group,
+            &[],
+        );
+        cpass.set_bind_group(
+            Group::TerrainAccumulateTileSet.index(),
             &self.common.bind_group(),
             &[],
         );
@@ -373,11 +364,11 @@ impl TileSet for SphericalNormalsTileSet {
 
     fn accumulate_colors<'a>(
         &'a self,
-        _cpass: ComputePass<'a>,
         _extent: &wgpu::Extent3d,
         _globals_buffer: &'a GlobalParametersBuffer,
         _accumulate_common_bind_group: &'a wgpu::BindGroup,
+        cpass: ComputePass<'a>,
     ) -> Result<ComputePass<'a>> {
-        unimplemented!()
+        Ok(cpass)
     }
 }

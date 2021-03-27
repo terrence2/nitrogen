@@ -29,7 +29,7 @@ use camera::Camera;
 use catalog::Catalog;
 use geodesy::{GeoCenter, Graticule};
 use global_data::GlobalParametersBuffer;
-use gpu::{ResizeHint, UploadTracker, GPU};
+use gpu::{Gpu, ResizeHint, UploadTracker};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
@@ -179,7 +179,7 @@ impl TerrainBuffer {
         cpu_detail_level: CpuDetailLevel,
         gpu_detail_level: GpuDetailLevel,
         globals_buffer: &GlobalParametersBuffer,
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
         interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
         let cpu_detail = cpu_detail_level.parameters();
@@ -481,7 +481,7 @@ impl TerrainBuffer {
         Ok(terrain)
     }
 
-    fn _make_deferred_texture_targets(gpu: &GPU) -> (wgpu::Texture, wgpu::TextureView) {
+    fn _make_deferred_texture_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
         let sz = gpu.physical_size();
         let target = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("deferred-texture-target"),
@@ -511,7 +511,7 @@ impl TerrainBuffer {
         (target, view)
     }
 
-    fn _make_deferred_depth_targets(gpu: &GPU) -> (wgpu::Texture, wgpu::TextureView) {
+    fn _make_deferred_depth_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
         let sz = gpu.physical_size();
         let depth_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("deferred-depth-texture"),
@@ -541,7 +541,7 @@ impl TerrainBuffer {
         (depth_texture, depth_view)
     }
 
-    fn _make_color_accumulator_targets(gpu: &GPU) -> (wgpu::Texture, wgpu::TextureView) {
+    fn _make_color_accumulator_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
         let sz = gpu.physical_size();
         let color_acc = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("terrain-color-acc-texture"),
@@ -571,7 +571,7 @@ impl TerrainBuffer {
         (color_acc, color_view)
     }
 
-    fn _make_normal_accumulator_targets(gpu: &GPU) -> (wgpu::Texture, wgpu::TextureView) {
+    fn _make_normal_accumulator_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
         let sz = gpu.physical_size();
         let normal_acc = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("terrain-normal-acc-texture"),
@@ -686,7 +686,7 @@ impl TerrainBuffer {
         optimize_camera: &Camera,
         catalog: Arc<AsyncRwLock<Catalog>>,
         async_rt: &mut Runtime,
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
         tracker: &mut UploadTracker,
     ) -> Result<()> {
         // Upload patches and capture visibility regions.
@@ -798,7 +798,7 @@ impl TerrainBuffer {
         cpass.set_pipeline(&self.accumulate_clear_pipeline);
         cpass.set_bind_group(Group::Globals.index(), globals_buffer.bind_group(), &[]);
         cpass.set_bind_group(
-            Group::TerrainAcc.index(),
+            Group::TerrainAccumulateCommon.index(),
             &self.accumulate_common_bind_group,
             &[],
         );
@@ -823,6 +823,10 @@ impl TerrainBuffer {
 
     pub fn add_tile_set(&mut self, tile_set: Box<dyn TileSet>) {
         self.tile_manager.add_tile_set(tile_set);
+    }
+
+    pub fn accumulate_common_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
+        &self.accumulate_common_bind_group_layout
     }
 
     #[method]
@@ -868,7 +872,7 @@ impl TerrainBuffer {
 }
 
 impl ResizeHint for TerrainBuffer {
-    fn note_resize(&mut self, gpu: &GPU) -> Result<()> {
+    fn note_resize(&mut self, gpu: &Gpu) -> Result<()> {
         self.acc_extent = gpu.attachment_extent();
         self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
         self.deferred_depth = Self::_make_deferred_depth_targets(gpu);

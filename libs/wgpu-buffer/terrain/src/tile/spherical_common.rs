@@ -33,8 +33,8 @@ use anyhow::Result;
 use bzip2::read::BzDecoder;
 use catalog::Catalog;
 use futures::task::noop_waker;
-use geometry::AABB2;
-use gpu::{texture_format_size, UploadTracker, GPU};
+use geometry::Aabb2;
+use gpu::{texture_format_size, Gpu, UploadTracker};
 use image::{ImageBuffer, Rgb};
 use log::trace;
 use std::{
@@ -162,7 +162,7 @@ impl SphericalTileSetCommon {
         prefix: &str,
         kind: DataSetDataKind,
         gpu_detail: &GpuDetail,
-        gpu: &GPU,
+        gpu: &Gpu,
     ) -> Result<Self> {
         let qt_start = Instant::now();
         let tile_tree = QuadTree::from_layers(prefix, catalog)?;
@@ -467,7 +467,7 @@ impl SphericalTileSetCommon {
     pub(crate) fn capture_and_save_index_snapshot(
         &mut self,
         async_rt: &Runtime,
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
     ) -> Result<()> {
         fn write_image(extent: wgpu::Extent3d, _: wgpu::TextureFormat, data: Vec<u8>) {
             let pix_cnt = extent.width as usize * extent.height as usize;
@@ -490,7 +490,7 @@ impl SphericalTileSetCommon {
             img.save("__dump__/terrain_index_texture.png")
                 .expect("wrote file");
         }
-        GPU::dump_texture(
+        Gpu::dump_texture(
             &self.index_texture,
             self.index_texture_extent,
             self.index_texture_format,
@@ -549,7 +549,7 @@ impl SphericalTileSetCommon {
         let max_lat = g0.latitude.max(g1.latitude).max(g2.latitude);
         let min_lon = g0.longitude.min(g1.longitude).min(g2.longitude);
         let max_lon = g0.longitude.max(g1.longitude).max(g2.longitude);
-        let aabb = AABB2::new(
+        let aabb = Aabb2::new(
             [
                 arcseconds!(min_lat).round() as i32,
                 arcseconds!(min_lon).round() as i32,
@@ -566,7 +566,7 @@ impl SphericalTileSetCommon {
         &mut self,
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &Runtime,
-        gpu: &GPU,
+        gpu: &Gpu,
         tracker: &mut UploadTracker,
     ) {
         let mut additions = Vec::new();
@@ -768,7 +768,7 @@ impl SphericalTileSetCommon {
         );
     }
 
-    pub(crate) fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut GPU) {
+    pub(crate) fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut Gpu) {
         self.capture_and_save_index_snapshot(async_rt, gpu).unwrap();
     }
 

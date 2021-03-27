@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
-use gpu::GPU;
+use gpu::Gpu;
 use log::trace;
 use nalgebra::Vector3;
 use star_catalog::Stars;
@@ -191,7 +191,7 @@ impl StarsBuffer {
         band.base_index as usize + rai
     }
 
-    pub fn new(gpu: &GPU) -> Result<Self> {
+    pub fn new(gpu: &Gpu) -> Result<Self> {
         trace!("StarsBuffer::new");
 
         let mut offset = 0;

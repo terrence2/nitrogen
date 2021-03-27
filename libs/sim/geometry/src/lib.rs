@@ -23,7 +23,7 @@ mod plane;
 mod sphere;
 
 pub use arrow::Arrow;
-pub use axis_aligned_bounding_box::AABB2;
+pub use axis_aligned_bounding_box::Aabb2;
 pub use circle::Circle;
 pub use ico_sphere::IcoSphere;
 pub use plane::Plane;

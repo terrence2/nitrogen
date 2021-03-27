@@ -21,7 +21,7 @@ use crate::{
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
-use gpu::GPU;
+use gpu::Gpu;
 use input::GenericEvent;
 use nitrous::Interpreter;
 use parking_lot::RwLock;
@@ -103,7 +103,7 @@ impl TextEdit {
 }
 
 impl Widget for TextEdit {
-    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Result<UploadMetrics> {
+    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<UploadMetrics> {
         let info = WidgetInfo::default();
         let widget_info_index = context.push_widget(&info);
 

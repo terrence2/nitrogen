@@ -21,7 +21,7 @@ use crate::{
     widget_vertex::WidgetVertex,
 };
 use anyhow::Result;
-use gpu::GPU;
+use gpu::Gpu;
 use input::GenericEvent;
 use nitrous::Interpreter;
 use parking_lot::RwLock;
@@ -91,7 +91,7 @@ impl VerticalBox {
 }
 
 impl Widget for VerticalBox {
-    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Result<UploadMetrics> {
+    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<UploadMetrics> {
         let widget_info_index = context.push_widget(&self.info);
         let mut widget_info_indexes = vec![widget_info_index];
 

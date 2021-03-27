@@ -19,7 +19,7 @@ use crate::{
     widget::UploadMetrics,
 };
 use anyhow::Result;
-use gpu::GPU;
+use gpu::Gpu;
 use input::ModifiersState;
 use smallvec::{smallvec, SmallVec};
 use std::{cmp::Ordering, ops::Range};
@@ -463,7 +463,7 @@ impl TextRun {
         &self,
         height_offset: f32,
         widget_info_index: u32,
-        gpu: &GPU,
+        gpu: &Gpu,
         context: &mut PaintContext,
     ) -> Result<(UploadMetrics, TextSpanMetrics)> {
         let mut min_text_offset = usize::MAX;

@@ -36,10 +36,10 @@ use winit::{
 use zerocopy::AsBytes;
 
 #[derive(Debug)]
-pub struct GPUConfig {
+pub struct GpuConfig {
     present_mode: wgpu::PresentMode,
 }
-impl Default for GPUConfig {
+impl Default for GpuConfig {
     fn default() -> Self {
         Self {
             present_mode: wgpu::PresentMode::Mailbox,
@@ -49,11 +49,11 @@ impl Default for GPUConfig {
 
 /// Implement this and register with the gpu instance to get resize notifications.
 pub trait ResizeHint: Debug + Send + Sync + 'static {
-    fn note_resize(&mut self, gpu: &GPU) -> Result<()>;
+    fn note_resize(&mut self, gpu: &Gpu) -> Result<()>;
 }
 
 #[derive(Debug, NitrousModule)]
-pub struct GPU {
+pub struct Gpu {
     surface: wgpu::Surface,
     _adapter: wgpu::Adapter,
     device: wgpu::Device,
@@ -63,7 +63,7 @@ pub struct GPU {
 
     resize_observers: Vec<Arc<RwLock<dyn ResizeHint>>>,
 
-    config: GPUConfig,
+    config: GpuConfig,
     scale_factor: f64,
     physical_size: PhysicalSize<u32>,
     logical_size: LogicalSize<f64>,
@@ -71,7 +71,7 @@ pub struct GPU {
 }
 
 #[inject_nitrous_module]
-impl GPU {
+impl Gpu {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
     pub const SCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 
@@ -107,7 +107,7 @@ impl GPU {
 
     pub fn new(
         window: &Window,
-        config: GPUConfig,
+        config: GpuConfig,
         interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
         block_on(Self::new_async(window, config, interpreter))
@@ -115,7 +115,7 @@ impl GPU {
 
     pub async fn new_async(
         window: &Window,
-        config: GPUConfig,
+        config: GpuConfig,
         interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
         window.set_title("Nitrogen");
@@ -414,7 +414,7 @@ impl GPU {
         extent: wgpu::Extent3d,
         format: wgpu::TextureFormat,
         async_rt: &Runtime,
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
         callback: Box<
             dyn FnOnce(wgpu::Extent3d, wgpu::TextureFormat, Vec<u8>) + Send + Sync + 'static,
         >,
@@ -497,7 +497,7 @@ mod tests {
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;
         let interpreter = Interpreter::new();
-        let _gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
+        let _gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
         Ok(())
     }
 }

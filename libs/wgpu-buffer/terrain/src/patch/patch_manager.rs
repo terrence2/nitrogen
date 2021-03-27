@@ -21,7 +21,7 @@ use absolute_unit::{degrees, meters, radians, Angle, Kilometers, Radians};
 use anyhow::Result;
 use camera::Camera;
 use geodesy::{Cartesian, GeoCenter, Graticule};
-use gpu::{UploadTracker, GPU};
+use gpu::{Gpu, UploadTracker};
 use nalgebra::{Matrix4, Point3};
 use static_assertions::{assert_eq_align, assert_eq_size};
 use std::{f64::consts::FRAC_PI_2, fmt, mem, num::NonZeroU64, ops::Range, sync::Arc};
@@ -109,7 +109,7 @@ impl PatchManager {
         target_refinement: f64,
         desired_patch_count: usize,
         max_subdivisions: usize,
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
     ) -> Result<Self> {
         let patch_upload_stride = 3; // 3 vertices per patch in the upload buffer.
         let patch_upload_byte_size = TerrainUploadVertex::mem_size() * patch_upload_stride;
@@ -509,7 +509,7 @@ impl PatchManager {
         &mut self,
         camera: &Camera,
         optimize_camera: &Camera,
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
         tracker: &mut UploadTracker,
         visible_regions: &mut Vec<VisiblePatch>,
     ) -> Result<()> {

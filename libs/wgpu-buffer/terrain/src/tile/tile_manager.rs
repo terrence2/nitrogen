@@ -56,16 +56,12 @@ use crate::{
 use anyhow::{anyhow, bail, Result};
 use catalog::{from_utf8_string, Catalog};
 use global_data::GlobalParametersBuffer;
-use gpu::{UploadTracker, GPU};
+use gpu::{Gpu, UploadTracker};
 use rayon::prelude::*;
 use std::{fmt::Debug, sync::Arc};
 use tokio::{runtime::Runtime, sync::RwLock};
 
 pub trait TileSet: Debug + Send + Sync + 'static {
-    // Indicates what passes this tile set will be used for.
-    fn kind(&self) -> DataSetDataKind;
-    fn coordinates(&self) -> DataSetCoordinates;
-
     // Maintain runtime visibility tracking based on VisiblePatch notifications derived
     // from the global geometry calculations.
     fn begin_update(&mut self);
@@ -74,12 +70,12 @@ pub trait TileSet: Debug + Send + Sync + 'static {
         &mut self,
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &Runtime,
-        gpu: &GPU,
+        gpu: &Gpu,
         tracker: &mut UploadTracker,
     );
 
     // Indicate that the current index should be written to the debug file.
-    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut GPU);
+    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut Gpu);
 
     // Per-frame opportunity to update the index based on any visibility updates pushed above.
     fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder);
@@ -104,10 +100,10 @@ pub trait TileSet: Debug + Send + Sync + 'static {
     // other the relative weight of their contributions.
     fn accumulate_normals<'a>(
         &'a self,
-        cpass: wgpu::ComputePass<'a>,
         extent: &wgpu::Extent3d,
         globals_buffer: &'a GlobalParametersBuffer,
         accumulate_common_bind_group: &'a wgpu::BindGroup,
+        cpass: wgpu::ComputePass<'a>,
     ) -> Result<wgpu::ComputePass<'a>>;
 
     // Implementors should read from the provided screen space world position coordinates and
@@ -116,10 +112,10 @@ pub trait TileSet: Debug + Send + Sync + 'static {
     // other the relative weight of their contributions.
     fn accumulate_colors<'a>(
         &'a self,
-        cpass: wgpu::ComputePass<'a>,
         extent: &wgpu::Extent3d,
         globals_buffer: &'a GlobalParametersBuffer,
         accumulate_common_bind_group: &'a wgpu::BindGroup,
+        cpass: wgpu::ComputePass<'a>,
     ) -> Result<wgpu::ComputePass<'a>>;
 }
 
@@ -137,8 +133,13 @@ impl TileManager {
         catalog: &Catalog,
         globals_buffer: &GlobalParametersBuffer,
         gpu_detail: &GpuDetail,
-        gpu: &GPU,
+        gpu: &Gpu,
     ) -> Result<Self> {
+        // TODO: figure out a way to track a single tree with multiple tile-sets under it; we're
+        //       wasting a ton of time recomputing the same visibility info for heights and normals
+        //       and not taking advantage of the different required resolutions for each. It would
+        //       be even more efficient to always load at the highest granularity and use the same
+        //       tree for all spherical tiles
         // Scan catalog for all tile sets.
         let tile_sets = catalog
             .find_labeled_matching("default", "*-index.json", Some("json"))?
@@ -220,7 +221,7 @@ impl TileManager {
         &mut self,
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &Runtime,
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
         tracker: &mut UploadTracker,
     ) {
         for ts in self.tile_sets.iter_mut() {
@@ -256,10 +257,6 @@ impl TileManager {
         mut cpass: wgpu::ComputePass<'a>,
     ) -> Result<wgpu::ComputePass<'a>> {
         for ts in self.tile_sets.iter() {
-            if ts.kind() != DataSetDataKind::Height {
-                continue;
-            }
-
             cpass = ts.displace_height(vertex_count, mesh_bind_group, cpass)?;
         }
         Ok(cpass)
@@ -273,12 +270,8 @@ impl TileManager {
         accumulate_common_bind_group: &'a wgpu::BindGroup,
     ) -> Result<wgpu::ComputePass<'a>> {
         for ts in self.tile_sets.iter() {
-            if ts.kind() != DataSetDataKind::Normal {
-                continue;
-            }
-
             cpass =
-                ts.accumulate_normals(cpass, extent, globals_buffer, accumulate_common_bind_group)?;
+                ts.accumulate_normals(extent, globals_buffer, accumulate_common_bind_group, cpass)?;
         }
         Ok(cpass)
     }
@@ -291,12 +284,8 @@ impl TileManager {
         accumulate_common_bind_group: &'a wgpu::BindGroup,
     ) -> Result<wgpu::ComputePass<'a>> {
         for ts in self.tile_sets.iter() {
-            if ts.kind() != DataSetDataKind::Color {
-                continue;
-            }
-
             cpass =
-                ts.accumulate_colors(cpass, extent, globals_buffer, accumulate_common_bind_group)?;
+                ts.accumulate_colors(extent, globals_buffer, accumulate_common_bind_group, cpass)?;
         }
         Ok(cpass)
     }
