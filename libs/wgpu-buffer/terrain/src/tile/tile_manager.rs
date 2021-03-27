@@ -49,32 +49,19 @@ use crate::{
         spherical_tile_set::{
             SphericalColorTileSet, SphericalHeightTileSet, SphericalNormalsTileSet,
         },
-        tile_info::TileInfo,
         DataSetCoordinates, DataSetDataKind,
     },
     GpuDetail, VisiblePatch,
 };
 use anyhow::{anyhow, bail, Result};
 use catalog::{from_utf8_string, Catalog};
-use gpu::{UploadTracker, GPU};
+use global_data::GlobalParametersBuffer;
+use gpu::{Gpu, UploadTracker};
 use rayon::prelude::*;
-use smallvec::{smallvec, SmallVec};
-use std::{fmt::Debug, mem, num::NonZeroU64, sync::Arc};
+use std::{fmt::Debug, sync::Arc};
 use tokio::{runtime::Runtime, sync::RwLock};
 
-/// Layouts that are shared by all shaders implementing TileSetInterface.
-#[derive(Debug)]
-pub(crate) struct BindGroupLayouts<'a> {
-    pub displace_height: &'a wgpu::BindGroupLayout,
-    pub accumulate_tiled_sint: &'a wgpu::BindGroupLayout,
-    pub accumulate_tiled_float: &'a wgpu::BindGroupLayout,
-}
-
 pub trait TileSet: Debug + Send + Sync + 'static {
-    // Indicates what passes this tile set will be used for.
-    fn kind(&self) -> DataSetDataKind;
-    fn coordinates(&self) -> DataSetCoordinates;
-
     // Maintain runtime visibility tracking based on VisiblePatch notifications derived
     // from the global geometry calculations.
     fn begin_update(&mut self);
@@ -83,12 +70,12 @@ pub trait TileSet: Debug + Send + Sync + 'static {
         &mut self,
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &Runtime,
-        gpu: &GPU,
+        gpu: &Gpu,
         tracker: &mut UploadTracker,
     );
 
     // Indicate that the current index should be written to the debug file.
-    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut GPU);
+    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut Gpu);
 
     // Per-frame opportunity to update the index based on any visibility updates pushed above.
     fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder);
@@ -107,156 +94,52 @@ pub trait TileSet: Debug + Send + Sync + 'static {
         cpass: wgpu::ComputePass<'a>,
     ) -> Result<wgpu::ComputePass<'a>>;
 
-    // The bind group representing the GPU resources that will be bound before....?
-    // combining the index, atlas, and TileInfo buffer that describes
-    // the atlas content.
-    fn bind_group(&self) -> &wgpu::BindGroup;
+    // Implementors should read from the provided screen space world position coordinates and
+    // accumulate into the provided normal accumulation buffer. Accumulation buffers will be
+    // automatically cleared at the start of each frame. TileSets should pre-arrange with each
+    // other the relative weight of their contributions.
+    fn accumulate_normals<'a>(
+        &'a self,
+        extent: &wgpu::Extent3d,
+        globals_buffer: &'a GlobalParametersBuffer,
+        accumulate_common_bind_group: &'a wgpu::BindGroup,
+        cpass: wgpu::ComputePass<'a>,
+    ) -> Result<wgpu::ComputePass<'a>>;
+
+    // Implementors should read from the provided screen space world position coordinates and
+    // accumulate into the provided color accumulation buffer. Accumulation buffers will be
+    // automatically cleared at the start of each frame. TileSets should pre-arrange with each
+    // other the relative weight of their contributions.
+    fn accumulate_colors<'a>(
+        &'a self,
+        extent: &wgpu::Extent3d,
+        globals_buffer: &'a GlobalParametersBuffer,
+        accumulate_common_bind_group: &'a wgpu::BindGroup,
+        cpass: wgpu::ComputePass<'a>,
+    ) -> Result<wgpu::ComputePass<'a>>;
 }
 
 // A collection of TileSet, potentially more than one per kind.
 #[derive(Debug)]
 pub(crate) struct TileManager {
-    // TODO: we will probably need some way of finding the right ones efficiently.
     tile_sets: Vec<Box<dyn TileSet>>,
-
-    tile_set_bind_group_layout_sint: wgpu::BindGroupLayout,
-    tile_set_bind_group_layout_float: wgpu::BindGroupLayout,
-
     take_index_snapshot: bool,
 }
 
 impl TileManager {
     pub(crate) fn new(
         displace_height_bind_group_layout: &wgpu::BindGroupLayout,
+        accumulate_common_bind_group_layout: &wgpu::BindGroupLayout,
         catalog: &Catalog,
+        globals_buffer: &GlobalParametersBuffer,
         gpu_detail: &GpuDetail,
-        gpu: &GPU,
+        gpu: &Gpu,
     ) -> Result<Self> {
-        // This layout is common for all indexed data sets.
-        // Note: this size must match the buffer size we allocate in all tile sets.
-        let atlas_tile_info_buffer_size =
-            (mem::size_of::<TileInfo>() as u32 * gpu_detail.tile_cache_size) as wgpu::BufferAddress;
-        let tile_set_bind_group_layout_sint =
-            gpu.device()
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("terrain-geo-tile-bind-group-layout"),
-                    entries: &[
-                        // Index Texture
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::Texture {
-                                sample_type: wgpu::TextureSampleType::Uint,
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                                multisampled: false,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::Sampler {
-                                filtering: true,
-                                comparison: false,
-                            },
-                            count: None,
-                        },
-                        // Atlas Textures, as referenced by the above index
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 2,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::Texture {
-                                view_dimension: wgpu::TextureViewDimension::D2Array,
-                                sample_type: wgpu::TextureSampleType::Sint,
-                                multisampled: false,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 3,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::Sampler {
-                                filtering: true,
-                                comparison: false,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 4,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: true },
-                                has_dynamic_offset: false,
-                                min_binding_size: NonZeroU64::new(atlas_tile_info_buffer_size),
-                            },
-                            count: None,
-                        },
-                    ],
-                });
-        let tile_set_bind_group_layout_float =
-            gpu.device()
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("terrain-geo-tile-bind-group-layout"),
-                    entries: &[
-                        // Index Texture
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::Texture {
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                                sample_type: wgpu::TextureSampleType::Uint,
-                                multisampled: false,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::Sampler {
-                                filtering: true,
-                                comparison: false,
-                            },
-                            count: None,
-                        },
-                        // Atlas Textures, as referenced by the above index
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 2,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::Texture {
-                                view_dimension: wgpu::TextureViewDimension::D2Array,
-                                sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                                multisampled: false,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 3,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::Sampler {
-                                filtering: true,
-                                comparison: false,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 4,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: true },
-                                has_dynamic_offset: false,
-                                min_binding_size: NonZeroU64::new(atlas_tile_info_buffer_size),
-                            },
-                            count: None,
-                        },
-                    ],
-                });
-
-        let bind_group_layouts = BindGroupLayouts {
-            displace_height: displace_height_bind_group_layout,
-            accumulate_tiled_sint: &tile_set_bind_group_layout_sint,
-            accumulate_tiled_float: &tile_set_bind_group_layout_float,
-        };
-
+        // TODO: figure out a way to track a single tree with multiple tile-sets under it; we're
+        //       wasting a ton of time recomputing the same visibility info for heights and normals
+        //       and not taking advantage of the different required resolutions for each. It would
+        //       be even more efficient to always load at the highest granularity and use the same
+        //       tree for all spherical tiles
         // Scan catalog for all tile sets.
         let tile_sets = catalog
             .find_labeled_matching("default", "*-index.json", Some("json"))?
@@ -282,23 +165,25 @@ impl TileManager {
                 Ok(match coordinates {
                     DataSetCoordinates::Spherical => match kind {
                         DataSetDataKind::Height => Box::new(SphericalHeightTileSet::new(
-                            &bind_group_layouts,
+                            displace_height_bind_group_layout,
                             catalog,
                             prefix,
                             gpu_detail,
                             gpu,
                         )?) as Box<dyn TileSet>,
                         DataSetDataKind::Color => Box::new(SphericalColorTileSet::new(
-                            &bind_group_layouts,
+                            accumulate_common_bind_group_layout,
                             catalog,
                             prefix,
+                            globals_buffer,
                             gpu_detail,
                             gpu,
                         )?) as Box<dyn TileSet>,
                         DataSetDataKind::Normal => Box::new(SphericalNormalsTileSet::new(
-                            &bind_group_layouts,
+                            accumulate_common_bind_group_layout,
                             catalog,
                             prefix,
+                            globals_buffer,
                             gpu_detail,
                             gpu,
                         )?) as Box<dyn TileSet>,
@@ -311,8 +196,6 @@ impl TileManager {
             .collect::<Result<Vec<_>>>()?;
 
         Ok(Self {
-            tile_set_bind_group_layout_sint,
-            tile_set_bind_group_layout_float,
             tile_sets,
             take_index_snapshot: false,
         })
@@ -338,7 +221,7 @@ impl TileManager {
         &mut self,
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &Runtime,
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
         tracker: &mut UploadTracker,
     ) {
         for ts in self.tile_sets.iter_mut() {
@@ -379,35 +262,31 @@ impl TileManager {
         Ok(cpass)
     }
 
-    pub fn tile_set_bind_group_layout_sint(&self) -> &wgpu::BindGroupLayout {
-        &self.tile_set_bind_group_layout_sint
-    }
-
-    pub fn tile_set_bind_group_layout_float(&self) -> &wgpu::BindGroupLayout {
-        &self.tile_set_bind_group_layout_float
-    }
-
-    pub fn spherical_normal_bind_groups(&self) -> SmallVec<[&wgpu::BindGroup; 4]> {
-        let mut out = smallvec![];
-        for ts in &self.tile_sets {
-            if ts.kind() == DataSetDataKind::Normal
-                && ts.coordinates() == DataSetCoordinates::Spherical
-            {
-                out.push(ts.bind_group())
-            }
+    pub fn accumulate_normals<'a>(
+        &'a self,
+        mut cpass: wgpu::ComputePass<'a>,
+        extent: &wgpu::Extent3d,
+        globals_buffer: &'a GlobalParametersBuffer,
+        accumulate_common_bind_group: &'a wgpu::BindGroup,
+    ) -> Result<wgpu::ComputePass<'a>> {
+        for ts in self.tile_sets.iter() {
+            cpass =
+                ts.accumulate_normals(extent, globals_buffer, accumulate_common_bind_group, cpass)?;
         }
-        out
+        Ok(cpass)
     }
 
-    pub fn spherical_color_bind_groups(&self) -> SmallVec<[&wgpu::BindGroup; 4]> {
-        let mut out = smallvec![];
-        for ts in &self.tile_sets {
-            if ts.kind() == DataSetDataKind::Color
-                && ts.coordinates() == DataSetCoordinates::Spherical
-            {
-                out.push(ts.bind_group())
-            }
+    pub fn accumulate_colors<'a>(
+        &'a self,
+        mut cpass: wgpu::ComputePass<'a>,
+        extent: &wgpu::Extent3d,
+        globals_buffer: &'a GlobalParametersBuffer,
+        accumulate_common_bind_group: &'a wgpu::BindGroup,
+    ) -> Result<wgpu::ComputePass<'a>> {
+        for ts in self.tile_sets.iter() {
+            cpass =
+                ts.accumulate_colors(extent, globals_buffer, accumulate_common_bind_group, cpass)?;
         }
-        out
+        Ok(cpass)
     }
 }

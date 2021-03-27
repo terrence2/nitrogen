@@ -19,7 +19,7 @@ use absolute_unit::{Angle, ArcSeconds};
 use anyhow::{ensure, Result};
 use catalog::{Catalog, FileId};
 use fxhash::FxHashMap;
-use geometry::AABB2;
+use geometry::Aabb2;
 use log::trace;
 use std::{collections::HashMap, ops::Range};
 
@@ -251,10 +251,10 @@ impl QuadTree {
         self.layer_packs[level].angular_extent_as()
     }
 
-    pub(crate) fn aabb_as(&self, id: &QuadTreeId) -> AABB2<i32> {
+    pub(crate) fn aabb_as(&self, id: &QuadTreeId) -> Aabb2<i32> {
         let extent = self.angular_extent_as(id);
         let node = &self.nodes[id.offset()];
-        AABB2::new(
+        Aabb2::new(
             [node.base.0, node.base.1],
             [node.base.0 + extent, node.base.1 + extent],
         )
@@ -265,7 +265,7 @@ impl QuadTree {
         self.additions.clear();
     }
 
-    pub(crate) fn note_required(&mut self, window: &AABB2<i32>, resolution: Angle<ArcSeconds>) {
+    pub(crate) fn note_required(&mut self, window: &Aabb2<i32>, resolution: Angle<ArcSeconds>) {
         self.visit_required_node(0, self.root, window, resolution);
     }
 
@@ -273,7 +273,7 @@ impl QuadTree {
         &mut self,
         level: usize,
         id: QuadTreeId,
-        window: &AABB2<i32>,
+        window: &Aabb2<i32>,
         resolution: Angle<ArcSeconds>,
     ) {
         debug_assert!(window.overlaps(&self.aabb_as(&id)));

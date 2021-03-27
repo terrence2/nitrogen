@@ -15,7 +15,7 @@
 use anyhow::Result;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::GlobalParametersBuffer;
-use gpu::GPU;
+use gpu::Gpu;
 use log::trace;
 use shader_shared::Group;
 use ui::UiRenderPass;
@@ -28,7 +28,7 @@ pub struct CompositeRenderPass {
 
 impl CompositeRenderPass {
     pub fn new(
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
         globals: &GlobalParametersBuffer,
         world: &WorldRenderPass,
         ui: &UiRenderPass,
@@ -68,7 +68,7 @@ impl CompositeRenderPass {
                     )?,
                     entry_point: "main",
                     targets: &[wgpu::ColorTargetState {
-                        format: GPU::SCREEN_FORMAT,
+                        format: Gpu::SCREEN_FORMAT,
                         color_blend: wgpu::BlendState::REPLACE,
                         alpha_blend: wgpu::BlendState::REPLACE,
                         write_mask: wgpu::ColorWrite::ALL,
@@ -82,7 +82,7 @@ impl CompositeRenderPass {
                     polygon_mode: wgpu::PolygonMode::Fill,
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
-                    format: GPU::DEPTH_FORMAT,
+                    format: Gpu::DEPTH_FORMAT,
                     depth_write_enabled: false, // FIXME
                     depth_compare: wgpu::CompareFunction::Always,
                     stencil: wgpu::StencilState {

@@ -15,6 +15,7 @@
 mod index_paint_vertex;
 mod layer_pack;
 mod quad_tree;
+mod spherical_common;
 mod spherical_tile_set;
 mod tile_info;
 mod tile_manager;
@@ -114,6 +115,14 @@ impl DataSetDataKind {
             Self::Color => wgpu::TextureFormat::Rgba8Unorm,
             Self::Normal => wgpu::TextureFormat::Rg16Sint,
             Self::Height => wgpu::TextureFormat::R16Sint,
+        }
+    }
+
+    pub fn texture_sample_type(&self) -> wgpu::TextureSampleType {
+        match self {
+            Self::Color => wgpu::TextureSampleType::Float { filterable: true },
+            Self::Normal => wgpu::TextureSampleType::Sint,
+            Self::Height => wgpu::TextureSampleType::Sint,
         }
     }
 

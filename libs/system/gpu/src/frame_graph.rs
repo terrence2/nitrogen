@@ -42,7 +42,7 @@ macro_rules! make_frame_graph_pass {
         if let Some(color_attachment) = maybe_color_attachment.as_ref() {
             let _rpass = $encoder.begin_render_pass(&$crate::wgpu::RenderPassDescriptor {
                 label: Some("screen-render-pass"),
-                color_attachments: &[$crate::GPU::color_attachment(&color_attachment.output.view)],
+                color_attachments: &[$crate::Gpu::color_attachment(&color_attachment.output.view)],
                 depth_stencil_attachment: Some($gpu.depth_stencil_attachment()),
             });
             $(
@@ -125,7 +125,7 @@ macro_rules! make_frame_graph {
                     }
                 )*
 
-                pub fn run(&mut self, gpu: &mut $crate::GPU, tracker: $crate::UploadTracker) -> ::anyhow::Result<bool> {
+                pub fn run(&mut self, gpu: &mut $crate::Gpu, tracker: $crate::UploadTracker) -> ::anyhow::Result<bool> {
                     $(
                         let $buffer_name = &self.$buffer_name.read();
                     )*
@@ -155,7 +155,7 @@ macro_rules! make_frame_graph {
 
 #[cfg(test)]
 mod test {
-    use crate::{UploadTracker, GPU};
+    use crate::{Gpu, UploadTracker};
     use anyhow::Result;
     use nitrous::Interpreter;
     use parking_lot::RwLock;
@@ -171,7 +171,7 @@ mod test {
         any_count: RefCell<usize>,
     }
     impl TestBuffer {
-        fn new(gpu: &GPU) -> Self {
+        fn new(gpu: &Gpu) -> Self {
             let texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
                 label: None,
                 size: wgpu::Extent3d {
@@ -253,7 +253,7 @@ mod test {
     }
     impl TestRenderer {
         #[allow(clippy::unnecessary_wraps)]
-        fn new(_gpu: &GPU, _foo: &TestBuffer) -> Result<Self> {
+        fn new(_gpu: &Gpu, _foo: &TestBuffer) -> Result<Self> {
             Ok(Self {
                 render_count: RefCell::new(0),
             })
@@ -300,7 +300,7 @@ mod test {
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;
         let interpreter = Interpreter::new();
-        let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
+        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
         let test_buffer = Arc::new(RwLock::new(TestBuffer::new(&gpu.read())));
         let test_renderer = Arc::new(RwLock::new(TestRenderer::new(
             &gpu.read(),

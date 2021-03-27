@@ -21,7 +21,7 @@ use crate::{
 use anyhow::Result;
 use atlas::{AtlasPacker, Frame};
 use font_common::{FontAdvance, FontInterface};
-use gpu::{UploadTracker, GPU};
+use gpu::{Gpu, UploadTracker};
 use image::Luma;
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
@@ -93,7 +93,7 @@ impl FontContext {
 
     pub fn upload(
         &mut self,
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
         async_rt: &Runtime,
         tracker: &mut UploadTracker,
     ) -> Result<()> {
@@ -192,7 +192,7 @@ impl FontContext {
         widget_info_index: u32,
         offset: [f32; 3],
         selection_area: SpanSelection,
-        gpu: &GPU,
+        gpu: &Gpu,
         text_pool: &mut Vec<WidgetVertex>,
         background_pool: &mut Vec<WidgetVertex>,
     ) -> Result<TextSpanMetrics> {

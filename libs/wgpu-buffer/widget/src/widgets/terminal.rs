@@ -20,7 +20,7 @@ use crate::{
     LineEdit, TextEdit, VerticalBox,
 };
 use anyhow::Result;
-use gpu::GPU;
+use gpu::Gpu;
 use input::{ElementState, GenericEvent, VirtualKeyCode};
 use nitrous::{
     ir::{Expr, Stmt, Term},
@@ -126,7 +126,7 @@ impl Terminal {
 }
 
 impl Widget for Terminal {
-    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Result<UploadMetrics> {
+    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<UploadMetrics> {
         if self.visible {
             self.container.read().upload(gpu, context)
         } else {

@@ -14,12 +14,12 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 
 #[derive(Debug)]
-pub struct AABB2<T: PartialOrd> {
+pub struct Aabb2<T: PartialOrd> {
     lo: [T; 2],
     hi: [T; 2],
 }
 
-impl<T: PartialOrd> AABB2<T> {
+impl<T: PartialOrd> Aabb2<T> {
     pub fn new(lo: [T; 2], hi: [T; 2]) -> Self {
         Self { lo, hi }
     }

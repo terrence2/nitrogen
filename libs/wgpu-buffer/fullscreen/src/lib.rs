@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use gpu::GPU;
+use gpu::Gpu;
 use parking_lot::RwLock;
 use std::{mem, ops::Range, sync::Arc};
 use zerocopy::{AsBytes, FromBytes};
@@ -30,7 +30,7 @@ impl FullscreenVertex {
         }
     }
 
-    pub fn buffer(gpu: &GPU) -> wgpu::Buffer {
+    pub fn buffer(gpu: &Gpu) -> wgpu::Buffer {
         let vertices = vec![
             Self::new([-1, -1]),
             Self::new([-1, 1]),
@@ -63,7 +63,7 @@ pub struct FullscreenBuffer {
 }
 
 impl FullscreenBuffer {
-    pub fn new(gpu: &GPU) -> Arc<RwLock<Self>> {
+    pub fn new(gpu: &Gpu) -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(Self {
             vertex_buffer: FullscreenVertex::buffer(gpu),
         }))
@@ -82,7 +82,7 @@ impl FullscreenBuffer {
 mod tests {
     use super::*;
     use anyhow::Result;
-    use gpu::GPU;
+    use gpu::Gpu;
     use nitrous::Interpreter;
     use winit::{event_loop::EventLoop, window::Window};
 
@@ -93,7 +93,7 @@ mod tests {
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;
         let interpreter = Interpreter::new();
-        let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
+        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
         let _fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
         Ok(())
     }

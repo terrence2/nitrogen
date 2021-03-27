@@ -18,7 +18,7 @@ use absolute_unit::{
 };
 use anyhow::{ensure, Result};
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
-use gpu::{ResizeHint, GPU};
+use gpu::{Gpu, ResizeHint};
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -41,7 +41,7 @@ pub struct ArcBallCamera {
 impl ArcBallCamera {
     pub fn new(
         z_near: Length<Meters>,
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
         interpreter: &mut Interpreter,
     ) -> Arc<RwLock<Self>> {
         let arcball = Arc::new(RwLock::new(Self::detached(gpu.aspect_ratio(), z_near)));
@@ -298,7 +298,7 @@ impl ArcBallCamera {
 }
 
 impl ResizeHint for ArcBallCamera {
-    fn note_resize(&mut self, gpu: &GPU) -> Result<()> {
+    fn note_resize(&mut self, gpu: &Gpu) -> Result<()> {
         self.camera.set_aspect_ratio(gpu.aspect_ratio());
         Ok(())
     }

@@ -21,7 +21,7 @@ use crate::{
     PaintContext,
 };
 use anyhow::{ensure, Result};
-use gpu::GPU;
+use gpu::Gpu;
 use input::{ElementState, GenericEvent, GenericSystemEvent, GenericWindowEvent, ModifiersState};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -69,7 +69,7 @@ impl EventMapper {
 }
 
 impl Widget for EventMapper {
-    fn upload(&self, _gpu: &GPU, _context: &mut PaintContext) -> Result<UploadMetrics> {
+    fn upload(&self, _gpu: &Gpu, _context: &mut PaintContext) -> Result<UploadMetrics> {
         Ok(UploadMetrics {
             widget_info_indexes: vec![],
             width: 0.,

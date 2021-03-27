@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::paint_context::PaintContext;
 use anyhow::Result;
-use gpu::GPU;
+use gpu::Gpu;
 use input::GenericEvent;
 use nitrous::Interpreter;
 use parking_lot::RwLock;
@@ -28,7 +28,7 @@ pub struct UploadMetrics {
 }
 
 pub trait Widget: Debug + Send + Sync + 'static {
-    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Result<UploadMetrics>;
+    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<UploadMetrics>;
     fn handle_event(
         &mut self,
         event: &GenericEvent,

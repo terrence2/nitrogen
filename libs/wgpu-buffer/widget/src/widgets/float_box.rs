@@ -18,7 +18,7 @@ use crate::{
     widget::{UploadMetrics, Widget},
 };
 use anyhow::{anyhow, Result};
-use gpu::GPU;
+use gpu::Gpu;
 use input::GenericEvent;
 use nitrous::Interpreter;
 use parking_lot::RwLock;
@@ -92,7 +92,7 @@ impl FloatBox {
 impl Widget for FloatBox {
     // Webgpu: (-1, -1) maps to the bottom-left of the screen.
     // Widget: (0, 0) maps to the top-left of the widget.
-    fn upload(&self, gpu: &GPU, context: &mut PaintContext) -> Result<UploadMetrics> {
+    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<UploadMetrics> {
         let mut widget_info_indexes = Vec::with_capacity(self.children.len());
         for pack in self.children.values() {
             let widget = pack.widget.read();

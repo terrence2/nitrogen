@@ -16,7 +16,7 @@ use anyhow::Result;
 use atmosphere::AtmosphereBuffer;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::GlobalParametersBuffer;
-use gpu::{ResizeHint, GPU};
+use gpu::{Gpu, ResizeHint};
 use log::trace;
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -67,7 +67,7 @@ pub struct WorldRenderPass {
 #[inject_nitrous_module]
 impl WorldRenderPass {
     pub fn new(
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
         interpreter: &mut Interpreter,
         globals_buffer: &GlobalParametersBuffer,
         atmosphere_buffer: &AtmosphereBuffer,
@@ -226,7 +226,7 @@ impl WorldRenderPass {
                         )?,
                         entry_point: "main",
                         targets: &[wgpu::ColorTargetState {
-                            format: GPU::SCREEN_FORMAT,
+                            format: Gpu::SCREEN_FORMAT,
                             color_blend: wgpu::BlendState::REPLACE,
                             alpha_blend: wgpu::BlendState::REPLACE,
                             write_mask: wgpu::ColorWrite::ALL,
@@ -241,7 +241,7 @@ impl WorldRenderPass {
                         polygon_mode: wgpu::PolygonMode::Line,
                     },
                     depth_stencil: Some(wgpu::DepthStencilState {
-                        format: GPU::DEPTH_FORMAT,
+                        format: Gpu::DEPTH_FORMAT,
                         depth_write_enabled: false,
                         depth_compare: wgpu::CompareFunction::Always,
                         stencil: wgpu::StencilState {
@@ -290,7 +290,7 @@ impl WorldRenderPass {
         Ok(world)
     }
 
-    fn _make_deferred_texture_targets(gpu: &GPU) -> (wgpu::Texture, wgpu::TextureView) {
+    fn _make_deferred_texture_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
         // FIXME: centralize the offscreen render size.
         let sz = gpu.physical_size();
         let target = gpu.device().create_texture(&wgpu::TextureDescriptor {
@@ -303,7 +303,7 @@ impl WorldRenderPass {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: GPU::SCREEN_FORMAT,
+            format: Gpu::SCREEN_FORMAT,
             usage: wgpu::TextureUsage::RENDER_ATTACHMENT
                 | wgpu::TextureUsage::COPY_SRC
                 | wgpu::TextureUsage::SAMPLED,
@@ -321,7 +321,7 @@ impl WorldRenderPass {
         (target, view)
     }
 
-    fn _make_deferred_depth_targets(gpu: &GPU) -> (wgpu::Texture, wgpu::TextureView) {
+    fn _make_deferred_depth_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
         let sz = gpu.physical_size();
         let depth_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("world-offscreen-depth-texture"),
@@ -333,7 +333,7 @@ impl WorldRenderPass {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: GPU::DEPTH_FORMAT,
+            format: Gpu::DEPTH_FORMAT,
             usage: wgpu::TextureUsage::RENDER_ATTACHMENT
                 | wgpu::TextureUsage::COPY_SRC
                 | wgpu::TextureUsage::SAMPLED,
@@ -352,7 +352,7 @@ impl WorldRenderPass {
     }
 
     fn _make_deferred_bind_group(
-        gpu: &GPU,
+        gpu: &Gpu,
         deferred_bind_group_layout: &wgpu::BindGroupLayout,
         deferred_texture_view: &wgpu::TextureView,
         deferred_sampler: &wgpu::Sampler,
@@ -391,7 +391,7 @@ impl WorldRenderPass {
                 module: &frag_shader,
                 entry_point: "main",
                 targets: &[wgpu::ColorTargetState {
-                    format: GPU::SCREEN_FORMAT,
+                    format: Gpu::SCREEN_FORMAT,
                     color_blend: wgpu::BlendState::REPLACE,
                     alpha_blend: wgpu::BlendState::REPLACE,
                     write_mask: wgpu::ColorWrite::ALL,
@@ -405,7 +405,7 @@ impl WorldRenderPass {
                 polygon_mode: wgpu::PolygonMode::Fill,
             },
             depth_stencil: Some(wgpu::DepthStencilState {
-                format: GPU::DEPTH_FORMAT,
+                format: Gpu::DEPTH_FORMAT,
                 depth_write_enabled: false,
                 depth_compare: wgpu::CompareFunction::Greater,
                 stencil: wgpu::StencilState {
@@ -551,7 +551,7 @@ impl WorldRenderPass {
 }
 
 impl ResizeHint for WorldRenderPass {
-    fn note_resize(&mut self, gpu: &GPU) -> Result<()> {
+    fn note_resize(&mut self, gpu: &Gpu) -> Result<()> {
         self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
         self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
         self.deferred_bind_group = Self::_make_deferred_bind_group(

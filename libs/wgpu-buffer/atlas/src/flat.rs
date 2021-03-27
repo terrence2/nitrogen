@@ -13,8 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
-use geometry::AABB2;
-use gpu::{texture_format_size, UploadTracker, GPU};
+use geometry::Aabb2;
+use gpu::{texture_format_size, Gpu, UploadTracker};
 use image::{GenericImage, ImageBuffer, Luma, Pixel};
 use log::debug;
 use std::{mem, sync::Arc};
@@ -345,7 +345,7 @@ where
     /// the builder can accumulate more textures and upload again later.
     pub fn upload(
         &mut self,
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
         async_rt: &Runtime,
         tracker: &mut UploadTracker,
     ) -> Result<()> {
@@ -376,7 +376,7 @@ where
                 //       we never overflow our width when dirtying.
                 // Note: we need to adjust lo_x to account for our alignment.
                 let upload_width =
-                    GPU::stride_for_row_size((hi_x - lo_x) * mem::size_of::<P>() as u32)
+                    Gpu::stride_for_row_size((hi_x - lo_x) * mem::size_of::<P>() as u32)
                         / mem::size_of::<P>() as u32;
                 if lo_x + upload_width >= self.width {
                     lo_x = self.width - upload_width;
@@ -432,7 +432,7 @@ where
                         usage: self.usage,
                     },
                 )));
-                let upload_width = GPU::stride_for_row_size(hi_x * mem::size_of::<P>() as u32)
+                let upload_width = Gpu::stride_for_row_size(hi_x * mem::size_of::<P>() as u32)
                     / mem::size_of::<P>() as u32;
                 let contiguous = self.buffer.sub_image(0, 0, upload_width, hi_y).to_image();
                 let buffer = gpu.push_buffer(
@@ -465,7 +465,7 @@ where
                 println!("writing to {}", path);
                 img.save(path).expect("wrote file");
             };
-            GPU::dump_texture(
+            Gpu::dump_texture(
                 &self.texture,
                 wgpu::Extent3d {
                     width: self.width,
@@ -486,7 +486,7 @@ where
     /// Upload and then steal the texture. Useful when used as a one-shot atlas.
     pub fn finish(
         mut self,
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
         async_rt: &Runtime,
         tracker: &mut UploadTracker,
     ) -> Result<(wgpu::TextureView, wgpu::Sampler)> {
@@ -522,10 +522,10 @@ where
     }
 
     fn assert_non_overlapping(&self, lo_x: u32, lo_y: u32, w: u32, h: u32) {
-        let img = AABB2::new([lo_x + 1, lo_y + 1], [lo_x + w, lo_y + h]);
+        let img = Aabb2::new([lo_x + 1, lo_y + 1], [lo_x + w, lo_y + h]);
         let mut c_x_start = 0;
         for c in self.columns.iter() {
-            let col = AABB2::new([c_x_start, 0], [c.x_end, c.fill_height]);
+            let col = Aabb2::new([c_x_start, 0], [c.x_end, c.fill_height]);
             c_x_start = c.x_end;
             assert!(!img.overlaps(&col));
         }
@@ -558,11 +558,11 @@ mod test {
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
         let interpreter = Interpreter::new();
-        let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
+        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             gpu.read().device(),
-            GPU::stride_for_row_size((1024 + 8) * 4) / 4,
+            Gpu::stride_for_row_size((1024 + 8) * 4) / 4,
             2048,
             *Rgba::from_slice(&[random(), random(), random(), 255]),
             wgpu::TextureFormat::Rgba8Unorm,
@@ -611,7 +611,7 @@ mod test {
         let window = Window::new(&event_loop).unwrap();
         let async_rt = Runtime::new()?;
         let interpreter = Interpreter::new();
-        let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
+        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             gpu.read().device(),
@@ -646,7 +646,7 @@ mod test {
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
         let interpreter = Interpreter::new();
-        let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
+        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             gpu.read().device(),
@@ -695,7 +695,7 @@ mod test {
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
         let interpreter = Interpreter::new();
-        let gpu = GPU::new(&window, Default::default(), &mut interpreter.write()).unwrap();
+        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write()).unwrap();
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             gpu.read().device(),
@@ -718,7 +718,7 @@ mod test {
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
         let interpreter = Interpreter::new();
-        let gpu = GPU::new(&window, Default::default(), &mut interpreter.write()).unwrap();
+        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write()).unwrap();
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             gpu.read().device(),

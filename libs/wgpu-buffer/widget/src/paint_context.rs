@@ -20,7 +20,7 @@ use crate::{
 };
 use anyhow::Result;
 use font_common::FontInterface;
-use gpu::GPU;
+use gpu::Gpu;
 use parking_lot::RwLock;
 use std::{borrow::Borrow, sync::Arc};
 
@@ -88,7 +88,7 @@ impl PaintContext {
         offset: [f32; 2],
         widget_info_index: u32,
         selection_area: SpanSelection,
-        gpu: &GPU,
+        gpu: &Gpu,
     ) -> Result<TextSpanMetrics> {
         self.font_context.layout_text(
             span,

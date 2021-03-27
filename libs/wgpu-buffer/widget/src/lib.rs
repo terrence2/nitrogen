@@ -44,7 +44,7 @@ use crate::font_context::FontContext;
 use anyhow::{ensure, Result};
 use font_common::{FontAdvance, FontInterface};
 use font_ttf::TtfFont;
-use gpu::{UploadTracker, GPU};
+use gpu::{Gpu, UploadTracker};
 use input::{ElementState, GenericEvent, ModifiersState, VirtualKeyCode};
 use log::trace;
 use nitrous::{Interpreter, Value};
@@ -108,7 +108,7 @@ impl WidgetBuffer {
     const MAX_BACKGROUND_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6; // note: rounded corners
     const MAX_IMAGE_VERTICES: usize = Self::MAX_WIDGETS * 4 * 6;
 
-    pub fn new(gpu: &mut GPU, interpreter: &mut Interpreter) -> Result<Arc<RwLock<Self>>> {
+    pub fn new(gpu: &mut Gpu, interpreter: &mut Interpreter) -> Result<Arc<RwLock<Self>>> {
         trace!("WidgetBuffer::new");
 
         let mut paint_context = PaintContext::new(gpu.device());
@@ -320,7 +320,7 @@ impl WidgetBuffer {
 
     pub fn make_upload_buffer(
         &mut self,
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
         async_rt: &Runtime,
         tracker: &mut UploadTracker,
     ) -> Result<()> {
@@ -414,7 +414,7 @@ mod test {
         let window = Window::new(&event_loop)?;
         let async_rt = Runtime::new()?;
         let interpreter = Interpreter::new();
-        let gpu = GPU::new(&window, Default::default(), &mut interpreter.write())?;
+        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
 
         let widgets = WidgetBuffer::new(&mut gpu.write(), &mut interpreter.write())?;
         let label = Label::new(

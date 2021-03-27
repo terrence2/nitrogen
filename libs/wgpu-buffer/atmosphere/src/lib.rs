@@ -27,7 +27,7 @@ mod precompute;
 
 use crate::{earth_consts::AtmosphereParameters, precompute::Precompute};
 use anyhow::Result;
-use gpu::{UploadTracker, GPU};
+use gpu::{Gpu, UploadTracker};
 use log::trace;
 use nalgebra::Vector3;
 use std::{mem, num::NonZeroU64, sync::Arc, time::Instant};
@@ -44,7 +44,7 @@ pub struct AtmosphereBuffer {
 }
 
 impl AtmosphereBuffer {
-    pub fn new(skip_cache: bool, gpu: &mut GPU) -> Result<Self> {
+    pub fn new(skip_cache: bool, gpu: &mut Gpu) -> Result<Self> {
         trace!("AtmosphereBuffer::new");
 
         let precompute_start = Instant::now();
@@ -302,7 +302,7 @@ impl AtmosphereBuffer {
     pub fn make_upload_buffer(
         &self,
         sun_direction: Vector3<f32>,
-        gpu: &GPU,
+        gpu: &Gpu,
         tracker: &mut UploadTracker,
     ) -> Result<()> {
         let buffer = [[

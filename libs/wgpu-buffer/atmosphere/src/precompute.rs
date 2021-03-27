@@ -19,7 +19,7 @@ use crate::{
 };
 use anyhow::{bail, Result};
 use futures::executor::block_on;
-use gpu::GPU;
+use gpu::Gpu;
 use image::{ImageBuffer, Luma, Rgb};
 use log::trace;
 use std::{env, fs, mem, num::NonZeroU64, slice, time::Instant};
@@ -104,7 +104,7 @@ impl Precompute {
         num_precomputed_wavelengths: usize,
         num_scattering_passes: usize,
         skip_cache: bool,
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
     ) -> Result<(
         wgpu::Buffer,
         wgpu::Texture,
@@ -130,7 +130,7 @@ impl Precompute {
         ))
     }
 
-    pub fn new(gpu: &GPU) -> Result<Self> {
+    pub fn new(gpu: &Gpu) -> Result<Self> {
         let device = gpu.device();
         let params = EarthParameters::new();
 
@@ -665,7 +665,7 @@ impl Precompute {
         num_precomputed_wavelengths: usize,
         num_scattering_passes: usize,
         skip_cache: bool,
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
     ) -> Result<wgpu::Buffer> /* AtmosphereParameters */ {
         let mut srgb_atmosphere = self.params.sample(RGB_LAMBDAS);
         srgb_atmosphere.ground_albedo = [0f32, 0f32, 0.04f32, 0f32];
@@ -754,7 +754,7 @@ impl Precompute {
         lambdas: [f64; 4],
         num_scattering_passes: usize,
         rad_to_lum: [f64; 16],
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
     ) {
         // Upload atmosphere parameters for this set of wavelengths.
         let atmosphere_params_buffer = gpu.push_data(
@@ -897,7 +897,7 @@ impl Precompute {
     fn compute_transmittance_at(
         &self,
         lambdas: [f64; 4],
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
         atmosphere_params_buffer: &wgpu::Buffer, // AtmosphereParameters
     ) {
         let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
@@ -952,7 +952,7 @@ impl Precompute {
     fn compute_direct_irradiance_at(
         &self,
         lambdas: [f64; 4],
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
         atmosphere_params_buffer: &wgpu::Buffer, // AtmosphereParameters
     ) {
         let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
@@ -1017,7 +1017,7 @@ impl Precompute {
     fn compute_single_scattering_at(
         &self,
         lambdas: [f64; 4],
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
         atmosphere_params_buffer: &wgpu::Buffer,
         rad_to_lum_buffer: &wgpu::Buffer,
     ) {
@@ -1145,7 +1145,7 @@ impl Precompute {
         &self,
         lambdas: [f64; 4],
         scattering_order: usize,
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
         atmosphere_params_buffer: &wgpu::Buffer,
         scattering_order_buffer: &wgpu::Buffer,
     ) {
@@ -1276,7 +1276,7 @@ impl Precompute {
         &self,
         lambdas: [f64; 4],
         scattering_order: usize,
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
         atmosphere_params_buffer: &wgpu::Buffer,
         rad_to_lum_buffer: &wgpu::Buffer,
         scattering_order_buffer: &wgpu::Buffer,
@@ -1409,7 +1409,7 @@ impl Precompute {
         &self,
         lambdas: [f64; 4],
         scattering_order: usize,
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
         atmosphere_params_buffer: &wgpu::Buffer,
         rad_to_lum_buffer: &wgpu::Buffer,
         scattering_order_buffer: &wgpu::Buffer,
@@ -1524,7 +1524,7 @@ impl Precompute {
     async fn dump_texture(
         prefix: String,
         lambdas: [f64; 4],
-        gpu: &mut GPU,
+        gpu: &mut Gpu,
         extent: wgpu::Extent3d,
         texture: &wgpu::Texture,
     ) {
@@ -1666,7 +1666,7 @@ impl Precompute {
         }
     }
 
-    async fn update_cache(&self, gpu: &mut GPU) -> Result<()> {
+    async fn update_cache(&self, gpu: &mut Gpu) -> Result<()> {
         let _ = fs::create_dir(CACHE_DIR);
 
         let transmittance_buf_size =
@@ -1801,12 +1801,12 @@ impl Precompute {
     }
 
     #[cfg(target_arch = "wasm32")]
-    fn load_cache(&self, gpu: &mut GPU) -> Result<()> {
+    fn load_cache(&self, gpu: &mut Gpu) -> Result<()> {
         bail!("TODO: no atmosphere cache on wasm32");
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn load_cache(&self, gpu: &mut GPU) -> Result<()> {
+    fn load_cache(&self, gpu: &mut Gpu) -> Result<()> {
         use memmap::MmapOptions;
 
         let transmittance_path = format!("{}/solar_transmittance.wgpu.bin", CACHE_DIR);
@@ -1932,7 +1932,7 @@ mod test {
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;
         let interpreter = Interpreter::new();
-        let gpu = gpu::GPU::new(&window, Default::default(), &mut interpreter.write())?;
+        let gpu = gpu::Gpu::new(&window, Default::default(), &mut interpreter.write())?;
         let precompute_start = Instant::now();
         let (
             _atmosphere_params_buffer,
