@@ -295,6 +295,7 @@ impl Shelf {
         glob: &str,
         with_extension: Option<&str>,
     ) -> Result<SmallVec<[FileId; 4]>> {
+        debug!("find_matching({}, {:?})", glob, with_extension);
         let mut matching = SmallVec::new();
         let opts = MatchOptions {
             case_sensitive: false,
@@ -319,6 +320,7 @@ impl Shelf {
     }
 
     pub fn find_matching_names(&self, glob: &str) -> Result<Vec<String>> {
+        debug!("find_matching_names({})", glob);
         let mut matching = Vec::new();
         let opts = MatchOptions {
             case_sensitive: false,
