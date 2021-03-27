@@ -165,8 +165,6 @@ pub struct TerrainBuffer {
     accumulate_common_bind_group: wgpu::BindGroup,
 
     accumulate_clear_pipeline: wgpu::ComputePipeline,
-    accumulate_spherical_normals_pipeline: wgpu::ComputePipeline,
-    accumulate_spherical_colors_pipeline: wgpu::ComputePipeline,
 }
 
 #[inject_nitrous_module]
@@ -192,13 +190,6 @@ impl TerrainBuffer {
             cpu_detail.target_refinement,
             cpu_detail.desired_patch_count,
             gpu_detail.subdivisions,
-            gpu,
-        )?;
-
-        let tile_manager = TileManager::new(
-            patch_manager.displace_height_bind_group_layout(),
-            catalog,
-            &gpu_detail,
             gpu,
         )?;
 
@@ -266,7 +257,7 @@ impl TerrainBuffer {
                 });
 
         let sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("terrain_geo-dbg-sampler"),
+            label: Some("terrain-dbg-sampler"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -280,11 +271,12 @@ impl TerrainBuffer {
             border_color: None,
         });
 
-        // The bind group layout for compositing all of our buffers together (or debugging)
+        // A bind group layout with readonly, filtered access to accumulator buffers for
+        // compositing all of it together to the screen.
         let composite_bind_group_layout =
             gpu.device()
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("terrain_geo-composite-bind-group-layout"),
+                    label: Some("terrain-composite-bind-group-layout"),
                     entries: &[
                         // deferred texture
                         wgpu::BindGroupLayoutEntry {
@@ -343,10 +335,11 @@ impl TerrainBuffer {
                     ],
                 });
 
+        // A bind group layout with read/write access to the accumulators for accumulating.
         let accumulate_common_bind_group_layout =
             gpu.device()
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("terrain_geo-accumulate-bind-group-layout"),
+                    label: Some("terrain-accumulate-bind-group-layout"),
                     entries: &[
                         // deferred texture
                         wgpu::BindGroupLayoutEntry {
@@ -405,13 +398,22 @@ impl TerrainBuffer {
                     ],
                 });
 
+        let tile_manager = TileManager::new(
+            patch_manager.displace_height_bind_group_layout(),
+            &accumulate_common_bind_group_layout,
+            catalog,
+            globals_buffer,
+            &gpu_detail,
+            gpu,
+        )?;
+
         let accumulate_clear_pipeline =
             gpu.device()
                 .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                    label: Some("terrain_geo-accumulate-pipeline"),
+                    label: Some("terrain-accumulate-pipeline"),
                     layout: Some(&gpu.device().create_pipeline_layout(
                         &wgpu::PipelineLayoutDescriptor {
-                            label: Some("terrain_geo-accumulate-pipeline-layout"),
+                            label: Some("terrain-accumulate-pipeline-layout"),
                             push_constant_ranges: &[],
                             bind_group_layouts: &[
                                 globals_buffer.bind_group_layout(),
@@ -422,50 +424,6 @@ impl TerrainBuffer {
                     module: &gpu.create_shader_module(
                         "accumulate_clear.comp",
                         include_bytes!("../target/accumulate_clear.comp.spirv"),
-                    )?,
-                    entry_point: "main",
-                });
-
-        let accumulate_spherical_normals_pipeline =
-            gpu.device()
-                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                    label: Some("terrain_geo-accumulate-spherical-normals-pipeline"),
-                    layout: Some(&gpu.device().create_pipeline_layout(
-                        &wgpu::PipelineLayoutDescriptor {
-                            label: Some("terrain_geo-accumulate-pipeline-layout"),
-                            push_constant_ranges: &[],
-                            bind_group_layouts: &[
-                                globals_buffer.bind_group_layout(),
-                                &accumulate_common_bind_group_layout,
-                                tile_manager.tile_set_bind_group_layout_sint(),
-                            ],
-                        },
-                    )),
-                    module: &gpu.create_shader_module(
-                        "accumulate_spherical_normals.comp",
-                        include_bytes!("../target/accumulate_spherical_normals.comp.spirv"),
-                    )?,
-                    entry_point: "main",
-                });
-
-        let accumulate_spherical_colors_pipeline =
-            gpu.device()
-                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                    label: Some("terrain_geo-accumulate-spherical-colors-pipeline"),
-                    layout: Some(&gpu.device().create_pipeline_layout(
-                        &wgpu::PipelineLayoutDescriptor {
-                            label: Some("terrain_geo-accumulate-pipeline-layout"),
-                            push_constant_ranges: &[],
-                            bind_group_layouts: &[
-                                globals_buffer.bind_group_layout(),
-                                &accumulate_common_bind_group_layout,
-                                tile_manager.tile_set_bind_group_layout_float(),
-                            ],
-                        },
-                    )),
-                    module: &gpu.create_shader_module(
-                        "accumulate_spherical_colors.comp",
-                        include_bytes!("../target/accumulate_spherical_colors.comp.spirv"),
                     )?,
                     entry_point: "main",
                 });
@@ -509,8 +467,6 @@ impl TerrainBuffer {
             accumulate_common_bind_group,
             sampler,
             accumulate_clear_pipeline,
-            accumulate_spherical_normals_pipeline,
-            accumulate_spherical_colors_pipeline,
         }));
 
         gpu.add_resize_observer(terrain.clone());
@@ -588,7 +544,7 @@ impl TerrainBuffer {
     fn _make_color_accumulator_targets(gpu: &GPU) -> (wgpu::Texture, wgpu::TextureView) {
         let sz = gpu.physical_size();
         let color_acc = gpu.device().create_texture(&wgpu::TextureDescriptor {
-            label: Some("terrain_geo-color-acc-texture"),
+            label: Some("terrain-color-acc-texture"),
             size: wgpu::Extent3d {
                 width: sz.width as u32,
                 height: sz.height as u32,
@@ -603,7 +559,7 @@ impl TerrainBuffer {
                 | wgpu::TextureUsage::STORAGE,
         });
         let color_view = color_acc.create_view(&wgpu::TextureViewDescriptor {
-            label: Some("terrain_geo-color-acc-texture-view"),
+            label: Some("terrain-color-acc-texture-view"),
             format: None,
             dimension: None,
             aspect: wgpu::TextureAspect::All,
@@ -618,7 +574,7 @@ impl TerrainBuffer {
     fn _make_normal_accumulator_targets(gpu: &GPU) -> (wgpu::Texture, wgpu::TextureView) {
         let sz = gpu.physical_size();
         let normal_acc = gpu.device().create_texture(&wgpu::TextureDescriptor {
-            label: Some("terrain_geo-normal-acc-texture"),
+            label: Some("terrain-normal-acc-texture"),
             size: wgpu::Extent3d {
                 width: sz.width as u32,
                 height: sz.height as u32,
@@ -633,7 +589,7 @@ impl TerrainBuffer {
                 | wgpu::TextureUsage::STORAGE,
         });
         let normal_view = normal_acc.create_view(&wgpu::TextureViewDescriptor {
-            label: Some("terrain_geo-normal-acc-texture-view"),
+            label: Some("terrain-normal-acc-texture-view"),
             format: None,
             dimension: None,
             aspect: wgpu::TextureAspect::All,
@@ -655,7 +611,7 @@ impl TerrainBuffer {
         sampler: &wgpu::Sampler,
     ) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("terrain_geo-composite-bind-group"),
+            label: Some("terrain-composite-bind-group"),
             layout: &bind_group_layout,
             entries: &[
                 // deferred texture
@@ -697,7 +653,7 @@ impl TerrainBuffer {
         sampler: &wgpu::Sampler,
     ) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("terrain_geo-accumulate-bind-group"),
+            label: Some("terrain-accumulate-bind-group"),
             layout: &bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
@@ -848,29 +804,19 @@ impl TerrainBuffer {
         );
         cpass.dispatch(self.acc_extent.width / 8, self.acc_extent.height / 8, 1);
 
-        cpass.set_pipeline(&self.accumulate_spherical_normals_pipeline);
-        cpass.set_bind_group(Group::Globals.index(), globals_buffer.bind_group(), &[]);
-        for bind_group in self.tile_manager.spherical_normal_bind_groups() {
-            cpass.set_bind_group(
-                Group::TerrainAcc.index(),
-                &self.accumulate_common_bind_group,
-                &[],
-            );
-            cpass.set_bind_group(Group::TerrainTileSet.index(), bind_group, &[]);
-            cpass.dispatch(self.acc_extent.width / 8, self.acc_extent.height / 8, 1);
-        }
+        cpass = self.tile_manager.accumulate_normals(
+            cpass,
+            &self.acc_extent,
+            globals_buffer,
+            &self.accumulate_common_bind_group,
+        )?;
 
-        cpass.set_pipeline(&self.accumulate_spherical_colors_pipeline);
-        cpass.set_bind_group(Group::Globals.index(), globals_buffer.bind_group(), &[]);
-        for bind_group in self.tile_manager.spherical_color_bind_groups() {
-            cpass.set_bind_group(
-                Group::TerrainAcc.index(),
-                &self.accumulate_common_bind_group,
-                &[],
-            );
-            cpass.set_bind_group(Group::TerrainTileSet.index(), bind_group, &[]);
-            cpass.dispatch(self.acc_extent.width / 8, self.acc_extent.height / 8, 1);
-        }
+        cpass = self.tile_manager.accumulate_colors(
+            cpass,
+            &self.acc_extent,
+            globals_buffer,
+            &self.accumulate_common_bind_group,
+        )?;
 
         Ok(cpass)
     }
@@ -919,14 +865,6 @@ impl TerrainBuffer {
     pub fn wireframe_index_range(&self, winding: PatchWinding) -> Range<u32> {
         self.patch_manager.wireframe_index_range(winding)
     }
-
-    // pub fn tristrip_index_buffer(&self, winding: PatchWinding) -> wgpu::BufferSlice {
-    //     self.patch_manager.tristrip_index_buffer(winding)
-    // }
-
-    // pub fn tristrip_index_range(&self, winding: PatchWinding) -> Range<u32> {
-    //     self.patch_manager.tristrip_index_range(winding)
-    // }
 }
 
 impl ResizeHint for TerrainBuffer {
