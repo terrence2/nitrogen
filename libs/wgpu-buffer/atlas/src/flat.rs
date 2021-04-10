@@ -404,7 +404,7 @@ where
             )
         } else {
             // Did not find room in this image, try the next one.
-            self.grow()?;
+            self.grow();
             self.push_image(image, gpu)?
         })
     }
@@ -661,7 +661,7 @@ where
         Ok((self.texture, self.texture_view, self.sampler))
     }
 
-    fn grow(&mut self) -> Result<()> {
+    fn grow(&mut self) {
         debug!(
             "{} grow {}x{} => {}x{}",
             self.name,
@@ -683,7 +683,6 @@ where
                 self.name, prior_width, prior_height
             );
         }
-        Ok(())
     }
 
     fn assert_non_overlapping(&self, lo_x: u32, lo_y: u32, w: u32, h: u32) {
