@@ -20,9 +20,10 @@ use crate::{
 };
 use anyhow::Result;
 use font_common::FontInterface;
-use gpu::Gpu;
+use gpu::{Gpu, UploadTracker};
 use parking_lot::RwLock;
 use std::{borrow::Borrow, sync::Arc};
+use tokio::runtime::Runtime;
 
 #[derive(Debug)]
 pub struct PaintContext {
@@ -38,15 +39,15 @@ impl PaintContext {
     pub const TEXT_DEPTH: f32 = 0.75f32;
     pub const BOX_DEPTH_SIZE: f32 = 1f32;
 
-    pub fn new(device: &wgpu::Device) -> Self {
-        Self {
+    pub fn new(gpu: &Gpu) -> Result<Self> {
+        Ok(Self {
             current_depth: 0f32,
-            font_context: FontContext::new(device),
+            font_context: FontContext::new(gpu)?,
             widget_info_pool: Vec::new(),
             background_pool: Vec::new(),
             image_pool: Vec::new(),
             text_pool: Vec::new(),
-        }
+        })
     }
 
     // Some data is frame-coherent, some is fresh for each frame. We mix them together in this
@@ -99,5 +100,21 @@ impl PaintContext {
             &mut self.text_pool,
             &mut self.background_pool,
         )
+    }
+
+    pub fn make_upload_buffer(
+        &mut self,
+        gpu: &mut Gpu,
+        async_rt: &Runtime,
+        tracker: &mut UploadTracker,
+    ) -> Result<()> {
+        self.font_context.make_upload_buffer(gpu, async_rt, tracker)
+    }
+
+    pub fn maintain_font_atlas<'a>(
+        &'a self,
+        cpass: wgpu::ComputePass<'a>,
+    ) -> Result<wgpu::ComputePass<'a>> {
+        self.font_context.maintain_font_atlas(cpass)
     }
 }

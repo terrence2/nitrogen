@@ -111,7 +111,7 @@ impl WidgetBuffer {
     pub fn new(gpu: &mut Gpu, interpreter: &mut Interpreter) -> Result<Arc<RwLock<Self>>> {
         trace!("WidgetBuffer::new");
 
-        let mut paint_context = PaintContext::new(gpu.device());
+        let mut paint_context = PaintContext::new(gpu)?;
         let fira_mono = TtfFont::from_bytes(&FIRA_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
         let fira_sans = TtfFont::from_bytes(&FIRA_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
         let dejavu_mono = TtfFont::from_bytes(&DEJAVU_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
@@ -328,8 +328,7 @@ impl WidgetBuffer {
         self.root.read().upload(gpu, &mut self.paint_context)?;
 
         self.paint_context
-            .font_context
-            .upload(gpu, async_rt, tracker)?;
+            .make_upload_buffer(gpu, async_rt, tracker)?;
 
         if !self.paint_context.widget_info_pool.is_empty() {
             ensure!(self.paint_context.widget_info_pool.len() <= Self::MAX_WIDGETS);
@@ -398,6 +397,13 @@ impl WidgetBuffer {
         );
 
         Ok(())
+    }
+
+    pub fn maintain_font_atlas<'a>(
+        &'a self,
+        cpass: wgpu::ComputePass<'a>,
+    ) -> Result<wgpu::ComputePass<'a>> {
+        self.paint_context.maintain_font_atlas(cpass)
     }
 }
 

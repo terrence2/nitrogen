@@ -404,8 +404,9 @@ impl Gpu {
             }))
     }
 
-    pub const fn stride_for_row_size(size: u32) -> u32 {
-        (size + wgpu::COPY_BYTES_PER_ROW_ALIGNMENT - 1) / wgpu::COPY_BYTES_PER_ROW_ALIGNMENT
+    pub const fn stride_for_row_size(size_in_bytes: u32) -> u32 {
+        (size_in_bytes + wgpu::COPY_BYTES_PER_ROW_ALIGNMENT - 1)
+            / wgpu::COPY_BYTES_PER_ROW_ALIGNMENT
             * wgpu::COPY_BYTES_PER_ROW_ALIGNMENT
     }
 

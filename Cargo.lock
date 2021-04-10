@@ -147,6 +147,7 @@ name = "atlas"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "build_shaders",
  "geometry",
  "gpu",
  "image",
@@ -156,6 +157,7 @@ dependencies = [
  "tokio",
  "wgpu",
  "winit",
+ "zerocopy",
 ]
 
 [[package]]
