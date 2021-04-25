@@ -113,20 +113,11 @@ impl CopyTextureToTextureDescriptor {
 }
 
 // Note: still quite limited; just precompute without dependencies.
+#[derive(Default, Debug)]
 pub struct UploadTracker {
     b2b_uploads: Vec<CopyBufferToBufferDescriptor>,
     b2t_uploads: Vec<CopyBufferToTextureDescriptor>,
     t2t_uploads: Vec<CopyTextureToTextureDescriptor>,
-}
-
-impl Default for UploadTracker {
-    fn default() -> Self {
-        Self {
-            b2b_uploads: Vec::new(),
-            b2t_uploads: Vec::new(),
-            t2t_uploads: Vec::new(),
-        }
-    }
 }
 
 impl UploadTracker {
@@ -186,7 +177,8 @@ impl UploadTracker {
         let target_element_size = texture_format_size(target_format);
         assert_eq!(
             (target_extent.width * target_element_size) % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT,
-            0
+            0,
+            "upload-to-texture target width not aligned to min stride"
         );
         self.b2t_uploads.push(CopyBufferToTextureDescriptor::new(
             source,

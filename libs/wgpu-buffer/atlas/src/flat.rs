@@ -15,10 +15,23 @@
 use anyhow::Result;
 use geometry::Aabb2;
 use gpu::{texture_format_size, Gpu, UploadTracker};
-use image::{GenericImage, ImageBuffer, Luma, Pixel};
+use image::{ImageBuffer, Luma, Pixel, Rgba};
 use log::debug;
-use std::{mem, sync::Arc};
+use std::{marker::PhantomData, mem, num::NonZeroU64, sync::Arc};
 use tokio::runtime::Runtime;
+use zerocopy::AsBytes;
+
+#[repr(C)]
+#[derive(AsBytes, Copy, Clone)]
+struct BufferToTextureCopyInfo {
+    x: u32,
+    y: u32,
+    w: u32,
+    h: u32,
+    padding_px: u32,
+    px_size: u32,
+    border_color: [u8; 4],
+}
 
 // Each column indicates the filled height up to the given offset.
 #[derive(Debug)]
@@ -36,10 +49,9 @@ impl Column {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum DirtyState {
     Clean,
-    Dirty(((u32, u32), (u32, u32))),
     RecreateTexture((u32, u32)),
 }
 
@@ -53,7 +65,7 @@ pub struct Frame {
 }
 
 impl Frame {
-    fn new(x: u32, y: u32, width: u32, height: u32, _img_width: u32, _img_height: u32) -> Self {
+    fn new(x: u32, y: u32, width: u32, height: u32) -> Self {
         Self {
             s0: x,
             s1: x + width,
@@ -83,10 +95,18 @@ impl Frame {
 // usage, so tries to be faster to pack at the cost of potentially loosing out on easy space wins
 // in cases where subsequent items are differently sized or shaped. Most common uses will only
 // feed similarly shaped items, so will generally be fine.
+//
+// For one-shot packing, call `add_image`, record all frames, then call `finish` to get a
+// texture out that can be bound.
+//
+// Assumptions:
+//   * Texture format must be a Unorm variety
+//   * Only R8Unorm and Rgba8Unorm are currently supported
 #[derive(Debug)]
 pub struct AtlasPacker<P: Pixel + 'static> {
     // Constant storage info
-    fill_color: P,
+    name: String,
+    fill_color_bytes: [u8; 4],
     initial_width: u32,
     initial_height: u32,
     padding: u32,
@@ -96,7 +116,6 @@ pub struct AtlasPacker<P: Pixel + 'static> {
     // Pack state
     width: u32,
     height: u32,
-    buffer: ImageBuffer<P, Vec<P::Subpixel>>,
     columns: Vec<Column>,
 
     // Upload state
@@ -106,35 +125,48 @@ pub struct AtlasPacker<P: Pixel + 'static> {
     sampler: wgpu::Sampler,
     dump_texture: Option<String>,
     next_texture: Option<Arc<Box<wgpu::Texture>>>,
+
+    // CPU-side list of buffers that need to be blit into the target texture these can either
+    // get directly encoded for aligned upload-as-copy, or need to get deferred to a gpu compute
+    // pass for unaligned and palettized uploads.
+    blit_list: Vec<(wgpu::Buffer, wgpu::Buffer, u32, u32)>,
+    upload_unaligned_bind_group_layout: wgpu::BindGroupLayout,
+    upload_unaligned_pipeline: wgpu::ComputePipeline,
+    unaligned_blit: Vec<(wgpu::BindGroup, u32, u32)>,
+
+    _phantom: PhantomData<P>,
 }
 
 impl<P: Pixel + 'static> AtlasPacker<P>
 where
     [P::Subpixel]: AsRef<[u8]>,
-    P::Subpixel: 'static,
+    P::Subpixel: AsBytes + 'static,
 {
-    pub fn new(
-        device: &wgpu::Device,
+    // Note that this much match the work group size in the shader.
+    // Columns in the layout must be aligned on these values as well so that texture writes
+    // can happen concurrently without stomping on each other.
+    const BLOCK_SIZE: u32 = 16;
+
+    pub fn new<S: Into<String>>(
+        name: S,
+        gpu: &Gpu,
         initial_width: u32,
         initial_height: u32,
-        fill_color: P,
+        fill_color: [u8; 4],
         format: wgpu::TextureFormat,
-        mut usage: wgpu::TextureUsage,
         filter: wgpu::FilterMode,
-    ) -> Self {
-        usage |= wgpu::TextureUsage::COPY_SRC | wgpu::TextureUsage::COPY_DST;
+    ) -> Result<Self> {
+        let usage = wgpu::TextureUsage::SAMPLED
+            | wgpu::TextureUsage::COPY_SRC
+            | wgpu::TextureUsage::COPY_DST
+            | wgpu::TextureUsage::STORAGE;
         assert_eq!(texture_format_size(format) as usize, mem::size_of::<P>());
         let pix_size = mem::size_of::<P>() as u32;
         assert_eq!(
             (initial_width * pix_size) % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT,
             0
         );
-        let buffer = ImageBuffer::<P, Vec<P::Subpixel>>::from_pixel(
-            initial_width,
-            initial_height,
-            fill_color,
-        );
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        let sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
             label: Some("atlas-sampler"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
@@ -148,19 +180,21 @@ where
             compare: None,
             border_color: None,
         });
-        let texture = Arc::new(Box::new(device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("atlas-texture"),
-            size: wgpu::Extent3d {
-                width: initial_width,
-                height: initial_height,
-                depth: 1,
+        let texture = Arc::new(Box::new(gpu.device().create_texture(
+            &wgpu::TextureDescriptor {
+                label: Some("atlas-texture"),
+                size: wgpu::Extent3d {
+                    width: initial_width,
+                    height: initial_height,
+                    depth: 1,
+                },
+                mip_level_count: 1, // TODO: mip-mapping for atlas textures?
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage,
             },
-            mip_level_count: 1, // TODO: mip-mapping for atlas textures
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format,
-            usage,
-        })));
+        )));
         let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some("atlas-texture-view"),
             format: None,
@@ -171,8 +205,79 @@ where
             base_array_layer: 0,
             array_layer_count: None,
         });
-        Self {
-            fill_color,
+
+        let upload_unaligned_bind_group_layout =
+            gpu.device()
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("atlas-upload-unaligned-bind-group-layout"),
+                    entries: &[
+                        // 0: Copy Info
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStage::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                        // 1: Buffer source
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStage::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: true },
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                        // 2: Texture target
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 2,
+                            visibility: wgpu::ShaderStage::COMPUTE,
+                            ty: wgpu::BindingType::StorageTexture {
+                                access: wgpu::StorageTextureAccess::WriteOnly,
+                                format,
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                            },
+                            count: None,
+                        },
+                    ],
+                });
+
+        let shader = if mem::size_of::<P>() == 4 {
+            gpu.create_shader_module(
+                "upload_unaligned.comp",
+                include_bytes!("../target/upload_unaligned_rgba.comp.spirv"),
+            )?
+        } else {
+            assert_eq!(mem::size_of::<P>(), 1);
+            gpu.create_shader_module(
+                "upload_unaligned.comp",
+                include_bytes!("../target/upload_unaligned_gray.comp.spirv"),
+            )?
+        };
+
+        let upload_unaligned_pipeline =
+            gpu.device()
+                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some("atlas-upload-unaligned-pipeline"),
+                    layout: Some(&gpu.device().create_pipeline_layout(
+                        &wgpu::PipelineLayoutDescriptor {
+                            label: Some("atlas-upload-unaligned-pipeline-layout"),
+                            bind_group_layouts: &[&upload_unaligned_bind_group_layout],
+                            push_constant_ranges: &[],
+                        },
+                    )),
+                    module: &shader,
+                    entry_point: "main",
+                });
+
+        Ok(Self {
+            name: name.into(),
+            fill_color_bytes: fill_color,
             initial_width,
             initial_height,
             format,
@@ -180,7 +285,6 @@ where
             padding: 1,
             width: initial_width,
             height: initial_height,
-            buffer,
             columns: vec![Column::new(0, 0)],
             // Note: texture not initialized, but no frames reference it yet.
             dirty_region: DirtyState::Clean,
@@ -189,7 +293,18 @@ where
             sampler,
             dump_texture: None,
             next_texture: None,
-        }
+
+            upload_unaligned_bind_group_layout,
+            upload_unaligned_pipeline,
+            blit_list: Vec::new(),
+            unaligned_blit: Vec::new(),
+
+            _phantom: PhantomData::default(),
+        })
+    }
+
+    pub fn align(v: u32) -> u32 {
+        (v + Self::BLOCK_SIZE - 1) & !(Self::BLOCK_SIZE - 1)
     }
 
     pub fn width(&self) -> u32 {
@@ -209,11 +324,9 @@ where
         self.dump_texture = Some(path.to_owned());
     }
 
-    pub fn push_image(&mut self, image: &ImageBuffer<P, Vec<P::Subpixel>>) -> Result<Frame> {
-        let w = image.width() + self.padding;
-        let h = image.height() + self.padding;
-        assert!(w < self.initial_width);
-        assert!(h < self.initial_height);
+    fn do_layout(&mut self, w: u32, h: u32) -> (u32, u32) {
+        assert!(w + 2 * self.padding <= self.initial_width);
+        assert!(h + 2 * self.padding <= self.initial_height);
         let mut x_column_start = 0;
         let x_last = self.columns.last().unwrap().x_end;
 
@@ -221,16 +334,24 @@ where
         let mut position = None;
         let mut adjust = None;
         for (i, c) in self.columns.iter_mut().enumerate() {
-            if h + self.padding <= self.height - c.fill_height {
-                if w + self.padding <= c.x_end - x_column_start {
+            if h + 2 * self.padding <= self.height - c.fill_height {
+                if w + 2 * self.padding <= c.x_end - x_column_start {
                     // Fits below this corner, place and expand corner down.
                     position = Some((x_column_start, c.fill_height));
-                    adjust = Some((i, c.x_end, c.fill_height + h));
+                    adjust = Some((
+                        i,
+                        Self::align(c.x_end),
+                        Self::align(c.fill_height + h + 2 * self.padding),
+                    ));
                     break;
                 } else if c.x_end == x_last && x_column_start + w < self.width {
                     // Does not fit width-wise, but we can expand since we are the last column.
                     position = Some((x_column_start, c.fill_height));
-                    adjust = Some((i, x_column_start + w, c.fill_height + h));
+                    adjust = Some((
+                        i,
+                        Self::align(x_column_start + w + 2 * self.padding),
+                        Self::align(c.fill_height + h + 2 * self.padding),
+                    ));
                     break;
                 } else {
                     x_column_start = c.x_end;
@@ -250,44 +371,62 @@ where
         if position.is_none() {
             // If we did not find a position above our current columns, see if there is room to insert
             // a new column and try there.
-            if self.width - x_last > w {
-                self.columns.push(Column::new(h, x_last + w));
+            if self.width - x_last > w + 2 * self.padding {
+                self.columns
+                    .push(Column::new(Self::align(h), x_last + w + 2 * self.padding));
                 position = Some((x_last, 0));
             }
         }
 
         self.assert_column_constraints();
 
-        Ok(if let Some((x, y)) = position {
-            debug!("push image {}x{} @ {}x{}", w, h, x, y);
-            self.mark_dirty_region(x, y, w + self.padding, h + self.padding);
-            self.blit(image, x + self.padding, y + self.padding)?;
-            Frame::new(
-                x + self.padding,
-                y + self.padding,
-                image.width(),
-                image.height(),
-                self.width,
-                self.height,
-            )
+        if let Some((x, y)) = position {
+            (x, y)
         } else {
-            // Did not find room in this image, try the next one.
-            self.grow()?;
-            self.push_image(image)?
-        })
+            // Did not find room in this image, grow and try again.
+            self.grow();
+            self.do_layout(w, h)
+        }
     }
 
-    fn mark_dirty_region(&mut self, x: u32, y: u32, w: u32, h: u32) {
-        self.dirty_region = match self.dirty_region {
-            DirtyState::Clean => DirtyState::Dirty(((x, y), (x + w, y + h))),
-            DirtyState::Dirty(((lo_x, lo_y), (hi_x, hi_y))) => DirtyState::Dirty((
-                (lo_x.min(x), lo_y.min(y)),
-                (hi_x.max(x + w), hi_y.max(y + h)),
-            )),
-            DirtyState::RecreateTexture((hi_x, hi_y)) => {
-                DirtyState::RecreateTexture((hi_x.max(x + w), hi_y.max(y + h)))
-            }
+    pub fn push_buffer(
+        &mut self,
+        buffer: wgpu::Buffer,
+        width: u32,
+        height: u32,
+        gpu: &Gpu,
+    ) -> Result<Frame> {
+        let (x, y) = self.do_layout(width, height);
+        let copy_info = BufferToTextureCopyInfo {
+            x,
+            y,
+            w: width,
+            h: height,
+            padding_px: self.padding,
+            px_size: texture_format_size(self.format),
+            border_color: self.fill_color_bytes,
         };
+        let copy_buffer = gpu.push_data("atlas-copy-info", &copy_info, wgpu::BufferUsage::UNIFORM);
+        self.blit_list.push((copy_buffer, buffer, width, height));
+        Ok(Frame::new(
+            x + self.padding,
+            y + self.padding,
+            width,
+            height,
+        ))
+    }
+
+    pub fn push_image(
+        &mut self,
+        image: &ImageBuffer<P, Vec<P::Subpixel>>,
+        gpu: &Gpu,
+    ) -> Result<Frame> {
+        let img_buffer = gpu.push_buffer(
+            "atlas-image-upload",
+            image.as_bytes(),
+            wgpu::BufferUsage::STORAGE,
+        );
+        self.push_buffer(img_buffer, image.width(), image.height(), gpu)
     }
 
     pub fn texture_layout_entry(&self, binding: u32) -> wgpu::BindGroupLayoutEntry {
@@ -328,10 +467,6 @@ where
         }
     }
 
-    pub fn buffer(&self) -> &ImageBuffer<P, Vec<P::Subpixel>> {
-        &self.buffer
-    }
-
     pub fn texture(&self) -> &wgpu::Texture {
         self.texture.as_ref()
     }
@@ -343,7 +478,7 @@ where
 
     /// Upload the current contents to the GPU. Note that this is non-destructive. If needed,
     /// the builder can accumulate more textures and upload again later.
-    pub fn upload(
+    pub fn make_upload_buffer(
         &mut self,
         gpu: &mut Gpu,
         async_rt: &Runtime,
@@ -353,6 +488,7 @@ where
         // Any glyphs in the new region will have an oob Frame for one frame, but that's better
         // than having the entire glyph texture be noise for one frame.
         if let Some(texture) = &self.next_texture {
+            debug!("{} transitioning to new texture", self.name);
             self.texture = texture.to_owned();
             self.texture_view = self.texture.create_view(&wgpu::TextureViewDescriptor {
                 label: Some("atlas-texture-view"),
@@ -369,47 +505,11 @@ where
 
         match self.dirty_region {
             DirtyState::Clean => {}
-            DirtyState::Dirty(((mut lo_x, lo_y), (hi_x, hi_y))) => {
-                debug!("upload dirty {}x{} - {}x{}", lo_x, lo_y, hi_x, hi_y);
-                // Note: even sub-region uploads need to obey row stride constraints.
-                // Note: this cannot overflow width because full width is aligned to row stride and
-                //       we never overflow our width when dirtying.
-                // Note: we need to adjust lo_x to account for our alignment.
-                let upload_width =
-                    Gpu::stride_for_row_size((hi_x - lo_x) * mem::size_of::<P>() as u32)
-                        / mem::size_of::<P>() as u32;
-                if lo_x + upload_width >= self.width {
-                    lo_x = self.width - upload_width;
-                }
-
-                let contiguous = self
-                    .buffer
-                    .sub_image(lo_x, lo_y, upload_width, hi_y - lo_y)
-                    .to_image();
-                let buffer = gpu.push_buffer(
-                    "atlas-upload-buffer",
-                    &contiguous.as_flat_samples().to_vec::<u8>().samples,
-                    wgpu::BufferUsage::COPY_SRC,
-                );
-                tracker.upload_to_texture(
-                    buffer,
-                    self.texture.clone(),
-                    wgpu::Extent3d {
-                        width: upload_width,
-                        height: hi_y - lo_y,
-                        depth: 1,
-                    },
-                    self.format,
-                    1,
-                    wgpu::Origin3d {
-                        x: lo_x,
-                        y: lo_y,
-                        z: 0,
-                    },
-                );
-            }
             DirtyState::RecreateTexture((hi_x, hi_y)) => {
-                debug!("upload recreate {}x{}", hi_x, hi_y);
+                debug!(
+                    "{} upload recreate {}x{} from {}x{}",
+                    self.name, self.width, self.height, hi_x, hi_y
+                );
                 // We are not in upload when we need to resize.
                 // When we enter here, the CPU `buffer` is already resized. The width/height fields
                 // are updated with the new requested size. We need to copy from 0,0 up to whatever
@@ -432,39 +532,96 @@ where
                         usage: self.usage,
                     },
                 )));
-                let upload_width = Gpu::stride_for_row_size(hi_x * mem::size_of::<P>() as u32)
-                    / mem::size_of::<P>() as u32;
-                let contiguous = self.buffer.sub_image(0, 0, upload_width, hi_y).to_image();
-                let buffer = gpu.push_buffer(
-                    "atlas-upload-buffer",
-                    &contiguous.as_flat_samples().to_vec::<u8>().samples,
-                    wgpu::BufferUsage::COPY_SRC,
-                );
-                tracker.upload_to_texture(
-                    buffer,
+                tracker.copy_texture_to_texture(
+                    self.texture.clone(),
+                    0,
                     next_texture.clone(),
+                    0,
                     wgpu::Extent3d {
-                        width: upload_width,
+                        width: hi_x,
                         height: hi_y,
                         depth: 1,
                     },
-                    self.format,
-                    1,
-                    wgpu::Origin3d::ZERO,
                 );
                 self.next_texture = Some(next_texture);
             }
         }
         self.dirty_region = DirtyState::Clean;
 
+        // Set up texture blits
+        self.unaligned_blit.clear();
+        for (copy_buffer, img_buffer, width, height) in self.blit_list.drain(..) {
+            let target_texture = if let Some(ref next_texture) = self.next_texture {
+                next_texture.clone()
+            } else {
+                self.texture.clone()
+            };
+            let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("atlas-upload-unaligned-bind-group"),
+                layout: &self.upload_unaligned_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Buffer {
+                            buffer: &copy_buffer,
+                            offset: 0,
+                            size: NonZeroU64::new(mem::size_of::<BufferToTextureCopyInfo>() as u64),
+                        },
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Buffer {
+                            buffer: &img_buffer,
+                            offset: 0,
+                            size: NonZeroU64::new(
+                                (texture_format_size(self.format) * width * height) as u64,
+                            ),
+                        },
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(&target_texture.create_view(
+                            &wgpu::TextureViewDescriptor {
+                                label: Some("atlas-texture-view"),
+                                format: None,
+                                dimension: None,
+                                aspect: wgpu::TextureAspect::All,
+                                base_mip_level: 0,
+                                level_count: None, // mip_
+                                base_array_layer: 0,
+                                array_layer_count: None,
+                            },
+                        )),
+                    },
+                ],
+            });
+            self.unaligned_blit.push((
+                bind_group,
+                Self::align(width + 2 * self.padding),
+                Self::align(height + 2 * self.padding),
+            ));
+        }
+
         if let Some(path_ref) = self.dump_texture.as_ref() {
             let path = path_ref.to_owned();
-            let write_img = |extent: wgpu::Extent3d, _: wgpu::TextureFormat, data: Vec<u8>| {
-                let img = ImageBuffer::<Luma<u8>, _>::from_raw(extent.width, extent.height, data)
-                    .expect("built image");
-                println!("writing to {}", path);
-                img.save(path).expect("wrote file");
-            };
+            let write_img =
+                |extent: wgpu::Extent3d, fmt: wgpu::TextureFormat, data: Vec<u8>| match fmt {
+                    wgpu::TextureFormat::R8Unorm => {
+                        let img =
+                            ImageBuffer::<Luma<u8>, _>::from_raw(extent.width, extent.height, data)
+                                .expect("built image");
+                        println!("writing to {}", path);
+                        img.save(path).expect("wrote file");
+                    }
+                    wgpu::TextureFormat::Rgba8Unorm => {
+                        let img =
+                            ImageBuffer::<Rgba<u8>, _>::from_raw(extent.width, extent.height, data)
+                                .expect("built image");
+                        println!("writing to {}", path);
+                        img.save(path).expect("wrote file");
+                    }
+                    _ => panic!("don't know how to dump texture format: {:?}", fmt),
+                };
             Gpu::dump_texture(
                 &self.texture,
                 wgpu::Extent3d {
@@ -483,42 +640,69 @@ where
         Ok(())
     }
 
+    pub fn maintain_gpu_resources<'a>(
+        &'a self,
+        mut cpass: wgpu::ComputePass<'a>,
+    ) -> Result<wgpu::ComputePass<'a>> {
+        cpass.set_pipeline(&self.upload_unaligned_pipeline);
+        for (bind_group, width, height) in &self.unaligned_blit {
+            assert!(*width / Self::BLOCK_SIZE > 0);
+            assert!(*height / Self::BLOCK_SIZE > 0);
+            cpass.set_bind_group(0, bind_group, &[]);
+            cpass.dispatch(*width / Self::BLOCK_SIZE, *height / Self::BLOCK_SIZE, 1);
+        }
+        Ok(cpass)
+    }
+
     /// Upload and then steal the texture. Useful when used as a one-shot atlas.
     pub fn finish(
         mut self,
         gpu: &mut Gpu,
         async_rt: &Runtime,
         tracker: &mut UploadTracker,
-    ) -> Result<(wgpu::TextureView, wgpu::Sampler)> {
-        self.upload(gpu, async_rt, tracker)?;
-        Ok((self.texture_view, self.sampler))
+    ) -> Result<(Arc<Box<wgpu::Texture>>, wgpu::TextureView, wgpu::Sampler)> {
+        // Note: we need to crank make_upload_buffer twice because of the way
+        // we defer moving to a new texture to ensure in-flight uploads happen.
+        self.make_upload_buffer(gpu, async_rt, tracker)?;
+
+        let mut encoder = gpu
+            .device()
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("atlas-finish"),
+            });
+        let cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("atlas-finish-compute-pass"),
+        });
+        self.maintain_gpu_resources(cpass)?;
+        gpu.queue_mut().submit(vec![encoder.finish()]);
+
+        self.make_upload_buffer(gpu, async_rt, tracker)?;
+
+        Ok((self.texture, self.texture_view, self.sampler))
     }
 
-    fn grow(&mut self) -> Result<()> {
+    fn grow(&mut self) {
         debug!(
-            "grow {}x{} => {}x{}",
+            "{} grow {}x{} => {}x{}",
+            self.name,
             self.width,
             self.height,
             self.width + self.initial_width,
             self.height + self.initial_height
         );
+        let prior_width = self.width;
+        let prior_height = self.height;
         self.width += self.initial_width;
         self.height += self.initial_height;
-        let mut next_buffer = ImageBuffer::<P, Vec<P::Subpixel>>::from_pixel(
-            self.width,
-            self.height,
-            self.fill_color,
-        );
-        next_buffer.copy_from(&self.buffer, 0, 0)?;
-        self.dirty_region =
-            DirtyState::RecreateTexture((self.buffer.width(), self.buffer.height()));
-        self.buffer = next_buffer;
-        Ok(())
-    }
-
-    fn blit(&mut self, other: &ImageBuffer<P, Vec<P::Subpixel>>, x: u32, y: u32) -> Result<()> {
-        self.buffer.copy_from(other, x, y)?;
-        Ok(())
+        if self.dirty_region == DirtyState::Clean {
+            // Note: we don't want to grow the dirty region past the extent of the currently
+            // bound texture. The w/h or the DirtyState are the region we copy *from*.
+            self.dirty_region = DirtyState::RecreateTexture((prior_width, prior_height));
+            debug!(
+                "{} set dirty region origin->{}x{}",
+                self.name, prior_width, prior_height
+            );
+        }
     }
 
     fn assert_non_overlapping(&self, lo_x: u32, lo_y: u32, w: u32, h: u32) {
@@ -535,7 +719,7 @@ where
         let mut prior = &self.columns[0];
         for c in self.columns.iter().skip(1) {
             assert!(c.x_end > prior.x_end);
-            assert!(c.x_end < self.width);
+            assert!(c.x_end <= self.width);
             assert!(c.fill_height <= self.height);
             prior = c;
         }
@@ -548,7 +732,8 @@ mod test {
     use image::{Rgba, RgbaImage};
     use nitrous::Interpreter;
     use rand::prelude::*;
-    use std::env;
+    use std::{env, time::Duration};
+    use tokio::runtime::Runtime;
     use winit::{event_loop::EventLoop, window::Window};
 
     #[cfg(unix)]
@@ -558,17 +743,18 @@ mod test {
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
         let interpreter = Interpreter::new();
+        let async_rt = Runtime::new()?;
         let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
-            gpu.read().device(),
+            "random_packing",
+            &gpu.read(),
             Gpu::stride_for_row_size((1024 + 8) * 4) / 4,
             2048,
-            *Rgba::from_slice(&[random(), random(), random(), 255]),
+            [random(), random(), random(), 255],
             wgpu::TextureFormat::Rgba8Unorm,
-            wgpu::TextureUsage::SAMPLED,
             wgpu::FilterMode::Linear,
-        );
+        )?;
         let minimum = 40;
         let maximum = 200;
 
@@ -578,7 +764,7 @@ mod test {
                 thread_rng().gen_range(minimum..maximum),
                 *Rgba::from_slice(&[random(), random(), random(), 255]),
             );
-            let frame = packer.push_image(&img)?;
+            let frame = packer.push_image(&img, &gpu.read())?;
             let w = packer.width();
             let h = packer.height();
             // Frame edges should keep these from ever being full.
@@ -594,11 +780,34 @@ mod test {
             assert!(frame.s0(w) < frame.s1(w));
             assert!(frame.t0(h) > frame.t1(h));
         }
+        let extent = wgpu::Extent3d {
+            width: packer.width(),
+            height: packer.height(),
+            depth: 1,
+        };
+        let (texture, _view, _sampler) =
+            packer.finish(&mut gpu.write(), &async_rt, &mut Default::default())?;
         if env::var("DUMP") == Ok("1".to_owned()) {
-            packer
-                .buffer()
-                .save("../../../__dump__/test_atlas_random_packing.png")
-                .unwrap();
+            Gpu::dump_texture(
+                &texture,
+                extent,
+                wgpu::TextureFormat::Rgba8Unorm,
+                &async_rt,
+                &mut gpu.write(),
+                Box::new(move |extent, _fmt, data| {
+                    let buffer = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_vec(
+                        extent.width,
+                        extent.height,
+                        data,
+                    )
+                    .unwrap();
+                    buffer
+                        .save("../../../__dump__/test_atlas_random_packing.png")
+                        .unwrap();
+                }),
+            )?;
+            // Shutting down the async_rt kills all tasks, so give ourself a chance to run.
+            std::thread::sleep(Duration::from_secs(1));
         }
         Ok(())
     }
@@ -614,25 +823,18 @@ mod test {
         let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
-            gpu.read().device(),
+            "test_finish",
+            &gpu.read(),
             256,
             256,
-            *Rgba::from_slice(&[0; 4]),
+            [0, 0, 0, 0],
             wgpu::TextureFormat::Rgba8Unorm,
-            wgpu::TextureUsage::SAMPLED,
             wgpu::FilterMode::Linear,
-        );
-        let _ = packer.push_image(&RgbaImage::from_pixel(
-            254,
-            254,
-            *Rgba::from_slice(&[255, 0, 0, 255]),
-        ))?;
-        if env::var("DUMP") == Ok("1".to_owned()) {
-            packer
-                .buffer()
-                .save("../../../__dump__/test_atlas_upload.png")
-                .unwrap();
-        }
+        )?;
+        let _ = packer.push_image(
+            &RgbaImage::from_pixel(254, 254, *Rgba::from_slice(&[255, 0, 0, 255])),
+            &gpu.read(),
+        )?;
 
         let _ = packer.finish(&mut gpu.write(), &async_rt, &mut Default::default());
         Ok(())
@@ -649,40 +851,37 @@ mod test {
         let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
-            gpu.read().device(),
+            "test_incremental",
+            &gpu.read(),
             256,
             256,
-            *Rgba::from_slice(&[0; 4]),
+            [0, 0, 0, 0],
             wgpu::TextureFormat::Rgba8Unorm,
-            wgpu::TextureUsage::SAMPLED,
             wgpu::FilterMode::Linear,
-        );
+        )?;
 
         // Base upload
-        let _ = packer.push_image(&RgbaImage::from_pixel(
-            254,
-            254,
-            *Rgba::from_slice(&[255, 0, 0, 255]),
-        ))?;
-        packer.upload(&mut gpu.write(), &async_rt, &mut Default::default())?;
+        let _ = packer.push_image(
+            &RgbaImage::from_pixel(254, 254, *Rgba::from_slice(&[255, 0, 0, 255])),
+            &gpu.read(),
+        )?;
+        packer.make_upload_buffer(&mut gpu.write(), &async_rt, &mut Default::default())?;
         let _ = packer.texture();
 
         // Grow
-        let _ = packer.push_image(&RgbaImage::from_pixel(
-            24,
-            254,
-            *Rgba::from_slice(&[255, 0, 0, 255]),
-        ))?;
-        packer.upload(&mut gpu.write(), &async_rt, &mut Default::default())?;
+        let _ = packer.push_image(
+            &RgbaImage::from_pixel(24, 254, *Rgba::from_slice(&[255, 0, 0, 255])),
+            &gpu.read(),
+        )?;
+        packer.make_upload_buffer(&mut gpu.write(), &async_rt, &mut Default::default())?;
         let _ = packer.texture();
 
         // Reuse
-        let _ = packer.push_image(&RgbaImage::from_pixel(
-            24,
-            254,
-            *Rgba::from_slice(&[255, 0, 0, 255]),
-        ))?;
-        packer.upload(&mut gpu.write(), &async_rt, &mut Default::default())?;
+        let _ = packer.push_image(
+            &RgbaImage::from_pixel(24, 254, *Rgba::from_slice(&[255, 0, 0, 255])),
+            &gpu.read(),
+        )?;
+        packer.make_upload_buffer(&mut gpu.write(), &async_rt, &mut Default::default())?;
         let _ = packer.texture();
         Ok(())
     }
@@ -698,16 +897,17 @@ mod test {
         let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write()).unwrap();
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
-            gpu.read().device(),
+            "test_extreme_width",
+            &gpu.read(),
             256,
             256,
-            *Rgba::from_slice(&[0; 4]),
+            [0, 0, 0, 0],
             wgpu::TextureFormat::Rgba8Unorm,
-            wgpu::TextureUsage::SAMPLED,
             wgpu::FilterMode::Linear,
-        );
+        )
+        .unwrap();
         let img = RgbaImage::from_pixel(255, 24, *Rgba::from_slice(&[255, 0, 0, 1]));
-        packer.push_image(&img).unwrap();
+        packer.push_image(&img, &gpu.read()).unwrap();
     }
 
     #[cfg(unix)]
@@ -721,15 +921,16 @@ mod test {
         let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write()).unwrap();
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
-            gpu.read().device(),
+            "test_extreme_height",
+            &gpu.read(),
             256,
             256,
-            *Rgba::from_slice(&[0; 4]),
+            [0, 0, 0, 0],
             wgpu::TextureFormat::Rgba8Unorm,
-            wgpu::TextureUsage::SAMPLED,
             wgpu::FilterMode::Linear,
-        );
+        )
+        .unwrap();
         let img = RgbaImage::from_pixel(24, 255, *Rgba::from_slice(&[255, 0, 0, 1]));
-        packer.push_image(&img).unwrap();
+        packer.push_image(&img, &gpu.read()).unwrap();
     }
 }

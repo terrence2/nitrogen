@@ -119,6 +119,9 @@ make_frame_graph!(
             composite: CompositeRenderPass
         };
         passes: [
+            // widget
+            maintain_font_atlas: Compute() { widgets() },
+
             // terrain
             // Update the indices so we have correct height data to tessellate with and normal
             // and color data to accumulate.

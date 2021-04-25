@@ -75,29 +75,36 @@ pub struct FontContext {
 }
 
 impl FontContext {
-    pub fn new(device: &wgpu::Device) -> Self {
-        Self {
+    pub fn new(gpu: &Gpu) -> Result<Self> {
+        Ok(Self {
             glyph_sheet: AtlasPacker::new(
-                device,
+                "glyph_sheet",
+                gpu,
+                256 * 4,
                 256,
-                256,
-                Luma([0; 1]),
+                [0, 0, 0, 0],
                 wgpu::TextureFormat::R8Unorm,
-                wgpu::TextureUsage::SAMPLED,
                 wgpu::FilterMode::Linear,
-            ),
+            )?,
             trackers: HashMap::new(),
             name_manager: Default::default(),
-        }
+        })
     }
 
-    pub fn upload(
+    pub fn make_upload_buffer(
         &mut self,
         gpu: &mut Gpu,
         async_rt: &Runtime,
         tracker: &mut UploadTracker,
     ) -> Result<()> {
-        self.glyph_sheet.upload(gpu, async_rt, tracker)
+        self.glyph_sheet.make_upload_buffer(gpu, async_rt, tracker)
+    }
+
+    pub fn maintain_font_atlas<'a>(
+        &'a self,
+        cpass: wgpu::ComputePass<'a>,
+    ) -> Result<wgpu::ComputePass<'a>> {
+        self.glyph_sheet.maintain_gpu_resources(cpass)
     }
 
     pub fn glyph_sheet_width(&self) -> u32 {
@@ -141,13 +148,14 @@ impl FontContext {
         self.trackers.insert(fid, GlyphTracker::new(font));
     }
 
-    pub fn load_glyph(&mut self, fid: FontId, c: char, scale: f32) -> Result<Frame> {
+    pub fn load_glyph(&mut self, fid: FontId, c: char, scale: f32, gpu: &Gpu) -> Result<Frame> {
         if let Some(frame) = self.trackers[&fid].glyphs.get(&(c, OrderedFloat(scale))) {
             return Ok(*frame);
         }
         // Note: cannot delegate to GlyphTracker because of the second mutable borrow.
         let img = self.trackers[&fid].font.read().render_glyph(c, scale);
-        let frame = self.glyph_sheet.push_image(&img)?;
+
+        let frame = self.glyph_sheet.push_image(&img, gpu)?;
         self.trackers
             .get_mut(&fid)
             .unwrap()
@@ -230,7 +238,7 @@ impl FontContext {
         let mut x_pos = 0f32;
         let mut prior = None;
         for (i, c) in span.content().chars().enumerate() {
-            let frame = self.load_glyph(span.font(), c, scale_px)?;
+            let frame = self.load_glyph(span.font(), c, scale_px, gpu)?;
             let font = self.get_font(span.font());
             let ((lo_x, lo_y), (hi_x, hi_y)) = font.read().pixel_bounding_box(c, scale_px);
             let lsb = font.read().left_side_bearing(c, scale_px);
