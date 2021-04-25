@@ -246,6 +246,20 @@ where
                         },
                     ],
                 });
+
+        let shader = if mem::size_of::<P>() == 4 {
+            gpu.create_shader_module(
+                "upload_unaligned.comp",
+                include_bytes!("../target/upload_unaligned_rgba.comp.spirv"),
+            )?
+        } else {
+            assert_eq!(mem::size_of::<P>(), 1);
+            gpu.create_shader_module(
+                "upload_unaligned.comp",
+                include_bytes!("../target/upload_unaligned_gray.comp.spirv"),
+            )?
+        };
+
         let upload_unaligned_pipeline =
             gpu.device()
                 .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -257,10 +271,7 @@ where
                             push_constant_ranges: &[],
                         },
                     )),
-                    module: &gpu.create_shader_module(
-                        "upload_unaligned.comp",
-                        include_bytes!("../target/upload_unaligned.comp.spirv"),
-                    )?,
+                    module: &shader,
                     entry_point: "main",
                 });
 
@@ -292,7 +303,7 @@ where
         })
     }
 
-    fn align(v: u32) -> u32 {
+    pub fn align(v: u32) -> u32 {
         (v + Self::BLOCK_SIZE - 1) & !(Self::BLOCK_SIZE - 1)
     }
 
@@ -313,16 +324,9 @@ where
         self.dump_texture = Some(path.to_owned());
     }
 
-    /// If width is larger than stride, it must be aligned to the min stride.
-    pub fn push_image(
-        &mut self,
-        image: &ImageBuffer<P, Vec<P::Subpixel>>,
-        gpu: &Gpu,
-    ) -> Result<Frame> {
-        let w = image.width() + self.padding;
-        let h = image.height() + self.padding;
-        assert!(w < self.initial_width);
-        assert!(h < self.initial_height);
+    fn do_layout(&mut self, w: u32, h: u32) -> (u32, u32) {
+        assert!(w + 2 * self.padding <= self.initial_width);
+        assert!(h + 2 * self.padding <= self.initial_height);
         let mut x_column_start = 0;
         let x_last = self.columns.last().unwrap().x_end;
 
@@ -376,37 +380,53 @@ where
 
         self.assert_column_constraints();
 
-        Ok(if let Some((x, y)) = position {
-            debug!("{} push image {}x{} @ {}x{}", self.name, w, h, x, y);
-            let copy_info = BufferToTextureCopyInfo {
-                x,
-                y,
-                w: image.width(),
-                h: image.height(),
-                padding_px: self.padding,
-                px_size: texture_format_size(self.format),
-                border_color: self.fill_color_bytes,
-            };
-            let copy_buffer =
-                gpu.push_data("atlas-copy-info", &copy_info, wgpu::BufferUsage::UNIFORM);
-            let img_buffer = gpu.push_buffer(
-                "atlas-image-upload",
-                image.as_bytes(),
-                wgpu::BufferUsage::STORAGE,
-            );
-            self.blit_list
-                .push((copy_buffer, img_buffer, image.width(), image.height()));
-            Frame::new(
-                x + self.padding,
-                y + self.padding,
-                image.width(),
-                image.height(),
-            )
+        if let Some((x, y)) = position {
+            (x, y)
         } else {
-            // Did not find room in this image, try the next one.
+            // Did not find room in this image, grow and try again.
             self.grow();
-            self.push_image(image, gpu)?
-        })
+            self.do_layout(w, h)
+        }
+    }
+
+    pub fn push_buffer(
+        &mut self,
+        buffer: wgpu::Buffer,
+        width: u32,
+        height: u32,
+        gpu: &Gpu,
+    ) -> Result<Frame> {
+        let (x, y) = self.do_layout(width, height);
+        let copy_info = BufferToTextureCopyInfo {
+            x,
+            y,
+            w: width,
+            h: height,
+            padding_px: self.padding,
+            px_size: texture_format_size(self.format),
+            border_color: self.fill_color_bytes,
+        };
+        let copy_buffer = gpu.push_data("atlas-copy-info", &copy_info, wgpu::BufferUsage::UNIFORM);
+        self.blit_list.push((copy_buffer, buffer, width, height));
+        Ok(Frame::new(
+            x + self.padding,
+            y + self.padding,
+            width,
+            height,
+        ))
+    }
+
+    pub fn push_image(
+        &mut self,
+        image: &ImageBuffer<P, Vec<P::Subpixel>>,
+        gpu: &Gpu,
+    ) -> Result<Frame> {
+        let img_buffer = gpu.push_buffer(
+            "atlas-image-upload",
+            image.as_bytes(),
+            wgpu::BufferUsage::STORAGE,
+        );
+        self.push_buffer(img_buffer, image.width(), image.height(), gpu)
     }
 
     pub fn texture_layout_entry(&self, binding: u32) -> wgpu::BindGroupLayoutEntry {

@@ -20,7 +20,6 @@ struct CopyInfo {
     uint w;
     uint h;
     uint padding_px;
-    uint px_size;
     uint border_color;
 };
 
@@ -29,28 +28,21 @@ layout(set = 0, binding = 0) uniform Meta { CopyInfo info; };
 layout(set = 0, binding = 1) readonly buffer Data {
     uint data[];
 };
-layout(set = 0, binding = 2) uniform writeonly image2D atlas_texture;
+layout(set = 0, binding = 2, r8) uniform writeonly image2D atlas_texture;
 
 void
 main() {
     ivec2 coord = ivec2(gl_GlobalInvocationID.xy);
     ivec2 src_coord = coord - ivec2(info.padding_px);
 
-    vec4 clr = unpackUnorm4x8(info.border_color);
-    if (info.px_size == 1) {
-        if (src_coord.x >= 0 && src_coord.x < info.w && src_coord.y >= 0 && src_coord.y < info.h) {
-            uint byte_offset = (src_coord.y * info.w + src_coord.x);
-            uint block_offset = byte_offset / 4;
-            vec4 clr_block = unpackUnorm4x8(data[block_offset]);
-            uint inner_offset = byte_offset % 4;
-            clr = vec4(clr_block[inner_offset]);
-        }
-    } else if (info.px_size == 4) {
-        if (src_coord.x >= 0 && src_coord.x < info.w && src_coord.y >= 0 && src_coord.y < info.h) {
-            uint block_offset = src_coord.y * info.w + src_coord.x;
-            clr = unpackUnorm4x8(data[block_offset]);
-        }
+    float clr = unpackUnorm4x8(info.border_color).r;
+    if (src_coord.x >= 0 && src_coord.x < info.w && src_coord.y >= 0 && src_coord.y < info.h) {
+        uint byte_offset = (src_coord.y * info.w + src_coord.x);
+        uint block_offset = byte_offset / 4;
+        vec4 clr_block = unpackUnorm4x8(data[block_offset]);
+        uint inner_offset = byte_offset % 4;
+        clr = clr_block[inner_offset];
     }
 
-    imageStore(atlas_texture, ivec2(info.x, info.y) + coord, clr);
+    imageStore(atlas_texture, ivec2(info.x, info.y) + coord, vec4(clr));
 }
