@@ -372,8 +372,10 @@ where
             // If we did not find a position above our current columns, see if there is room to insert
             // a new column and try there.
             if self.width - x_last > w + 2 * self.padding {
-                self.columns
-                    .push(Column::new(Self::align(h), x_last + w + 2 * self.padding));
+                self.columns.push(Column::new(
+                    Self::align(h + 2 * self.padding),
+                    x_last + w + 2 * self.padding,
+                ));
                 position = Some((x_last, 0));
             }
         }
