@@ -12,6 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use crate::Gpu;
 use std::{mem, sync::Arc};
 
 #[derive(Debug)]
@@ -205,6 +206,16 @@ impl UploadTracker {
             target_layer,
             size,
         ));
+    }
+
+    pub fn dispatch_uploads_one_shot(self, gpu: &mut Gpu) {
+        let mut encoder = gpu
+            .device()
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("upload-t2-info"),
+            });
+        self.dispatch_uploads(&mut encoder);
+        gpu.queue_mut().submit(vec![encoder.finish()]);
     }
 
     pub fn dispatch_uploads(mut self, encoder: &mut wgpu::CommandEncoder) {
