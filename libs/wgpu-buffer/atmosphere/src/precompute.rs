@@ -1932,7 +1932,7 @@ mod test {
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;
         let interpreter = Interpreter::new();
-        let gpu = gpu::Gpu::new(&window, Default::default(), &mut interpreter.write())?;
+        let gpu = gpu::Gpu::new(window, Default::default(), &mut interpreter.write())?;
         let precompute_start = Instant::now();
         let (
             _atmosphere_params_buffer,

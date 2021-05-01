@@ -72,7 +72,7 @@ async fn async_main() -> Result<()> {
     }
 
     let interpreter = Interpreter::new();
-    let gpu = Gpu::new_async(&window, Default::default(), &mut interpreter.write()).await?;
+    let gpu = Gpu::new_async(window, Default::default(), &mut interpreter.write()).await?;
     //let mut async_rt = Runtime::new()?;
     //let legion = World::default();
 

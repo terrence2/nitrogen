@@ -420,7 +420,7 @@ mod test {
         let window = Window::new(&event_loop)?;
         let async_rt = Runtime::new()?;
         let interpreter = Interpreter::new();
-        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
+        let gpu = Gpu::new(window, Default::default(), &mut interpreter.write())?;
 
         let widgets = WidgetBuffer::new(&mut gpu.write(), &mut interpreter.write())?;
         let label = Label::new(

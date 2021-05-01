@@ -753,7 +753,7 @@ mod test {
         let window = Window::new(&event_loop).unwrap();
         let interpreter = Interpreter::new();
         let async_rt = Runtime::new()?;
-        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
+        let gpu = Gpu::new(window, Default::default(), &mut interpreter.write())?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "random_packing",
@@ -829,7 +829,7 @@ mod test {
         let window = Window::new(&event_loop).unwrap();
         let async_rt = Runtime::new()?;
         let interpreter = Interpreter::new();
-        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
+        let gpu = Gpu::new(window, Default::default(), &mut interpreter.write())?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "test_finish",
@@ -857,7 +857,7 @@ mod test {
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
         let interpreter = Interpreter::new();
-        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
+        let gpu = Gpu::new(window, Default::default(), &mut interpreter.write())?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "test_incremental",
@@ -903,7 +903,7 @@ mod test {
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
         let interpreter = Interpreter::new();
-        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write()).unwrap();
+        let gpu = Gpu::new(window, Default::default(), &mut interpreter.write()).unwrap();
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "test_extreme_width",
@@ -927,7 +927,7 @@ mod test {
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
         let interpreter = Interpreter::new();
-        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write()).unwrap();
+        let gpu = Gpu::new(window, Default::default(), &mut interpreter.write()).unwrap();
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "test_extreme_height",

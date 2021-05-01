@@ -15,7 +15,10 @@
 mod frame_graph;
 mod upload_tracker;
 
-pub use crate::upload_tracker::{texture_format_sample_type, texture_format_size, UploadTracker};
+pub use crate::upload_tracker::{
+    texture_format_sample_type, texture_format_size, ArcTextureCopyView, OwnedBufferCopyView,
+    UploadTracker,
+};
 
 // Note: re-export for use by FrameGraph when it is instantiated in other crates.
 pub use wgpu;
@@ -54,6 +57,8 @@ pub trait ResizeHint: Debug + Send + Sync + 'static {
 
 #[derive(Debug, NitrousModule)]
 pub struct Gpu {
+    window: Window,
+    instance: wgpu::Instance,
     surface: wgpu::Surface,
     _adapter: wgpu::Adapter,
     device: wgpu::Device,
@@ -106,7 +111,7 @@ impl Gpu {
     }
 
     pub fn new(
-        window: &Window,
+        window: Window,
         config: GpuConfig,
         interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
@@ -114,7 +119,7 @@ impl Gpu {
     }
 
     pub async fn new_async(
-        window: &Window,
+        window: Window,
         config: GpuConfig,
         interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
@@ -129,7 +134,7 @@ impl Gpu {
             .await
             .ok_or_else(|| anyhow!("no suitable graphics adapter"))?;
 
-        let surface = unsafe { instance.create_surface(window) };
+        let surface = unsafe { instance.create_surface(&window) };
 
         let trace_path = PathBuf::from("api_tracing.txt");
         let (device, queue) = adapter
@@ -157,6 +162,8 @@ impl Gpu {
         let depth_texture = Self::create_depth_texture(&device, &sc_desc);
 
         let gpu = Arc::new(RwLock::new(Self {
+            window,
+            instance,
             surface,
             _adapter: adapter,
             device,
@@ -189,10 +196,18 @@ impl Gpu {
 
     #[method]
     pub fn on_resize(&mut self, width: i64, height: i64) -> Result<()> {
+        info!(
+            "resize: {}x{} vs {:?}",
+            width,
+            height,
+            self.window.inner_size()
+        );
+        //self.surface = unsafe { self.instance.create_surface(&self.window) };
         self.physical_size = PhysicalSize {
             width: width as u32,
             height: height as u32,
         };
+        self.window.set_inner_size(self.physical_size);
         self.logical_size = self.physical_size.to_logical(self.scale_factor);
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
@@ -263,7 +278,7 @@ impl Gpu {
             Err(wgpu::SwapChainError::OutOfMemory) => bail!("OOM: gpu is out of memory"),
             Err(wgpu::SwapChainError::Lost) => bail!("Lost: our context wondered off"),
             Err(wgpu::SwapChainError::Outdated) => {
-                info!("GPU: context outdated, recreating");
+                info!("GPU: swap chain outdated, must be recreated");
                 Ok(None)
             }
         }
@@ -495,10 +510,12 @@ mod tests {
     #[test]
     fn test_create() -> Result<()> {
         use winit::platform::unix::EventLoopExtUnix;
-        let event_loop = EventLoop::<()>::new_any_thread();
-        let window = Window::new(&event_loop)?;
         let interpreter = Interpreter::new();
-        let _gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
+        let _gpu = Gpu::new(
+            Window::new(&EventLoop::<()>::new_any_thread())?,
+            Default::default(),
+            &mut interpreter.write(),
+        )?;
         Ok(())
     }
 }

@@ -34,7 +34,7 @@ use bzip2::read::BzDecoder;
 use catalog::Catalog;
 use futures::task::noop_waker;
 use geometry::Aabb2;
-use gpu::{texture_format_size, Gpu, UploadTracker};
+use gpu::{texture_format_size, ArcTextureCopyView, Gpu, OwnedBufferCopyView, UploadTracker};
 use image::{ImageBuffer, Rgb};
 use log::trace;
 use std::{
@@ -671,16 +671,29 @@ impl SphericalTileSetCommon {
                 &data,
                 wgpu::BufferUsage::COPY_SRC,
             );
-            tracker.upload_to_texture(
-                texture_buffer,
-                self.atlas_texture.clone(),
-                self.atlas_texture_extent,
-                self.atlas_texture_format,
-                1,
-                wgpu::Origin3d {
-                    x: 0,
-                    y: 0,
-                    z: atlas_slot as u32,
+            tracker.copy_owned_buffer_to_arc_texture(
+                OwnedBufferCopyView {
+                    buffer: texture_buffer,
+                    layout: wgpu::TextureDataLayout {
+                        offset: 0,
+                        bytes_per_row: self.atlas_texture_extent.width
+                            * texture_format_size(self.atlas_texture_format),
+                        rows_per_image: self.atlas_texture_extent.height,
+                    },
+                },
+                ArcTextureCopyView {
+                    texture: self.atlas_texture.clone(),
+                    mip_level: 0,
+                    origin: wgpu::Origin3d {
+                        x: 0,
+                        y: 0,
+                        z: atlas_slot as u32,
+                    },
+                },
+                wgpu::Extent3d {
+                    width: self.atlas_texture_extent.width,
+                    height: self.atlas_texture_extent.height,
+                    depth: 1,
                 },
             );
 

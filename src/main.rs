@@ -175,7 +175,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     }
 
     let interpreter = Interpreter::new();
-    let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
+    let gpu = Gpu::new(window, Default::default(), &mut interpreter.write())?;
 
     let orrery = Orrery::new(
         Utc.ymd(1964, 2, 24).and_hms(12, 0, 0),
