@@ -54,6 +54,7 @@ use crate::{
     GpuDetail, VisiblePatch,
 };
 use anyhow::{anyhow, bail, Result};
+use camera::Camera;
 use catalog::{from_utf8_string, Catalog};
 use global_data::GlobalParametersBuffer;
 use gpu::{Gpu, UploadTracker};
@@ -68,6 +69,7 @@ pub trait TileSet: Debug + Send + Sync + 'static {
     fn note_required(&mut self, visible_patch: &VisiblePatch);
     fn finish_update(
         &mut self,
+        camera: &Camera,
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &Runtime,
         gpu: &Gpu,
@@ -219,13 +221,14 @@ impl TileManager {
 
     pub fn finish_update(
         &mut self,
+        camera: &Camera,
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &Runtime,
         gpu: &mut Gpu,
         tracker: &mut UploadTracker,
     ) {
         for ts in self.tile_sets.iter_mut() {
-            ts.finish_update(catalog.clone(), async_rt, gpu, tracker);
+            ts.finish_update(camera, catalog.clone(), async_rt, gpu, tracker);
         }
 
         if self.take_index_snapshot {

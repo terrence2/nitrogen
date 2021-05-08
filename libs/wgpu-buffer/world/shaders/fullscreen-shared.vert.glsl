@@ -29,6 +29,6 @@ void main() {
     // map -1->1 screen coord to 0->1 u/v
     vec2 tc = position;
     tc.y = -tc.y;
-    tc = (tc + vec2(1.0, 1.0)) / 2.0;
+    tc = (tc + vec2(1)) / 2;
     v_tc = tc;
 }

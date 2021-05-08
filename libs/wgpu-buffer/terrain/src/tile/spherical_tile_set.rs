@@ -17,6 +17,7 @@ use crate::{
     GpuDetail, VisiblePatch,
 };
 use anyhow::Result;
+use camera::Camera;
 use catalog::Catalog;
 use global_data::GlobalParametersBuffer;
 use gpu::wgpu::{BindGroup, CommandEncoder, ComputePass};
@@ -84,6 +85,7 @@ impl TileSet for SphericalHeightTileSet {
 
     fn finish_update(
         &mut self,
+        _camera: &Camera,
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &Runtime,
         gpu: &Gpu,
@@ -196,6 +198,7 @@ impl TileSet for SphericalColorTileSet {
 
     fn finish_update(
         &mut self,
+        _camera: &Camera,
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &Runtime,
         gpu: &Gpu,
@@ -313,6 +316,7 @@ impl TileSet for SphericalNormalsTileSet {
 
     fn finish_update(
         &mut self,
+        _camera: &Camera,
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &Runtime,
         gpu: &Gpu,
