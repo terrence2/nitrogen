@@ -157,7 +157,8 @@ pub struct TerrainBuffer {
     deferred_depth: (wgpu::Texture, wgpu::TextureView),
     color_acc: (wgpu::Texture, wgpu::TextureView),
     normal_acc: (wgpu::Texture, wgpu::TextureView),
-    sampler: wgpu::Sampler,
+    sampler_linear: wgpu::Sampler,
+    sampler_nearest: wgpu::Sampler,
 
     composite_bind_group_layout: wgpu::BindGroupLayout,
     composite_bind_group: wgpu::BindGroup,
@@ -256,13 +257,28 @@ impl TerrainBuffer {
                     },
                 });
 
-        let sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("terrain-dbg-sampler"),
+        let sampler_linear = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("terrain-sampler-linear"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
             mag_filter: wgpu::FilterMode::Linear,
             min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            lod_min_clamp: 1f32,
+            lod_max_clamp: 1f32,
+            compare: None,
+            anisotropy_clamp: None,
+            border_color: None,
+        });
+
+        let sampler_nearest = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("terrain-sampler-nearest"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
             mipmap_filter: wgpu::FilterMode::Nearest,
             lod_min_clamp: 1f32,
             lod_max_clamp: 1f32,
@@ -328,6 +344,16 @@ impl TerrainBuffer {
                             visibility: wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Sampler {
                                 filtering: true,
+                                comparison: false,
+                            },
+                            count: None,
+                        },
+                        // nearest sampler
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 5,
+                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler {
+                                filtering: false,
                                 comparison: false,
                             },
                             count: None,
@@ -439,7 +465,8 @@ impl TerrainBuffer {
             &deferred_depth.1,
             &color_acc.1,
             &normal_acc.1,
-            &sampler,
+            &sampler_linear,
+            &sampler_nearest,
         );
         let accumulate_common_bind_group = Self::_make_accumulate_common_bind_group(
             gpu.device(),
@@ -448,7 +475,7 @@ impl TerrainBuffer {
             &deferred_depth.1,
             &color_acc.1,
             &normal_acc.1,
-            &sampler,
+            &sampler_linear,
         );
 
         let terrain = Arc::new(RwLock::new(Self {
@@ -465,7 +492,8 @@ impl TerrainBuffer {
             composite_bind_group,
             accumulate_common_bind_group_layout,
             accumulate_common_bind_group,
-            sampler,
+            sampler_linear,
+            sampler_nearest,
             accumulate_clear_pipeline,
         }));
 
@@ -608,7 +636,8 @@ impl TerrainBuffer {
         deferred_depth: &wgpu::TextureView,
         color_acc: &wgpu::TextureView,
         normal_acc: &wgpu::TextureView,
-        sampler: &wgpu::Sampler,
+        sampler_linear: &wgpu::Sampler,
+        sampler_nearest: &wgpu::Sampler,
     ) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("terrain-composite-bind-group"),
@@ -637,7 +666,12 @@ impl TerrainBuffer {
                 // Linear sampler
                 wgpu::BindGroupEntry {
                     binding: 4,
-                    resource: wgpu::BindingResource::Sampler(sampler),
+                    resource: wgpu::BindingResource::Sampler(sampler_linear),
+                },
+                // Nearest sampler
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: wgpu::BindingResource::Sampler(sampler_nearest),
                 },
             ],
         })
@@ -885,7 +919,8 @@ impl ResizeHint for TerrainBuffer {
             &self.deferred_depth.1,
             &self.color_acc.1,
             &self.normal_acc.1,
-            &self.sampler,
+            &self.sampler_linear,
+            &self.sampler_nearest,
         );
         self.accumulate_common_bind_group = Self::_make_accumulate_common_bind_group(
             gpu.device(),
@@ -894,7 +929,7 @@ impl ResizeHint for TerrainBuffer {
             &self.deferred_depth.1,
             &self.color_acc.1,
             &self.normal_acc.1,
-            &self.sampler,
+            &self.sampler_linear,
         );
         Ok(())
     }

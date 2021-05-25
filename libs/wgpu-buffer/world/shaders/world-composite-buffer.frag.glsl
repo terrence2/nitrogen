@@ -27,9 +27,6 @@ layout(location = 0) in vec2 v_tc;
 layout(location = 1) in vec3 v_ray_world;
 layout(location = 2) in vec2 v_ndc;
 
-// FIXME: upload exposure on globals and let us tweak it under a brightness setting.
-//const float EXPOSURE = MAX_LUMINOUS_EFFICACY * 0.0001;
-
 vec4
 ndc_to_world_km(vec3 ndc)
 {
@@ -59,7 +56,7 @@ main()
 
         vec3 world_intersect_km = ndc_to_world_km(vec3(v_ndc, depth_sample)).xyz;
 
-        ivec2 raw_normal = texture(isampler2D(terrain_normal_acc_texture, terrain_linear_sampler), v_tc).xy;
+        ivec2 raw_normal = texture(isampler2D(terrain_normal_acc_texture, terrain_nearest_sampler), v_tc).xy;
         vec2 flat_normal = raw_normal / 32768.0;
         vec3 local_normal = vec3(
             flat_normal.x,

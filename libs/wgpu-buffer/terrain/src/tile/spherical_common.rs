@@ -309,13 +309,14 @@ impl SphericalTileSetCommon {
             base_array_layer: 0,
             array_layer_count: NonZeroU32::new(gpu_detail.tile_cache_size),
         });
+        let atlas_texture_filter_mode = kind.filter_mode();
         let atlas_texture_sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
             label: Some("terrain-atlas-sampler"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
+            mag_filter: atlas_texture_filter_mode,
+            min_filter: atlas_texture_filter_mode,
             mipmap_filter: wgpu::FilterMode::Nearest, // We should be able to mip between levels...
             lod_min_clamp: 0f32,
             lod_max_clamp: 9_999_999f32,
@@ -355,7 +356,7 @@ impl SphericalTileSetCommon {
                             binding: 1,
                             visibility: wgpu::ShaderStage::COMPUTE,
                             ty: wgpu::BindingType::Sampler {
-                                filtering: true,
+                                filtering: false,
                                 comparison: false,
                             },
                             count: None,
@@ -380,6 +381,7 @@ impl SphericalTileSetCommon {
                             },
                             count: None,
                         },
+                        // Tile metadata
                         wgpu::BindGroupLayoutEntry {
                             binding: 4,
                             visibility: wgpu::ShaderStage::COMPUTE,
