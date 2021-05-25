@@ -13,7 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use approx::relative_eq;
-use nalgebra::{Point3, RealField, Vector3};
+use nalgebra::{convert, Point3, RealField, Vector3};
+use simba::scalar::SupersetOf;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Plane<T: RealField> {
@@ -84,6 +85,15 @@ impl<T: RealField> Plane<T> {
 
     pub fn d(&self) -> T {
         -self.distance
+    }
+
+    pub fn vec4<To: SupersetOf<T>>(&self) -> [To; 4] {
+        [
+            convert::<T, To>(self.normal.x),
+            convert::<T, To>(self.normal.y),
+            convert::<T, To>(self.normal.z),
+            convert::<T, To>(self.distance),
+        ]
     }
 }
 

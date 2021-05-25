@@ -147,6 +147,10 @@ where
     // can happen concurrently without stomping on each other.
     const BLOCK_SIZE: u32 = 16;
 
+    // This padding applies all the way around for all images so is effectively 2, except at
+    // borders. As such, it is generally good enough for linear filtering in most situations.
+    const DEFAULT_PADDING: u32 = 1;
+
     pub fn new<S: Into<String>>(
         name: S,
         gpu: &Gpu,
@@ -282,7 +286,7 @@ where
             initial_height,
             format,
             usage: usage | wgpu::TextureUsage::COPY_DST,
-            padding: 1,
+            padding: Self::DEFAULT_PADDING,
             width: initial_width,
             height: initial_height,
             columns: vec![Column::new(0, 0)],
@@ -372,8 +376,10 @@ where
             // If we did not find a position above our current columns, see if there is room to insert
             // a new column and try there.
             if self.width - x_last > w + 2 * self.padding {
-                self.columns
-                    .push(Column::new(Self::align(h), x_last + w + 2 * self.padding));
+                self.columns.push(Column::new(
+                    Self::align(h + 2 * self.padding),
+                    x_last + w + 2 * self.padding,
+                ));
                 position = Some((x_last, 0));
             }
         }
@@ -706,7 +712,10 @@ where
     }
 
     fn assert_non_overlapping(&self, lo_x: u32, lo_y: u32, w: u32, h: u32) {
-        let img = Aabb2::new([lo_x + 1, lo_y + 1], [lo_x + w, lo_y + h]);
+        let img = Aabb2::new(
+            [lo_x + self.padding, lo_y + self.padding],
+            [lo_x + w, lo_y + h],
+        );
         let mut c_x_start = 0;
         for c in self.columns.iter() {
             let col = Aabb2::new([c_x_start, 0], [c.x_end, c.fill_height]);
@@ -744,7 +753,7 @@ mod test {
         let window = Window::new(&event_loop).unwrap();
         let interpreter = Interpreter::new();
         let async_rt = Runtime::new()?;
-        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
+        let gpu = Gpu::new(window, Default::default(), &mut interpreter.write())?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "random_packing",
@@ -820,7 +829,7 @@ mod test {
         let window = Window::new(&event_loop).unwrap();
         let async_rt = Runtime::new()?;
         let interpreter = Interpreter::new();
-        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
+        let gpu = Gpu::new(window, Default::default(), &mut interpreter.write())?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "test_finish",
@@ -848,7 +857,7 @@ mod test {
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
         let interpreter = Interpreter::new();
-        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
+        let gpu = Gpu::new(window, Default::default(), &mut interpreter.write())?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "test_incremental",
@@ -894,7 +903,7 @@ mod test {
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
         let interpreter = Interpreter::new();
-        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write()).unwrap();
+        let gpu = Gpu::new(window, Default::default(), &mut interpreter.write()).unwrap();
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "test_extreme_width",
@@ -918,7 +927,7 @@ mod test {
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop).unwrap();
         let interpreter = Interpreter::new();
-        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write()).unwrap();
+        let gpu = Gpu::new(window, Default::default(), &mut interpreter.write()).unwrap();
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "test_extreme_height",

@@ -33,7 +33,7 @@ fn main() -> Result<()> {
 
 fn window_main(window: Window, input_controller: &InputController) -> Result<()> {
     let interpreter = Interpreter::new();
-    let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
+    let gpu = Gpu::new(window, Default::default(), &mut interpreter.write())?;
 
     let globals_buffer = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter.write());
     let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());

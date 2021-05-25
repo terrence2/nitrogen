@@ -8,3 +8,7 @@ edition = "2018"
 approx = "^ 0.4"
 nalgebra = "^ 0.24"
 num-traits = "^ 0.2"
+
+[dependencies.simba]
+version = "0.3"
+default-features = false

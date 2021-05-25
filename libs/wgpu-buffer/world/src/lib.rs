@@ -129,8 +129,8 @@ impl WorldRenderPass {
         );
 
         let fullscreen_shared_vert = gpu.create_shader_module(
-            "dbg-fullscreen-shared.vert",
-            include_bytes!("../target/dbg-fullscreen-shared.vert.spirv"),
+            "fullscreen-shared.vert",
+            include_bytes!("../target/fullscreen-shared.vert.spirv"),
         )?;
         let fullscreen_layout =
             gpu.device()

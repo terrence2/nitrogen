@@ -388,7 +388,7 @@ mod tests {
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;
         let interpreter = Interpreter::new();
-        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
+        let gpu = Gpu::new(window, Default::default(), &mut interpreter.write())?;
         let _globals_buffer =
             GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter.write());
         Ok(())

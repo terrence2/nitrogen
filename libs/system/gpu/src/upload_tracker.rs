@@ -12,34 +12,39 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use crate::Gpu;
 use std::{mem, sync::Arc};
 
 #[derive(Debug)]
-pub struct CopyBufferToTextureDescriptor {
-    source: wgpu::Buffer,
-    target: Arc<Box<wgpu::Texture>>,
-    target_extent: wgpu::Extent3d,
-    target_element_size: u32,
-    array_layer_count: u32,
-    target_origin: wgpu::Origin3d,
+pub struct OwnedBufferCopyView {
+    pub buffer: wgpu::Buffer,
+    pub layout: wgpu::TextureDataLayout,
 }
 
-impl CopyBufferToTextureDescriptor {
+#[derive(Debug)]
+pub struct ArcTextureCopyView {
+    pub texture: Arc<Box<wgpu::Texture>>,
+    pub mip_level: u32,
+    pub origin: wgpu::Origin3d,
+}
+
+#[derive(Debug)]
+pub struct CopyOwnedBufferToArcTextureDescriptor {
+    buffer: OwnedBufferCopyView,
+    texture: ArcTextureCopyView,
+    extent: wgpu::Extent3d,
+}
+
+impl CopyOwnedBufferToArcTextureDescriptor {
     pub fn new(
-        source: wgpu::Buffer,
-        target: Arc<Box<wgpu::Texture>>,
-        target_extent: wgpu::Extent3d,
-        target_element_size: u32,
-        array_layer_count: u32,
-        target_origin: wgpu::Origin3d,
+        buffer: OwnedBufferCopyView,
+        texture: ArcTextureCopyView,
+        extent: wgpu::Extent3d,
     ) -> Self {
         Self {
-            source,
-            target,
-            target_extent,
-            target_element_size,
-            array_layer_count,
-            target_origin,
+            buffer,
+            texture,
+            extent,
         }
     }
 }
@@ -113,18 +118,20 @@ impl CopyTextureToTextureDescriptor {
 }
 
 // Note: still quite limited; just precompute without dependencies.
-#[derive(Default, Debug)]
+#[derive(Debug, Default)]
 pub struct UploadTracker {
     b2b_uploads: Vec<CopyBufferToBufferDescriptor>,
-    b2t_uploads: Vec<CopyBufferToTextureDescriptor>,
     t2t_uploads: Vec<CopyTextureToTextureDescriptor>,
+    copy_owned_buffer_to_arc_texture: Vec<CopyOwnedBufferToArcTextureDescriptor>,
 }
 
 impl UploadTracker {
-    pub fn reset(&mut self) {
-        self.b2b_uploads.clear();
-        self.b2t_uploads.clear();
-        self.t2t_uploads.clear();
+    pub fn new() -> Self {
+        Self {
+            b2b_uploads: vec![],
+            t2t_uploads: vec![],
+            copy_owned_buffer_to_arc_texture: vec![],
+        }
     }
 
     pub fn upload(
@@ -165,29 +172,16 @@ impl UploadTracker {
         ));
     }
 
-    pub fn upload_to_texture(
+    pub fn copy_owned_buffer_to_arc_texture(
         &mut self,
-        source: wgpu::Buffer,
-        target: Arc<Box<wgpu::Texture>>,
-        target_extent: wgpu::Extent3d,
-        target_format: wgpu::TextureFormat,
-        array_layer_count: u32,
-        origin: wgpu::Origin3d,
+        buffer: OwnedBufferCopyView,
+        texture: ArcTextureCopyView,
+        extent: wgpu::Extent3d,
     ) {
-        let target_element_size = texture_format_size(target_format);
-        assert_eq!(
-            (target_extent.width * target_element_size) % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT,
-            0,
-            "upload-to-texture target width not aligned to min stride"
-        );
-        self.b2t_uploads.push(CopyBufferToTextureDescriptor::new(
-            source,
-            target,
-            target_extent,
-            target_element_size,
-            array_layer_count,
-            origin,
-        ));
+        self.copy_owned_buffer_to_arc_texture
+            .push(CopyOwnedBufferToArcTextureDescriptor::new(
+                buffer, texture, extent,
+            ));
     }
 
     pub fn copy_texture_to_texture(
@@ -207,6 +201,16 @@ impl UploadTracker {
         ));
     }
 
+    pub fn dispatch_uploads_one_shot(self, gpu: &mut Gpu) {
+        let mut encoder = gpu
+            .device()
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("upload-t2-info"),
+            });
+        self.dispatch_uploads(&mut encoder);
+        gpu.queue_mut().submit(vec![encoder.finish()]);
+    }
+
     pub fn dispatch_uploads(mut self, encoder: &mut wgpu::CommandEncoder) {
         for desc in self.b2b_uploads.drain(..) {
             encoder.copy_buffer_to_buffer(
@@ -215,29 +219,6 @@ impl UploadTracker {
                 &desc.destination,
                 desc.destination_offset,
                 desc.copy_size,
-            );
-        }
-
-        for desc in self.b2t_uploads.drain(..) {
-            encoder.copy_buffer_to_texture(
-                wgpu::BufferCopyView {
-                    buffer: &desc.source,
-                    layout: wgpu::TextureDataLayout {
-                        offset: 0,
-                        bytes_per_row: desc.target_extent.width * desc.target_element_size,
-                        rows_per_image: desc.target_extent.height,
-                    },
-                },
-                wgpu::TextureCopyView {
-                    texture: &desc.target,
-                    mip_level: 0, // TODO: need to scale extent appropriately
-                    origin: desc.target_origin,
-                },
-                wgpu::Extent3d {
-                    width: desc.target_extent.width,
-                    height: desc.target_extent.height,
-                    depth: desc.array_layer_count,
-                },
             );
         }
 
@@ -267,6 +248,21 @@ impl UploadTracker {
                     depth: 1,
                 },
             )
+        }
+
+        for desc in self.copy_owned_buffer_to_arc_texture.drain(..) {
+            encoder.copy_buffer_to_texture(
+                wgpu::BufferCopyView {
+                    buffer: &desc.buffer.buffer,
+                    layout: desc.buffer.layout,
+                },
+                wgpu::TextureCopyView {
+                    texture: &desc.texture.texture,
+                    mip_level: desc.texture.mip_level,
+                    origin: desc.texture.origin,
+                },
+                desc.extent,
+            );
         }
     }
 }

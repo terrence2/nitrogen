@@ -1114,6 +1114,7 @@ dependencies = [
  "approx",
  "nalgebra",
  "num-traits",
+ "simba",
 ]
 
 [[package]]

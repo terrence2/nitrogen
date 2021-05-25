@@ -740,7 +740,7 @@ impl TerrainBuffer {
             self.tile_manager.note_required(visible_patch);
         }
         self.tile_manager
-            .finish_update(catalog, async_rt, gpu, tracker);
+            .finish_update(camera, catalog, async_rt, gpu, tracker);
 
         Ok(())
     }

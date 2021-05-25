@@ -298,9 +298,12 @@ mod test {
     fn test_basic() -> Result<()> {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
-        let window = Window::new(&event_loop)?;
         let interpreter = Interpreter::new();
-        let gpu = Gpu::new(&window, Default::default(), &mut interpreter.write())?;
+        let gpu = Gpu::new(
+            Window::new(&event_loop)?,
+            Default::default(),
+            &mut interpreter.write(),
+        )?;
         let test_buffer = Arc::new(RwLock::new(TestBuffer::new(&gpu.read())));
         let test_renderer = Arc::new(RwLock::new(TestRenderer::new(
             &gpu.read(),
