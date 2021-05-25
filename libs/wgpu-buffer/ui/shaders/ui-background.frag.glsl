@@ -17,10 +17,9 @@
 #include <wgpu-buffer/widget/include/widget.glsl>
 #include <wgpu-buffer/world/include/world-deferred.glsl>
 
-layout(location = 0) in vec2 v_tex_coord;
-layout(location = 1) flat in vec4 v_color;
-layout(location = 2) in vec2 v_screen_tex_coord;
-layout(location = 3) flat in uint widget_info_id;
+layout(location = 0) flat in vec4 v_color;
+layout(location = 1) in vec2 v_screen_tex_coord;
+layout(location = 2) flat in uint widget_info_id;
 
 layout(location = 0) out vec4 f_color;
 
