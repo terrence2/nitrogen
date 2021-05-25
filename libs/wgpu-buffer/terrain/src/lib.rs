@@ -629,6 +629,7 @@ impl TerrainBuffer {
         (normal_acc, normal_view)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn _make_composite_bind_group(
         device: &wgpu::Device,
         bind_group_layout: &wgpu::BindGroupLayout,
