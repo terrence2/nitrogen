@@ -19,14 +19,15 @@
 
 layout(location = 0) out vec4 f_color;
 layout(location = 0) in vec2 v_tc;
-layout(location = 1) in vec3 v_ray;
+layout(location = 1) in vec3 v_ray_world;
+layout(location = 2) in vec2 v_ndc;
 
 void
 main()
 {
     float depth = texture(sampler2D(terrain_deferred_depth, terrain_linear_sampler), v_tc).x;
     if (depth > -1) {
-        ivec2 raw_normal = texture(isampler2D(terrain_normal_acc_texture, terrain_linear_sampler), v_tc).xy;
+        ivec2 raw_normal = texture(isampler2D(terrain_normal_acc_texture, terrain_nearest_sampler), v_tc).xy;
         vec2 flat_normal = raw_normal / 32768.0;
         vec3 local_normal = vec3(
             flat_normal.x,

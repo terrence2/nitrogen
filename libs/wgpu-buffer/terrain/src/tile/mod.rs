@@ -118,6 +118,15 @@ impl DataSetDataKind {
         }
     }
 
+    /// The filter mode to use for samples. Note that integer textures cannot be sampled.
+    pub fn filter_mode(&self) -> wgpu::FilterMode {
+        match self {
+            Self::Color => wgpu::FilterMode::Linear,
+            Self::Normal => wgpu::FilterMode::Nearest,
+            Self::Height => wgpu::FilterMode::Nearest,
+        }
+    }
+
     pub fn texture_sample_type(&self) -> wgpu::TextureSampleType {
         match self {
             Self::Color => wgpu::TextureSampleType::Float { filterable: true },
