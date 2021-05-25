@@ -272,6 +272,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "log",
+ "naga 0.4.1",
  "shaderc",
 ]
 
@@ -602,16 +603,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81156fece84ab6a9f2afdb109ce3ae577e42b1228441eded99bd77f627953b1a"
 dependencies = [
  "cfg-if 1.0.0",
-]
-
-[[package]]
-name = "crossbeam-channel"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b153fe7cbef478c567df0f972e02e6d736db11affe43dfc9c56a9374d1adfb87"
-dependencies = [
- "crossbeam-utils 0.7.2",
- "maybe-uninit",
 ]
 
 [[package]]
@@ -1221,7 +1212,7 @@ dependencies = [
  "khronos-egl",
  "libloading 0.6.7",
  "log",
- "naga",
+ "naga 0.3.2",
  "parking_lot",
  "raw-window-handle",
  "spirv_cross",
@@ -1245,7 +1236,7 @@ dependencies = [
  "gfx-hal",
  "log",
  "metal",
- "naga",
+ "naga 0.3.2",
  "objc",
  "parking_lot",
  "range-alloc",
@@ -1267,7 +1258,7 @@ dependencies = [
  "gfx-hal",
  "inplace_it",
  "log",
- "naga",
+ "naga 0.3.2",
  "objc",
  "parking_lot",
  "raw-window-handle",
@@ -1282,7 +1273,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1d9cc8d3b573dda62d0baca4f02e0209786e22c562caff001d77c389008781d"
 dependencies = [
  "bitflags",
- "naga",
+ "naga 0.3.2",
  "raw-window-handle",
  "thiserror",
 ]
@@ -1512,15 +1503,6 @@ dependencies = [
 
 [[package]]
 name = "itertools"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "284f18f85651fe11e8a991b2adb42cb078325c996ed026d994719efcfca1d54b"
-dependencies = [
- "either",
-]
-
-[[package]]
-name = "itertools"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37d572918e350e82412fe766d24b15e6682fb2ed2bbe018280caa810397cb319"
@@ -1598,7 +1580,7 @@ dependencies = [
  "bit-set",
  "diff",
  "ena",
- "itertools 0.10.0",
+ "itertools",
  "lalrpop-util",
  "petgraph",
  "pico-args",
@@ -1633,39 +1615,17 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "legion"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9aa40f1a5f64dfdc1830657e0e7dd2c28087c4e32a2a85fcf63a286c429edefc"
-dependencies = [
- "bit-set",
- "crossbeam-channel 0.4.4",
- "derivative",
- "downcast-rs",
- "erased-serde",
- "itertools 0.9.0",
- "legion_codegen 0.3.0",
- "parking_lot",
- "paste",
- "rayon",
- "serde",
- "smallvec",
- "thiserror",
- "uuid",
-]
-
-[[package]]
-name = "legion"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6bfd53bb4690a5ab2bd6d1c683461ee52763afe0d000929743708a256d9d9b1f"
 dependencies = [
  "atomic_refcell",
  "bit-set",
- "crossbeam-channel 0.5.0",
+ "crossbeam-channel",
  "downcast-rs",
  "erased-serde",
- "itertools 0.10.0",
- "legion_codegen 0.4.0",
+ "itertools",
+ "legion_codegen",
  "parking_lot",
  "paste",
  "rayon",
@@ -1674,18 +1634,6 @@ dependencies = [
  "smallvec",
  "thiserror",
  "uuid",
-]
-
-[[package]]
-name = "legion_codegen"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c24e58060e656eae6b87f83f14f41080656a930fba7ef299122e40eb8ccd307f"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
- "thiserror",
 ]
 
 [[package]]
@@ -1910,6 +1858,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "naga"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f470a97eafcdd0dbea43d5e1a8ef3557aa31f49ba643d9430dbbf911c162b24c"
+dependencies = [
+ "bit-set",
+ "bitflags",
+ "fxhash",
+ "log",
+ "num-traits",
+ "petgraph",
+ "spirv_headers",
+ "thiserror",
+]
+
+[[package]]
 name = "nalgebra"
 version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2007,7 +1971,7 @@ dependencies = [
  "gpu",
  "image",
  "input",
- "legion 0.3.1",
+ "legion",
  "log",
  "nalgebra",
  "nitrous",
@@ -2569,7 +2533,7 @@ version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9ab346ac5921dc62ffa9f89b7a773907511cdfa5490c572ae9be1be33e8afa4a"
 dependencies = [
- "crossbeam-channel 0.5.0",
+ "crossbeam-channel",
  "crossbeam-deque 0.8.0",
  "crossbeam-utils 0.8.3",
  "lazy_static",
@@ -3202,7 +3166,7 @@ checksum = "f7fe0bb3479651439c9112f72b6c505038574c9fbb575ed1bf3b797fa39dd564"
 name = "universe"
 version = "0.1.0"
 dependencies = [
- "legion 0.4.0",
+ "legion",
  "nalgebra",
 ]
 
@@ -3440,7 +3404,7 @@ checksum = "c60007fc3748278a36b458d96f86105f43aa5f0e412b15a5f934950d61ec26a9"
 dependencies = [
  "arrayvec",
  "js-sys",
- "naga",
+ "naga 0.3.2",
  "parking_lot",
  "raw-window-handle",
  "smallvec",
@@ -3472,7 +3436,7 @@ dependencies = [
  "gfx-hal",
  "gpu-alloc",
  "gpu-descriptor",
- "naga",
+ "naga 0.3.2",
  "parking_lot",
  "raw-window-handle",
  "smallvec",

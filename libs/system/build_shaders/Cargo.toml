@@ -7,4 +7,5 @@ edition = "2018"
 [dependencies]
 log = "^ 0.4"
 anyhow = "^ 1"
+naga = { version = "^ 0.4", features = ["spv-in"] }
 shaderc = "^ 0.7"

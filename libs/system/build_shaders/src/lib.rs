@@ -152,6 +152,26 @@ pub fn build() -> Result<()> {
         if let Some(spirv_assembly) = assembly {
             fs::write(&format!("{}.s", target_path), spirv_assembly.as_text())?;
         }
+
+        {
+            let options = naga::front::spv::Options {
+                adjust_coordinate_space: false, // we require NDC_Y_UP feature
+                strict_capabilities: true,
+                flow_graph_dump_prefix: None,
+            };
+            let parser = naga::front::spv::Parser::new(spirv.as_binary().iter().cloned(), &options);
+            match parser.parse() {
+                Ok(_module) => {}
+                Err(err) => {
+                    let msg = format!(
+                        "Failed to parse shader SPIR-V code for {:?}: {:?}",
+                        pathbuf, err
+                    );
+                    log::warn!("{}", &msg);
+                    //bail!(msg)
+                }
+            };
+        }
     }
 
     Ok(())
