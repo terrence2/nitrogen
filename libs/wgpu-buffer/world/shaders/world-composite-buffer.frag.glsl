@@ -134,7 +134,9 @@ main()
         transmittance,
         sky_radiance);
 
-    if (dot(world_view_direction, sun_direction) > cos(atmosphere.sun_angular_radius)) {
+    if (depth_sample == -1 &&
+        dot(world_view_direction, sun_direction) > cos(atmosphere.sun_angular_radius))
+    {
         vec3 sun_lums = get_solar_luminance(
             vec3(atmosphere.sun_irradiance),
             atmosphere.sun_angular_radius,
