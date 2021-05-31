@@ -197,17 +197,23 @@ impl Gpu {
     #[method]
     pub fn on_resize(&mut self, width: i64, height: i64) -> Result<()> {
         info!(
-            "resize: {}x{} vs {:?}",
+            "received resize event: {}x{}; cached: {}x{}",
             width,
             height,
-            self.window.inner_size()
+            self.window.inner_size().width,
+            self.window.inner_size().height,
         );
-        //self.surface = unsafe { self.instance.create_surface(&self.window) };
         self.physical_size = PhysicalSize {
             width: width as u32,
             height: height as u32,
         };
         self.window.set_inner_size(self.physical_size);
+        let new_size = self.window.inner_size();
+        info!(
+            "after resize, size is: {}x{}",
+            new_size.width, new_size.height
+        );
+        self.physical_size = new_size;
         self.logical_size = self.physical_size.to_logical(self.scale_factor);
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
