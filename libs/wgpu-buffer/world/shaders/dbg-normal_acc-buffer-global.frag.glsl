@@ -28,7 +28,7 @@ main()
 {
     float depth = texture(sampler2D(terrain_deferred_depth, terrain_linear_sampler), v_tc).x;
     if (depth > -1) {
-        ivec2 raw_normal = texture(isampler2D(terrain_normal_acc_texture, terrain_linear_sampler), v_tc).xy;
+        ivec2 raw_normal = texture(isampler2D(terrain_normal_acc_texture, terrain_nearest_sampler), v_tc).xy;
         vec2 flat_normal = raw_normal / 32768.0;
         vec3 local_normal = vec3(
             flat_normal.x,
