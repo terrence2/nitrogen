@@ -122,8 +122,30 @@ impl DataSetDataKind {
     pub fn filter_mode(&self) -> wgpu::FilterMode {
         match self {
             Self::Color => wgpu::FilterMode::Linear,
-            Self::Normal => wgpu::FilterMode::Nearest,
-            Self::Height => wgpu::FilterMode::Nearest,
+            Self::Normal => {
+                // FIXME: Linear filtering of R?16Sint appears to work fine and be supported by the
+                //        Vulkan spec, but the bits are not getting set right on the Vulkan side,
+                //        probably dust still settling from the transition to naga and the rush to
+                //        get webgpu done. There seems to be support for supporting this eventually.
+                #[cfg(debug_assertions)]
+                {
+                    wgpu::FilterMode::Nearest
+                }
+                #[cfg(not(debug_assertions))]
+                {
+                    wgpu::FilterMode::Linear
+                }
+            }
+            Self::Height => {
+                #[cfg(debug_assertions)]
+                {
+                    wgpu::FilterMode::Nearest
+                }
+                #[cfg(not(debug_assertions))]
+                {
+                    wgpu::FilterMode::Linear
+                }
+            }
         }
     }
 
