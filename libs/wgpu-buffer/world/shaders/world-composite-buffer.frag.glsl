@@ -88,6 +88,7 @@ main()
             sun_irradiance,
             sky_irradiance
         );
+
         // FIXME: this ground albedo scaling factor is arbitrary and dependent on our source material
         ground_radiance = ground_albedo * 2 * (
             // Todo: properer shadow maps so we can get sun visibility
@@ -110,6 +111,7 @@ main()
             single_mie_scattering_sampler,
             world_position_km,
             world_intersect_km,
+            world_view_direction,
             sun_direction,
             transmittance,
             in_scatter
