@@ -28,7 +28,7 @@ main()
     vec4 texel = texture(sampler2D(terrain_deferred_texture, terrain_linear_sampler), v_tc);
     float depth = texture(sampler2D(terrain_deferred_depth, terrain_linear_sampler), v_tc).x;
     if (depth > -1) {
-        f_color = vec4(texel.xy, 0, 1);
+        f_color = vec4(texel.zw, 0, 1);
     } else {
         f_color = vec4(0, 0, 0, 1);
     }

@@ -23,7 +23,12 @@ layout(location = 3) in vec2 v_graticule; // earth centered
 layout(location = 0) out vec4 v_color;
 
 void main() {
-    // Note: we upload positions in eye space: e.g. pre-multiplied by the view matrix.
+    // Note: we upload positions in eye space instead of world space for precision reasons.
     gl_Position = camera_perspective_m * vec4(v_position, 1);
-    v_color = vec4(v_graticule, v_normal.x, v_normal.z);
+
+    // Normals are uploaded in eye space so that they can displace the eye-space verticies as we
+    // build the vertices. We want to invert the normal to world space for storage in the deferred
+    // texture.
+    vec3 normal_w = (vec4(v_normal, 1) * camera_inverse_view_km).xyz;
+    v_color = vec4(v_graticule, normal_w.x, normal_w.z);
 }
