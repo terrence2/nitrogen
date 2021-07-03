@@ -41,7 +41,8 @@ void get_sun_and_sky_irradiance(
     vec4 irradiance_at_point = get_irradiance(
         irradiance_texture,
         irradiance_sampler,
-        r, mu_s,
+        r,
+        mu_s,
         atmosphere.bottom_radius,
         atmosphere.top_radius
     );
@@ -131,14 +132,19 @@ void get_sky_radiance_to_point(
     sampler single_mie_scattering_sampler,
     vec3 camera,
     vec3 point,
+    vec3 view_ray,
     vec3 sun_direction,
     out vec3 transmittance,
     out vec3 in_scattering
 ) {
+    // This should be the same as view_ray, but is not.
+    // It seems to be invariant to perspective... which makes some sense.
+    // But the point should take that into account?
+    //vec3 view_ray = normalize(point - camera);
+
     // Compute the distance to the top atmosphere boundary along the view ray,
     // assuming the viewer is in space (or NaN if the view ray does not intersect
     // the atmosphere).
-    vec3 view_ray = normalize(point - camera);
     float r = length(camera);
     float rmu = dot(camera, view_ray);
     float distance_to_top_atmosphere_boundary = -rmu -
@@ -217,82 +223,6 @@ void get_sky_radiance_to_point(
 
     in_scattering = scattering * rayleigh_phase_function(nu) +
         single_mie_scattering * mie_phase_function(atmosphere.mie_phase_function_g, nu);
-}
-
-void compute_ground_radiance(
-    AtmosphereParameters atmosphere,
-    texture2D transmittance_texture,
-    sampler transmittance_sampler,
-    texture3D scattering_texture,
-    sampler scattering_sampler,
-    texture3D single_mie_scattering_texture,
-    sampler single_mie_scattering_sampler,
-    texture2D irradiance_texture,
-    sampler irradiance_sampler,
-    vec3 camera,
-    vec3 view,
-    vec3 sun_direction,
-    out vec3 ground_radiance,
-    out float ground_alpha
-) {
-    // The planet center is always at 0.
-    vec3 p = camera - vec3(0, 0, 0);
-    float p_dot_v = dot(p, view);
-    float p_dot_p = dot(p, p);
-    float dist2 = p_dot_p - p_dot_v * p_dot_v;
-    float t0 = -p_dot_v - sqrt(atmosphere.bottom_radius * atmosphere.bottom_radius - dist2);
-
-    ground_alpha = 0.0;
-    ground_radiance = vec3(0);
-    if (t0 > 0.0) {
-        ground_alpha = 1.0;
-
-        vec3 intersect = camera + view * t0;
-        vec3 normal = normalize(intersect);
-
-        // Get sun and sky irradiance at the ground point and modulate
-        // by the ground albedo.
-        vec3 sky_irradiance;
-        vec3 sun_irradiance;
-        get_sun_and_sky_irradiance(
-            atmosphere,
-            transmittance_texture,
-            transmittance_sampler,
-            irradiance_texture,
-            irradiance_sampler,
-            intersect,
-            normal,
-            sun_direction,
-            sun_irradiance,
-            sky_irradiance
-        );
-        ground_radiance = vec3(atmosphere.ground_albedo) * (1.0 / PI) * (
-            sun_irradiance * get_sun_visibility(intersect, sun_direction) +
-            sky_irradiance * get_sky_visibility(intersect)
-        );
-
-        // Fade the radiance on the ground by the amount of atmosphere
-        // between us and that point and brighten by ambient in-scatter
-        // to the camera on that path.
-        vec3 transmittance;
-        vec3 in_scatter;
-        get_sky_radiance_to_point(
-            atmosphere,
-            transmittance_texture,
-            transmittance_sampler,
-            scattering_texture,
-            scattering_sampler,
-            single_mie_scattering_texture,
-            single_mie_scattering_sampler,
-            camera,
-            intersect,
-            sun_direction,
-            transmittance,
-            in_scatter
-        );
-
-        ground_radiance = ground_radiance * transmittance + in_scatter;
-    }
 }
 
 void get_sky_radiance(

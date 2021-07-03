@@ -38,9 +38,9 @@ main()
         uint atlas_slot = terrain_atlas_slot_for_graticule(grat, index_texture, index_sampler);
         vec4 raw_color = terrain_color_in_tile(grat, tile_info[atlas_slot], atlas_texture, atlas_sampler);
 
-        // FIXME: blend normal with existing buffer.
+        // FIXME: blend sample with existing buffer.
 
-        // Write back blended normal.
+        // Write back blended sample.
         imageStore(
             terrain_color_acc,
             coord,

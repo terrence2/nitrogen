@@ -458,6 +458,7 @@ impl WorldRenderPass {
                 DebugMode::NormalLocal => DebugMode::NormalGlobal,
                 DebugMode::NormalGlobal => DebugMode::None,
             };
+            println!("Debug Mode is now: {:?}", self.debug_mode);
         }
     }
 

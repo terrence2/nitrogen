@@ -19,12 +19,14 @@
 layout(location = 0) in vec2 position;
 layout(location = 0) out vec2 v_tc;
 layout(location = 1) out vec3 v_ray_world;
-layout(location = 2) out vec2 v_ndc;
+layout(location = 2) out vec2 v_fullscreen;
 
 void main() {
+    // Assignment of clip space will produce ndc on the other side.
+    // But since w is 1, clip == ndc in this case.
     gl_Position = vec4(position, 0.0, 1.0);
     v_ray_world = raymarching_view_ray(position);
-    v_ndc = position;
+    v_fullscreen = position;
 
     // map -1->1 screen coord to 0->1 u/v
     vec2 tc = position;

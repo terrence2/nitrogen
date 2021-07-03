@@ -20,7 +20,7 @@
 layout(location = 0) out vec4 f_color;
 layout(location = 0) in vec2 v_tc;
 layout(location = 1) in vec3 v_ray_world;
-layout(location = 2) in vec2 v_ndc;
+layout(location = 2) in vec2 v_fullscreen;
 
 void
 main()
@@ -28,7 +28,13 @@ main()
     vec4 texel = texture(sampler2D(terrain_deferred_texture, terrain_linear_sampler), v_tc);
     float depth = texture(sampler2D(terrain_deferred_depth, terrain_linear_sampler), v_tc).x;
     if (depth > -1) {
-        f_color = vec4(texel.xy, 0, 1);
+        vec2 normal_wrld_xz = texel.zw;
+        vec3 normal_wrld = vec3(
+            normal_wrld_xz.x,
+            sqrt(1.0 - (normal_wrld_xz.x * normal_wrld_xz.x + normal_wrld_xz.y * normal_wrld_xz.y)),
+            normal_wrld_xz.y
+        );
+        f_color = vec4(normal_wrld, 1);
     } else {
         f_color = vec4(0, 0, 0, 1);
     }

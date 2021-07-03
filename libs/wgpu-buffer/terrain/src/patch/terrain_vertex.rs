@@ -24,8 +24,8 @@ use zerocopy::{AsBytes, FromBytes};
 pub struct TerrainVertex {
     surface_position: [f32; 3], // undisplaced position, in view space
     position: [f32; 3],         // displaced position, in view space
-    normal: [f32; 3],           // normal, in view space
-    graticule: [f32; 2],
+    normal: [f32; 3],           // normal, in view space, so that we can displace in view space
+    graticule: [f32; 2],        // lat/lon to pass on to the deferred texturing pipeline
 }
 
 impl TerrainVertex {

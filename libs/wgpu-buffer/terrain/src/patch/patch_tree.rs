@@ -1076,8 +1076,8 @@ impl PatchTree {
         }
         let node = self.tree_node(tree_index);
         let mut out = String::new();
+        let pad = "  ".repeat(lvl);
         if node.is_node() {
-            let pad = "  ".repeat(lvl);
             out += &format!(
                 "{}Node @{}, [{},{},{}]\n",
                 pad,
@@ -1090,7 +1090,6 @@ impl PatchTree {
                 out += &self.format_tree_display_inner(lvl + 1, *child);
             }
         } else {
-            let pad = "  ".repeat(lvl);
             out += &format!(
                 "{}Leaf @{}, peers: [{},{},{}]\n",
                 pad,

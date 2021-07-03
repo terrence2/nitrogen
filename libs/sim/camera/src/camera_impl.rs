@@ -130,12 +130,16 @@ impl Camera {
         // Infinite depth perspective with flipped w so that we can use inverted depths.
         // float f = 1.0f / tan(fovY_radians / 2.0f);
         // return glm::mat4(
-        //     f / aspectWbyH, 0.0f,  0.0f,  0.0f,
-        //     0.0f,    f,  0.0f,  0.0f,
-        //     0.0f, 0.0f,  0.0f, -1.0f,
-        //     0.0f, 0.0f, zNear,  0.0f);
+        //     f / WbyH, 0.0f,  0.0f,  0.0f,
+        //     0.0f,        f,  0.0f,  0.0f,
+        //     0.0f,     0.0f,  0.0f, -1.0f,
+        //     0.0f,     0.0f, zNear,  0.0f);
 
-        // Note for inversing on the GPU:
+        // TL;DR is that we set the the Z in clip space to zNear instead of -1 (and write z
+        // into the w coordinate, like always). When we do the perspective divide by w, this
+        // inverts the z _and_ changes the scaling.
+
+        // Note for inverting the transform on the GPU:
         // z = -1
         // w = z*zNear
         // z' = -1 / (z / zNear)
@@ -143,8 +147,9 @@ impl Camera {
 
         let mut matrix: Matrix4<f64> = num::Zero::zero();
         let f = 1.0 / (self.fov_y.f64() / 2.0).tan();
-        matrix[(0, 0)] = self.aspect_ratio / f; // aspect is h/w, so invert.
-        matrix[(1, 1)] = f;
+        let fp = f / self.aspect_ratio; // aspect is h/w, so invert
+        matrix[(0, 0)] = f;
+        matrix[(1, 1)] = fp;
         matrix[(3, 2)] = -1.0;
         matrix[(2, 3)] = Length::<T>::from(&self.z_near).into();
         Perspective3::from_matrix_unchecked(matrix)
