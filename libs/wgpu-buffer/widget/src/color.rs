@@ -39,7 +39,7 @@ impl Default for Color {
 }
 
 impl Color {
-    pub fn to_u8_array(&self) -> [u8; 4] {
+    pub fn to_u8_array(self) -> [u8; 4] {
         let a = self.to_f32_array();
         [
             (a[0] * 255.0) as u8,
@@ -49,7 +49,7 @@ impl Color {
         ]
     }
 
-    pub fn to_f32_array(&self) -> [f32; 4] {
+    pub fn to_f32_array(self) -> [f32; 4] {
         match self {
             Self::Transparent => [0.; 4],
             Self::Black => [0., 0., 0., 1.],
@@ -64,7 +64,7 @@ impl Color {
             Self::Blue => [0., 0., 1., 1.],
             Self::Purple => [0.5, 0., 0.5, 1.],
             Self::Magenta => [1., 0., 1., 1.],
-            Self::Custom(f) => *f,
+            Self::Custom(f) => f,
         }
     }
 

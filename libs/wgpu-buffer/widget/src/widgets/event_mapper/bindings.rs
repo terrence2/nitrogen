@@ -296,7 +296,7 @@ mod test {
             &mut state,
             &mut interpreter.write(),
         )?;
-        assert_eq!(player.read().walking, false);
+        assert!(!player.read().walking);
 
         state.input_states.insert(w_key, ElementState::Pressed);
         bindings.match_input(
@@ -305,7 +305,7 @@ mod test {
             &mut state,
             &mut interpreter.write(),
         )?;
-        assert_eq!(player.read().walking, false);
+        assert!(!player.read().walking);
 
         Ok(())
     }

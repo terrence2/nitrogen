@@ -257,7 +257,7 @@ pub enum ChildIndex {
 }
 
 impl ChildIndex {
-    pub fn to_index(&self) -> usize {
+    pub fn to_index(self) -> usize {
         match self {
             Self::SouthWest => 0, // 00
             Self::SouthEast => 1, // 01

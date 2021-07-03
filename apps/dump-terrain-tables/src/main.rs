@@ -505,6 +505,7 @@ fn make_triangle_strip(
         let tri2 = binned[&bins[1]].last().unwrap();
 
         // Full top.
+        #[allow(clippy::branches_sharing_code)]
         if winding.has_side0() && winding.has_side2() {
             // t0
             indices.push(tri0.i[0]);
@@ -554,6 +555,7 @@ fn make_triangle_strip(
         let tri_c = binned[&bin_a].last().unwrap();
         let tri_d = binned[&bin_b].last().unwrap();
 
+        #[allow(clippy::branches_sharing_code)]
         if winding.has_side0() {
             // Degenerate into place.
             indices.push(tri_a.i[0]);
