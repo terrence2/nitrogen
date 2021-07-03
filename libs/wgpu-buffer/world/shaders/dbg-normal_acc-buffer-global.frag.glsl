@@ -21,7 +21,7 @@
 layout(location = 0) out vec4 f_color;
 layout(location = 0) in vec2 v_tc;
 layout(location = 1) in vec3 v_ray_world;
-layout(location = 2) in vec2 v_ndc;
+layout(location = 2) in vec2 v_fullscreen;
 
 void
 main()

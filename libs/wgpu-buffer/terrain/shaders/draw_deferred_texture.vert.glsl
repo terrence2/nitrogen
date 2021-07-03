@@ -15,20 +15,20 @@
 #version 450
 #include <wgpu-buffer/global_data/include/global_data.glsl>
 
-layout(location = 0) in vec3 v_surface_position; // eye relative
-layout(location = 1) in vec3 v_position; // eye relative
-layout(location = 2) in vec3 v_normal;
+layout(location = 0) in vec3 v_surface_position_eye; // eye relative
+layout(location = 1) in vec3 v_position_eye; // eye relative
+layout(location = 2) in vec3 v_normal_eye; // eye relative
 layout(location = 3) in vec2 v_graticule; // earth centered
 
 layout(location = 0) out vec4 v_color;
 
 void main() {
     // Note: we upload positions in eye space instead of world space for precision reasons.
-    gl_Position = camera_perspective_m * vec4(v_position, 1);
+    gl_Position = camera_perspective_m * vec4(v_position_eye, 1); // Note: results in clip space coordinate
 
     // Normals are uploaded in eye space so that they can displace the eye-space verticies as we
     // build the vertices. We want to invert the normal to world space for storage in the deferred
     // texture.
-    vec3 normal_w = (vec4(v_normal, 1) * camera_inverse_view_km).xyz;
-    v_color = vec4(v_graticule, normal_w.x, normal_w.z);
+    vec3 normal_wrld = (camera_inverse_view_km * vec4(normalize(v_normal_eye), 1)).xyz;
+    v_color = vec4(v_graticule, normal_wrld.x, normal_wrld.z);
 }

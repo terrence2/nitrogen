@@ -56,10 +56,10 @@ raymarching_view_ray(vec2 position)
 {
     // https://www.derschmale.com/2014/01/26/reconstructing-positions-from-the-depth-buffer/
 
-    // Position is a corner of ndc at z=0.
+    // Position is a corner of ~ndc~ clip at z=0.
     vec4 corner = vec4(position, 0, 1);
 
-    // Reverse ndc into eye space vector.
+    // Reverse ~ndc~ clip into eye space vector.
     vec4 eye = camera_inverse_perspective_km * corner;
     eye.w = 0;
 
