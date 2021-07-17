@@ -53,32 +53,32 @@ struct Opt {
 }
 
 #[derive(Debug, NitrousModule)]
-struct Demo {
+struct System {
     exit: bool,
     pin_camera: bool,
     camera: Camera,
 }
 
 #[inject_nitrous_module]
-impl Demo {
+impl System {
     pub fn new(interpreter: &mut Interpreter) -> Arc<RwLock<Self>> {
-        let demo = Arc::new(RwLock::new(Self {
+        let system = Arc::new(RwLock::new(Self {
             exit: false,
             pin_camera: false,
             camera: Default::default(),
         }));
-        interpreter.put_global("demo", Value::Module(demo.clone()));
-        demo
+        interpreter.put_global("system", Value::Module(system.clone()));
+        system
     }
 
     pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
         interpreter.interpret_once(
             r#"
-                let bindings := mapper.create_bindings("demo");
-                bindings.bind("quit", "demo.exit()");
-                bindings.bind("Escape", "demo.exit()");
-                bindings.bind("q", "demo.exit()");
-                bindings.bind("p", "demo.toggle_pin_camera(pressed)");
+                let bindings := mapper.create_bindings("system");
+                bindings.bind("quit", "system.exit()");
+                bindings.bind("Escape", "system.exit()");
+                bindings.bind("q", "system.exit()");
+                bindings.bind("p", "system.toggle_pin_camera(pressed)");
                 bindings.bind("l", "widget.dump_glyphs(pressed)");
             "#,
         )?;
@@ -200,7 +200,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         &mut interpreter.write(),
     )?;
     let catalog = Arc::new(AsyncRwLock::new(catalog));
-    let widgets = WidgetBuffer::new(&mut gpu.write(), &mut interpreter.write())?;
     let world = WorldRenderPass::new(
         &mut gpu.write(),
         &mut interpreter.write(),
@@ -209,6 +208,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         &stars_buffer.read(),
         &terrain_buffer.read(),
     )?;
+    let widgets = WidgetBuffer::new(&mut gpu.write(), &mut interpreter.write())?;
     let ui = UiRenderPass::new(
         &mut gpu.write(),
         &globals.read(),
@@ -233,8 +233,9 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         ui,
         composite,
     )?;
-    ///////////////////////////////////////////////////////////
 
+    ///////////////////////////////////////////////////////////
+    // UI Setup
     let version_label = Label::new("Nitrogen v0.1")
         .with_font(widgets.read().font_context().font_id_for_name("fira-sans"))
         .with_color(Color::Green)
@@ -268,10 +269,10 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     camera.apply_rotation(&Vector3::new(0.0, 1.0, 0.0), PI);
     */
 
-    // everest: 27.9880704,86.9245623
+    // London: 51.5,-0.1
     arcball.write().set_target(Graticule::<GeoSurface>::new(
-        degrees!(27.9880704),
-        degrees!(-86.9245623), // FIXME: wat?
+        degrees!(51.5),
+        degrees!(-0.1),
         meters!(8000.),
     ));
     arcball.write().set_eye_relative(Graticule::<Target>::new(
@@ -279,6 +280,17 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         degrees!(869.5),
         meters!(67668.5053),
     ))?;
+    // everest: 27.9880704,86.9245623
+    // arcball.write().set_target(Graticule::<GeoSurface>::new(
+    //     degrees!(27.9880704),
+    //     degrees!(-86.9245623), // FIXME: wat?
+    //     meters!(8000.),
+    // ));
+    // arcball.write().set_eye_relative(Graticule::<Target>::new(
+    //     degrees!(11.5),
+    //     degrees!(869.5),
+    //     meters!(67668.5053),
+    // ))?;
     // ISS: 408km up
     // arcball.write().set_target(Graticule::<GeoSurface>::new(
     //     degrees!(27.9880704),
@@ -291,7 +303,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     //     meters!(1308.7262),
     // ))?;
 
-    let demo = Demo::new(&mut interpreter.write());
+    let system = System::new(&mut interpreter.write());
 
     {
         let interp = &mut interpreter.write();
@@ -300,10 +312,10 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         arcball.write().add_default_bindings(interp)?;
         globals.write().add_default_bindings(interp)?;
         world.write().add_default_bindings(interp)?;
-        demo.write().add_default_bindings(interp)?;
+        system.write().add_default_bindings(interp)?;
     }
 
-    while !demo.read().exit {
+    while !system.read().exit {
         let loop_start = Instant::now();
 
         widgets
@@ -325,7 +337,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         )?;
         frame_graph.terrain_mut().make_upload_buffer(
             arcball.read().camera(),
-            demo.write().get_camera(arcball.read().camera()),
+            system.write().get_camera(arcball.read().camera()),
             catalog.clone(),
             &mut async_rt,
             &mut gpu.write(),

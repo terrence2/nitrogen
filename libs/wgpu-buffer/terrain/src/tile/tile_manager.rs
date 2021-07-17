@@ -60,7 +60,7 @@ use global_data::GlobalParametersBuffer;
 use gpu::{Gpu, UploadTracker};
 use rayon::prelude::*;
 use std::{fmt::Debug, sync::Arc};
-use tokio::{runtime::Runtime, sync::RwLock};
+use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 
 pub trait TileSet: Debug + Send + Sync + 'static {
     // Maintain runtime visibility tracking based on VisiblePatch notifications derived
@@ -70,7 +70,7 @@ pub trait TileSet: Debug + Send + Sync + 'static {
     fn finish_update(
         &mut self,
         camera: &Camera,
-        catalog: Arc<RwLock<Catalog>>,
+        catalog: Arc<AsyncRwLock<Catalog>>,
         async_rt: &Runtime,
         gpu: &Gpu,
         tracker: &mut UploadTracker,
@@ -222,7 +222,7 @@ impl TileManager {
     pub fn finish_update(
         &mut self,
         camera: &Camera,
-        catalog: Arc<RwLock<Catalog>>,
+        catalog: Arc<AsyncRwLock<Catalog>>,
         async_rt: &Runtime,
         gpu: &mut Gpu,
         tracker: &mut UploadTracker,
