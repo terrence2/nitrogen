@@ -24,16 +24,18 @@
 mod colorspace;
 mod earth_consts;
 mod precompute;
+mod table_helpers;
 
-use crate::{earth_consts::AtmosphereParameters, precompute::Precompute};
+pub use crate::{
+    earth_consts::AtmosphereParameters, precompute::Precompute, table_helpers::TableHelpers,
+};
+
 use anyhow::Result;
 use gpu::{Gpu, UploadTracker};
 use log::trace;
 use nalgebra::Vector3;
-use std::{mem, num::NonZeroU64, sync::Arc, time::Instant};
-
-const NUM_PRECOMPUTED_WAVELENGTHS: usize = 40;
-const NUM_SCATTERING_ORDER: usize = 4;
+use parking_lot::RwLock;
+use std::{mem, num::NonZeroU64, sync::Arc};
 
 #[derive(Debug)]
 pub struct AtmosphereBuffer {
@@ -44,28 +46,16 @@ pub struct AtmosphereBuffer {
 }
 
 impl AtmosphereBuffer {
-    pub fn new(skip_cache: bool, gpu: &mut Gpu) -> Result<Self> {
+    pub fn new(gpu: &mut Gpu) -> Result<Arc<RwLock<Self>>> {
         trace!("AtmosphereBuffer::new");
 
-        let precompute_start = Instant::now();
+        let atmosphere_params_buffer = TableHelpers::initial_atmosphere_parameters(gpu);
         let (
-            atmosphere_params_buffer,
             transmittance_texture,
             irradiance_texture,
             scattering_texture,
             single_mie_scattering_texture,
-        ) = Precompute::precompute(
-            NUM_PRECOMPUTED_WAVELENGTHS,
-            NUM_SCATTERING_ORDER,
-            skip_cache,
-            gpu,
-        )?;
-        let precompute_time = precompute_start.elapsed();
-        println!(
-            "AtmosphereBuffer::precompute timing: {}.{}ms",
-            precompute_time.as_secs() * 1000 + u64::from(precompute_time.subsec_millis()),
-            precompute_time.subsec_micros()
-        );
+        ) = TableHelpers::initial_textures(gpu)?;
 
         let camera_and_sun_buffer_size = mem::size_of::<[[f32; 4]; 1]>() as u64;
         let camera_and_sun_buffer = Arc::new(Box::new(gpu.device().create_buffer(
@@ -284,11 +274,11 @@ impl AtmosphereBuffer {
             ],
         });
 
-        Ok(Self {
+        Ok(Arc::new(RwLock::new(Self {
             bind_group_layout,
             bind_group,
             sun_direction_buffer: camera_and_sun_buffer,
-        })
+        })))
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {

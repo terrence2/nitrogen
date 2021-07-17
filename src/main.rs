@@ -40,16 +40,12 @@ use widget::{Color, Label, PositionH, PositionV, WidgetBuffer};
 use winit::window::Window;
 use world::WorldRenderPass;
 
-/// Show the contents of an MM file
+/// Demonstrate the capabilities of the Nitrogen engine
 #[derive(Debug, StructOpt)]
 struct Opt {
     /// Extra directories to treat as libraries
     #[structopt(short, long)]
     libdir: Vec<PathBuf>,
-
-    /// Regenerate instead of loading cached items on startup
-    #[structopt(long = "no-cache")]
-    no_cache: bool,
 }
 
 #[derive(Debug, NitrousModule)]
@@ -184,10 +180,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     let arcball = ArcBallCamera::new(meters!(0.5), &mut gpu.write(), &mut interpreter.write());
 
     ///////////////////////////////////////////////////////////
-    let atmosphere_buffer = Arc::new(RwLock::new(AtmosphereBuffer::new(
-        opt.no_cache,
-        &mut gpu.write(),
-    )?));
+    let atmosphere_buffer = AtmosphereBuffer::new(&mut gpu.write())?;
     let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
     let globals = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter.write());
     let stars_buffer = Arc::new(RwLock::new(StarsBuffer::new(&gpu.read())?));
