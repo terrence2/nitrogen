@@ -6,6 +6,7 @@ edition = "2018"
 
 [workspace]
 members = [
+    "apps/dump-atmosphere-tables",
     "apps/dump-layer-pack",
     "apps/dump-terrain-tables",
     "apps/dump-terrain-tiles",
