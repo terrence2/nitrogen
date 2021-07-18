@@ -17,7 +17,7 @@ use crate::{
     font_context::FontId,
     paint_context::PaintContext,
     text_run::TextRun,
-    widget::{UploadMetrics, Widget},
+    widget::{Size, UploadMetrics, Widget},
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
@@ -30,7 +30,7 @@ use std::{ops::Range, sync::Arc};
 #[derive(Debug)]
 pub struct LineEdit {
     line: TextRun,
-    override_width: Option<f32>,
+    override_width: Option<Size>,
 }
 
 impl LineEdit {
@@ -41,7 +41,7 @@ impl LineEdit {
         }
     }
 
-    pub fn with_width(mut self, width: f32) -> Self {
+    pub fn with_width(mut self, width: Size) -> Self {
         self.override_width = Some(width);
         self
     }
@@ -56,8 +56,8 @@ impl LineEdit {
         self
     }
 
-    pub fn with_default_size_pts(mut self, size_pts: f32) -> Self {
-        self.line.set_default_size_pts(size_pts);
+    pub fn with_default_size(mut self, size: Size) -> Self {
+        self.line.set_default_size(size);
         self
     }
 
@@ -78,8 +78,8 @@ impl LineEdit {
         self.line.select(range);
     }
 
-    pub fn change_size_pts(&mut self, size_pts: f32) {
-        self.line.change_size_pts(size_pts);
+    pub fn change_size(&mut self, size: Size) {
+        self.line.change_size(size);
     }
 
     pub fn take_action(
@@ -113,7 +113,10 @@ impl Widget for LineEdit {
         let (line_metrics, _) = self.line.upload(0f32, widget_info_index, gpu, context)?;
         Ok(UploadMetrics {
             widget_info_indexes: line_metrics.widget_info_indexes,
-            width: self.override_width.unwrap_or(line_metrics.width),
+            width: self
+                .override_width
+                .map(|v| v.as_gpu(gpu))
+                .unwrap_or(line_metrics.width),
             height: line_metrics.height,
         })
     }

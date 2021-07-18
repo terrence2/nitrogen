@@ -20,11 +20,118 @@ use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::{fmt::Debug, sync::Arc};
 
+#[derive(Copy, Clone, Debug)]
+pub enum Size {
+    /// In 0.0 to 2.0, to fit into the -1 to 1 webgpu frame.
+    Gpu(f32),
+
+    /// As percentage of screen
+    Percent(f32),
+
+    /// Font "points", not actually 1/72 of an inch; font dependent.
+    Pts(f32),
+
+    /// Pixels of screen real-estate. Not exact.
+    Px(f32),
+}
+
+impl Size {
+    pub fn as_gpu(self, gpu: &Gpu) -> f32 {
+        match self {
+            Self::Gpu(v) => v,
+            Self::Percent(pct) => pct / 100.0 * 2.0,
+            Self::Pts(pts) => {
+                let px = pts as f64 * 96.0 / 72.0;
+                (px / gpu.logical_size().width * 2.) as f32
+            }
+            Self::Px(px) => (px as f64 / gpu.logical_size().width * 2.) as f32,
+        }
+    }
+
+    pub fn as_px(self, gpu: &Gpu) -> f32 {
+        match self {
+            Self::Gpu(v) => v / 2.0 * gpu.logical_size().width as f32,
+            Self::Percent(pct) => pct / 100.0 * gpu.logical_size().width as f32,
+            Self::Pts(pts) => pts * 96.0 / 72.0,
+            Self::Px(px) => px,
+        }
+    }
+
+    pub fn as_pts(self, gpu: &Gpu) -> f32 {
+        match self {
+            Self::Gpu(_) => self.as_px(gpu) * 72.0 / 96.0,
+            Self::Percent(_) => self.as_px(gpu) * 72.0 / 96.0,
+            Self::Pts(pts) => pts,
+            Self::Px(px) => px * 72.0 / 96.0,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct Padding {
+    top: Size,
+    bottom: Size,
+    left: Size,
+    right: Size,
+}
+
+impl Padding {
+    pub fn new_uniform(size: Size) -> Self {
+        Self {
+            top: size,
+            bottom: size,
+            left: size,
+            right: size,
+        }
+    }
+
+    pub fn left(&self) -> Size {
+        self.left
+    }
+
+    pub fn right(&self) -> Size {
+        self.right
+    }
+
+    pub fn top(&self) -> Size {
+        self.top
+    }
+
+    pub fn bottom(&self) -> Size {
+        self.bottom
+    }
+
+    pub fn left_gpu(&self, gpu: &Gpu) -> f32 {
+        self.left.as_gpu(gpu)
+    }
+
+    pub fn right_gpu(&self, gpu: &Gpu) -> f32 {
+        self.right.as_gpu(gpu)
+    }
+
+    pub fn top_gpu(&self, gpu: &Gpu) -> f32 {
+        self.top.as_gpu(gpu)
+    }
+
+    pub fn bottom_gpu(&self, gpu: &Gpu) -> f32 {
+        self.bottom.as_gpu(gpu)
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct UploadMetrics {
     pub widget_info_indexes: Vec<u32>,
     pub width: f32,
     pub height: f32,
+}
+
+impl UploadMetrics {
+    pub fn adjust_height(&self, height: Size, gpu: &Gpu, context: &mut PaintContext) {
+        // Offset up to our current height.
+        for &widget_info_index in &self.widget_info_indexes {
+            context.widget_info_pool[widget_info_index as usize].position[1] += height.as_gpu(gpu);
+        }
+    }
 }
 
 pub trait Widget: Debug + Send + Sync + 'static {

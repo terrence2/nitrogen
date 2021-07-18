@@ -26,10 +26,11 @@ pub use crate::{
     box_packing::{PositionH, PositionV},
     color::Color,
     paint_context::PaintContext,
-    widget::Widget,
+    widget::{Size, Widget},
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
     widgets::{
+        button::Button,
         event_mapper::{Bindings, EventMapper},
         float_box::FloatBox,
         label::Label,

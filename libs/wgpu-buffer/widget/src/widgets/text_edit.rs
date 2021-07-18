@@ -17,7 +17,7 @@ use crate::{
     font_context::{FontId, SANS_FONT_ID},
     paint_context::PaintContext,
     text_run::TextRun,
-    widget::{UploadMetrics, Widget},
+    widget::{Size, UploadMetrics, Widget},
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
@@ -34,7 +34,7 @@ pub struct TextEdit {
     read_only: bool,
     default_color: Color,
     default_font: FontId,
-    default_size_pts: f32,
+    default_size: Size,
 }
 
 impl TextEdit {
@@ -45,7 +45,7 @@ impl TextEdit {
             read_only: true, // NOTE: writable text edits not supported yet.
             default_color: Color::Black,
             default_font: SANS_FONT_ID,
-            default_size_pts: 12.,
+            default_size: Size::Pts(12.),
         };
         obj.replace_content(markup);
         obj
@@ -61,8 +61,8 @@ impl TextEdit {
         self
     }
 
-    pub fn with_default_size(mut self, size_pts: f32) -> Self {
-        self.default_size_pts = size_pts;
+    pub fn with_default_size(mut self, size: Size) -> Self {
+        self.default_size = size;
         self
     }
 
@@ -95,7 +95,7 @@ impl TextEdit {
     fn make_run(&self, text: &str) -> TextRun {
         TextRun::empty()
             .with_hidden_selection()
-            .with_default_size_pts(self.default_size_pts)
+            .with_default_size(self.default_size)
             .with_default_color(self.default_color)
             .with_default_font(self.default_font)
             .with_text(text)

@@ -16,7 +16,7 @@ use crate::{
     color::Color,
     font_context::{FontId, TextSpanMetrics, SANS_FONT_ID},
     paint_context::PaintContext,
-    widget::UploadMetrics,
+    widget::{Size, UploadMetrics},
 };
 use anyhow::Result;
 use gpu::Gpu;
@@ -28,16 +28,16 @@ use std::{cmp::Ordering, ops::Range};
 pub struct TextSpan {
     text: String,
     color: Color,
-    size_pts: f32,
+    size: Size,
     font_id: FontId,
 }
 
 impl TextSpan {
-    pub fn new<S: Into<String>>(text: S, size_pts: f32, font_id: FontId, color: Color) -> Self {
+    pub fn new<S: Into<String>>(text: S, size: Size, font_id: FontId, color: Color) -> Self {
         Self {
             text: text.into(),
             color,
-            size_pts,
+            size,
             font_id,
         }
     }
@@ -50,8 +50,8 @@ impl TextSpan {
         self.font_id = font_id;
     }
 
-    pub fn set_size_pts(&mut self, size_pts: f32) {
-        self.size_pts = size_pts;
+    pub fn set_size(&mut self, size: Size) {
+        self.size = size;
     }
 
     pub fn set_color(&mut self, color: Color) {
@@ -66,8 +66,8 @@ impl TextSpan {
         &self.text
     }
 
-    pub fn size_pts(&self) -> f32 {
-        self.size_pts
+    pub fn size(&self) -> Size {
+        self.size
     }
 
     pub fn font(&self) -> FontId {
@@ -178,7 +178,7 @@ pub struct TextRun {
     pre_blend_text: bool,
 
     default_font_id: FontId,
-    default_size_pts: f32,
+    default_size: Size,
     default_color: Color,
 }
 
@@ -198,7 +198,7 @@ impl TextRun {
             hide_selection: false,
             pre_blend_text: false,
             default_font_id: SANS_FONT_ID,
-            default_size_pts: 12.0,
+            default_size: Size::Pts(12.0),
             default_color: Color::Magenta,
         }
     }
@@ -237,13 +237,13 @@ impl TextRun {
         self.default_font_id = font_id;
     }
 
-    pub fn with_default_size_pts(mut self, size_pts: f32) -> Self {
-        self.default_size_pts = size_pts;
+    pub fn with_default_size(mut self, size: Size) -> Self {
+        self.default_size = size;
         self
     }
 
-    pub fn set_default_size_pts(&mut self, size_pts: f32) {
-        self.default_size_pts = size_pts;
+    pub fn set_default_size(&mut self, size: Size) {
+        self.default_size = size;
     }
 
     pub fn from_text(text: &str) -> Self {
@@ -264,14 +264,14 @@ impl TextRun {
     }
 
     /// Change the selected region's size.
-    pub fn change_size_pts(&mut self, size_pts: f32) {
-        self.change_properties(None, Some(size_pts), None);
+    pub fn change_size(&mut self, size: Size) {
+        self.change_properties(None, Some(size), None);
     }
 
     fn change_properties(
         &mut self,
         color: Option<Color>,
-        size_pts: Option<f32>,
+        size: Option<Size>,
         font_id: Option<FontId>,
     ) {
         if self.selection.is_empty() {
@@ -289,8 +289,8 @@ impl TextRun {
                     if let Some(color) = color {
                         span.set_color(color);
                     }
-                    if let Some(size_pts) = size_pts {
-                        span.set_size_pts(size_pts);
+                    if let Some(size) = size {
+                        span.set_size(size);
                     }
                     if let Some(font_id) = font_id {
                         span.set_font(font_id);
@@ -299,14 +299,14 @@ impl TextRun {
                 } else {
                     let parts = [
                         (0..span_range.start, None, None, None),
-                        (span_range.clone(), color, size_pts, font_id),
+                        (span_range.clone(), color, size, font_id),
                         (span_range.end..span.text.len(), None, None, None),
                     ];
-                    for (part_range, color, size_pts, font_id) in &parts {
+                    for (part_range, color, size, font_id) in &parts {
                         if !part_range.is_empty() {
                             next_spans.push(TextSpan::new(
                                 &span.content()[part_range.to_owned()],
-                                size_pts.unwrap_or_else(|| span.size_pts()),
+                                size.unwrap_or_else(|| span.size()),
                                 font_id.unwrap_or_else(|| span.font()),
                                 color.unwrap_or_else(|| *span.color()),
                             ));
@@ -406,7 +406,7 @@ impl TextRun {
         } else {
             self.spans.push(TextSpan::new(
                 text,
-                self.default_size_pts,
+                self.default_size,
                 self.default_font_id,
                 self.default_color,
             ));

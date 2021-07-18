@@ -212,12 +212,16 @@ impl FontContext {
 
         let phys_w = gpu.physical_size().width as f32;
 
-        let px_scaling = if span.size_pts() <= 12.0 { 4.0 } else { 2.0 };
+        let px_scaling = if span.size().as_pts(gpu) <= 12.0 {
+            4.0
+        } else {
+            2.0
+        };
 
         // Use ttf standard formula to adjust scale by pts to figure out base rendering size.
         // Note that we add some extra scaling and use linear filtering to help account for
         // our lack of sub-pixel and pixel alignment techniques.
-        let scale_px = px_scaling * span.size_pts() * gpu.scale_factor() as f32;
+        let scale_px = px_scaling * span.size().as_pts(gpu) * gpu.scale_factor() as f32;
 
         // We used guess_dpi to project from logical to physical pixels for rendering, so scale
         // vertices proportional to physical size for vertex layout. Note that the extra factor of

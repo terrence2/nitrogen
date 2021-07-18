@@ -17,7 +17,7 @@ use crate::{
     font_context::FontId,
     paint_context::PaintContext,
     text_run::TextRun,
-    widget::{UploadMetrics, Widget},
+    widget::{Size, UploadMetrics, Widget},
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
@@ -41,8 +41,8 @@ impl Label {
         }
     }
 
-    pub fn with_size(mut self, size_pts: f32) -> Self {
-        self.line.set_default_size_pts(size_pts);
+    pub fn with_size(mut self, size: Size) -> Self {
+        self.line.set_default_size(size);
         self
     }
 

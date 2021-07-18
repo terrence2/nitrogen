@@ -16,7 +16,7 @@ use crate::{
     color::Color,
     font_context::FontContext,
     paint_context::PaintContext,
-    widget::{UploadMetrics, Widget},
+    widget::{Size, UploadMetrics, Widget},
     LineEdit, TextEdit, VerticalBox,
 };
 use anyhow::Result;
@@ -48,14 +48,14 @@ impl Terminal {
         let edit = LineEdit::empty()
             .with_default_font(font_context.font_id_for_name("mono"))
             .with_default_color(Color::White)
-            .with_default_size_pts(12.0)
+            .with_default_size(Size::Pts(12.0))
             .with_text("help()")
             .wrapped();
         edit.write().line_mut().select_all();
-        let container = VerticalBox::with_children(&[output.clone(), edit.clone()])
+        let container = VerticalBox::new_with_children(&[output.clone(), edit.clone()])
             .with_background_color(Color::Gray.darken(3.).opacity(0.8))
-            .with_width(2.0)
-            .with_height(0.9)
+            .with_width(Size::Percent(100.))
+            .with_height(Size::Percent(40.))
             .wrapped();
         container.write().info_mut().set_glass_background(true);
         Self {

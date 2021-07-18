@@ -36,7 +36,7 @@ use structopt::StructOpt;
 use terrain::{CpuDetailLevel, GpuDetailLevel, TerrainBuffer};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use ui::UiRenderPass;
-use widget::{Color, Label, PositionH, PositionV, WidgetBuffer};
+use widget::{Color, Label, PositionH, PositionV, Size, VerticalBox, WidgetBuffer};
 use winit::window::Window;
 use world::WorldRenderPass;
 
@@ -232,20 +232,25 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     let version_label = Label::new("Nitrogen v0.1")
         .with_font(widgets.read().font_context().font_id_for_name("fira-sans"))
         .with_color(Color::Green)
-        .with_size(8.0)
+        .with_size(Size::Pts(8.0))
         .with_pre_blended_text()
+        .wrapped();
+    //let button_wp_1 = Button::
+    let controls_box = VerticalBox::new_with_children(&[version_label])
+        //.with_background_color(Color::Gray.darken(3.).opacity(0.8))
+        .with_background_color(Color::Transparent)
         .wrapped();
     widgets
         .read()
         .root()
         .write()
-        .add_child("version", version_label)
+        .add_child("controls", controls_box)
         .set_float(PositionH::End, PositionV::Top);
 
     let fps_label = Label::new("fps")
         .with_font(widgets.read().font_context().font_id_for_name("sans"))
         .with_color(Color::Red)
-        .with_size(13.0)
+        .with_size(Size::Pts(13.0))
         .with_pre_blended_text()
         .wrapped();
     widgets

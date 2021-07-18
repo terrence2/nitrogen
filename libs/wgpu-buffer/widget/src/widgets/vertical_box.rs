@@ -16,7 +16,7 @@ use crate::{
     box_packing::BoxPacking,
     color::Color,
     paint_context::PaintContext,
-    widget::{UploadMetrics, Widget},
+    widget::{Size, UploadMetrics, Widget},
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
 };
@@ -32,13 +32,13 @@ use std::sync::Arc;
 pub struct VerticalBox {
     info: WidgetInfo,
     background_color: Color,
-    override_width: Option<f32>,
-    override_height: Option<f32>,
+    override_width: Option<Size>,
+    override_height: Option<Size>,
     children: Vec<BoxPacking>,
 }
 
 impl VerticalBox {
-    pub fn with_children(children: &[Arc<RwLock<dyn Widget>>]) -> Self {
+    pub fn new_with_children(children: &[Arc<RwLock<dyn Widget>>]) -> Self {
         Self {
             children: children
                 .iter()
@@ -61,12 +61,12 @@ impl VerticalBox {
         self
     }
 
-    pub fn with_width(mut self, width: f32) -> Self {
+    pub fn with_width(mut self, width: Size) -> Self {
         self.override_width = Some(width);
         self
     }
 
-    pub fn with_height(mut self, height: f32) -> Self {
+    pub fn with_height(mut self, height: Size) -> Self {
         self.override_height = Some(height);
         self
     }
@@ -101,11 +101,12 @@ impl Widget for VerticalBox {
         for pack in &self.children {
             // Pack at 0,0
             let mut child_metrics = pack.widget().read().upload(gpu, context)?;
+            child_metrics.adjust_height(Size::Gpu(-height), gpu, context);
 
             // Offset up to our current height.
-            for &widget_info_index in &child_metrics.widget_info_indexes {
-                context.widget_info_pool[widget_info_index as usize].position[1] -= height;
-            }
+            // for &widget_info_index in &child_metrics.widget_info_indexes {
+            //     context.widget_info_pool[widget_info_index as usize].position[1] -= height;
+            // }
 
             width = width.max(child_metrics.width);
             height += child_metrics.height;
@@ -114,10 +115,10 @@ impl Widget for VerticalBox {
         context.current_depth -= PaintContext::BOX_DEPTH_SIZE;
 
         if let Some(override_width) = self.override_width {
-            width = override_width;
+            width = override_width.as_gpu(gpu);
         }
         if let Some(override_height) = self.override_height {
-            height = override_height;
+            height = override_height.as_gpu(gpu);
         }
 
         WidgetVertex::push_quad(
