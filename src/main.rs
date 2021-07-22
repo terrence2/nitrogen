@@ -36,7 +36,7 @@ use structopt::StructOpt;
 use terrain::{CpuDetailLevel, GpuDetailLevel, TerrainBuffer};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use ui::UiRenderPass;
-use widget::{Color, Label, PositionH, PositionV, Size, VerticalBox, WidgetBuffer};
+use widget::{Button, Color, Label, PositionH, PositionV, Size, VerticalBox, WidgetBuffer};
 use winit::window::Window;
 use world::WorldRenderPass;
 
@@ -235,11 +235,14 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         .with_size(Size::Pts(8.0))
         .with_pre_blended_text()
         .wrapped();
-    //let button_wp_1 = Button::
-    let controls_box = VerticalBox::new_with_children(&[version_label])
-        //.with_background_color(Color::Gray.darken(3.).opacity(0.8))
-        .with_background_color(Color::Transparent)
-        .wrapped();
+    let button_wp_1 = Button::new_with_text("Whitepoint 1").wrapped();
+    let button_wp_2 = Button::new_with_text("Whitepoint 2").wrapped();
+    let button_wp_3 = Button::new_with_text("Whitepoint 3").wrapped();
+    let controls_box =
+        VerticalBox::new_with_children(&[version_label, button_wp_1, button_wp_2, button_wp_3])
+            //.with_background_color(Color::Gray.darken(3.).opacity(0.8))
+            .with_background_color(Color::Transparent)
+            .wrapped();
     widgets
         .read()
         .root()

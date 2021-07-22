@@ -20,6 +20,7 @@ use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::{fmt::Debug, sync::Arc};
 
+/// Linear extents defined with units and conversions.
 #[derive(Copy, Clone, Debug)]
 pub enum Size {
     /// In 0.0 to 2.0, to fit into the -1 to 1 webgpu frame.
@@ -135,7 +136,10 @@ impl UploadMetrics {
 }
 
 pub trait Widget: Debug + Send + Sync + 'static {
+    /// Mutate paint context to reflect the presence of this widget.
     fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<UploadMetrics>;
+
+    /// Low level event handler.
     fn handle_event(
         &mut self,
         event: &GenericEvent,
