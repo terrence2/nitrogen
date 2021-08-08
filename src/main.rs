@@ -37,8 +37,8 @@ use terrain::{CpuDetailLevel, GpuDetailLevel, TerrainBuffer};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use ui::UiRenderPass;
 use widget::{
-    Border, Button, Color, Expander, Label, LeftBound, PositionH, PositionV, Size, VerticalBox,
-    WidgetBuffer,
+    Border, Button, Color, Expander, Label, Labeled, LeftBound, PositionH, PositionV, Size,
+    VerticalBox, WidgetBuffer,
 };
 use winit::window::Window;
 use world::WorldRenderPass;
@@ -251,7 +251,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
             .with_glass_background()
             .wrapped();
     let expander = Expander::new_with_child("☰ Nitrogen v0.1", controls_box)
-        .with_foreground_color(Color::White)
+        .with_color(Color::White)
         .with_background_color(Color::Gray.darken(3.).opacity(0.8))
         .with_glass_background()
         .with_border(

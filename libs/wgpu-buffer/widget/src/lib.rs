@@ -28,7 +28,7 @@ pub use crate::{
     color::Color,
     paint_context::PaintContext,
     size::{Border, Extent, LeftBound, Position, Size},
-    widget::Widget,
+    widget::{Labeled, Widget},
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
     widgets::{

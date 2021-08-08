@@ -18,7 +18,7 @@ use crate::{
     paint_context::PaintContext,
     size::{AspectMath, Extent, Position, ScreenDir, Size},
     text_run::TextRun,
-    widget::Widget,
+    widget::{Labeled, Widget},
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
@@ -30,33 +30,22 @@ use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct Label {
-    position: Position<Size>,
-    metrics: TextSpanMetrics,
     line: TextRun,
+
+    metrics: TextSpanMetrics,
+    allocated_position: Position<Size>,
+    allocated_extent: Extent<Size>,
 }
 
 impl Label {
     pub fn new<S: AsRef<str> + Into<String>>(content: S) -> Self {
         Self {
-            position: Position::origin(),
-            metrics: TextSpanMetrics::default(),
             line: TextRun::from_text(content.as_ref()).with_hidden_selection(),
+
+            metrics: TextSpanMetrics::default(),
+            allocated_position: Position::origin(),
+            allocated_extent: Extent::zero(),
         }
-    }
-
-    pub fn with_size(mut self, size: Size) -> Self {
-        self.line.set_default_size(size);
-        self
-    }
-
-    pub fn with_font(mut self, font_id: FontId) -> Self {
-        self.set_font(font_id);
-        self
-    }
-
-    pub fn with_color(mut self, color: Color) -> Self {
-        self.set_color(color);
-        self
     }
 
     pub fn with_pre_blended_text(mut self) -> Self {
@@ -67,17 +56,19 @@ impl Label {
     pub fn wrapped(self) -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(self))
     }
+}
 
-    pub fn set_text<S: AsRef<str> + Into<String>>(&mut self, content: S) {
+impl Labeled for Label {
+    fn set_text<S: AsRef<str> + Into<String>>(&mut self, content: S) {
         self.line.select_all();
         self.line.insert(content.as_ref());
     }
 
-    pub fn set_size(&mut self, size: Size) {
+    fn set_size(&mut self, size: Size) {
         self.line.set_default_size(size);
     }
 
-    pub fn set_color(&mut self, color: Color) {
+    fn set_color(&mut self, color: Color) {
         self.line.set_default_color(color);
         // Note: this is a label; we don't allow selection, so no need to save and restore it.
         self.line.select_all();
@@ -85,7 +76,7 @@ impl Label {
         self.line.select_none();
     }
 
-    pub fn set_font(&mut self, font_id: FontId) {
+    fn set_font(&mut self, font_id: FontId) {
         self.line.set_default_font(font_id);
         // Note: this is a label; we don't allow selection, so no need to save and restore it.
         self.line.select_all();
@@ -107,14 +98,15 @@ impl Widget for Label {
         &mut self,
         gpu: &Gpu,
         mut position: Position<Size>,
-        _extent: Extent<Size>,
+        extent: Extent<Size>,
         _font_context: &mut FontContext,
     ) -> Result<()> {
         *position.bottom_mut() =
             position
                 .bottom()
                 .sub(&self.metrics.descent.into(), gpu, ScreenDir::Vertical);
-        self.position = position;
+        self.allocated_position = position;
+        self.allocated_extent = extent;
         Ok(())
     }
 
@@ -122,7 +114,7 @@ impl Widget for Label {
         let widget_info_index = context.push_widget(&WidgetInfo::default());
 
         self.line
-            .upload(self.position, widget_info_index, gpu, context)?;
+            .upload(self.allocated_position, widget_info_index, gpu, context)?;
 
         Ok(())
     }

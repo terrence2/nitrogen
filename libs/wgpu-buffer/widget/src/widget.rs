@@ -13,7 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    font_context::FontContext,
+    color::Color,
+    font_context::{FontContext, FontId},
     paint_context::PaintContext,
     size::{Extent, Position, Size},
 };
@@ -23,6 +24,33 @@ use input::GenericEvent;
 use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::{fmt::Debug, sync::Arc};
+
+pub trait Labeled: Debug + Sized + Send + Sync + 'static {
+    fn set_text<S: AsRef<str> + Into<String>>(&mut self, content: S);
+    fn set_size(&mut self, size: Size);
+    fn set_color(&mut self, color: Color);
+    fn set_font(&mut self, font_id: FontId);
+
+    fn with_text<S: AsRef<str> + Into<String>>(mut self, content: S) -> Self {
+        self.set_text(content);
+        self
+    }
+
+    fn with_size(mut self, size: Size) -> Self {
+        self.set_size(size);
+        self
+    }
+
+    fn with_font(mut self, font_id: FontId) -> Self {
+        self.set_font(font_id);
+        self
+    }
+
+    fn with_color(mut self, color: Color) -> Self {
+        self.set_color(color);
+        self
+    }
+}
 
 pub trait Widget: Debug + Send + Sync + 'static {
     /// Return the minimum required size for displaying this widget.

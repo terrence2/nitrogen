@@ -17,7 +17,7 @@ use crate::{
     font_context::{FontContext, FontId},
     paint_context::PaintContext,
     size::{AspectMath, Border, Extent, Position, ScreenDir, Size},
-    widget::Widget,
+    widget::{Labeled, Widget},
     widget_vertex::WidgetVertex,
     widgets::button::Button,
     WidgetInfo,
@@ -68,16 +68,6 @@ impl Expander {
         }
     }
 
-    pub fn with_font(self, font_id: FontId) -> Self {
-        self.header.write().set_font(font_id);
-        self
-    }
-
-    pub fn with_foreground_color(self, color: Color) -> Self {
-        self.header.write().set_color(color);
-        self
-    }
-
     pub fn with_background_color(mut self, color: Color) -> Self {
         self.background_color = Some(color);
         self
@@ -101,6 +91,24 @@ impl Expander {
 
     pub fn wrapped(self) -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(self))
+    }
+}
+
+impl Labeled for Expander {
+    fn set_text<S: AsRef<str> + Into<String>>(&mut self, content: S) {
+        self.header.write().set_text(content);
+    }
+
+    fn set_size(&mut self, size: Size) {
+        self.header.write().set_size(size);
+    }
+
+    fn set_color(&mut self, color: Color) {
+        self.header.write().set_color(color);
+    }
+
+    fn set_font(&mut self, font_id: FontId) {
+        self.header.write().set_font(font_id);
     }
 }
 

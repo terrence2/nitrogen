@@ -17,7 +17,7 @@ use crate::{
     font_context::{FontContext, FontId},
     paint_context::PaintContext,
     size::{Extent, Position, Size},
-    widget::Widget,
+    widget::{Labeled, Widget},
     widgets::label::Label,
 };
 use anyhow::Result;
@@ -41,11 +41,6 @@ impl Button {
         }
     }
 
-    pub fn with_color(mut self, color: Color) -> Self {
-        self.set_color(color);
-        self
-    }
-
     pub fn with_action<S: Into<String>>(mut self, action: S) -> Self {
         self.action = action.into();
         self
@@ -54,16 +49,22 @@ impl Button {
     pub fn wrapped(self) -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(self))
     }
+}
 
-    pub fn set_size(&mut self, size: Size) {
+impl Labeled for Button {
+    fn set_text<S: AsRef<str> + Into<String>>(&mut self, content: S) {
+        self.label.write().set_text(content);
+    }
+
+    fn set_size(&mut self, size: Size) {
         self.label.write().set_size(size);
     }
 
-    pub fn set_color(&mut self, color: Color) {
+    fn set_color(&mut self, color: Color) {
         self.label.write().set_color(color);
     }
 
-    pub fn set_font(&mut self, font_id: FontId) {
+    fn set_font(&mut self, font_id: FontId) {
         self.label.write().set_font(font_id);
     }
 }
