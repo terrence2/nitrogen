@@ -16,7 +16,7 @@ use crate::{
     color::Color,
     font_context::{FontContext, FontId, TextSpanMetrics},
     paint_context::PaintContext,
-    size::{Extent, Position, ScreenDir, Size},
+    size::{AspectMath, Extent, Position, ScreenDir, Size},
     text_run::TextRun,
     widget::Widget,
     widget_info::WidgetInfo,
@@ -50,20 +50,12 @@ impl Label {
     }
 
     pub fn with_font(mut self, font_id: FontId) -> Self {
-        self.line.set_default_font(font_id);
-        // Note: this is a label; we don't allow selection, so no need to save and restore it.
-        self.line.select_all();
-        self.line.change_font(font_id);
-        self.line.select_none();
+        self.set_font(font_id);
         self
     }
 
     pub fn with_color(mut self, color: Color) -> Self {
-        self.line.set_default_color(color);
-        // Note: this is a label; we don't allow selection, so no need to save and restore it.
-        self.line.select_all();
-        self.line.change_color(color);
-        self.line.select_none();
+        self.set_color(color);
         self
     }
 
@@ -79,6 +71,26 @@ impl Label {
     pub fn set_text<S: AsRef<str> + Into<String>>(&mut self, content: S) {
         self.line.select_all();
         self.line.insert(content.as_ref());
+    }
+
+    pub fn set_size(&mut self, size: Size) {
+        self.line.set_default_size(size);
+    }
+
+    pub fn set_color(&mut self, color: Color) {
+        self.line.set_default_color(color);
+        // Note: this is a label; we don't allow selection, so no need to save and restore it.
+        self.line.select_all();
+        self.line.change_color(color);
+        self.line.select_none();
+    }
+
+    pub fn set_font(&mut self, font_id: FontId) {
+        self.line.set_default_font(font_id);
+        // Note: this is a label; we don't allow selection, so no need to save and restore it.
+        self.line.select_all();
+        self.line.change_font(font_id);
+        self.line.select_none();
     }
 }
 
@@ -98,9 +110,9 @@ impl Widget for Label {
         _extent: Extent<Size>,
         _font_context: &mut FontContext,
     ) -> Result<()> {
-        *position.top_mut() =
+        *position.bottom_mut() =
             position
-                .top()
+                .bottom()
                 .sub(&self.metrics.descent.into(), gpu, ScreenDir::Vertical);
         self.position = position;
         Ok(())

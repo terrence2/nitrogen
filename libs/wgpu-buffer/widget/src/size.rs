@@ -28,6 +28,12 @@ pub trait LeftBound {
     fn zero() -> Self;
 }
 
+pub trait AspectMath {
+    fn add(&self, other: &Self, gpu: &Gpu, dir: ScreenDir) -> Self;
+    fn sub(&self, other: &Self, gpu: &Gpu, dir: ScreenDir) -> Self;
+    fn max(&self, other: &Self, gpu: &Gpu, dir: ScreenDir) -> Self;
+}
+
 #[derive(Copy, Clone, Debug)]
 pub enum ScreenDir {
     Vertical,
@@ -140,6 +146,20 @@ impl AddAssign for RelSize {
     }
 }
 
+impl AspectMath for RelSize {
+    fn add(&self, other: &Self, _gpu: &Gpu, _dir: ScreenDir) -> Self {
+        *self + *other
+    }
+
+    fn sub(&self, other: &Self, _gpu: &Gpu, _dir: ScreenDir) -> Self {
+        *self - *other
+    }
+
+    fn max(&self, other: &Self, _gpu: &Gpu, _dir: ScreenDir) -> Self {
+        Self::Percent(self.as_percent().max(other.as_percent()))
+    }
+}
+
 impl Display for RelSize {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -196,14 +216,14 @@ impl AbsSize {
         ))
     }
 
-    pub fn max(&self, other: Self) -> Self {
+    pub fn max(&self, other: &Self) -> Self {
         match self {
             Self::Px(px) => Self::Px(px.max(other.as_px())),
             Self::Pts(pts) => Self::Pts(pts.max(other.as_pts())),
         }
     }
 
-    pub fn min(&self, other: Self) -> Self {
+    pub fn min(&self, other: &Self) -> Self {
         match self {
             Self::Px(px) => Self::Px(px.min(other.as_px())),
             Self::Pts(pts) => Self::Pts(pts.min(other.as_pts())),
@@ -296,6 +316,20 @@ impl AddAssign for AbsSize {
     }
 }
 
+impl AspectMath for AbsSize {
+    fn add(&self, other: &Self, _gpu: &Gpu, _dir: ScreenDir) -> Self {
+        *self + *other
+    }
+
+    fn sub(&self, other: &Self, _gpu: &Gpu, _dir: ScreenDir) -> Self {
+        *self - *other
+    }
+
+    fn max(&self, other: &Self, _gpu: &Gpu, _dir: ScreenDir) -> Self {
+        self.max(other)
+    }
+}
+
 impl Display for AbsSize {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -361,18 +395,10 @@ impl Size {
             Self::Abs(v) => v.as_pts(),
         }
     }
+}
 
-    pub fn max(&self, other: &Self, gpu: &Gpu, screen_dir: ScreenDir) -> Self {
-        match self {
-            Self::Rel(v) => Self::from_percent(
-                v.as_percent()
-                    .max(other.as_rel(gpu, screen_dir).as_percent()),
-            ),
-            Self::Abs(v) => Self::from_px(v.as_px().max(other.as_abs(gpu, screen_dir).as_px())),
-        }
-    }
-
-    pub fn add(&self, other: &Self, gpu: &Gpu, screen_dir: ScreenDir) -> Self {
+impl AspectMath for Size {
+    fn add(&self, other: &Self, gpu: &Gpu, screen_dir: ScreenDir) -> Self {
         match self {
             Self::Rel(v) => {
                 Self::from_percent(v.as_percent() + other.as_rel(gpu, screen_dir).as_percent())
@@ -381,12 +407,22 @@ impl Size {
         }
     }
 
-    pub fn sub(&self, other: &Self, gpu: &Gpu, screen_dir: ScreenDir) -> Self {
+    fn sub(&self, other: &Self, gpu: &Gpu, screen_dir: ScreenDir) -> Self {
         match self {
             Self::Rel(v) => {
                 Self::from_percent(v.as_percent() - other.as_rel(gpu, screen_dir).as_percent())
             }
             Self::Abs(v) => Self::from_px(v.as_px() - other.as_abs(gpu, screen_dir).as_px()),
+        }
+    }
+
+    fn max(&self, other: &Self, gpu: &Gpu, screen_dir: ScreenDir) -> Self {
+        match self {
+            Self::Rel(v) => Self::from_percent(
+                v.as_percent()
+                    .max(other.as_rel(gpu, screen_dir).as_percent()),
+            ),
+            Self::Abs(v) => Self::from_px(v.as_px().max(other.as_abs(gpu, screen_dir).as_px())),
         }
     }
 }
@@ -446,7 +482,7 @@ pub struct Extent<T> {
     height: T,
 }
 
-impl<T: Copy + Clone + LeftBound> Extent<T> {
+impl<T: Copy + Clone + LeftBound + AspectMath> Extent<T> {
     pub fn zero() -> Self {
         Extent {
             width: T::zero(),
@@ -482,12 +518,39 @@ impl<T: Copy + Clone + LeftBound> Extent<T> {
         self.height = height;
     }
 
+    pub fn width_mut(&mut self) -> &mut T {
+        &mut self.width
+    }
+
+    pub fn height_mut(&mut self) -> &mut T {
+        &mut self.height
+    }
+
     pub fn set_axis(&mut self, dir: ScreenDir, v: T) {
         match dir {
             ScreenDir::Horizontal => self.width = v,
             ScreenDir::Vertical => self.height = v,
             ScreenDir::Depth => panic!("cannot set depth on extent"),
         }
+    }
+
+    pub fn with_border(mut self, border: &Border<T>, gpu: &Gpu) -> Self {
+        self.add_border(border, gpu);
+        self
+    }
+
+    pub fn add_border(&mut self, border: &Border<T>, gpu: &Gpu) {
+        self.width = self.width.add(&border.left, gpu, ScreenDir::Horizontal);
+        self.width = self.width.add(&border.right, gpu, ScreenDir::Horizontal);
+        self.height = self.height.add(&border.top, gpu, ScreenDir::Vertical);
+        self.height = self.height.add(&border.bottom, gpu, ScreenDir::Vertical);
+    }
+
+    pub fn remove_border(&mut self, border: &Border<T>, gpu: &Gpu) {
+        self.width = self.width.sub(&border.left, gpu, ScreenDir::Horizontal);
+        self.width = self.width.sub(&border.right, gpu, ScreenDir::Horizontal);
+        self.height = self.height.sub(&border.top, gpu, ScreenDir::Vertical);
+        self.height = self.height.sub(&border.bottom, gpu, ScreenDir::Vertical);
     }
 }
 
@@ -517,15 +580,15 @@ impl Extent<Size> {
 #[derive(Copy, Clone, Debug)]
 pub struct Position<T> {
     left: T,
-    top: T,
+    bottom: T,
     depth: RelSize,
 }
 
-impl<T: Copy + Clone + LeftBound> Position<T> {
+impl<T: Copy + Clone + LeftBound + AspectMath> Position<T> {
     pub fn origin() -> Self {
         Self {
             left: T::zero(),
-            top: T::zero(),
+            bottom: T::zero(),
             depth: RelSize::zero(),
         }
     }
@@ -533,27 +596,31 @@ impl<T: Copy + Clone + LeftBound> Position<T> {
     pub fn new(left: T, top: T) -> Self {
         Self {
             left,
-            top,
+            bottom: top,
             depth: RelSize::zero(),
         }
     }
 
-    pub fn new_with_depth(left: T, top: T, depth: RelSize) -> Self {
-        Self { left, top, depth }
+    pub fn new_with_depth(left: T, bottom: T, depth: RelSize) -> Self {
+        Self {
+            left,
+            bottom,
+            depth,
+        }
     }
 
     pub fn left(&self) -> T {
         self.left
     }
 
-    pub fn top(&self) -> T {
-        self.top
+    pub fn bottom(&self) -> T {
+        self.bottom
     }
 
     pub fn axis(&self, dir: ScreenDir) -> T {
         match dir {
             ScreenDir::Horizontal => self.left,
-            ScreenDir::Vertical => self.top,
+            ScreenDir::Vertical => self.bottom,
             ScreenDir::Depth => panic!("no generic depth"),
         }
     }
@@ -562,14 +629,14 @@ impl<T: Copy + Clone + LeftBound> Position<T> {
         &mut self.left
     }
 
-    pub fn top_mut(&mut self) -> &mut T {
-        &mut self.top
+    pub fn bottom_mut(&mut self) -> &mut T {
+        &mut self.bottom
     }
 
     pub fn axis_mut(&mut self, dir: ScreenDir) -> &mut T {
         match dir {
             ScreenDir::Horizontal => &mut self.left,
-            ScreenDir::Vertical => &mut self.top,
+            ScreenDir::Vertical => &mut self.bottom,
             ScreenDir::Depth => panic!("no generic depth"),
         }
     }
@@ -582,13 +649,23 @@ impl<T: Copy + Clone + LeftBound> Position<T> {
         self.depth = depth;
         self
     }
+
+    pub fn add_border(&mut self, border: &Border<T>, gpu: &Gpu) {
+        self.bottom = self.bottom.add(&border.bottom, gpu, ScreenDir::Vertical);
+        self.left = self.left.add(&border.left, gpu, ScreenDir::Horizontal);
+    }
+
+    pub fn with_border(mut self, border: &Border<T>, gpu: &Gpu) -> Self {
+        self.add_border(border, gpu);
+        self
+    }
 }
 
 impl Position<Size> {
     pub fn as_rel(self, gpu: &Gpu) -> Position<RelSize> {
         Position::<RelSize>::new_with_depth(
             self.left.as_rel(gpu, ScreenDir::Horizontal),
-            self.top.as_rel(gpu, ScreenDir::Vertical),
+            self.bottom.as_rel(gpu, ScreenDir::Vertical),
             self.depth,
         )
     }
@@ -596,7 +673,7 @@ impl Position<Size> {
     pub fn as_abs(self, gpu: &Gpu) -> Position<AbsSize> {
         Position::<AbsSize>::new_with_depth(
             self.left.as_abs(gpu, ScreenDir::Horizontal),
-            self.top.as_abs(gpu, ScreenDir::Vertical),
+            self.bottom.as_abs(gpu, ScreenDir::Vertical),
             self.depth,
         )
     }
@@ -604,20 +681,38 @@ impl Position<Size> {
 
 impl From<Position<AbsSize>> for Position<Size> {
     fn from(abs: Position<AbsSize>) -> Self {
-        Position::<Size>::new_with_depth(abs.left().into(), abs.top().into(), abs.depth())
+        Position::<Size>::new_with_depth(abs.left().into(), abs.bottom().into(), abs.depth())
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct Padding {
-    top: Size,
-    bottom: Size,
-    left: Size,
-    right: Size,
+#[derive(Clone, Debug)]
+pub struct Border<T> {
+    top: T,
+    bottom: T,
+    left: T,
+    right: T,
 }
 
-impl Padding {
-    pub fn new_uniform(size: Size) -> Self {
+impl<T: Copy + Clone + LeftBound> Border<T> {
+    pub fn empty() -> Self {
+        Self {
+            top: T::zero(),
+            bottom: T::zero(),
+            left: T::zero(),
+            right: T::zero(),
+        }
+    }
+
+    pub fn new(top: T, bottom: T, left: T, right: T) -> Self {
+        Self {
+            top,
+            bottom,
+            left,
+            right,
+        }
+    }
+
+    pub fn new_uniform(size: T) -> Self {
         Self {
             top: size,
             bottom: size,
@@ -627,22 +722,22 @@ impl Padding {
     }
 
     #[allow(unused)]
-    pub fn left(&self) -> Size {
+    pub fn left(&self) -> T {
         self.left
     }
 
     #[allow(unused)]
-    pub fn right(&self) -> Size {
+    pub fn right(&self) -> T {
         self.right
     }
 
     #[allow(unused)]
-    pub fn top(&self) -> Size {
+    pub fn top(&self) -> T {
         self.top
     }
 
     #[allow(unused)]
-    pub fn bottom(&self) -> Size {
+    pub fn bottom(&self) -> T {
         self.bottom
     }
 }

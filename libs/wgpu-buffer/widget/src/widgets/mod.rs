@@ -14,6 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 pub(crate) mod button;
 pub(crate) mod event_mapper;
+pub(crate) mod expander;
 pub(crate) mod float_box;
 pub(crate) mod label;
 pub(crate) mod line_edit;

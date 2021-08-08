@@ -322,7 +322,7 @@ impl Tile {
     ) -> Arc<RwLock<Tile>> {
         assert_eq!(self.level.offset() + 1, target_level.offset());
         let tile = Arc::new(RwLock::new(Tile::new_uninitialized(
-            &self.prefix,
+            self.prefix,
             target_level,
             index,
             self.child_base(index),

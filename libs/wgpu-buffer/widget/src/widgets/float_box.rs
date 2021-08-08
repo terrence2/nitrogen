@@ -119,7 +119,7 @@ impl Widget for FloatBox {
                     PositionH::Center => (extent.width() / 2.) - (child_extent.width() / 2.),
                     PositionH::End => extent.width() - child_extent.width(),
                 };
-            let top_offset = position.top()
+            let top_offset = position.bottom()
                 + match pack.float_v {
                     PositionV::Top => extent.height() - child_extent.height(),
                     PositionV::Center => (extent.height() / 2.) - (child_extent.height() / 2.),

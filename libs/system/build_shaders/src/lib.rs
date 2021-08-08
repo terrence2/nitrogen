@@ -185,7 +185,7 @@ pub fn build_shader_from_path(
     let path_str = path.to_str().expect("a filename");
 
     let shader_content = fs::read_to_string(path)?;
-    let shader_type = type_for_filename(&path_str);
+    let shader_type = type_for_filename(path_str);
 
     let mut options = CompileOptions::new().expect("some options");
     options.set_warnings_as_errors();

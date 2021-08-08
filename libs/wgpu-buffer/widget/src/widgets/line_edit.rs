@@ -16,7 +16,7 @@ use crate::{
     color::Color,
     font_context::{FontContext, FontId, TextSpanMetrics},
     paint_context::PaintContext,
-    size::{Extent, Position, ScreenDir, Size},
+    size::{AspectMath, Extent, Position, ScreenDir, Size},
     text_run::TextRun,
     widget::Widget,
     widget_info::WidgetInfo,
@@ -123,9 +123,9 @@ impl Widget for LineEdit {
         extent: Extent<Size>,
         _font_context: &mut FontContext,
     ) -> Result<()> {
-        *position.top_mut() =
+        *position.bottom_mut() =
             position
-                .top()
+                .bottom()
                 .sub(&self.metrics.descent.into(), gpu, ScreenDir::Vertical);
         self.position = position;
         self.extent = extent;

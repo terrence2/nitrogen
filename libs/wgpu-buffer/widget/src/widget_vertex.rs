@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     color::Color,
-    size::{Extent, Position, ScreenDir, Size},
+    size::{AspectMath, Extent, Position, ScreenDir, Size},
 };
 use gpu::Gpu;
 use memoffset::offset_of;
@@ -166,13 +166,13 @@ impl WidgetVertex {
         pool: &mut Vec<WidgetVertex>,
     ) {
         Self::push_textured_quad(
-            [position.left(), position.top()],
+            [position.left(), position.bottom()],
             [
                 position
                     .left()
                     .add(&extent.width(), gpu, ScreenDir::Horizontal),
                 position
-                    .top()
+                    .bottom()
                     .add(&extent.height(), gpu, ScreenDir::Vertical),
             ],
             position.depth().as_depth(),

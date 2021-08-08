@@ -114,7 +114,7 @@ impl Widget for TextEdit {
                 height_offset += span_metrics.line_gap;
             }
             height_offset += span_metrics.height;
-            width = width.max(span_metrics.width);
+            width = width.max(&span_metrics.width);
         }
         self.measured_extent = Extent::new(width, height_offset);
         Ok(self.measured_extent.into())
@@ -137,14 +137,14 @@ impl Widget for TextEdit {
         let widget_info_index = context.push_widget(&info);
 
         let mut pos = self.layout_position.as_abs(gpu);
-        *pos.top_mut() += self.measured_extent.height();
+        *pos.bottom_mut() += self.measured_extent.height();
         for (i, line) in self.lines.iter().enumerate() {
             let span_metrics = line.measure(gpu, &mut context.font_context)?;
-            *pos.top_mut() -= span_metrics.height;
+            *pos.bottom_mut() -= span_metrics.height;
             //println!("{}: {}", line.flatten(), pos.top().as_px());
             let span_metrics = line.upload(pos.into(), widget_info_index, gpu, context)?;
             if i != self.lines.len() - 1 {
-                *pos.top_mut() -= span_metrics.line_gap;
+                *pos.bottom_mut() -= span_metrics.line_gap;
             }
         }
 

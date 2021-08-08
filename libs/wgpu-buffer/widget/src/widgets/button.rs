@@ -13,9 +13,10 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    font_context::FontContext,
+    color::Color,
+    font_context::{FontContext, FontId},
     paint_context::PaintContext,
-    size::{Extent, Padding, Position, Size},
+    size::{Border, Extent, Position, Size},
     widget::Widget,
     widgets::label::Label,
 };
@@ -29,19 +30,41 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub struct Button {
     label: Arc<RwLock<Label>>,
-    padding: Padding,
+    action: String,
 }
 
 impl Button {
     pub fn new_with_text<S: AsRef<str> + Into<String>>(s: S) -> Self {
         Button {
             label: Label::new(s).wrapped(),
-            padding: Padding::new_uniform(Size::from_px(3.)),
+            action: String::new(),
         }
+    }
+
+    pub fn with_color(mut self, color: Color) -> Self {
+        self.set_color(color);
+        self
+    }
+
+    pub fn with_action<S: Into<String>>(mut self, action: S) -> Self {
+        self.action = action.into();
+        self
     }
 
     pub fn wrapped(self) -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(self))
+    }
+
+    pub fn set_size(&mut self, size: Size) {
+        self.label.write().set_size(size);
+    }
+
+    pub fn set_color(&mut self, color: Color) {
+        self.label.write().set_color(color);
+    }
+
+    pub fn set_font(&mut self, font_id: FontId) {
+        self.label.write().set_font(font_id);
     }
 }
 

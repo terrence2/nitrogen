@@ -27,13 +27,14 @@ pub use crate::{
     box_packing::{PositionH, PositionV},
     color::Color,
     paint_context::PaintContext,
-    size::{Extent, Position, Size},
+    size::{Border, Extent, LeftBound, Position, Size},
     widget::Widget,
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
     widgets::{
         button::Button,
         event_mapper::{Bindings, EventMapper},
+        expander::Expander,
         float_box::FloatBox,
         label::Label,
         line_edit::LineEdit,
@@ -87,6 +88,7 @@ pub struct WidgetBuffer {
     root: Arc<RwLock<FloatBox>>,
     paint_context: PaintContext,
     keyboard_focus: String,
+    cursor_position: Position<Size>,
 
     // Auto-inserted widgets.
     terminal: Arc<RwLock<Terminal>>,
@@ -115,10 +117,10 @@ impl WidgetBuffer {
         trace!("WidgetBuffer::new");
 
         let mut paint_context = PaintContext::new(gpu)?;
-        let fira_mono = TtfFont::from_bytes(&FIRA_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
-        let fira_sans = TtfFont::from_bytes(&FIRA_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
-        let dejavu_mono = TtfFont::from_bytes(&DEJAVU_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
-        let dejavu_sans = TtfFont::from_bytes(&DEJAVU_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
+        let fira_mono = TtfFont::from_bytes(FIRA_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
+        let fira_sans = TtfFont::from_bytes(FIRA_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
+        let dejavu_mono = TtfFont::from_bytes(DEJAVU_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
+        let dejavu_sans = TtfFont::from_bytes(DEJAVU_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
         paint_context.add_font("dejavu-sans", dejavu_sans.clone());
         paint_context.add_font("dejavu-mono", dejavu_mono);
         paint_context.add_font("fira-sans", fira_sans);
@@ -213,6 +215,7 @@ impl WidgetBuffer {
             root,
             paint_context,
             keyboard_focus: "mapper".to_owned(),
+            cursor_position: Position::origin(),
 
             terminal,
             mapper,
@@ -257,40 +260,6 @@ impl WidgetBuffer {
         self.paint_context.dump_glyphs();
     }
 
-    pub fn handle_events(
-        &mut self,
-        events: &[GenericEvent],
-        interpreter: Arc<RwLock<Interpreter>>,
-    ) -> Result<()> {
-        for event in events {
-            if let GenericEvent::KeyboardKey {
-                virtual_keycode,
-                press_state,
-                modifiers_state,
-                ..
-            } = event
-            {
-                if *virtual_keycode == VirtualKeyCode::Grave
-                    && *modifiers_state == ModifiersState::SHIFT
-                    && *press_state == ElementState::Pressed
-                {
-                    self.show_terminal = !self.show_terminal;
-                    self.set_keyboard_focus(if self.show_terminal {
-                        "terminal"
-                    } else {
-                        "mapper"
-                    });
-                    self.terminal.write().set_visible(self.show_terminal);
-                    continue;
-                }
-            }
-            self.root()
-                .write()
-                .handle_event(event, &self.keyboard_focus, interpreter.clone())?;
-        }
-        Ok(())
-    }
-
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.bind_group_layout
     }
@@ -321,19 +290,61 @@ impl WidgetBuffer {
         0u32..self.paint_context.text_pool.len() as u32
     }
 
-    pub fn make_upload_buffer(
-        &mut self,
-        gpu: &mut Gpu,
-        async_rt: &Runtime,
-        tracker: &mut UploadTracker,
-    ) -> Result<()> {
+    pub fn layout_for_frame(&mut self, gpu: &mut Gpu) -> Result<()> {
         self.root.write().layout(
             gpu,
             Position::origin(),
             Extent::new(Size::from_percent(100.), Size::from_percent(100.)),
             &mut self.paint_context.font_context,
         )?;
+        Ok(())
+    }
 
+    pub fn handle_events(
+        &mut self,
+        events: &[GenericEvent],
+        interpreter: Arc<RwLock<Interpreter>>,
+    ) -> Result<()> {
+        for event in events {
+            if let GenericEvent::KeyboardKey {
+                virtual_keycode,
+                press_state,
+                modifiers_state,
+                ..
+            } = event
+            {
+                if *virtual_keycode == VirtualKeyCode::Grave
+                    && *modifiers_state == ModifiersState::SHIFT
+                    && *press_state == ElementState::Pressed
+                {
+                    self.show_terminal = !self.show_terminal;
+                    self.set_keyboard_focus(if self.show_terminal {
+                        "terminal"
+                    } else {
+                        "mapper"
+                    });
+                    self.terminal.write().set_visible(self.show_terminal);
+                    continue;
+                }
+            }
+            if let GenericEvent::CursorMove { pixel_position, .. } = event {
+                let (x, y) = *pixel_position;
+                self.cursor_position =
+                    Position::new(Size::from_px(x as f32), Size::from_px(y as f32));
+            }
+            self.root()
+                .write()
+                .handle_event(event, &self.keyboard_focus, interpreter.clone())?;
+        }
+        Ok(())
+    }
+
+    pub fn make_upload_buffer(
+        &mut self,
+        gpu: &mut Gpu,
+        async_rt: &Runtime,
+        tracker: &mut UploadTracker,
+    ) -> Result<()> {
         self.paint_context.reset_for_frame();
         self.root.read().upload(gpu, &mut self.paint_context)?;
 

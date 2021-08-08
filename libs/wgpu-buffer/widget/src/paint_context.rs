@@ -37,7 +37,9 @@ pub struct PaintContext {
 }
 
 impl PaintContext {
-    pub const TEXT_DEPTH: RelSize = RelSize::from_percent(0.75);
+    pub const BACKGROUND_DEPTH: RelSize = RelSize::from_percent(0.75);
+    pub const BORDER_DEPTH: RelSize = RelSize::from_percent(0.5);
+    pub const TEXT_DEPTH: RelSize = RelSize::from_percent(0.25);
     pub const BOX_DEPTH_SIZE: RelSize = RelSize::from_percent(1.);
 
     pub fn new(gpu: &Gpu) -> Result<Self> {

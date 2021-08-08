@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     font_context::FontContext,
-    size::{Extent, LeftBound, Position, ScreenDir, Size},
+    size::{AspectMath, Extent, LeftBound, Position, ScreenDir, Size},
     widget::Widget,
 };
 use anyhow::Result;

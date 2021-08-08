@@ -36,7 +36,10 @@ use structopt::StructOpt;
 use terrain::{CpuDetailLevel, GpuDetailLevel, TerrainBuffer};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use ui::UiRenderPass;
-use widget::{Button, Color, Label, PositionH, PositionV, Size, VerticalBox, WidgetBuffer};
+use widget::{
+    Border, Button, Color, Expander, Label, LeftBound, PositionH, PositionV, Size, VerticalBox,
+    WidgetBuffer,
+};
 use winit::window::Window;
 use world::WorldRenderPass;
 
@@ -227,6 +230,8 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         composite,
     )?;
 
+    let system = System::new(&mut interpreter.write());
+
     ///////////////////////////////////////////////////////////
     // UI Setup
     let version_label = Label::new("Nitrogen v0.1")
@@ -235,7 +240,9 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         .with_size(Size::from_pts(8.0))
         .with_pre_blended_text()
         .wrapped();
-    let button_wp_1 = Button::new_with_text("Whitepoint 1").wrapped();
+    let button_wp_1 = Button::new_with_text("--> ☰ <--")
+        .with_action("camera.set_whitepoint()")
+        .wrapped();
     let button_wp_2 = Button::new_with_text("Whitepoint 2").wrapped();
     let button_wp_3 = Button::new_with_text("Whitepoint 3").wrapped();
     let controls_box =
@@ -243,12 +250,32 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
             .with_background_color(Color::Gray.darken(3.).opacity(0.8))
             .with_glass_background()
             .wrapped();
+    let expander = Expander::new_with_child("☰ Nitrogen v0.1", controls_box)
+        .with_foreground_color(Color::White)
+        .with_background_color(Color::Gray.darken(3.).opacity(0.8))
+        .with_glass_background()
+        .with_border(
+            Color::Black,
+            Border::new(
+                Size::zero(),
+                Size::from_px(2.),
+                Size::from_px(2.),
+                Size::zero(),
+            ),
+        )
+        .with_padding(Border::new(
+            Size::from_px(2.),
+            Size::from_px(3.),
+            Size::from_px(3.),
+            Size::from_px(2.),
+        ))
+        .wrapped();
     widgets
         .read()
         .root()
         .write()
-        .add_child("controls", controls_box)
-        // .add_child("version", version_label.clone())
+        //.add_child("controls", controls_box)
+        .add_child("controls", expander)
         .set_float(PositionH::End, PositionV::Top);
 
     let fps_label = Label::new("fps")
@@ -305,8 +332,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     //     meters!(1308.7262),
     // ))?;
 
-    let system = System::new(&mut interpreter.write());
-
     {
         let interp = &mut interpreter.write();
         gpu.write().add_default_bindings(interp)?;
@@ -320,7 +345,12 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     while !system.read().exit {
         let loop_start = Instant::now();
 
-        widgets
+        frame_graph
+            .widgets
+            .write()
+            .layout_for_frame(&mut gpu.write())?;
+        frame_graph
+            .widgets
             .write()
             .handle_events(&input_controller.poll_events()?, interpreter.clone())?;
 

@@ -466,12 +466,12 @@ impl TextRun {
         let mut min_descent = AbsSize::zero();
         let mut max_line_gap = AbsSize::zero();
         for span in self.spans.iter() {
-            let span_metrics = font_context.measure_text(&span, gpu)?;
+            let span_metrics = font_context.measure_text(span, gpu)?;
             total_width += span_metrics.width;
-            max_height = max_height.max(span_metrics.height);
-            max_line_gap = max_line_gap.max(span_metrics.line_gap);
-            max_ascent = max_ascent.max(span_metrics.ascent);
-            min_descent = min_descent.min(span_metrics.descent);
+            max_height = max_height.max(&span_metrics.height);
+            max_line_gap = max_line_gap.max(&span_metrics.line_gap);
+            max_ascent = max_ascent.max(&span_metrics.ascent);
+            min_descent = min_descent.min(&span_metrics.descent);
         }
         Ok(TextSpanMetrics {
             width: total_width,
@@ -509,18 +509,18 @@ impl TextRun {
             position += span.content().len();
 
             let span_metrics = context.layout_text(
-                &span,
-                Position::new(init_pos.left() + total_width, init_pos.top()),
+                span,
+                Position::new(init_pos.left() + total_width, init_pos.bottom()),
                 widget_info_index,
                 selection_area,
                 gpu,
             )?;
             total_width += span_metrics.width;
 
-            max_height = max_height.max(span_metrics.height);
-            max_line_gap = max_line_gap.max(span_metrics.line_gap);
-            max_ascent = max_ascent.max(span_metrics.ascent);
-            min_descent = min_descent.min(span_metrics.descent);
+            max_height = max_height.max(&span_metrics.height);
+            max_line_gap = max_line_gap.max(&span_metrics.line_gap);
+            max_ascent = max_ascent.max(&span_metrics.ascent);
+            min_descent = min_descent.min(&span_metrics.descent);
         }
 
         Ok(TextSpanMetrics {

@@ -260,7 +260,7 @@ impl FontContext {
         let advance = font.read().advance_style();
 
         let mut x_pos = offset.left();
-        let y_pos = offset.top();
+        let y_pos = offset.bottom();
         let mut prior = None;
         for (i, c) in span.content().chars().enumerate() {
             let frame = self.load_glyph(span.font(), c, scale_px, gpu)?;
@@ -304,8 +304,8 @@ impl FontContext {
                     let mut bx0 = offset.left() + x_pos;
                     Self::align_to_px(phys_w, &mut bx0);
                     let bx1 = bx0 + AbsSize::from_px(2.);
-                    let by0 = offset.top() + descent;
-                    let by1 = offset.top() + ascent;
+                    let by0 = offset.bottom() + descent;
+                    let by1 = offset.bottom() + ascent;
                     let bz = offset.depth() - RelSize::from_percent(0.1);
 
                     WidgetVertex::push_quad(
@@ -323,8 +323,8 @@ impl FontContext {
                 if range.contains(&i) {
                     let bx0 = offset.left() + x_pos;
                     let bx1 = offset.left() + x_pos + kerning + AbsSize::from_px(lo_x as f32) + adv;
-                    let by0 = offset.top() + descent;
-                    let by1 = offset.top() + ascent;
+                    let by0 = offset.bottom() + descent;
+                    let by1 = offset.bottom() + ascent;
                     let bz = offset.depth() - RelSize::from_percent(0.1);
 
                     WidgetVertex::push_quad(
@@ -351,8 +351,8 @@ impl FontContext {
                 let mut bx0 = offset.left() + x_pos;
                 Self::align_to_px(phys_w, &mut bx0);
                 let bx1 = bx0 + AbsSize::from_px(2.);
-                let by0 = offset.top() + descent;
-                let by1 = offset.top() + ascent;
+                let by0 = offset.bottom() + descent;
+                let by1 = offset.bottom() + ascent;
                 let bz = offset.depth() - RelSize::from_percent(0.1);
 
                 WidgetVertex::push_quad(

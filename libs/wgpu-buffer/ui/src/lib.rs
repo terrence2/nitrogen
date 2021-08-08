@@ -377,7 +377,7 @@ impl UiRenderPass {
     ) -> Result<wgpu::RenderPass<'a>> {
         // Background
         rpass.set_pipeline(&self.background_pipeline);
-        rpass.set_bind_group(Group::Globals.index(), &global_data.bind_group(), &[]);
+        rpass.set_bind_group(Group::Globals.index(), global_data.bind_group(), &[]);
         rpass.set_bind_group(Group::Ui.index(), widget_buffer.bind_group(), &[]);
         rpass.set_bind_group(Group::OffScreenWorld.index(), world.bind_group(), &[]);
         rpass.set_vertex_buffer(0, widget_buffer.background_vertex_buffer());
@@ -385,7 +385,7 @@ impl UiRenderPass {
         // Image
         // Text
         rpass.set_pipeline(&self.text_pipeline);
-        rpass.set_bind_group(Group::Globals.index(), &global_data.bind_group(), &[]);
+        rpass.set_bind_group(Group::Globals.index(), global_data.bind_group(), &[]);
         rpass.set_bind_group(Group::Ui.index(), widget_buffer.bind_group(), &[]);
         rpass.set_vertex_buffer(0, widget_buffer.text_vertex_buffer());
         rpass.draw(widget_buffer.text_vertex_range(), 0..1);

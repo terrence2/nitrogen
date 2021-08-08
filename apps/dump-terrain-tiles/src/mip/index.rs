@@ -137,7 +137,7 @@ impl IndexDataSet {
     }
 
     pub fn prefix(&self) -> &str {
-        &self.prefix
+        self.prefix
     }
 
     pub fn base_path(&self) -> &Path {
@@ -158,7 +158,7 @@ impl IndexDataSet {
 
     pub fn as_json(&self) -> Result<JsonValue> {
         let mut obj = JsonValue::new_object();
-        obj.insert::<&str>("prefix", &self.prefix)?;
+        obj.insert::<&str>("prefix", self.prefix)?;
         obj.insert("kind", self.kind.name())?;
         obj.insert("coordinates", self.coordinates.name())?;
         // let mut index = JsonValue::new_object();

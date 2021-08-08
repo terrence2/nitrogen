@@ -110,7 +110,7 @@ impl Terminal {
                 }
             } else if let Expr::Attr(mod_name_term, Term::Symbol(sym)) = e.as_mut() {
                 if let Expr::Term(Term::Symbol(mod_name)) = mod_name_term.as_ref() {
-                    if let Some(Value::Module(pin)) = interpreter.read().get_global(&mod_name) {
+                    if let Some(Value::Module(pin)) = interpreter.read().get_global(mod_name) {
                         let ns = pin.read();
                         let sim = ns
                             .names()
