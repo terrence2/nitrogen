@@ -68,12 +68,12 @@ impl Expander {
         }
     }
 
-    pub fn with_font(mut self, font_id: FontId) -> Self {
+    pub fn with_font(self, font_id: FontId) -> Self {
         self.header.write().set_font(font_id);
         self
     }
 
-    pub fn with_foreground_color(mut self, color: Color) -> Self {
+    pub fn with_foreground_color(self, color: Color) -> Self {
         self.header.write().set_color(color);
         self
     }

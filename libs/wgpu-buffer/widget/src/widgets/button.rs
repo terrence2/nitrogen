@@ -16,7 +16,7 @@ use crate::{
     color::Color,
     font_context::{FontContext, FontId},
     paint_context::PaintContext,
-    size::{Border, Extent, Position, Size},
+    size::{Extent, Position, Size},
     widget::Widget,
     widgets::label::Label,
 };

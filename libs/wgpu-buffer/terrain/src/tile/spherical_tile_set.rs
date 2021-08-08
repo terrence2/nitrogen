@@ -286,7 +286,7 @@ impl SphericalNormalsTileSet {
                             push_constant_ranges: &[],
                             bind_group_layouts: &[
                                 globals_buffer.bind_group_layout(),
-                                &accumulate_common_bind_group_layout,
+                                accumulate_common_bind_group_layout,
                                 common.bind_group_layout(),
                             ],
                         },
@@ -358,7 +358,7 @@ impl TileSet for SphericalNormalsTileSet {
         );
         cpass.set_bind_group(
             Group::TerrainAccumulateTileSet.index(),
-            &self.common.bind_group(),
+            self.common.bind_group(),
             &[],
         );
         cpass.dispatch(extent.width / 8, extent.height / 8, 1);

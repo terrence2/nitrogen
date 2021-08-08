@@ -642,7 +642,7 @@ impl TerrainBuffer {
     ) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("terrain-composite-bind-group"),
-            layout: &bind_group_layout,
+            layout: bind_group_layout,
             entries: &[
                 // deferred texture
                 wgpu::BindGroupEntry {
@@ -689,7 +689,7 @@ impl TerrainBuffer {
     ) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("terrain-accumulate-bind-group"),
-            layout: &bind_group_layout,
+            layout: bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
@@ -762,7 +762,7 @@ impl TerrainBuffer {
         // Use our height tiles to displace mesh.
         cpass = self.tile_manager.displace_height(
             self.patch_manager.target_vertex_count(),
-            &self.patch_manager.displace_height_bind_group(),
+            self.patch_manager.displace_height_bind_group(),
             cpass,
         )?;
 
@@ -804,7 +804,7 @@ impl TerrainBuffer {
         globals_buffer: &'a GlobalParametersBuffer,
     ) -> Result<wgpu::RenderPass<'a>> {
         rpass.set_pipeline(&self.deferred_texture_pipeline);
-        rpass.set_bind_group(Group::Globals.index(), &globals_buffer.bind_group(), &[]);
+        rpass.set_bind_group(Group::Globals.index(), globals_buffer.bind_group(), &[]);
         rpass.set_vertex_buffer(0, self.patch_manager.vertex_buffer());
         for i in 0..self.patch_manager.num_patches() {
             let winding = self.patch_manager.patch_winding(i);

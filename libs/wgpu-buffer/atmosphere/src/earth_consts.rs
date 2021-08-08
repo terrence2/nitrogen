@@ -268,12 +268,12 @@ impl EarthParameters {
         lambda_power: f64,
     ) -> [f32; 3] {
         let mut out = [0f32; 3];
-        let solar = interpolate(&wavelengths, &sun_irradiance, RGB_LAMBDAS, 1.0);
+        let solar = interpolate(wavelengths, sun_irradiance, RGB_LAMBDAS, 1.0);
         for lambda in LAMBDA_RANGE {
             let f_lambda = f64::from(lambda);
             let xyz_bar = cie_color_coefficient_at_wavelength(f_lambda);
             let rgb_bar = convert_xyz_to_srgb(xyz_bar, 1.0);
-            let irradiance = interpolate_at_lambda(&wavelengths, &sun_irradiance, f_lambda);
+            let irradiance = interpolate_at_lambda(wavelengths, sun_irradiance, f_lambda);
             for i in 0..3 {
                 out[i] += (rgb_bar[i] * irradiance / f64::from(solar[i])
                     * (f_lambda / RGB_LAMBDAS[i]).pow(lambda_power))
