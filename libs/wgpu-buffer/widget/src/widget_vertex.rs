@@ -12,7 +12,11 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::color::Color;
+use crate::{
+    color::Color,
+    size::{Extent, Position, ScreenDir, Size},
+};
+use gpu::Gpu;
 use memoffset::offset_of;
 use std::mem;
 use zerocopy::{AsBytes, FromBytes};
@@ -81,15 +85,21 @@ impl WidgetVertex {
 
     #[allow(clippy::too_many_arguments)]
     pub fn push_textured_quad(
-        [x0, y0]: [f32; 2],
-        [x1, y1]: [f32; 2],
+        [x0, y0]: [Size; 2],
+        [x1, y1]: [Size; 2],
         z: f32,
         [s0, t0]: [f32; 2],
         [s1, t1]: [f32; 2],
         color: &Color,
         widget_info_index: u32,
+        gpu: &Gpu,
         pool: &mut Vec<WidgetVertex>,
     ) {
+        let x0 = x0.as_rel(gpu, ScreenDir::Horizontal).as_gpu();
+        let y0 = y0.as_rel(gpu, ScreenDir::Vertical).as_gpu();
+        let x1 = x1.as_rel(gpu, ScreenDir::Horizontal).as_gpu();
+        let y1 = y1.as_rel(gpu, ScreenDir::Vertical).as_gpu();
+
         // Build 4 corner vertices.
         let v00 = WidgetVertex {
             position: [x0, y0, z],
@@ -126,11 +136,12 @@ impl WidgetVertex {
     }
 
     pub fn push_quad(
-        pos_low: [f32; 2],
-        pos_high: [f32; 2],
+        pos_low: [Size; 2],
+        pos_high: [Size; 2],
         z: f32,
         color: &Color,
         widget_info_index: u32,
+        gpu: &Gpu,
         pool: &mut Vec<WidgetVertex>,
     ) {
         Self::push_textured_quad(
@@ -141,6 +152,35 @@ impl WidgetVertex {
             [0f32, 0f32],
             color,
             widget_info_index,
+            gpu,
+            pool,
+        )
+    }
+
+    pub fn push_quad_ext(
+        position: Position<Size>,
+        extent: Extent<Size>,
+        color: &Color,
+        widget_info_index: u32,
+        gpu: &Gpu,
+        pool: &mut Vec<WidgetVertex>,
+    ) {
+        Self::push_textured_quad(
+            [position.left(), position.top()],
+            [
+                position
+                    .left()
+                    .add(&extent.width(), gpu, ScreenDir::Horizontal),
+                position
+                    .top()
+                    .add(&extent.height(), gpu, ScreenDir::Vertical),
+            ],
+            position.depth().as_depth(),
+            [0f32, 0f32],
+            [0f32, 0f32],
+            color,
+            widget_info_index,
+            gpu,
             pool,
         )
     }

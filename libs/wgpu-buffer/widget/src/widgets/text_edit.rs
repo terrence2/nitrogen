@@ -14,10 +14,11 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     color::Color,
-    font_context::{FontId, SANS_FONT_ID},
+    font_context::{FontContext, FontId, SANS_FONT_ID},
     paint_context::PaintContext,
+    size::{AbsSize, Extent, LeftBound, Position, Size},
     text_run::TextRun,
-    widget::{Size, UploadMetrics, Widget},
+    widget::Widget,
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
@@ -30,22 +31,28 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub struct TextEdit {
     lines: Vec<TextRun>,
-    width: f32,
     read_only: bool,
     default_color: Color,
     default_font: FontId,
     default_size: Size,
+
+    measured_extent: Extent<AbsSize>,
+    layout_position: Position<Size>,
+    layout_extent: Extent<Size>,
 }
 
 impl TextEdit {
     pub fn new(markup: &str) -> Self {
         let mut obj = Self {
             lines: vec![],
-            width: 1.,
             read_only: true, // NOTE: writable text edits not supported yet.
             default_color: Color::Black,
             default_font: SANS_FONT_ID,
-            default_size: Size::Pts(12.),
+            default_size: Size::from_pts(12.),
+
+            measured_extent: Extent::zero(),
+            layout_position: Position::origin(),
+            layout_extent: Extent::zero(),
         };
         obj.replace_content(markup);
         obj
@@ -63,11 +70,6 @@ impl TextEdit {
 
     pub fn with_default_size(mut self, size: Size) -> Self {
         self.default_size = size;
-        self
-    }
-
-    pub fn with_width(mut self, width: f32) -> Self {
-        self.width = width;
         self
     }
 
@@ -103,26 +105,50 @@ impl TextEdit {
 }
 
 impl Widget for TextEdit {
-    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<UploadMetrics> {
-        let info = WidgetInfo::default();
-        let widget_info_index = context.push_widget(&info);
-
-        let mut height_offset = 0f32;
+    fn measure(&mut self, gpu: &Gpu, font_context: &mut FontContext) -> Result<Extent<Size>> {
+        let mut width = AbsSize::zero();
+        let mut height_offset = AbsSize::zero();
         for (i, line) in self.lines.iter().enumerate() {
-            let (run_metrics, span_metrics) =
-                line.upload(height_offset, widget_info_index, gpu, context)?;
-
+            let span_metrics = line.measure(gpu, font_context)?;
             if i != self.lines.len() - 1 {
                 height_offset += span_metrics.line_gap;
             }
-            height_offset += run_metrics.height;
+            height_offset += span_metrics.height;
+            width = width.max(span_metrics.width);
+        }
+        self.measured_extent = Extent::new(width, height_offset);
+        Ok(self.measured_extent.into())
+    }
+
+    fn layout(
+        &mut self,
+        _gpu: &Gpu,
+        position: Position<Size>,
+        extent: Extent<Size>,
+        _font_context: &mut FontContext,
+    ) -> Result<()> {
+        self.layout_position = position;
+        self.layout_extent = extent;
+        Ok(())
+    }
+
+    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
+        let info = WidgetInfo::default();
+        let widget_info_index = context.push_widget(&info);
+
+        let mut pos = self.layout_position.as_abs(gpu);
+        *pos.top_mut() += self.measured_extent.height();
+        for (i, line) in self.lines.iter().enumerate() {
+            let span_metrics = line.measure(gpu, &mut context.font_context)?;
+            *pos.top_mut() -= span_metrics.height;
+            //println!("{}: {}", line.flatten(), pos.top().as_px());
+            let span_metrics = line.upload(pos.into(), widget_info_index, gpu, context)?;
+            if i != self.lines.len() - 1 {
+                *pos.top_mut() -= span_metrics.line_gap;
+            }
         }
 
-        Ok(UploadMetrics {
-            widget_info_indexes: vec![widget_info_index],
-            width: self.width,
-            height: height_offset,
-        })
+        Ok(())
     }
 
     fn handle_event(

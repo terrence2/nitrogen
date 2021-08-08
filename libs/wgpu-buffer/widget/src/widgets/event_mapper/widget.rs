@@ -13,7 +13,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    widget::{UploadMetrics, Widget},
+    font_context::FontContext,
+    size::{Extent, Position, Size},
+    widget::Widget,
     widgets::event_mapper::{
         bindings::Bindings,
         input::{Input, InputSet},
@@ -69,12 +71,22 @@ impl EventMapper {
 }
 
 impl Widget for EventMapper {
-    fn upload(&self, _gpu: &Gpu, _context: &mut PaintContext) -> Result<UploadMetrics> {
-        Ok(UploadMetrics {
-            widget_info_indexes: vec![],
-            width: 0.,
-            height: 0.,
-        })
+    fn measure(&mut self, _gpu: &Gpu, _font_context: &mut FontContext) -> Result<Extent<Size>> {
+        Ok(Extent::zero())
+    }
+
+    fn layout(
+        &mut self,
+        _gpu: &Gpu,
+        _position: Position<Size>,
+        _extent: Extent<Size>,
+        _font_context: &mut FontContext,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    fn upload(&self, _gpu: &Gpu, _context: &mut PaintContext) -> Result<()> {
+        Ok(())
     }
 
     fn handle_event(

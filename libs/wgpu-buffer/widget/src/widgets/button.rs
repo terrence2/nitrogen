@@ -13,9 +13,10 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
+    font_context::FontContext,
     paint_context::PaintContext,
-    widget::{Padding, Size, UploadMetrics, Widget},
-    widget_info::WidgetInfo,
+    size::{Extent, Padding, Position, Size},
+    widget::Widget,
     widgets::label::Label,
 };
 use anyhow::Result;
@@ -35,7 +36,7 @@ impl Button {
     pub fn new_with_text<S: AsRef<str> + Into<String>>(s: S) -> Self {
         Button {
             label: Label::new(s).wrapped(),
-            padding: Padding::new_uniform(Size::Px(3.)),
+            padding: Padding::new_uniform(Size::from_px(3.)),
         }
     }
 
@@ -45,21 +46,24 @@ impl Button {
 }
 
 impl Widget for Button {
-    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<UploadMetrics> {
-        let info = WidgetInfo::default();
-        let widget_info_index = context.push_widget(&info);
+    fn measure(&mut self, gpu: &Gpu, font_context: &mut FontContext) -> Result<Extent<Size>> {
+        self.label.write().measure(gpu, font_context)
+    }
 
-        let mut label_metrics = self.label.read().upload(gpu, context)?;
-        label_metrics.adjust_height(self.padding.top(), gpu, context);
+    fn layout(
+        &mut self,
+        gpu: &Gpu,
+        position: Position<Size>,
+        extent: Extent<Size>,
+        font_context: &mut FontContext,
+    ) -> Result<()> {
+        self.label
+            .write()
+            .layout(gpu, position, extent, font_context)
+    }
 
-        let mut widget_info_indexes = vec![widget_info_index];
-        widget_info_indexes.append(&mut label_metrics.widget_info_indexes);
-
-        Ok(UploadMetrics {
-            widget_info_indexes,
-            width: self.padding.left_gpu(gpu) + label_metrics.width + self.padding.right_gpu(gpu),
-            height: self.padding.top_gpu(gpu) + label_metrics.height + self.padding.bottom_gpu(gpu),
-        })
+    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
+        self.label.read().upload(gpu, context)
     }
 
     fn handle_event(

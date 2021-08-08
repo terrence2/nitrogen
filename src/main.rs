@@ -232,7 +232,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     let version_label = Label::new("Nitrogen v0.1")
         .with_font(widgets.read().font_context().font_id_for_name("fira-sans"))
         .with_color(Color::Green)
-        .with_size(Size::Pts(8.0))
+        .with_size(Size::from_pts(8.0))
         .with_pre_blended_text()
         .wrapped();
     let button_wp_1 = Button::new_with_text("Whitepoint 1").wrapped();
@@ -240,20 +240,21 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     let button_wp_3 = Button::new_with_text("Whitepoint 3").wrapped();
     let controls_box =
         VerticalBox::new_with_children(&[version_label, button_wp_1, button_wp_2, button_wp_3])
-            //.with_background_color(Color::Gray.darken(3.).opacity(0.8))
-            .with_background_color(Color::Transparent)
+            .with_background_color(Color::Gray.darken(3.).opacity(0.8))
+            .with_glass_background()
             .wrapped();
     widgets
         .read()
         .root()
         .write()
         .add_child("controls", controls_box)
+        // .add_child("version", version_label.clone())
         .set_float(PositionH::End, PositionV::Top);
 
     let fps_label = Label::new("fps")
         .with_font(widgets.read().font_context().font_id_for_name("sans"))
         .with_color(Color::Red)
-        .with_size(Size::Pts(13.0))
+        .with_size(Size::from_pts(13.0))
         .with_pre_blended_text()
         .wrapped();
     widgets
@@ -271,20 +272,9 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     */
 
     // London: 51.5,-0.1
-    arcball.write().set_target(Graticule::<GeoSurface>::new(
-        degrees!(51.5),
-        degrees!(-0.1),
-        meters!(8000.),
-    ));
-    arcball.write().set_eye_relative(Graticule::<Target>::new(
-        degrees!(11.5),
-        degrees!(869.5),
-        meters!(67668.5053),
-    ))?;
-    // everest: 27.9880704,86.9245623
     // arcball.write().set_target(Graticule::<GeoSurface>::new(
-    //     degrees!(27.9880704),
-    //     degrees!(-86.9245623), // FIXME: wat?
+    //     degrees!(51.5),
+    //     degrees!(-0.1),
     //     meters!(8000.),
     // ));
     // arcball.write().set_eye_relative(Graticule::<Target>::new(
@@ -292,6 +282,17 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     //     degrees!(869.5),
     //     meters!(67668.5053),
     // ))?;
+    // everest: 27.9880704,86.9245623
+    arcball.write().set_target(Graticule::<GeoSurface>::new(
+        degrees!(27.9880704),
+        degrees!(-86.9245623), // FIXME: wat?
+        meters!(8000.),
+    ));
+    arcball.write().set_eye_relative(Graticule::<Target>::new(
+        degrees!(11.5),
+        degrees!(869.5),
+        meters!(67668.5053),
+    ))?;
     // ISS: 408km up
     // arcball.write().set_target(Graticule::<GeoSurface>::new(
     //     degrees!(27.9880704),

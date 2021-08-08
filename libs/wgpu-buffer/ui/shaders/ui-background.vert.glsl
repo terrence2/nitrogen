@@ -33,8 +33,8 @@ void main() {
     v_color = color;
 
     vec4 widget_position = vec4(
-        position.x + info.position.x,
-        position.y + info.position.y,
+        position.x,
+        position.y,
         position.z / MAX_WIDGETS,
         1
     );

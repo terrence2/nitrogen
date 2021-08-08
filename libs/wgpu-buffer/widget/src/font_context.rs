@@ -14,6 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     color::Color,
+    size::{AbsSize, Position, RelSize, ScreenDir},
     text_run::{SpanSelection, TextSpan},
     widget_vertex::WidgetVertex,
     SANS_FONT_NAME,
@@ -47,24 +48,20 @@ impl GlyphTracker {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct TextSpanMetrics {
     // The width of the span.
-    pub width: f32,
+    pub width: AbsSize,
 
     // The height of the span from top of ascent to bottom of descent.
-    pub height: f32,
+    pub height: AbsSize,
 
     // Distance from the origin to the top and bottom of the span, respectively.
-    pub ascent: f32,
-    pub descent: f32,
+    pub ascent: AbsSize,
+    pub descent: AbsSize,
 
     // Expected additional builtin line gap (baseline to baseline) for this span.
-    pub line_gap: f32,
-
-    // Initial position of text and background buffers that we push into.
-    pub initial_text_offset: usize,
-    pub initial_background_offset: usize,
+    pub line_gap: AbsSize,
 }
 
 #[derive(Debug)]
@@ -183,104 +180,120 @@ impl FontContext {
         self.glyph_sheet.dump("__dump__/font_context_glyphs.png");
     }
 
-    // Because of the indirection when rendering, we can't easily take advantage of sub-pixel
-    // techniques, or even guarantee pixel-perfect placement. To help with text clarity, we thus
-    // double our render size and use linear filtering. This is wasteful, however, so we scale
-    // up a bit when rendering to get more use out of the pixels we place. Thus we take a hint
-    // from Gnome's font rendering subsystem and assume a 96dpi screen compared to the 72 that
-    // TTF assumes, to get the same nice look to what Gnome gives us.
-    const TTF_FONT_DPI: f32 = 72.0;
-    const GNOME_DPI: f32 = 96.0;
-    const GNOME_SCALE_FACTOR: f32 = Self::TTF_FONT_DPI / Self::GNOME_DPI;
+    fn align_to_px(phys_w: f32, x_pos: &mut AbsSize) {
+        *x_pos = AbsSize::from_px((x_pos.as_px() * phys_w).floor() / phys_w);
+    }
+
+    pub fn measure_text(&mut self, span: &TextSpan, gpu: &Gpu) -> Result<TextSpanMetrics> {
+        let phys_w = gpu.physical_size().width as f32;
+        let scale_px =
+            (span.size().as_px(gpu, ScreenDir::Horizontal) * gpu.scale_factor() as f32).ceil();
+
+        // Font rendering is based around the baseline. We want it based around the top-left
+        // corner instead, so move down by the ascent.
+        let font = self.get_font(span.font());
+        let descent = AbsSize::from_px(font.read().descent(scale_px));
+        let ascent = AbsSize::from_px(font.read().ascent(scale_px));
+        let line_gap = AbsSize::from_px(font.read().line_gap(scale_px));
+        let advance = font.read().advance_style();
+
+        let mut x_pos = AbsSize::from_px(0.);
+        let mut prior = None;
+        for c in span.content().chars() {
+            let font = self.get_font(span.font());
+            let lsb = AbsSize::from_px(font.read().left_side_bearing(c, scale_px));
+            let adv = AbsSize::from_px(font.read().advance_width(c, scale_px));
+            let kerning = AbsSize::from_px(
+                prior
+                    .map(|p| font.read().pair_kerning(p, c, scale_px))
+                    .unwrap_or(0f32),
+            );
+            prior = Some(c);
+
+            if advance != FontAdvance::Mono {
+                x_pos += kerning;
+            }
+            Self::align_to_px(phys_w, &mut x_pos);
+
+            x_pos += match advance {
+                FontAdvance::Mono => adv,
+                FontAdvance::Sans => adv - lsb,
+            };
+        }
+
+        Ok(TextSpanMetrics {
+            width: x_pos,
+            height: ascent - descent,
+            ascent,
+            descent,
+            line_gap,
+        })
+    }
 
     #[allow(clippy::too_many_arguments)]
     pub fn layout_text(
         &mut self,
         span: &TextSpan,
         widget_info_index: u32,
-        offset: [f32; 3],
+        offset: Position<AbsSize>,
         selection_area: SpanSelection,
         gpu: &Gpu,
         text_pool: &mut Vec<WidgetVertex>,
         background_pool: &mut Vec<WidgetVertex>,
     ) -> Result<TextSpanMetrics> {
-        let initial_text_offset = text_pool.len();
-        let initial_background_offset = background_pool.len();
+        let gs_width = self.glyph_sheet_width();
+        let gs_height = self.glyph_sheet_height();
 
-        let w = self.glyph_sheet_width();
-        let h = self.glyph_sheet_height();
-
+        // Use the physical width to re-align all pixel boxes to pixel boundaries.
         let phys_w = gpu.physical_size().width as f32;
 
-        let px_scaling = if span.size().as_pts(gpu) <= 12.0 {
-            4.0
-        } else {
-            2.0
-        };
-
-        // Use ttf standard formula to adjust scale by pts to figure out base rendering size.
-        // Note that we add some extra scaling and use linear filtering to help account for
-        // our lack of sub-pixel and pixel alignment techniques.
-        let scale_px = px_scaling * span.size().as_pts(gpu) * gpu.scale_factor() as f32;
-
-        // We used guess_dpi to project from logical to physical pixels for rendering, so scale
-        // vertices proportional to physical size for vertex layout. Note that the extra factor of
-        // 2 here is to account for the fact that vertex ranges are between [-1,1], not to account
-        // for the scaling of scale_px above.
-        let scale_y =
-            Self::GNOME_SCALE_FACTOR * 4.0 / gpu.physical_size().height as f32 / px_scaling;
-        let scale_x = scale_y * gpu.aspect_ratio_f32();
+        // The font system expects scales in pixels.
+        let scale_px =
+            (span.size().as_px(gpu, ScreenDir::Horizontal) * gpu.scale_factor() as f32).ceil();
 
         // Font rendering is based around the baseline. We want it based around the top-left
         // corner instead, so move down by the ascent.
         let font = self.get_font(span.font());
-        let descent = font.read().descent(scale_px);
-        let ascent = font.read().ascent(scale_px);
-        let line_gap = font.read().line_gap(scale_px);
+        let descent = AbsSize::from_px(font.read().descent(scale_px));
+        let ascent = AbsSize::from_px(font.read().ascent(scale_px));
+        let line_gap = AbsSize::from_px(font.read().line_gap(scale_px));
         let advance = font.read().advance_style();
 
-        let mut x_pos = 0f32;
+        let mut x_pos = offset.left();
+        let y_pos = offset.top();
         let mut prior = None;
         for (i, c) in span.content().chars().enumerate() {
             let frame = self.load_glyph(span.font(), c, scale_px, gpu)?;
             let font = self.get_font(span.font());
             let ((lo_x, lo_y), (hi_x, hi_y)) = font.read().pixel_bounding_box(c, scale_px);
-            let lsb = font.read().left_side_bearing(c, scale_px);
-            let adv = font.read().advance_width(c, scale_px);
-            let kerning = prior
-                .map(|p| font.read().pair_kerning(p, c, scale_px))
-                .unwrap_or(0f32);
+            let lsb = AbsSize::from_px(font.read().left_side_bearing(c, scale_px));
+            let adv = AbsSize::from_px(font.read().advance_width(c, scale_px));
+            let kerning = AbsSize::from_px(
+                prior
+                    .map(|p| font.read().pair_kerning(p, c, scale_px))
+                    .unwrap_or(0f32),
+            );
             prior = Some(c);
 
             if advance != FontAdvance::Mono {
                 x_pos += kerning;
             }
-            x_pos = (x_pos * phys_w).floor() / phys_w;
+            Self::align_to_px(phys_w, &mut x_pos);
 
-            let px0 = x_pos + lo_x as f32;
-            let px1 = x_pos + hi_x as f32;
-            let mut x0 = offset[0] + px0 * scale_x;
-            let mut x1 = offset[0] + px1 * scale_x;
-            x0 = (x0 * phys_w).floor() / phys_w;
-            x1 = (x1 * phys_w).floor() / phys_w;
-
-            let y0 = offset[1] + lo_y as f32 * scale_y;
-            let y1 = offset[1] + hi_y as f32 * scale_y;
-            let z = offset[2];
-
-            let s0 = frame.s0(w);
-            let s1 = frame.s1(w);
-            let t0 = frame.t0(h);
-            let t1 = frame.t1(h);
+            let x0 = x_pos + AbsSize::from_px(lo_x as f32);
+            let x1 = x_pos + AbsSize::from_px(hi_x as f32);
+            let y0 = y_pos + AbsSize::from_px(lo_y as f32);
+            let y1 = y_pos + AbsSize::from_px(hi_y as f32);
 
             WidgetVertex::push_textured_quad(
-                [x0, y0],
-                [x1, y1],
-                z,
-                [s0, t0],
-                [s1, t1],
+                [x0.into(), y0.into()],
+                [x1.into(), y1.into()],
+                offset.depth().as_depth(),
+                [frame.s0(gs_width), frame.t0(gs_height)],
+                [frame.s1(gs_width), frame.t1(gs_height)],
                 span.color(),
                 widget_info_index,
+                gpu,
                 text_pool,
             );
 
@@ -288,37 +301,39 @@ impl FontContext {
             if let SpanSelection::Cursor { position } = selection_area {
                 if i == position {
                     // Draw cursor, pixel aligned.
-                    let mut bx0 = offset[0] + x_pos * scale_x;
-                    bx0 = (bx0 * phys_w).floor() / phys_w;
-                    let bx1 = bx0 + px_scaling / gpu.physical_size().width as f32;
-                    let by0 = offset[1] + descent * scale_y;
-                    let by1 = offset[1] + ascent * scale_y;
-                    let bz = offset[2] - 0.1;
+                    let mut bx0 = offset.left() + x_pos;
+                    Self::align_to_px(phys_w, &mut bx0);
+                    let bx1 = bx0 + AbsSize::from_px(2.);
+                    let by0 = offset.top() + descent;
+                    let by1 = offset.top() + ascent;
+                    let bz = offset.depth() - RelSize::from_percent(0.1);
 
                     WidgetVertex::push_quad(
-                        [bx0, by0],
-                        [bx1, by1],
-                        bz,
+                        [bx0.into(), by0.into()],
+                        [bx1.into(), by1.into()],
+                        bz.as_depth(),
                         &Color::White,
                         widget_info_index,
+                        gpu,
                         background_pool,
                     );
                 }
             }
             if let SpanSelection::Select { range } = &selection_area {
                 if range.contains(&i) {
-                    let bx0 = offset[0] + x_pos * scale_x;
-                    let bx1 = offset[0] + (x_pos + kerning + lo_x as f32 + adv) * scale_x;
-                    let by0 = offset[1] + descent * scale_y;
-                    let by1 = offset[1] + ascent * scale_y;
-                    let bz = offset[2] - 0.1;
+                    let bx0 = offset.left() + x_pos;
+                    let bx1 = offset.left() + x_pos + kerning + AbsSize::from_px(lo_x as f32) + adv;
+                    let by0 = offset.top() + descent;
+                    let by1 = offset.top() + ascent;
+                    let bz = offset.depth() - RelSize::from_percent(0.1);
 
                     WidgetVertex::push_quad(
-                        [bx0, by0],
-                        [bx1, by1],
-                        bz,
+                        [bx0.into(), by0.into()],
+                        [bx1.into(), by1.into()],
+                        bz.as_depth(),
                         &Color::Blue,
                         widget_info_index,
+                        gpu,
                         background_pool,
                     );
                 }
@@ -333,32 +348,31 @@ impl FontContext {
         if let SpanSelection::Cursor { position } = selection_area {
             if position == span.content().len() {
                 // Draw cursor, pixel aligned.
-                let mut bx0 = offset[0] + x_pos * scale_x;
-                bx0 = (bx0 * phys_w).floor() / phys_w;
-                let bx1 = bx0 + px_scaling / gpu.physical_size().width as f32;
-                let by0 = offset[1] + descent * scale_y;
-                let by1 = offset[1] + ascent * scale_y;
-                let bz = offset[2] - 0.1;
+                let mut bx0 = offset.left() + x_pos;
+                Self::align_to_px(phys_w, &mut bx0);
+                let bx1 = bx0 + AbsSize::from_px(2.);
+                let by0 = offset.top() + descent;
+                let by1 = offset.top() + ascent;
+                let bz = offset.depth() - RelSize::from_percent(0.1);
 
                 WidgetVertex::push_quad(
-                    [bx0, by0],
-                    [bx1, by1],
-                    bz,
+                    [bx0.into(), by0.into()],
+                    [bx1.into(), by1.into()],
+                    bz.as_depth(),
                     &Color::White,
                     widget_info_index,
+                    gpu,
                     background_pool,
                 );
             }
         }
 
         Ok(TextSpanMetrics {
-            width: x_pos * scale_x,
-            height: (ascent - descent) * scale_y,
-            ascent: ascent * scale_y,
-            descent: descent * scale_y,
+            width: x_pos,
+            height: ascent - descent,
+            ascent,
+            descent,
             line_gap,
-            initial_text_offset,
-            initial_background_offset,
         })
     }
 }

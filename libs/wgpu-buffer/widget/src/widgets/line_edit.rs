@@ -14,10 +14,11 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     color::Color,
-    font_context::FontId,
+    font_context::{FontContext, FontId, TextSpanMetrics},
     paint_context::PaintContext,
+    size::{Extent, Position, ScreenDir, Size},
     text_run::TextRun,
-    widget::{Size, UploadMetrics, Widget},
+    widget::Widget,
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
@@ -30,20 +31,21 @@ use std::{ops::Range, sync::Arc};
 #[derive(Debug)]
 pub struct LineEdit {
     line: TextRun,
-    override_width: Option<Size>,
+    metrics: TextSpanMetrics,
+
+    position: Position<Size>,
+    extent: Extent<Size>,
 }
 
 impl LineEdit {
     pub fn empty() -> Self {
         Self {
             line: TextRun::empty(),
-            override_width: None,
-        }
-    }
+            metrics: TextSpanMetrics::default(),
 
-    pub fn with_width(mut self, width: Size) -> Self {
-        self.override_width = Some(width);
-        self
+            position: Position::origin(),
+            extent: Extent::zero(),
+        }
     }
 
     pub fn with_default_color(mut self, color: Color) -> Self {
@@ -106,19 +108,38 @@ impl LineEdit {
 }
 
 impl Widget for LineEdit {
-    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<UploadMetrics> {
+    fn measure(&mut self, gpu: &Gpu, font_context: &mut FontContext) -> Result<Extent<Size>> {
+        self.metrics = self.line.measure(gpu, font_context)?;
+        Ok(Extent::<Size>::new(
+            self.metrics.width.into(),
+            (self.metrics.height - self.metrics.descent).into(),
+        ))
+    }
+
+    fn layout(
+        &mut self,
+        gpu: &Gpu,
+        mut position: Position<Size>,
+        extent: Extent<Size>,
+        _font_context: &mut FontContext,
+    ) -> Result<()> {
+        *position.top_mut() =
+            position
+                .top()
+                .sub(&self.metrics.descent.into(), gpu, ScreenDir::Vertical);
+        self.position = position;
+        self.extent = extent;
+        Ok(())
+    }
+
+    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
         let info = WidgetInfo::default();
         let widget_info_index = context.push_widget(&info);
 
-        let (line_metrics, _) = self.line.upload(0f32, widget_info_index, gpu, context)?;
-        Ok(UploadMetrics {
-            widget_info_indexes: line_metrics.widget_info_indexes,
-            width: self
-                .override_width
-                .map(|v| v.as_gpu(gpu))
-                .unwrap_or(line_metrics.width),
-            height: line_metrics.height,
-        })
+        self.line
+            .upload(self.position, widget_info_index, gpu, context)?;
+
+        Ok(())
     }
 
     fn handle_event(

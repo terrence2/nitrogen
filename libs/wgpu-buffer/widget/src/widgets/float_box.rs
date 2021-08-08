@@ -14,8 +14,10 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     box_packing::{PositionH, PositionV},
+    font_context::FontContext,
     paint_context::PaintContext,
-    widget::{UploadMetrics, Widget},
+    size::{Extent, LeftBound, Position, RelSize, Size},
+    widget::Widget,
 };
 use anyhow::{anyhow, Result};
 use gpu::Gpu;
@@ -61,12 +63,16 @@ impl FloatPacking {
 #[derive(Debug)]
 pub struct FloatBox {
     children: HashMap<String, FloatPacking>,
+    position: Position<RelSize>,
+    extent: Extent<RelSize>,
 }
 
 impl FloatBox {
     pub fn new() -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(Self {
             children: HashMap::new(),
+            position: Position::origin(),
+            extent: Extent::zero(),
         }))
     }
 
@@ -90,37 +96,62 @@ impl FloatBox {
 }
 
 impl Widget for FloatBox {
+    fn measure(&mut self, _gpu: &Gpu, _font_context: &mut FontContext) -> Result<Extent<Size>> {
+        Ok(Extent::zero())
+    }
+
+    fn layout(
+        &mut self,
+        gpu: &Gpu,
+        position: Position<Size>,
+        extent: Extent<Size>,
+        font_context: &mut FontContext,
+    ) -> Result<()> {
+        let position = position.as_rel(gpu);
+        let extent = extent.as_rel(gpu);
+        for pack in self.children.values() {
+            let mut widget = pack.widget.write();
+            let child_extent = widget.measure(gpu, font_context)?.as_rel(gpu);
+
+            let left_offset = position.left()
+                + match pack.float_h {
+                    PositionH::Start => RelSize::from_percent(0.),
+                    PositionH::Center => (extent.width() / 2.) - (child_extent.width() / 2.),
+                    PositionH::End => extent.width() - child_extent.width(),
+                };
+            let top_offset = position.top()
+                + match pack.float_v {
+                    PositionV::Top => extent.height() - child_extent.height(),
+                    PositionV::Center => (extent.height() / 2.) - (child_extent.height() / 2.),
+                    PositionV::Bottom => RelSize::zero(),
+                };
+            let remaining_extent = Extent::<Size>::new(
+                (extent.width() - left_offset).into(),
+                (extent.height() - top_offset).into(),
+            );
+            widget.layout(
+                gpu,
+                Position::new(left_offset.into(), top_offset.into()),
+                remaining_extent,
+                font_context,
+            )?;
+        }
+        self.position = position;
+        self.extent = extent;
+
+        Ok(())
+    }
+
     // Webgpu: (-1, -1) maps to the bottom-left of the screen.
     // Widget: (0, 0) maps to the top-left of the widget.
-    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<UploadMetrics> {
-        let mut widget_info_indexes = Vec::with_capacity(self.children.len());
+    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
+        // Upload all children
         for pack in self.children.values() {
             let widget = pack.widget.read();
-            let mut child_metrics = widget.upload(gpu, context)?;
-
-            // Apply float to child.
-            let x_offset = match pack.float_h {
-                PositionH::Start => -1f32,
-                PositionH::Center => -child_metrics.width / 2f32,
-                PositionH::End => 1f32 - child_metrics.width,
-            };
-            let y_offset = match pack.float_v {
-                PositionV::Top => 1f32,
-                PositionV::Center => child_metrics.height / 2.0,
-                PositionV::Bottom => -1f32 + child_metrics.height,
-            };
-            for &widget_info_index in &child_metrics.widget_info_indexes {
-                context.widget_info_pool[widget_info_index as usize].position[0] += x_offset;
-                context.widget_info_pool[widget_info_index as usize].position[1] += y_offset;
-            }
-
-            widget_info_indexes.append(&mut child_metrics.widget_info_indexes);
+            let _ = widget.upload(gpu, context)?;
         }
-        Ok(UploadMetrics {
-            widget_info_indexes,
-            width: 2f32,
-            height: 2f32,
-        })
+
+        Ok(())
     }
 
     fn handle_event(

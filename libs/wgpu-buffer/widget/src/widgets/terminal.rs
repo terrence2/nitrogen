@@ -16,7 +16,8 @@ use crate::{
     color::Color,
     font_context::FontContext,
     paint_context::PaintContext,
-    widget::{Size, UploadMetrics, Widget},
+    size::{Extent, Position, Size},
+    widget::Widget,
     LineEdit, TextEdit, VerticalBox,
 };
 use anyhow::Result;
@@ -39,6 +40,9 @@ pub struct Terminal {
 }
 
 impl Terminal {
+    const WIDTH: Size = Size::from_percent(100.);
+    const HEIGHT: Size = Size::from_percent(40.);
+
     pub fn new(font_context: &FontContext) -> Self {
         let output = TextEdit::new("")
             .with_default_font(font_context.font_id_for_name("dejavu-mono"))
@@ -48,16 +52,16 @@ impl Terminal {
         let edit = LineEdit::empty()
             .with_default_font(font_context.font_id_for_name("mono"))
             .with_default_color(Color::White)
-            .with_default_size(Size::Pts(12.0))
+            .with_default_size(Size::from_pts(12.0))
             .with_text("help()")
             .wrapped();
         edit.write().line_mut().select_all();
         let container = VerticalBox::new_with_children(&[output.clone(), edit.clone()])
             .with_background_color(Color::Gray.darken(3.).opacity(0.8))
-            .with_width(Size::Percent(100.))
-            .with_height(Size::Percent(40.))
+            .with_glass_background()
+            .with_overridden_extent(Extent::new(Self::WIDTH, Self::HEIGHT))
+            .with_fill(0)
             .wrapped();
-        container.write().info_mut().set_glass_background(true);
         Self {
             edit,
             output,
@@ -126,12 +130,35 @@ impl Terminal {
 }
 
 impl Widget for Terminal {
-    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<UploadMetrics> {
-        if self.visible {
-            self.container.read().upload(gpu, context)
-        } else {
-            Ok(Default::default())
+    fn measure(&mut self, gpu: &Gpu, font_context: &mut FontContext) -> Result<Extent<Size>> {
+        if !self.visible {
+            return Ok(Extent::zero());
         }
+
+        self.container.write().measure(gpu, font_context)
+    }
+
+    fn layout(
+        &mut self,
+        gpu: &Gpu,
+        position: Position<Size>,
+        extent: Extent<Size>,
+        font_context: &mut FontContext,
+    ) -> Result<()> {
+        if !self.visible {
+            return Ok(());
+        }
+
+        self.container
+            .write()
+            .layout(gpu, position, extent, font_context)
+    }
+
+    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
+        if !self.visible {
+            return Ok(());
+        }
+        self.container.read().upload(gpu, context)
     }
 
     fn handle_event(

@@ -14,9 +14,9 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     color::Color,
-    font_context::{FontId, TextSpanMetrics, SANS_FONT_ID},
+    font_context::{FontContext, FontId, TextSpanMetrics, SANS_FONT_ID},
     paint_context::PaintContext,
-    widget::{Size, UploadMetrics},
+    size::{AbsSize, LeftBound, Position, Size},
 };
 use anyhow::Result;
 use gpu::Gpu;
@@ -198,7 +198,7 @@ impl TextRun {
             hide_selection: false,
             pre_blend_text: false,
             default_font_id: SANS_FONT_ID,
-            default_size: Size::Pts(12.0),
+            default_size: Size::from_pts(12.0),
             default_color: Color::Magenta,
         }
     }
@@ -459,21 +459,46 @@ impl TextRun {
         out
     }
 
+    pub fn measure(&self, gpu: &Gpu, font_context: &mut FontContext) -> Result<TextSpanMetrics> {
+        let mut total_width = AbsSize::zero();
+        let mut max_height = AbsSize::zero();
+        let mut max_ascent = AbsSize::zero();
+        let mut min_descent = AbsSize::zero();
+        let mut max_line_gap = AbsSize::zero();
+        for span in self.spans.iter() {
+            let span_metrics = font_context.measure_text(&span, gpu)?;
+            total_width += span_metrics.width;
+            max_height = max_height.max(span_metrics.height);
+            max_line_gap = max_line_gap.max(span_metrics.line_gap);
+            max_ascent = max_ascent.max(span_metrics.ascent);
+            min_descent = min_descent.min(span_metrics.descent);
+        }
+        Ok(TextSpanMetrics {
+            width: total_width,
+            ascent: max_ascent,
+            descent: min_descent,
+            height: max_height,
+            line_gap: max_line_gap,
+        })
+    }
+
     pub fn upload(
         &self,
-        height_offset: f32,
+        initial_position: Position<Size>,
         widget_info_index: u32,
         gpu: &Gpu,
         context: &mut PaintContext,
-    ) -> Result<(UploadMetrics, TextSpanMetrics)> {
-        let mut min_text_offset = usize::MAX;
-        let mut min_background_offset = usize::MAX;
+    ) -> Result<TextSpanMetrics> {
+        context
+            .widget_mut(widget_info_index)
+            .set_pre_blend_text(self.pre_blend_text);
+        let init_pos = initial_position.as_abs(gpu);
         let mut position = 0;
-        let mut total_width = 0f32;
-        let mut max_height = 0f32;
-        let mut max_ascent = 0f32;
-        let mut min_descent = 0f32;
-        let mut max_line_gap = 0f32;
+        let mut total_width = AbsSize::zero();
+        let mut max_height = AbsSize::zero();
+        let mut max_ascent = AbsSize::zero();
+        let mut min_descent = AbsSize::zero();
+        let mut max_line_gap = AbsSize::zero();
         for span in self.spans.iter() {
             let selection_area = if self.hide_selection {
                 SpanSelection::None
@@ -485,7 +510,7 @@ impl TextRun {
 
             let span_metrics = context.layout_text(
                 &span,
-                [total_width, -height_offset],
+                Position::new(init_pos.left() + total_width, init_pos.top()),
                 widget_info_index,
                 selection_area,
                 gpu,
@@ -496,36 +521,15 @@ impl TextRun {
             max_line_gap = max_line_gap.max(span_metrics.line_gap);
             max_ascent = max_ascent.max(span_metrics.ascent);
             min_descent = min_descent.min(span_metrics.descent);
-            min_text_offset = min_text_offset.min(span_metrics.initial_text_offset);
-            min_background_offset =
-                min_background_offset.min(span_metrics.initial_background_offset);
-        }
-        min_text_offset = min_text_offset.min(context.text_pool.len());
-        min_background_offset = min_background_offset.min(context.background_pool.len());
-
-        for v in &mut context.text_pool[min_text_offset..] {
-            v.position[1] -= max_ascent;
-        }
-        for v in &mut context.background_pool[min_background_offset..] {
-            v.position[1] -= max_ascent;
         }
 
-        Ok((
-            UploadMetrics {
-                widget_info_indexes: vec![widget_info_index],
-                width: total_width,
-                height: max_height,
-            },
-            TextSpanMetrics {
-                width: total_width,
-                ascent: max_ascent,
-                descent: min_descent,
-                height: max_height,
-                line_gap: max_line_gap,
-                initial_text_offset: min_text_offset,
-                initial_background_offset: min_background_offset,
-            },
-        ))
+        Ok(TextSpanMetrics {
+            width: total_width,
+            ascent: max_ascent,
+            descent: min_descent,
+            height: max_height,
+            line_gap: max_line_gap,
+        })
     }
 }
 

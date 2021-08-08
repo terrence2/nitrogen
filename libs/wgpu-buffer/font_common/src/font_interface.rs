@@ -21,6 +21,7 @@ pub enum FontAdvance {
     Sans,
 }
 
+// Note: scale is pixels in ascender - descender: e.g. the same as gnome.
 pub trait FontInterface: Debug + Send + Sync + 'static {
     // global metrics
     fn units_per_em(&self) -> f32;

@@ -15,8 +15,10 @@
 use crate::{
     box_packing::BoxPacking,
     color::Color,
+    font_context::FontContext,
     paint_context::PaintContext,
-    widget::{Size, UploadMetrics, Widget},
+    size::{Extent, Position, ScreenDir, Size},
+    widget::Widget,
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
 };
@@ -28,12 +30,14 @@ use parking_lot::RwLock;
 use std::sync::Arc;
 
 // Items packed from top to bottom.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct VerticalBox {
     info: WidgetInfo,
-    background_color: Color,
-    override_width: Option<Size>,
-    override_height: Option<Size>,
+    position: Position<Size>,
+    extent: Extent<Size>,
+
+    background_color: Option<Color>,
+    override_extent: Option<Extent<Size>>,
     children: Vec<BoxPacking>,
 }
 
@@ -45,10 +49,11 @@ impl VerticalBox {
                 .enumerate()
                 .map(|(i, w)| BoxPacking::new(w.to_owned(), i))
                 .collect::<Vec<_>>(),
-            background_color: Color::Magenta,
+            background_color: None,
             info: WidgetInfo::default(),
-            override_width: None,
-            override_height: None,
+            position: Position::origin(),
+            extent: Extent::zero(),
+            override_extent: None,
         }
     }
 
@@ -57,17 +62,22 @@ impl VerticalBox {
     }
 
     pub fn with_background_color(mut self, color: Color) -> Self {
-        self.background_color = color;
+        self.background_color = Some(color);
         self
     }
 
-    pub fn with_width(mut self, width: Size) -> Self {
-        self.override_width = Some(width);
+    pub fn with_glass_background(mut self) -> Self {
+        self.info.set_glass_background(true);
         self
     }
 
-    pub fn with_height(mut self, height: Size) -> Self {
-        self.override_height = Some(height);
+    pub fn with_overridden_extent(mut self, extent: Extent<Size>) -> Self {
+        self.override_extent = Some(extent);
+        self
+    }
+
+    pub fn with_fill(mut self, offset: usize) -> Self {
+        self.packing_mut(offset).set_fill();
         self
     }
 
@@ -91,50 +101,57 @@ impl VerticalBox {
 }
 
 impl Widget for VerticalBox {
-    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<UploadMetrics> {
+    fn measure(&mut self, gpu: &Gpu, font_context: &mut FontContext) -> Result<Extent<Size>> {
+        // Note: we need to measure children for layout, even if we have a fixed extent.
+        let size = BoxPacking::measure(&mut self.children, ScreenDir::Vertical, gpu, font_context)?;
+        if let Some(extent) = self.override_extent {
+            return Ok(extent);
+        }
+        Ok(size)
+    }
+
+    fn layout(
+        &mut self,
+        gpu: &Gpu,
+        position: Position<Size>,
+        extent: Extent<Size>,
+        font_context: &mut FontContext,
+    ) -> Result<()> {
+        BoxPacking::layout(
+            &mut self.children,
+            ScreenDir::Vertical,
+            gpu,
+            position,
+            extent,
+            font_context,
+        )?;
+        self.position = position;
+        self.extent = extent;
+
+        Ok(())
+    }
+
+    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
         let widget_info_index = context.push_widget(&self.info);
-        let mut widget_info_indexes = vec![widget_info_index];
 
-        let mut width = 0f32;
-        let mut height = 0f32;
         context.current_depth += PaintContext::BOX_DEPTH_SIZE;
-        for pack in &self.children {
-            // Pack at 0,0
-            let mut child_metrics = pack.widget().read().upload(gpu, context)?;
-            child_metrics.adjust_height(Size::Gpu(-height), gpu, context);
-
-            // Offset up to our current height.
-            // for &widget_info_index in &child_metrics.widget_info_indexes {
-            //     context.widget_info_pool[widget_info_index as usize].position[1] -= height;
-            // }
-
-            width = width.max(child_metrics.width);
-            height += child_metrics.height;
-            widget_info_indexes.append(&mut child_metrics.widget_info_indexes);
+        for packing in &self.children {
+            packing.widget_mut().upload(gpu, context)?;
         }
         context.current_depth -= PaintContext::BOX_DEPTH_SIZE;
 
-        if let Some(override_width) = self.override_width {
-            width = override_width.as_gpu(gpu);
-        }
-        if let Some(override_height) = self.override_height {
-            height = override_height.as_gpu(gpu);
+        if let Some(background_color) = self.background_color {
+            WidgetVertex::push_quad_ext(
+                self.position.with_depth(context.current_depth),
+                self.extent,
+                &background_color,
+                widget_info_index,
+                gpu,
+                &mut context.background_pool,
+            );
         }
 
-        WidgetVertex::push_quad(
-            [0., -height],
-            [width, 0.],
-            context.current_depth,
-            &self.background_color,
-            widget_info_index,
-            &mut context.background_pool,
-        );
-
-        Ok(UploadMetrics {
-            widget_info_indexes,
-            width,
-            height,
-        })
+        Ok(())
     }
 
     fn handle_event(
@@ -145,8 +162,7 @@ impl Widget for VerticalBox {
     ) -> Result<()> {
         for child in &self.children {
             child
-                .widget
-                .write()
+                .widget_mut()
                 .handle_event(event, focus, interpreter.clone())?;
         }
         Ok(())

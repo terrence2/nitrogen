@@ -14,6 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     font_context::{FontContext, TextSpanMetrics},
+    size::{AbsSize, LeftBound, Position, RelSize},
     text_run::{SpanSelection, TextSpan},
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
@@ -27,7 +28,7 @@ use tokio::runtime::Runtime;
 
 #[derive(Debug)]
 pub struct PaintContext {
-    pub current_depth: f32,
+    pub current_depth: RelSize,
     pub font_context: FontContext,
     pub widget_info_pool: Vec<WidgetInfo>,
     pub background_pool: Vec<WidgetVertex>,
@@ -36,12 +37,12 @@ pub struct PaintContext {
 }
 
 impl PaintContext {
-    pub const TEXT_DEPTH: f32 = 0.75f32;
-    pub const BOX_DEPTH_SIZE: f32 = 1f32;
+    pub const TEXT_DEPTH: RelSize = RelSize::from_percent(0.75);
+    pub const BOX_DEPTH_SIZE: RelSize = RelSize::from_percent(1.);
 
     pub fn new(gpu: &Gpu) -> Result<Self> {
         Ok(Self {
-            current_depth: 0f32,
+            current_depth: RelSize::zero(),
             font_context: FontContext::new(gpu)?,
             widget_info_pool: Vec::new(),
             background_pool: Vec::new(),
@@ -54,11 +55,15 @@ impl PaintContext {
     // struct, inconveniently, so that we need to thread fewer random parameters through our
     // entire upload call stack.
     pub fn reset_for_frame(&mut self) {
-        self.current_depth = 0f32;
+        self.current_depth = RelSize::zero();
         self.widget_info_pool.truncate(0);
         self.background_pool.truncate(0);
         self.image_pool.truncate(0);
         self.text_pool.truncate(0);
+    }
+
+    pub fn widget_mut(&mut self, offset: u32) -> &mut WidgetInfo {
+        &mut self.widget_info_pool[offset as usize]
     }
 
     pub fn add_font<S: Borrow<str> + Into<String>>(
@@ -86,7 +91,7 @@ impl PaintContext {
     pub fn layout_text(
         &mut self,
         span: &TextSpan,
-        offset: [f32; 2],
+        offset: Position<AbsSize>,
         widget_info_index: u32,
         selection_area: SpanSelection,
         gpu: &Gpu,
@@ -94,7 +99,7 @@ impl PaintContext {
         self.font_context.layout_text(
             span,
             widget_info_index,
-            [offset[0], offset[1], self.current_depth + Self::TEXT_DEPTH],
+            offset.with_depth(self.current_depth + Self::TEXT_DEPTH),
             selection_area,
             gpu,
             &mut self.text_pool,

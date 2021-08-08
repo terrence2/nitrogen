@@ -29,8 +29,8 @@ layout(location = 3) flat out uint widget_info_id_frag;
 void main() {
     WidgetInfo info = widget_info[widget_info_id];
     vec4 widget_position = vec4(
-        position.x + info.position.x,
-        position.y + info.position.y,
+        position.x,
+        position.y,
         position.z / MAX_WIDGETS,
         1
     );

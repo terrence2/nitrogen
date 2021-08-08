@@ -16,6 +16,7 @@ mod box_packing;
 mod color;
 mod font_context;
 mod paint_context;
+mod size;
 mod text_run;
 mod widget;
 mod widget_info;
@@ -26,7 +27,8 @@ pub use crate::{
     box_packing::{PositionH, PositionV},
     color::Color,
     paint_context::PaintContext,
-    widget::{Size, Widget},
+    size::{Extent, Position, Size},
+    widget::Widget,
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
     widgets::{
@@ -325,6 +327,13 @@ impl WidgetBuffer {
         async_rt: &Runtime,
         tracker: &mut UploadTracker,
     ) -> Result<()> {
+        self.root.write().layout(
+            gpu,
+            Position::origin(),
+            Extent::new(Size::from_percent(100.), Size::from_percent(100.)),
+            &mut self.paint_context.font_context,
+        )?;
+
         self.paint_context.reset_for_frame();
         self.root.read().upload(gpu, &mut self.paint_context)?;
 
