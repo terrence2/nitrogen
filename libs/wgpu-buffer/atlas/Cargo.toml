@@ -10,7 +10,7 @@ image = "^ 0.23"
 log = "^ 0.4"
 tokio = { version = "^ 1.0", features = ["rt-multi-thread", "macros", "io-util", "fs", "sync"] }
 wgpu = "^ 0.7"
-geometry = { path = "../../sim/geometry" }
+geometry = { path = "../../util/geometry" }
 gpu = { path = "../../system/gpu" }
 zerocopy = "= 0.3.0"
 

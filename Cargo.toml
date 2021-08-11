@@ -15,11 +15,11 @@ members = [
     # Only external dependencies, appropriate for splitting
     # out fully, once mature enough.
     "libs/util/absolute_unit",
+    "libs/util/geometry",
 
     "libs/sim/animate",
     "libs/sim/camera",
     "libs/sim/geodesy",
-    "libs/sim/geometry",
     "libs/sim/orrery",
     "libs/sim/physical_constants",
     "libs/sim/star_catalog",
