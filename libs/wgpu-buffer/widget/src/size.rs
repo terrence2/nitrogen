@@ -344,7 +344,7 @@ impl PartialOrd for AbsSize {
             Some(Ordering::Less)
         } else if self.as_px() > other.as_px() {
             Some(Ordering::Greater)
-        } else if self.as_px() == other.as_px() {
+        } else if (self.as_px() - other.as_px()).abs() < f32::EPSILON {
             Some(Ordering::Equal)
         } else {
             None

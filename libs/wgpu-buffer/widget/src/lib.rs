@@ -468,9 +468,12 @@ mod test {
         widgets.read().root().write().add_child("label", label);
 
         let mut tracker = Default::default();
-        widgets
-            .write()
-            .make_upload_buffer(&mut gpu.write(), &async_rt, &mut tracker)?;
+        widgets.write().make_upload_buffer(
+            Instant::now(),
+            &mut gpu.write(),
+            &async_rt,
+            &mut tracker,
+        )?;
 
         Ok(())
     }

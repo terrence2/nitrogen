@@ -23,8 +23,6 @@ use crate::{
 };
 use anyhow::Result;
 use gpu::Gpu;
-use input::GenericEvent;
-use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::{sync::Arc, time::Instant};
 

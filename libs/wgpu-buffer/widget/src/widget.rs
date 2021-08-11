@@ -25,11 +25,12 @@ use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::{fmt::Debug, sync::Arc, time::Instant};
 
-pub enum HoverState {
-    None(Instant),
-    Hover(Instant),
-    Press(Instant),
-}
+// Note: need intersection testing before this is useful.
+// pub enum HoverState {
+//     None(Instant),
+//     Hover(Instant),
+//     Press(Instant),
+// }
 
 pub trait Labeled: Debug + Sized + Send + Sync + 'static {
     fn set_text<S: AsRef<str> + Into<String>>(&mut self, content: S);
@@ -80,11 +81,11 @@ pub trait Widget: Debug + Send + Sync + 'static {
     /// children and not handle events directly, except in some rare cases.
     fn handle_event(
         &mut self,
-        now: Instant,
-        event: &GenericEvent,
-        focus: &str,
-        cursor_position: Position<AbsSize>,
-        interpreter: Arc<RwLock<Interpreter>>,
+        _now: Instant,
+        _event: &GenericEvent,
+        _focus: &str,
+        _cursor_position: Position<AbsSize>,
+        _interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
         Ok(())
     }

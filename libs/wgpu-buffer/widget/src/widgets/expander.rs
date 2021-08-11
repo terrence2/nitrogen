@@ -157,9 +157,7 @@ impl Widget for Expander {
         // Layout the content at the bottom of the box.
         // TODO: what about an internal border? What about bottom and left borders?
         let mut pos = position;
-        *pos.bottom_mut() = pos
-            .bottom()
-            .add(&extent.height().into(), gpu, ScreenDir::Vertical);
+        *pos.bottom_mut() = pos.bottom().add(&extent.height(), gpu, ScreenDir::Vertical);
         if self.expanded {
             self.child
                 .write()
