@@ -16,6 +16,8 @@ members = [
     # out fully, once mature enough.
     "libs/util/absolute_unit",
     "libs/util/geometry",
+    "libs/util/nitrous",
+    "libs/util/nitrous_injector",
     "libs/util/packed_struct",
     "libs/util/physical_constants",
     "libs/util/star_catalog",
@@ -31,8 +33,6 @@ members = [
     "libs/system/catalog",
     "libs/system/gpu",
     "libs/system/input",
-    "libs/system/nitrous",
-    "libs/system/nitrous_injector",
 
     "libs/wgpu-buffer/atlas",
     "libs/wgpu-buffer/atmosphere",
@@ -73,8 +73,8 @@ geodesy = { path = "libs/sim/geodesy" }
 global_data = { path = "libs/wgpu-buffer/global_data" }
 gpu = { path = "libs/system/gpu" }
 input = { path = "libs/system/input" }
-nitrous = { path = "libs/system/nitrous" }
-nitrous_injector = { path = "libs/system/nitrous_injector" }
+nitrous = { path = "libs/util/nitrous" }
+nitrous_injector = { path = "libs/util/nitrous_injector" }
 orrery = { path = "libs/sim/orrery" }
 stars = { path = "libs/wgpu-buffer/stars" }
 terrain = { path = "libs/wgpu-buffer/terrain" }

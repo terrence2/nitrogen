@@ -11,5 +11,5 @@ structopt = "^ 0.3"
 atmosphere = { path = "../../libs/wgpu-buffer/atmosphere" }
 gpu = { path = "../../libs/system/gpu" }
 input = { path = "../../libs/system/input" }
-nitrous = { path = "../../libs/system/nitrous" }
+nitrous = { path = "../../libs/util/nitrous" }
 winit = { version = "^ 0.24", features = ["web-sys"] }

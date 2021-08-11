@@ -33,8 +33,8 @@ geodesy = { path = "../../sim/geodesy" }
 geometry = { path = "../../util/geometry" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 gpu = { path = "../../system/gpu" }
-nitrous = { path = "../../system/nitrous" }
-nitrous_injector = { path = "../../system/nitrous_injector" }
+nitrous = { path = "../../util/nitrous" }
+nitrous_injector = { path = "../../util/nitrous_injector" }
 packed_struct = { path = "../../util/packed_struct" }
 physical_constants = { path = "../../util/physical_constants" }
 shader_shared = { path = "../../wgpu-buffer/shader_shared" }

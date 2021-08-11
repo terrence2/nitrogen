@@ -28,4 +28,4 @@ geodesy = { path = "../../libs/sim/geodesy" }
 global_data = { path = "../../libs/wgpu-buffer/global_data" }
 gpu = { path = "../../libs/system/gpu" }
 input = { path = "../../libs/system/input" }
-nitrous = { path = "../../libs/system/nitrous" }
+nitrous = { path = "../../libs/util/nitrous" }
