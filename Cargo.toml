@@ -6,6 +6,7 @@ edition = "2018"
 
 [workspace]
 members = [
+    # Various helper applications.
     "apps/dump-atmosphere-tables",
     "apps/dump-layer-pack",
     "apps/dump-terrain-tables",
@@ -15,6 +16,8 @@ members = [
     # Only external dependencies, appropriate for splitting
     # out fully, once mature enough.
     "libs/util/absolute_unit",
+    "libs/util/animate",
+    "libs/util/geodesy",
     "libs/util/geometry",
     "libs/util/nitrous",
     "libs/util/nitrous_injector",
@@ -22,18 +25,21 @@ members = [
     "libs/util/physical_constants",
     "libs/util/star_catalog",
 
-    "libs/sim/animate",
-    "libs/sim/camera",
-    "libs/sim/geodesy",
-    "libs/sim/orrery",
-    "libs/sim/universe",
-
+    # Only external and util dependencies. Generally adapting or wrapping
+    # system level platform capabilities.
     "libs/system/ansi",
     "libs/system/build_shaders",
     "libs/system/catalog",
     "libs/system/gpu",
     "libs/system/input",
 
+    # Only external, util, and system dependencies. Generally concerned
+    # with running the simulated environment.
+    "libs/sim/camera",
+    "libs/sim/orrery",
+    "libs/sim/universe",
+
+    # GPU buffer management and drawing pass implementations.
     "libs/wgpu-buffer/atlas",
     "libs/wgpu-buffer/atmosphere",
     "libs/wgpu-buffer/composite",
@@ -69,7 +75,7 @@ camera = { path = "libs/sim/camera" }
 catalog = { path = "libs/system/catalog" }
 composite = { path = "libs/wgpu-buffer/composite" }
 fullscreen = { path = "libs/wgpu-buffer/fullscreen" }
-geodesy = { path = "libs/sim/geodesy" }
+geodesy = { path = "libs/util/geodesy" }
 global_data = { path = "libs/wgpu-buffer/global_data" }
 gpu = { path = "libs/system/gpu" }
 input = { path = "libs/system/input" }

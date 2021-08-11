@@ -12,7 +12,7 @@ parking_lot = "^ 0.11"
 wgpu = "^ 0.7"
 zerocopy = "= 0.3.0"
 absolute_unit = { path = "../../util/absolute_unit" }
-geodesy = { path = "../../sim/geodesy" }
+geodesy = { path = "../../util/geodesy" }
 camera = { path = "../../sim/camera" }
 gpu = { path = "../../system/gpu" }
 nitrous = { path = "../../util/nitrous" }

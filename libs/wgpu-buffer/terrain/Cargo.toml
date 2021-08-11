@@ -29,7 +29,7 @@ zerocopy = "= 0.3.0"
 absolute_unit = { path = "../../util/absolute_unit" }
 camera = { path = "../../sim/camera" }
 catalog = { path = "../../system/catalog" }
-geodesy = { path = "../../sim/geodesy" }
+geodesy = { path = "../../util/geodesy" }
 geometry = { path = "../../util/geometry" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 gpu = { path = "../../system/gpu" }
@@ -38,7 +38,6 @@ nitrous_injector = { path = "../../util/nitrous_injector" }
 packed_struct = { path = "../../util/packed_struct" }
 physical_constants = { path = "../../util/physical_constants" }
 shader_shared = { path = "../../wgpu-buffer/shader_shared" }
-universe = { path = "../../sim/universe" }
 
 [dev-dependencies]
 input = { path = "../../system/input" }

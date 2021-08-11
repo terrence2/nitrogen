@@ -2980,7 +2980,6 @@ dependencies = [
  "smallvec",
  "static_assertions",
  "tokio",
- "universe",
  "wgpu",
  "zerocopy",
 ]

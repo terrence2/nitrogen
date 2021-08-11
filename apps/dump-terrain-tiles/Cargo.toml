@@ -17,6 +17,6 @@ rayon = "= 1.4.0"
 structopt = "^ 0.3"
 zerocopy = "= 0.3.0"
 absolute_unit = { path = "../../libs/util/absolute_unit" }
-geodesy = { path = "../../libs/sim/geodesy" }
+geodesy = { path = "../../libs/util/geodesy" }
 terrain = { path = "../../libs/wgpu-buffer/terrain" }
 compression = { version = "^ 0.1", features = ["lzhuf"]  }

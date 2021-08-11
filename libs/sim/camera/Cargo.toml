@@ -11,7 +11,7 @@ nalgebra = "^ 0.24"
 num = "^ 0.3"
 parking_lot = "^ 0.11"
 absolute_unit = { path = "../../util/absolute_unit" }
-geodesy = { path = "../../sim/geodesy" }
+geodesy = { path = "../../util/geodesy" }
 geometry = { path = "../../util/geometry" }
 gpu = { path = "../../system/gpu" }
 nitrous = { path = "../../util/nitrous" }
