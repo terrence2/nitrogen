@@ -22,7 +22,11 @@ use composite::CompositeRenderPass;
 use fullscreen::FullscreenBuffer;
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
-use gpu::{make_frame_graph, Gpu};
+use gpu::{
+    make_frame_graph,
+    size::{AbsSize, LeftBound, Size},
+    Gpu,
+};
 use input::{InputController, InputSystem};
 use legion::world::World;
 use nalgebra::convert;
@@ -37,8 +41,8 @@ use terrain::{CpuDetailLevel, GpuDetailLevel, TerrainBuffer};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use ui::UiRenderPass;
 use widget::{
-    AbsSize, Border, Button, Color, Expander, Extent, Label, Labeled, LeftBound, PositionH,
-    PositionV, Size, VerticalBox, WidgetBuffer,
+    Border, Button, Color, Expander, Extent, Label, Labeled, PositionH, PositionV, VerticalBox,
+    WidgetBuffer,
 };
 use winit::window::Window;
 use world::WorldRenderPass;

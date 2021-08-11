@@ -14,11 +14,14 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     font_context::FontContext,
-    size::{AspectMath, Extent, LeftBound, Position, ScreenDir, Size},
+    region::{Extent, Position},
     widget::Widget,
 };
 use anyhow::Result;
-use gpu::Gpu;
+use gpu::{
+    size::{AspectMath, LeftBound, ScreenDir, Size},
+    Gpu,
+};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::sync::Arc;
 

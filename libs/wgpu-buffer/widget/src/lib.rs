@@ -16,7 +16,7 @@ mod box_packing;
 mod color;
 mod font_context;
 mod paint_context;
-mod size;
+mod region;
 mod text_run;
 mod widget;
 mod widget_info;
@@ -27,7 +27,7 @@ pub use crate::{
     box_packing::{PositionH, PositionV},
     color::Color,
     paint_context::PaintContext,
-    size::{AbsSize, Border, Extent, LeftBound, Position, Size},
+    region::{Border, Extent, Position},
     widget::{Labeled, Widget},
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
@@ -48,7 +48,10 @@ use crate::font_context::FontContext;
 use anyhow::{ensure, Result};
 use font_common::{FontAdvance, FontInterface};
 use font_ttf::TtfFont;
-use gpu::{Gpu, UploadTracker};
+use gpu::{
+    size::{AbsSize, Size},
+    Gpu, UploadTracker,
+};
 use input::{ElementState, GenericEvent, ModifiersState, VirtualKeyCode};
 use log::trace;
 use nitrous::{Interpreter, Value};

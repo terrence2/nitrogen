@@ -16,13 +16,16 @@ use crate::{
     color::Color,
     font_context::{FontContext, FontId, SANS_FONT_ID},
     paint_context::PaintContext,
-    size::{AbsSize, Extent, LeftBound, Position, Size},
+    region::{Extent, Position},
     text_run::TextRun,
     widget::Widget,
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
-use gpu::Gpu;
+use gpu::{
+    size::{AbsSize, LeftBound, Size},
+    Gpu,
+};
 use input::GenericEvent;
 use nitrous::Interpreter;
 use parking_lot::RwLock;

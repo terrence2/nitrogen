@@ -16,10 +16,13 @@ use crate::{
     color::Color,
     font_context::{FontContext, FontId, TextSpanMetrics, SANS_FONT_ID},
     paint_context::PaintContext,
-    size::{AbsSize, LeftBound, Position, Size},
+    region::Position,
 };
 use anyhow::Result;
-use gpu::Gpu;
+use gpu::{
+    size::{AbsSize, LeftBound, Size},
+    Gpu,
+};
 use input::ModifiersState;
 use smallvec::{smallvec, SmallVec};
 use std::{cmp::Ordering, ops::Range};

@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     font_context::FontContext,
-    size::{AbsSize, Extent, Position, Size},
+    region::{Extent, Position},
     widget::Widget,
     widgets::event_mapper::{
         bindings::Bindings,
@@ -23,7 +23,10 @@ use crate::{
     PaintContext,
 };
 use anyhow::{ensure, Result};
-use gpu::Gpu;
+use gpu::{
+    size::{AbsSize, Size},
+    Gpu,
+};
 use input::{ElementState, GenericEvent, GenericSystemEvent, GenericWindowEvent, ModifiersState};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};

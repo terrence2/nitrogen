@@ -14,14 +14,17 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     font_context::{FontContext, TextSpanMetrics},
-    size::{AbsSize, LeftBound, Position, RelSize},
+    region::Position,
     text_run::{SpanSelection, TextSpan},
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
 };
 use anyhow::Result;
 use font_common::FontInterface;
-use gpu::{Gpu, UploadTracker};
+use gpu::{
+    size::{AbsSize, LeftBound, RelSize},
+    Gpu, UploadTracker,
+};
 use parking_lot::RwLock;
 use std::{borrow::Borrow, sync::Arc};
 use tokio::runtime::Runtime;

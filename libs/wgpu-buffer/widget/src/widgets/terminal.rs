@@ -16,12 +16,15 @@ use crate::{
     color::Color,
     font_context::FontContext,
     paint_context::PaintContext,
-    size::{AbsSize, Extent, Position, Size},
+    region::{Extent, Position},
     widget::Widget,
     LineEdit, TextEdit, VerticalBox,
 };
 use anyhow::Result;
-use gpu::Gpu;
+use gpu::{
+    size::{AbsSize, Size},
+    Gpu,
+};
 use input::{ElementState, GenericEvent, VirtualKeyCode};
 use nitrous::{
     ir::{Expr, Stmt, Term},

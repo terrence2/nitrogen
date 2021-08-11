@@ -16,13 +16,16 @@ use crate::{
     color::Color,
     font_context::{FontContext, FontId, TextSpanMetrics},
     paint_context::PaintContext,
-    size::{AspectMath, Extent, Position, ScreenDir, Size},
+    region::{Extent, Position},
     text_run::TextRun,
     widget::{Labeled, Widget},
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
-use gpu::Gpu;
+use gpu::{
+    size::{AspectMath, ScreenDir, Size},
+    Gpu,
+};
 use parking_lot::RwLock;
 use std::{sync::Arc, time::Instant};
 

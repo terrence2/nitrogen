@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     color::Color,
-    size::{AbsSize, Position, RelSize, ScreenDir},
+    region::Position,
     text_run::{SpanSelection, TextSpan},
     widget_vertex::WidgetVertex,
     SANS_FONT_NAME,
@@ -22,7 +22,10 @@ use crate::{
 use anyhow::Result;
 use atlas::{AtlasPacker, Frame};
 use font_common::{FontAdvance, FontInterface};
-use gpu::{Gpu, UploadTracker};
+use gpu::{
+    size::{AbsSize, RelSize, ScreenDir},
+    Gpu, UploadTracker,
+};
 use image::Luma;
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;

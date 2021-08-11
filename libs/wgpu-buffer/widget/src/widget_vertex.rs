@@ -14,9 +14,12 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     color::Color,
-    size::{AspectMath, Extent, Position, ScreenDir, Size},
+    region::{Extent, Position},
 };
-use gpu::Gpu;
+use gpu::{
+    size::{AspectMath, ScreenDir, Size},
+    Gpu,
+};
 use memoffset::offset_of;
 use std::mem;
 use zerocopy::{AsBytes, FromBytes};
