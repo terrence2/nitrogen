@@ -27,7 +27,7 @@ pub use crate::{
     box_packing::{PositionH, PositionV},
     color::Color,
     paint_context::PaintContext,
-    size::{Border, Extent, LeftBound, Position, Size},
+    size::{AbsSize, Border, Extent, LeftBound, Position, Size},
     widget::{Labeled, Widget},
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
@@ -54,7 +54,7 @@ use log::trace;
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
-use std::{borrow::Borrow, mem, num::NonZeroU64, ops::Range, sync::Arc};
+use std::{borrow::Borrow, mem, num::NonZeroU64, ops::Range, sync::Arc, time::Instant};
 use tokio::runtime::Runtime;
 
 // Drawing UI efficiently:
@@ -88,7 +88,7 @@ pub struct WidgetBuffer {
     root: Arc<RwLock<FloatBox>>,
     paint_context: PaintContext,
     keyboard_focus: String,
-    cursor_position: Position<Size>,
+    cursor_position: Position<AbsSize>,
 
     // Auto-inserted widgets.
     terminal: Arc<RwLock<Terminal>>,
@@ -302,8 +302,11 @@ impl WidgetBuffer {
 
     pub fn handle_events(
         &mut self,
+        now: Instant,
         events: &[GenericEvent],
         interpreter: Arc<RwLock<Interpreter>>,
+        scale_factor: f64,
+        logical_size: Extent<AbsSize>,
     ) -> Result<()> {
         for event in events {
             if let GenericEvent::KeyboardKey {
@@ -329,24 +332,31 @@ impl WidgetBuffer {
             }
             if let GenericEvent::CursorMove { pixel_position, .. } = event {
                 let (x, y) = *pixel_position;
-                self.cursor_position =
-                    Position::new(Size::from_px(x as f32), Size::from_px(y as f32));
+                self.cursor_position = Position::new(
+                    AbsSize::from_px((x / scale_factor) as f32),
+                    logical_size.height() - AbsSize::from_px((y / scale_factor) as f32),
+                );
             }
-            self.root()
-                .write()
-                .handle_event(event, &self.keyboard_focus, interpreter.clone())?;
+            self.root().write().handle_event(
+                now,
+                event,
+                &self.keyboard_focus,
+                self.cursor_position,
+                interpreter.clone(),
+            )?;
         }
         Ok(())
     }
 
     pub fn make_upload_buffer(
         &mut self,
+        now: Instant,
         gpu: &mut Gpu,
         async_rt: &Runtime,
         tracker: &mut UploadTracker,
     ) -> Result<()> {
         self.paint_context.reset_for_frame();
-        self.root.read().upload(gpu, &mut self.paint_context)?;
+        self.root.read().upload(now, gpu, &mut self.paint_context)?;
 
         self.paint_context
             .make_upload_buffer(gpu, async_rt, tracker)?;

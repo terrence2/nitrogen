@@ -16,7 +16,7 @@ use crate::{
     color::Color,
     font_context::FontContext,
     paint_context::PaintContext,
-    size::{Extent, Position, Size},
+    size::{AbsSize, Extent, Position, Size},
     widget::Widget,
     LineEdit, TextEdit, VerticalBox,
 };
@@ -28,7 +28,7 @@ use nitrous::{
     Interpreter, Module, Script, Value,
 };
 use parking_lot::RwLock;
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 // Items packed from top to bottom.
 #[derive(Debug)]
@@ -154,17 +154,19 @@ impl Widget for Terminal {
             .layout(gpu, position, extent, font_context)
     }
 
-    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
+    fn upload(&self, now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
         if !self.visible {
             return Ok(());
         }
-        self.container.read().upload(gpu, context)
+        self.container.read().upload(now, gpu, context)
     }
 
     fn handle_event(
         &mut self,
+        now: Instant,
         event: &GenericEvent,
         focus: &str,
+        cursor_position: Position<AbsSize>,
         interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
         // FIXME: don't hard-code the name
@@ -175,7 +177,7 @@ impl Widget for Terminal {
         // FIXME: set focus parameter here equal to whatever we call the line_edit child
         self.edit
             .write()
-            .handle_event(event, focus, interpreter.clone())?;
+            .handle_event(now, event, focus, cursor_position, interpreter.clone())?;
 
         // Intercept the enter key and process the command in edit into the terminal.
         if let GenericEvent::KeyboardKey {

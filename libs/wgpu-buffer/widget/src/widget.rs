@@ -16,14 +16,20 @@ use crate::{
     color::Color,
     font_context::{FontContext, FontId},
     paint_context::PaintContext,
-    size::{Extent, Position, Size},
+    size::{AbsSize, Extent, Position, Size},
 };
 use anyhow::Result;
 use gpu::Gpu;
 use input::GenericEvent;
 use nitrous::Interpreter;
 use parking_lot::RwLock;
-use std::{fmt::Debug, sync::Arc};
+use std::{fmt::Debug, sync::Arc, time::Instant};
+
+pub enum HoverState {
+    None(Instant),
+    Hover(Instant),
+    Press(Instant),
+}
 
 pub trait Labeled: Debug + Sized + Send + Sync + 'static {
     fn set_text<S: AsRef<str> + Into<String>>(&mut self, content: S);
@@ -66,13 +72,23 @@ pub trait Widget: Debug + Send + Sync + 'static {
     ) -> Result<()>;
 
     /// Mutate paint context to reflect the presence of this widget.
-    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<()>;
+    fn upload(&self, now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()>;
 
-    /// Low level event handler.
+    /// Low level event handler. The default implementation is generally suitable
+    /// such that leaf nodes can implement one of the fine-grained handle_ methods
+    /// for keyboard or mouse. Container widgets should pass through to their
+    /// children and not handle events directly, except in some rare cases.
     fn handle_event(
         &mut self,
+        now: Instant,
         event: &GenericEvent,
         focus: &str,
+        cursor_position: Position<AbsSize>,
         interpreter: Arc<RwLock<Interpreter>>,
-    ) -> Result<()>;
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    // fn allocated_position(&self) -> &Position<Size>;
+    // fn allocated_extent(&self) -> &Extent<Size>;
 }

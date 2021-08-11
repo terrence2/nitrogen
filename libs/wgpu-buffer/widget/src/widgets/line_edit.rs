@@ -16,7 +16,7 @@ use crate::{
     color::Color,
     font_context::{FontContext, FontId, TextSpanMetrics},
     paint_context::PaintContext,
-    size::{AspectMath, Extent, Position, ScreenDir, Size},
+    size::{AbsSize, AspectMath, Extent, Position, ScreenDir, Size},
     text_run::TextRun,
     widget::Widget,
     widget_info::WidgetInfo,
@@ -26,7 +26,7 @@ use gpu::Gpu;
 use input::{ElementState, GenericEvent, ModifiersState, VirtualKeyCode};
 use nitrous::Interpreter;
 use parking_lot::RwLock;
-use std::{ops::Range, sync::Arc};
+use std::{ops::Range, sync::Arc, time::Instant};
 
 #[derive(Debug)]
 pub struct LineEdit {
@@ -132,7 +132,7 @@ impl Widget for LineEdit {
         Ok(())
     }
 
-    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
+    fn upload(&self, _now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
         let info = WidgetInfo::default();
         let widget_info_index = context.push_widget(&info);
 
@@ -144,8 +144,10 @@ impl Widget for LineEdit {
 
     fn handle_event(
         &mut self,
+        _now: Instant,
         event: &GenericEvent,
         _focus: &str,
+        _cursor_position: Position<AbsSize>,
         _interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
         // FIXME: add name to widget and obey focus

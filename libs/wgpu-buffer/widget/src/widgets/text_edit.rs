@@ -26,7 +26,7 @@ use gpu::Gpu;
 use input::GenericEvent;
 use nitrous::Interpreter;
 use parking_lot::RwLock;
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 #[derive(Debug)]
 pub struct TextEdit {
@@ -132,7 +132,7 @@ impl Widget for TextEdit {
         Ok(())
     }
 
-    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
+    fn upload(&self, _now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
         let info = WidgetInfo::default();
         let widget_info_index = context.push_widget(&info);
 
@@ -153,8 +153,10 @@ impl Widget for TextEdit {
 
     fn handle_event(
         &mut self,
+        _now: Instant,
         _event: &GenericEvent,
         _focus: &str,
+        _cursor_position: Position<AbsSize>,
         _interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
         assert!(self.read_only);

@@ -16,7 +16,7 @@ use crate::{
     box_packing::{PositionH, PositionV},
     font_context::FontContext,
     paint_context::PaintContext,
-    size::{Extent, LeftBound, Position, RelSize, Size},
+    size::{AbsSize, Extent, LeftBound, Position, RelSize, Size},
     widget::Widget,
 };
 use anyhow::{anyhow, Result};
@@ -24,7 +24,7 @@ use gpu::Gpu;
 use input::GenericEvent;
 use nitrous::Interpreter;
 use parking_lot::RwLock;
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Instant};
 
 // Pack boxes at an edge.
 #[derive(Debug)]
@@ -144,11 +144,11 @@ impl Widget for FloatBox {
 
     // Webgpu: (-1, -1) maps to the bottom-left of the screen.
     // Widget: (0, 0) maps to the top-left of the widget.
-    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
+    fn upload(&self, now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
         // Upload all children
         for pack in self.children.values() {
             let widget = pack.widget.read();
-            let _ = widget.upload(gpu, context)?;
+            let _ = widget.upload(now, gpu, context)?;
         }
 
         Ok(())
@@ -156,15 +156,20 @@ impl Widget for FloatBox {
 
     fn handle_event(
         &mut self,
+        now: Instant,
         event: &GenericEvent,
         focus: &str,
+        cursor_position: Position<AbsSize>,
         interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
         for packing in self.children.values() {
-            packing
-                .widget
-                .write()
-                .handle_event(event, focus, interpreter.clone())?;
+            packing.widget.write().handle_event(
+                now,
+                event,
+                focus,
+                cursor_position,
+                interpreter.clone(),
+            )?;
         }
         Ok(())
     }

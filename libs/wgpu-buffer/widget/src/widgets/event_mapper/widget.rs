@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     font_context::FontContext,
-    size::{Extent, Position, Size},
+    size::{AbsSize, Extent, Position, Size},
     widget::Widget,
     widgets::event_mapper::{
         bindings::Bindings,
@@ -32,6 +32,7 @@ use parking_lot::RwLock;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
+    time::Instant,
 };
 
 #[derive(Debug, Default)]
@@ -85,14 +86,16 @@ impl Widget for EventMapper {
         Ok(())
     }
 
-    fn upload(&self, _gpu: &Gpu, _context: &mut PaintContext) -> Result<()> {
+    fn upload(&self, _now: Instant, _gpu: &Gpu, _context: &mut PaintContext) -> Result<()> {
         Ok(())
     }
 
     fn handle_event(
         &mut self,
+        _now: Instant,
         event: &GenericEvent,
         focus: &str,
+        _cursor_position: Position<AbsSize>,
         interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
         let input = Input::from_event(event);

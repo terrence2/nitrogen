@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use gpu::Gpu;
+use std::cmp::Ordering;
 use std::fmt::Formatter;
 use std::{
     fmt::{Debug, Display},
@@ -89,7 +90,8 @@ impl RelSize {
     pub fn as_abs(self, gpu: &Gpu, screen_dir: ScreenDir) -> AbsSize {
         let rng = match screen_dir {
             ScreenDir::Vertical => gpu.aspect_ratio_f32(),
-            _ => 1.,
+            ScreenDir::Horizontal => 1.,
+            _ => panic!("can only convert H/V to abs"),
         };
         let f = map_range(Self::PCT_RANGE, (0., rng), self.as_percent());
         AbsSize::Px(f * gpu.logical_size().width as f32)
@@ -327,6 +329,26 @@ impl AspectMath for AbsSize {
 
     fn max(&self, other: &Self, _gpu: &Gpu, _dir: ScreenDir) -> Self {
         self.max(other)
+    }
+}
+
+impl PartialEq for AbsSize {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_px() == other.as_px()
+    }
+}
+
+impl PartialOrd for AbsSize {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        if self.as_px() < other.as_px() {
+            Some(Ordering::Less)
+        } else if self.as_px() > other.as_px() {
+            Some(Ordering::Greater)
+        } else if self.as_px() == other.as_px() {
+            Some(Ordering::Equal)
+        } else {
+            None
+        }
     }
 }
 
@@ -568,10 +590,10 @@ impl Extent<Size> {
         )
     }
 
-    pub fn as_abs(self, gpu: &Gpu, screen_dir: ScreenDir) -> Extent<AbsSize> {
+    pub fn as_abs(self, gpu: &Gpu) -> Extent<AbsSize> {
         Extent::<AbsSize>::new(
-            self.width.as_abs(gpu, screen_dir),
-            self.height.as_abs(gpu, screen_dir),
+            self.width.as_abs(gpu, ScreenDir::Horizontal),
+            self.height.as_abs(gpu, ScreenDir::Vertical),
         )
     }
 }
@@ -739,5 +761,16 @@ impl<T: Copy + Clone + LeftBound> Border<T> {
     #[allow(unused)]
     pub fn bottom(&self) -> T {
         self.bottom
+    }
+}
+
+impl Border<Size> {
+    pub fn as_rel(&self, gpu: &Gpu) -> Border<RelSize> {
+        Border::<RelSize>::new(
+            self.top.as_rel(gpu, ScreenDir::Vertical),
+            self.bottom.as_rel(gpu, ScreenDir::Vertical),
+            self.left.as_rel(gpu, ScreenDir::Horizontal),
+            self.right.as_rel(gpu, ScreenDir::Horizontal),
+        )
     }
 }

@@ -16,7 +16,7 @@ use crate::{
     color::Color,
     font_context::{FontContext, FontId},
     paint_context::PaintContext,
-    size::{Extent, Position, Size},
+    size::{AbsSize, Extent, Position, Size},
     widget::{Labeled, Widget},
     widgets::label::Label,
 };
@@ -25,7 +25,7 @@ use gpu::Gpu;
 use input::GenericEvent;
 use nitrous::Interpreter;
 use parking_lot::RwLock;
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 #[derive(Debug)]
 pub struct Button {
@@ -86,14 +86,16 @@ impl Widget for Button {
             .layout(gpu, position, extent, font_context)
     }
 
-    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
-        self.label.read().upload(gpu, context)
+    fn upload(&self, now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
+        self.label.read().upload(now, gpu, context)
     }
 
     fn handle_event(
         &mut self,
+        _now: Instant,
         _event: &GenericEvent,
         _focus: &str,
+        _cursor_position: Position<AbsSize>,
         _interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
         Ok(())

@@ -37,8 +37,8 @@ use terrain::{CpuDetailLevel, GpuDetailLevel, TerrainBuffer};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use ui::UiRenderPass;
 use widget::{
-    Border, Button, Color, Expander, Label, Labeled, LeftBound, PositionH, PositionV, Size,
-    VerticalBox, WidgetBuffer,
+    AbsSize, Border, Button, Color, Expander, Extent, Label, Labeled, LeftBound, PositionH,
+    PositionV, Size, VerticalBox, WidgetBuffer,
 };
 use winit::window::Window;
 use world::WorldRenderPass;
@@ -345,14 +345,27 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     while !system.read().exit {
         let loop_start = Instant::now();
 
-        frame_graph
-            .widgets
-            .write()
-            .layout_for_frame(&mut gpu.write())?;
-        frame_graph
-            .widgets
-            .write()
-            .handle_events(&input_controller.poll_events()?, interpreter.clone())?;
+        {
+            let logical_extent = {
+                let sz = gpu.read().logical_size();
+                Extent::new(
+                    AbsSize::from_px(sz.width as f32),
+                    AbsSize::from_px(sz.height as f32),
+                )
+            };
+            let scale_factor = { gpu.read().scale_factor() };
+            frame_graph
+                .widgets
+                .write()
+                .layout_for_frame(&mut gpu.write())?;
+            frame_graph.widgets.write().handle_events(
+                loop_start,
+                &input_controller.poll_events()?,
+                interpreter.clone(),
+                scale_factor,
+                logical_extent,
+            )?;
+        }
 
         arcball.write().think();
 
@@ -376,6 +389,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
             &mut tracker,
         )?;
         frame_graph.widgets.write().make_upload_buffer(
+            loop_start,
             &mut gpu.write(),
             &async_rt,
             &mut tracker,

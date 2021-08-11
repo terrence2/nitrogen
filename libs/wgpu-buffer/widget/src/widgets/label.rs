@@ -26,7 +26,7 @@ use gpu::Gpu;
 use input::GenericEvent;
 use nitrous::Interpreter;
 use parking_lot::RwLock;
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 #[derive(Debug)]
 pub struct Label {
@@ -110,21 +110,12 @@ impl Widget for Label {
         Ok(())
     }
 
-    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
+    fn upload(&self, _now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
         let widget_info_index = context.push_widget(&WidgetInfo::default());
 
         self.line
             .upload(self.allocated_position, widget_info_index, gpu, context)?;
 
-        Ok(())
-    }
-
-    fn handle_event(
-        &mut self,
-        _event: &GenericEvent,
-        _focus: &str,
-        _interpreter: Arc<RwLock<Interpreter>>,
-    ) -> Result<()> {
         Ok(())
     }
 }

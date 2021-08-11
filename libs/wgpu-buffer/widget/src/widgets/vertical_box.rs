@@ -17,7 +17,7 @@ use crate::{
     color::Color,
     font_context::FontContext,
     paint_context::PaintContext,
-    size::{Extent, Position, ScreenDir, Size},
+    size::{AbsSize, Extent, Position, ScreenDir, Size},
     widget::Widget,
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
@@ -27,7 +27,7 @@ use gpu::Gpu;
 use input::GenericEvent;
 use nitrous::Interpreter;
 use parking_lot::RwLock;
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 // Items packed from top to bottom.
 #[derive(Debug)]
@@ -131,12 +131,12 @@ impl Widget for VerticalBox {
         Ok(())
     }
 
-    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
+    fn upload(&self, now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
         let widget_info_index = context.push_widget(&self.info);
 
         context.current_depth += PaintContext::BOX_DEPTH_SIZE;
         for packing in &self.children {
-            packing.widget_mut().upload(gpu, context)?;
+            packing.widget_mut().upload(now, gpu, context)?;
         }
         context.current_depth -= PaintContext::BOX_DEPTH_SIZE;
 
@@ -156,14 +156,20 @@ impl Widget for VerticalBox {
 
     fn handle_event(
         &mut self,
+        now: Instant,
         event: &GenericEvent,
         focus: &str,
+        cursor_position: Position<AbsSize>,
         interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
         for child in &self.children {
-            child
-                .widget_mut()
-                .handle_event(event, focus, interpreter.clone())?;
+            child.widget_mut().handle_event(
+                now,
+                event,
+                focus,
+                cursor_position,
+                interpreter.clone(),
+            )?;
         }
         Ok(())
     }
