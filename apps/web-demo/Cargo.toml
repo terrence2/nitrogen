@@ -21,7 +21,7 @@ wasm-bindgen-futures = "=0.4.19"
 web-sys = "=0.3.46"
 wgpu = "=0.7.0"
 winit = { version = "^ 0.24", features = ["web-sys"] }
-absolute_unit = { path = "../../libs/sim/absolute_unit" }
+absolute_unit = { path = "../../libs/util/absolute_unit" }
 camera = { path = "../../libs/sim/camera" }
 fullscreen = { path = "../../libs/wgpu-buffer/fullscreen" }
 geodesy = { path = "../../libs/sim/geodesy" }

@@ -13,7 +13,7 @@ camera = { path = "../../sim/camera" }
 gpu = { path = "../../system/gpu" }
 
 [dev-dependencies]
-absolute_unit = { path = "../../sim/absolute_unit" }
+absolute_unit = { path = "../../util/absolute_unit" }
 anyhow = "^ 1"
 geodesy = { path = "../../sim/geodesy" }
 global_data = { path = "../../wgpu-buffer/global_data" }
