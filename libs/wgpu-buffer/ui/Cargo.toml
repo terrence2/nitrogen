@@ -16,4 +16,4 @@ widget = { path = "../../wgpu-buffer/widget" }
 world = { path = "../../wgpu-buffer/world" }
 
 [build-dependencies]
-build_shaders = { path = "../../system/build_shaders" }
+build_shaders = { path = "../../util/build_shaders" }

@@ -17,6 +17,8 @@ members = [
     # out fully, once mature enough.
     "libs/util/absolute_unit",
     "libs/util/animate",
+    "libs/util/ansi",
+    "libs/util/build_shaders",
     "libs/util/geodesy",
     "libs/util/geometry",
     "libs/util/nitrous",
@@ -27,8 +29,6 @@ members = [
 
     # Only external and util dependencies. Generally adapting or wrapping
     # system level platform capabilities.
-    "libs/system/ansi",
-    "libs/system/build_shaders",
     "libs/system/catalog",
     "libs/system/gpu",
     "libs/system/input",

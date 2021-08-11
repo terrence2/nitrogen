@@ -20,4 +20,4 @@ winit = { version = "^ 0.24", features = ["web-sys"] }
 nitrous = { path = "../../util/nitrous" }
 
 [build-dependencies]
-build_shaders = { path = "../../system/build_shaders" }
+build_shaders = { path = "../../util/build_shaders" }
