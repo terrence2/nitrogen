@@ -23,7 +23,7 @@ use anyhow::Result;
 use atlas::{AtlasPacker, Frame};
 use font_common::{FontAdvance, FontInterface};
 use gpu::{
-    size::{AbsSize, RelSize, ScreenDir},
+    size::{AbsSize, LeftBound, RelSize, ScreenDir},
     Gpu, UploadTracker,
 };
 use image::Luma;
@@ -148,8 +148,11 @@ impl FontContext {
         self.trackers.insert(fid, GlyphTracker::new(font));
     }
 
-    pub fn load_glyph(&mut self, fid: FontId, c: char, scale: f32, gpu: &Gpu) -> Result<Frame> {
-        if let Some(frame) = self.trackers[&fid].glyphs.get(&(c, OrderedFloat(scale))) {
+    pub fn load_glyph(&mut self, fid: FontId, c: char, scale: AbsSize, gpu: &Gpu) -> Result<Frame> {
+        if let Some(frame) = self.trackers[&fid]
+            .glyphs
+            .get(&(c, OrderedFloat(scale.as_pts())))
+        {
             return Ok(*frame);
         }
         // Note: cannot delegate to GlyphTracker because of the second mutable borrow.
@@ -160,7 +163,7 @@ impl FontContext {
             .get_mut(&fid)
             .unwrap()
             .glyphs
-            .insert((c, OrderedFloat(scale)), frame);
+            .insert((c, OrderedFloat(scale.as_pts())), frame);
         Ok(frame)
     }
 
@@ -189,28 +192,27 @@ impl FontContext {
 
     pub fn measure_text(&mut self, span: &TextSpan, gpu: &Gpu) -> Result<TextSpanMetrics> {
         let phys_w = gpu.physical_size().width as f32;
-        let scale_px =
-            (span.size().as_px(gpu, ScreenDir::Horizontal) * gpu.scale_factor() as f32).ceil();
+        let scale_px = (span.size() * gpu.scale_factor() as f32)
+            .as_abs(gpu, ScreenDir::Horizontal)
+            .ceil();
 
         // Font rendering is based around the baseline. We want it based around the top-left
         // corner instead, so move down by the ascent.
         let font = self.get_font(span.font());
-        let descent = AbsSize::from_px(font.read().descent(scale_px));
-        let ascent = AbsSize::from_px(font.read().ascent(scale_px));
-        let line_gap = AbsSize::from_px(font.read().line_gap(scale_px));
+        let descent = font.read().descent(scale_px);
+        let ascent = font.read().ascent(scale_px);
+        let line_gap = font.read().line_gap(scale_px);
         let advance = font.read().advance_style();
 
         let mut x_pos = AbsSize::from_px(0.);
         let mut prior = None;
         for c in span.content().chars() {
             let font = self.get_font(span.font());
-            let lsb = AbsSize::from_px(font.read().left_side_bearing(c, scale_px));
-            let adv = AbsSize::from_px(font.read().advance_width(c, scale_px));
-            let kerning = AbsSize::from_px(
-                prior
-                    .map(|p| font.read().pair_kerning(p, c, scale_px))
-                    .unwrap_or(0f32),
-            );
+            let lsb = font.read().left_side_bearing(c, scale_px);
+            let adv = font.read().advance_width(c, scale_px);
+            let kerning = prior
+                .map(|p| font.read().pair_kerning(p, c, scale_px))
+                .unwrap_or_else(AbsSize::zero);
             prior = Some(c);
 
             if advance != FontAdvance::Mono {
@@ -251,15 +253,16 @@ impl FontContext {
         let phys_w = gpu.physical_size().width as f32;
 
         // The font system expects scales in pixels.
-        let scale_px =
-            (span.size().as_px(gpu, ScreenDir::Horizontal) * gpu.scale_factor() as f32).ceil();
+        let scale_px = (span.size() * gpu.scale_factor() as f32)
+            .as_abs(gpu, ScreenDir::Horizontal)
+            .ceil();
 
         // Font rendering is based around the baseline. We want it based around the top-left
         // corner instead, so move down by the ascent.
         let font = self.get_font(span.font());
-        let descent = AbsSize::from_px(font.read().descent(scale_px));
-        let ascent = AbsSize::from_px(font.read().ascent(scale_px));
-        let line_gap = AbsSize::from_px(font.read().line_gap(scale_px));
+        let descent = font.read().descent(scale_px);
+        let ascent = font.read().ascent(scale_px);
+        let line_gap = font.read().line_gap(scale_px);
         let advance = font.read().advance_style();
 
         let mut x_pos = offset.left();
@@ -269,13 +272,11 @@ impl FontContext {
             let frame = self.load_glyph(span.font(), c, scale_px, gpu)?;
             let font = self.get_font(span.font());
             let ((lo_x, lo_y), (hi_x, hi_y)) = font.read().pixel_bounding_box(c, scale_px);
-            let lsb = AbsSize::from_px(font.read().left_side_bearing(c, scale_px));
-            let adv = AbsSize::from_px(font.read().advance_width(c, scale_px));
-            let kerning = AbsSize::from_px(
-                prior
-                    .map(|p| font.read().pair_kerning(p, c, scale_px))
-                    .unwrap_or(0f32),
-            );
+            let lsb = font.read().left_side_bearing(c, scale_px);
+            let adv = font.read().advance_width(c, scale_px);
+            let kerning = prior
+                .map(|p| font.read().pair_kerning(p, c, scale_px))
+                .unwrap_or_else(AbsSize::zero);
             prior = Some(c);
 
             if advance != FontAdvance::Mono {
@@ -283,10 +284,10 @@ impl FontContext {
             }
             Self::align_to_px(phys_w, &mut x_pos);
 
-            let x0 = x_pos + AbsSize::from_px(lo_x as f32);
-            let x1 = x_pos + AbsSize::from_px(hi_x as f32);
-            let y0 = y_pos + AbsSize::from_px(lo_y as f32);
-            let y1 = y_pos + AbsSize::from_px(hi_y as f32);
+            let x0 = x_pos + lo_x;
+            let x1 = x_pos + hi_x;
+            let y0 = y_pos + lo_y;
+            let y1 = y_pos + hi_y;
 
             WidgetVertex::push_textured_quad(
                 [x0.into(), y0.into()],
@@ -325,7 +326,7 @@ impl FontContext {
             if let SpanSelection::Select { range } = &selection_area {
                 if range.contains(&i) {
                     let bx0 = offset.left() + x_pos;
-                    let bx1 = offset.left() + x_pos + kerning + AbsSize::from_px(lo_x as f32) + adv;
+                    let bx1 = offset.left() + x_pos + kerning + lo_x + adv;
                     let by0 = offset.bottom() + descent;
                     let by1 = offset.bottom() + ascent;
                     let bz = offset.depth() - RelSize::from_percent(0.1);

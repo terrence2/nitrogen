@@ -231,6 +231,13 @@ impl AbsSize {
             Self::Pts(pts) => Self::Pts(pts.min(other.as_pts())),
         }
     }
+
+    pub fn ceil(&self) -> Self {
+        match self {
+            Self::Px(px) => Self::Px(px.ceil()),
+            Self::Pts(pts) => Self::Pts(pts.ceil()),
+        }
+    }
 }
 
 impl Default for AbsSize {
