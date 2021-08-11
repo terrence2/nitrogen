@@ -15,7 +15,7 @@ static_assertions = "^ 1"
 wgpu = "^ 0.7"
 zerocopy = "= 0.3.0"
 camera = { path = "../../sim/camera" }
-star_catalog = { path = "../../sim/star_catalog" }
+star_catalog = { path = "../../util/star_catalog" }
 gpu = { path = "../../system/gpu" }
 
 [dev-dependencies]

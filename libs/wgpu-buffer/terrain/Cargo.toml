@@ -35,8 +35,8 @@ global_data = { path = "../../wgpu-buffer/global_data" }
 gpu = { path = "../../system/gpu" }
 nitrous = { path = "../../system/nitrous" }
 nitrous_injector = { path = "../../system/nitrous_injector" }
-packed_struct = { path = "../../system/packed_struct" }
-physical_constants = { path = "../../sim/physical_constants" }
+packed_struct = { path = "../../util/packed_struct" }
+physical_constants = { path = "../../util/physical_constants" }
 shader_shared = { path = "../../wgpu-buffer/shader_shared" }
 universe = { path = "../../sim/universe" }
 

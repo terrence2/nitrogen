@@ -19,4 +19,4 @@ nitrous_injector = { path = "../../system/nitrous_injector" }
 
 [dev-dependencies]
 approx = "^ 0.4"
-physical_constants = { path = "../../sim/physical_constants" }
+physical_constants = { path = "../../util/physical_constants" }

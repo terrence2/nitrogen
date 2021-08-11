@@ -9,7 +9,7 @@ edition = "2018"
 nalgebra = "^ 0.24"
 num-traits = "^ 0.2"
 absolute_unit = { path = "../../util/absolute_unit" }
-physical_constants = { path = "../../sim/physical_constants" }
+physical_constants = { path = "../../util/physical_constants" }
 
 [dev-dependencies]
 approx = "^ 0.4"

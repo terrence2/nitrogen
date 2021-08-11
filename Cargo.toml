@@ -16,13 +16,14 @@ members = [
     # out fully, once mature enough.
     "libs/util/absolute_unit",
     "libs/util/geometry",
+    "libs/util/packed_struct",
+    "libs/util/physical_constants",
+    "libs/util/star_catalog",
 
     "libs/sim/animate",
     "libs/sim/camera",
     "libs/sim/geodesy",
     "libs/sim/orrery",
-    "libs/sim/physical_constants",
-    "libs/sim/star_catalog",
     "libs/sim/universe",
 
     "libs/system/ansi",
@@ -32,7 +33,6 @@ members = [
     "libs/system/input",
     "libs/system/nitrous",
     "libs/system/nitrous_injector",
-    "libs/system/packed_struct",
 
     "libs/wgpu-buffer/atlas",
     "libs/wgpu-buffer/atmosphere",
