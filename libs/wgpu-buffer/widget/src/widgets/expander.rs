@@ -16,7 +16,7 @@ use crate::{
     color::Color,
     font_context::{FontContext, FontId},
     paint_context::PaintContext,
-    region::{Border, Extent, Position},
+    region::{Border, Extent, Position, Region},
     widget::{Labeled, Widget},
     widget_vertex::WidgetVertex,
     widgets::label::Label,
@@ -44,8 +44,7 @@ pub struct Expander {
     background_color: Option<Color>,
 
     info: WidgetInfo,
-    allocated_position: Position<Size>,
-    allocated_extent: Extent<Size>,
+    allocated_region: Region<Size>,
     header_position: Position<AbsSize>,
     header_extent: Extent<AbsSize>,
 }
@@ -66,8 +65,7 @@ impl Expander {
             background_color: None,
 
             info: WidgetInfo::default(),
-            allocated_position: Position::origin(),
-            allocated_extent: Extent::zero(),
+            allocated_region: Region::empty(),
             header_position: Position::origin(),
             header_extent: Extent::zero(),
         }
@@ -143,41 +141,45 @@ impl Widget for Expander {
 
     fn layout(
         &mut self,
+        region: Region<Size>,
         gpu: &Gpu,
-        position: Position<Size>,
-        extent: Extent<Size>,
         font_context: &mut FontContext,
     ) -> Result<()> {
         // TODO: This is almost certainly wrong when content is expanded.
         {
             // Put the label inside the box at the proper border and padding offset.
-            let mut pos = position;
+            let mut pos = *region.position();
             pos.add_border(&self.border, gpu);
             pos.add_border(&self.padding, gpu);
-            self.header.write().layout(gpu, pos, extent, font_context)?;
+            self.header.write().layout(
+                Region::new(pos, self.header_extent.into()),
+                gpu,
+                font_context,
+            )?;
         }
 
         // Layout the content at the bottom of the box.
         // TODO: what about an internal border? What about bottom and left borders?
-        let mut pos = position;
-        *pos.bottom_mut() = pos.bottom().add(&extent.height(), gpu, ScreenDir::Vertical);
+        let mut pos = *region.position();
+        *pos.bottom_mut() = pos
+            .bottom()
+            .add(&region.extent().height(), gpu, ScreenDir::Vertical);
         if self.expanded {
             self.child
                 .write()
-                .layout(gpu, position, extent, font_context)?;
+                .layout(region.clone(), gpu, font_context)?;
         }
 
         // note: for full extent of header, rather than just the label's
-        let mut pos = position;
+        let mut pos = *region.position();
         *pos.bottom_mut() = pos.bottom().add(
             &self.header_extent.height().into(),
             gpu,
             ScreenDir::Vertical,
         );
-        self.header_position = position.as_abs(gpu);
+        self.header_position = region.position().as_abs(gpu);
 
-        self.allocated_position = position;
-        self.allocated_extent = extent;
+        self.allocated_region = region;
 
         Ok(())
     }
@@ -192,9 +194,10 @@ impl Widget for Expander {
 
         if let Some(border_color) = self.border_color {
             WidgetVertex::push_quad_ext(
-                self.allocated_position
+                self.allocated_region
+                    .position()
                     .with_depth(context.current_depth + PaintContext::BORDER_DEPTH),
-                self.allocated_extent,
+                *self.allocated_region.extent(),
                 &border_color,
                 widget_info_index,
                 gpu,
@@ -203,10 +206,11 @@ impl Widget for Expander {
         }
         if let Some(background_color) = self.background_color {
             let mut pos = self
-                .allocated_position
+                .allocated_region
+                .position()
                 .with_depth(context.current_depth + PaintContext::BACKGROUND_DEPTH);
             pos.add_border(&self.border, gpu);
-            let mut ext = self.allocated_extent;
+            let mut ext = *self.allocated_region.extent();
             ext.remove_border(&self.border, gpu);
             WidgetVertex::push_quad_ext(
                 pos,

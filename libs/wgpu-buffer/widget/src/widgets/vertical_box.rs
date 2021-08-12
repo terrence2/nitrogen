@@ -17,7 +17,7 @@ use crate::{
     color::Color,
     font_context::FontContext,
     paint_context::PaintContext,
-    region::{Extent, Position},
+    region::{Extent, Position, Region},
     widget::Widget,
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
@@ -115,21 +115,20 @@ impl Widget for VerticalBox {
 
     fn layout(
         &mut self,
+        region: Region<Size>,
         gpu: &Gpu,
-        position: Position<Size>,
-        extent: Extent<Size>,
         font_context: &mut FontContext,
     ) -> Result<()> {
         BoxPacking::layout(
             &mut self.children,
             ScreenDir::Vertical,
             gpu,
-            position,
-            extent,
+            *region.position(),
+            *region.extent(),
             font_context,
         )?;
-        self.position = position;
-        self.extent = extent;
+        self.position = *region.position();
+        self.extent = *region.extent();
 
         Ok(())
     }

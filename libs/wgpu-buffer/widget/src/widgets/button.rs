@@ -16,7 +16,7 @@ use crate::{
     color::Color,
     font_context::{FontContext, FontId},
     paint_context::PaintContext,
-    region::{Extent, Position},
+    region::{Extent, Position, Region},
     widget::{Labeled, Widget},
     widgets::label::Label,
 };
@@ -79,14 +79,11 @@ impl Widget for Button {
 
     fn layout(
         &mut self,
+        region: Region<Size>,
         gpu: &Gpu,
-        position: Position<Size>,
-        extent: Extent<Size>,
         font_context: &mut FontContext,
     ) -> Result<()> {
-        self.label
-            .write()
-            .layout(gpu, position, extent, font_context)
+        self.label.write().layout(region, gpu, font_context)
     }
 
     fn upload(&self, now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {

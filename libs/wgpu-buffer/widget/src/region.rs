@@ -294,3 +294,30 @@ impl Border<Size> {
         )
     }
 }
+
+#[derive(Clone, Debug)]
+pub struct Region<T> {
+    position: Position<T>,
+    extent: Extent<T>,
+}
+
+impl<T: Copy + Clone + AspectMath + LeftBound> Region<T> {
+    pub fn empty() -> Self {
+        Self {
+            position: Position::origin(),
+            extent: Extent::zero(),
+        }
+    }
+
+    pub fn new(position: Position<T>, extent: Extent<T>) -> Self {
+        Self { position, extent }
+    }
+
+    pub fn position(&self) -> &Position<T> {
+        &self.position
+    }
+
+    pub fn extent(&self) -> &Extent<T> {
+        &self.extent
+    }
+}

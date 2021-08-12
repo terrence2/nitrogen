@@ -16,7 +16,7 @@ use crate::{
     color::Color,
     font_context::{FontContext, FontId, SANS_FONT_ID},
     paint_context::PaintContext,
-    region::{Extent, Position},
+    region::{Extent, Position, Region},
     text_run::TextRun,
     widget::Widget,
     widget_info::WidgetInfo,
@@ -125,13 +125,12 @@ impl Widget for TextEdit {
 
     fn layout(
         &mut self,
+        region: Region<Size>,
         _gpu: &Gpu,
-        position: Position<Size>,
-        extent: Extent<Size>,
         _font_context: &mut FontContext,
     ) -> Result<()> {
-        self.layout_position = position;
-        self.layout_extent = extent;
+        self.layout_position = *region.position();
+        self.layout_extent = *region.extent();
         Ok(())
     }
 

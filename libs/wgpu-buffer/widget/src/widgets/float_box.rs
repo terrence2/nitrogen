@@ -16,7 +16,7 @@ use crate::{
     box_packing::{PositionH, PositionV},
     font_context::FontContext,
     paint_context::PaintContext,
-    region::{Extent, Position},
+    region::{Extent, Position, Region},
     widget::Widget,
 };
 use anyhow::{anyhow, Result};
@@ -66,6 +66,7 @@ impl FloatPacking {
 #[derive(Debug)]
 pub struct FloatBox {
     children: HashMap<String, FloatPacking>,
+
     position: Position<RelSize>,
     extent: Extent<RelSize>,
 }
@@ -105,13 +106,12 @@ impl Widget for FloatBox {
 
     fn layout(
         &mut self,
+        region: Region<Size>,
         gpu: &Gpu,
-        position: Position<Size>,
-        extent: Extent<Size>,
         font_context: &mut FontContext,
     ) -> Result<()> {
-        let position = position.as_rel(gpu);
-        let extent = extent.as_rel(gpu);
+        let position = region.position().as_rel(gpu);
+        let extent = region.extent().as_rel(gpu);
         for pack in self.children.values() {
             let mut widget = pack.widget.write();
             let child_extent = widget.measure(gpu, font_context)?.as_rel(gpu);
@@ -133,9 +133,11 @@ impl Widget for FloatBox {
                 (extent.height() - top_offset).into(),
             );
             widget.layout(
+                Region::new(
+                    Position::new(left_offset.into(), top_offset.into()),
+                    remaining_extent,
+                ),
                 gpu,
-                Position::new(left_offset.into(), top_offset.into()),
-                remaining_extent,
                 font_context,
             )?;
         }

@@ -27,7 +27,7 @@ pub use crate::{
     box_packing::{PositionH, PositionV},
     color::Color,
     paint_context::PaintContext,
-    region::{Border, Extent, Position},
+    region::{Border, Extent, Position, Region},
     widget::{Labeled, Widget},
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
@@ -295,9 +295,11 @@ impl WidgetBuffer {
 
     pub fn layout_for_frame(&mut self, gpu: &mut Gpu) -> Result<()> {
         self.root.write().layout(
+            Region::new(
+                Position::origin(),
+                Extent::new(Size::from_percent(100.), Size::from_percent(100.)),
+            ),
             gpu,
-            Position::origin(),
-            Extent::new(Size::from_percent(100.), Size::from_percent(100.)),
             &mut self.paint_context.font_context,
         )?;
         Ok(())

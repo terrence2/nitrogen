@@ -16,7 +16,7 @@ use crate::{
     color::Color,
     font_context::FontContext,
     paint_context::PaintContext,
-    region::{Extent, Position},
+    region::{Extent, Position, Region},
     widget::Widget,
     LineEdit, TextEdit, VerticalBox,
 };
@@ -143,18 +143,15 @@ impl Widget for Terminal {
 
     fn layout(
         &mut self,
+        region: Region<Size>,
         gpu: &Gpu,
-        position: Position<Size>,
-        extent: Extent<Size>,
         font_context: &mut FontContext,
     ) -> Result<()> {
         if !self.visible {
             return Ok(());
         }
 
-        self.container
-            .write()
-            .layout(gpu, position, extent, font_context)
+        self.container.write().layout(region, gpu, font_context)
     }
 
     fn upload(&self, now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {

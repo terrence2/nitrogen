@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     font_context::FontContext,
-    region::{Extent, Position},
+    region::{Extent, Position, Region},
     widget::Widget,
 };
 use anyhow::Result;
@@ -157,7 +157,7 @@ impl BoxPacking {
             tmp_extent.set_axis(dir, child_alloc);
             packing
                 .widget_mut()
-                .layout(gpu, pos, tmp_extent, font_context)?;
+                .layout(Region::new(pos, tmp_extent), gpu, font_context)?;
         }
 
         Ok(())

@@ -16,7 +16,7 @@ use crate::{
     color::Color,
     font_context::{FontContext, FontId},
     paint_context::PaintContext,
-    region::{Extent, Position},
+    region::{Extent, Position, Region},
 };
 use anyhow::Result;
 use gpu::{
@@ -69,9 +69,8 @@ pub trait Widget: Debug + Send + Sync + 'static {
     /// Apply the layout algorithm to size everything for the current displayed set.
     fn layout(
         &mut self,
+        region: Region<Size>,
         gpu: &Gpu,
-        position: Position<Size>,
-        extent: Extent<Size>,
         font_context: &mut FontContext,
     ) -> Result<()>;
 

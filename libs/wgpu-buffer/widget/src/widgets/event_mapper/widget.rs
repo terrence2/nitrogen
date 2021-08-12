@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     font_context::FontContext,
-    region::{Extent, Position},
+    region::{Extent, Position, Region},
     widget::Widget,
     widgets::event_mapper::{
         bindings::Bindings,
@@ -81,9 +81,8 @@ impl Widget for EventMapper {
 
     fn layout(
         &mut self,
+        _region: Region<Size>,
         _gpu: &Gpu,
-        _position: Position<Size>,
-        _extent: Extent<Size>,
         _font_context: &mut FontContext,
     ) -> Result<()> {
         Ok(())

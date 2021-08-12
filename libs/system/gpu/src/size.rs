@@ -238,6 +238,13 @@ impl AbsSize {
             Self::Pts(pts) => Self::Pts(pts.ceil()),
         }
     }
+
+    pub fn round(&self) -> Self {
+        match self {
+            Self::Px(px) => Self::Px(px.round()),
+            Self::Pts(pts) => Self::Pts(pts.round()),
+        }
+    }
 }
 
 impl Default for AbsSize {
