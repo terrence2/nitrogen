@@ -24,7 +24,7 @@ use crate::{
 };
 use anyhow::Result;
 use gpu::{
-    size::{AbsSize, AspectMath, ScreenDir, Size},
+    size::{AbsSize, Size},
     Gpu,
 };
 use input::GenericEvent;
@@ -44,9 +44,8 @@ pub struct Expander {
     background_color: Option<Color>,
 
     info: WidgetInfo,
-    allocated_region: Region<Size>,
-    header_position: Position<AbsSize>,
-    header_extent: Extent<AbsSize>,
+    allocated_region: Region<AbsSize>,
+    header_region: Region<AbsSize>,
 }
 
 impl Expander {
@@ -66,8 +65,7 @@ impl Expander {
 
             info: WidgetInfo::default(),
             allocated_region: Region::empty(),
-            header_position: Position::origin(),
-            header_extent: Extent::zero(),
+            header_region: Region::empty(),
         }
     }
 
@@ -118,66 +116,54 @@ impl Labeled for Expander {
 impl Widget for Expander {
     fn measure(&mut self, gpu: &Gpu, font_context: &mut FontContext) -> Result<Extent<Size>> {
         // Measure label and add border and padding from the box.
-        let mut extent = self.header.write().measure(gpu, font_context)?;
-        extent.add_border(&self.border, gpu);
-        extent.add_border(&self.padding, gpu);
+        let mut extent = self.header.write().measure(gpu, font_context)?.as_abs(gpu);
+        extent.expand_with_border(&self.border.as_abs(gpu), gpu);
+        extent.expand_with_border(&self.padding.as_abs(gpu), gpu);
 
-        // Copy this to what we use for hit testing.
-        self.header_extent = extent.as_abs(gpu);
+        // Copy the full area to what we use for hit testing.
+        self.header_region.set_extent(extent);
 
         // If we are expanded, add the full size of the child.
         if self.expanded {
             // TODO: what about internal border / line between?
-            let child = self.child.write().measure(gpu, font_context)?;
-            extent
-                .width_mut()
-                .max(&child.width(), gpu, ScreenDir::Horizontal);
-            extent
-                .height_mut()
-                .add(&child.height(), gpu, ScreenDir::Vertical);
+            let child = self.child.write().measure(gpu, font_context)?.as_abs(gpu);
+            *extent.width_mut() = extent.width().max(&child.width());
+            *extent.height_mut() = extent.height() + child.height();
         }
-        Ok(extent)
+        Ok(extent.into())
     }
 
     fn layout(
         &mut self,
+        now: Instant,
         region: Region<Size>,
         gpu: &Gpu,
         font_context: &mut FontContext,
     ) -> Result<()> {
-        // TODO: This is almost certainly wrong when content is expanded.
-        {
-            // Put the label inside the box at the proper border and padding offset.
-            let mut pos = *region.position();
-            pos.add_border(&self.border, gpu);
-            pos.add_border(&self.padding, gpu);
-            self.header.write().layout(
-                Region::new(pos, self.header_extent.into()),
-                gpu,
-                font_context,
-            )?;
-        }
+        let region = region.as_abs(gpu);
 
-        // Layout the content at the bottom of the box.
-        // TODO: what about an internal border? What about bottom and left borders?
-        let mut pos = *region.position();
-        *pos.bottom_mut() = pos
-            .bottom()
-            .add(&region.extent().height(), gpu, ScreenDir::Vertical);
+        // Put the expanded content at the bottom of the box.
+        let mut extent = *region.extent();
+        *extent.height_mut() = extent.height() - self.header_region.extent().height();
         if self.expanded {
             self.child
                 .write()
-                .layout(region.clone(), gpu, font_context)?;
+                .layout(now, region.with_extent(extent).into(), gpu, font_context)?;
         }
 
-        // note: for full extent of header, rather than just the label's
+        // Recompute position from top using the header.
         let mut pos = *region.position();
-        *pos.bottom_mut() = pos.bottom().add(
-            &self.header_extent.height().into(),
+        *pos.bottom_mut() = pos.bottom() + region.extent().height();
+        *pos.bottom_mut() = pos.bottom() - self.header_region.extent().height();
+        self.header_region.set_position(pos);
+        pos.offset_by_border(&self.border.as_abs(gpu), gpu);
+        pos.offset_by_border(&self.padding.as_abs(gpu), gpu);
+        self.header.write().layout(
+            now,
+            Region::new(pos.into(), (*self.header_region.extent()).into()),
             gpu,
-            ScreenDir::Vertical,
-        );
-        self.header_position = region.position().as_abs(gpu);
+            font_context,
+        )?;
 
         self.allocated_region = region;
 
@@ -196,8 +182,9 @@ impl Widget for Expander {
             WidgetVertex::push_quad_ext(
                 self.allocated_region
                     .position()
-                    .with_depth(context.current_depth + PaintContext::BORDER_DEPTH),
-                *self.allocated_region.extent(),
+                    .with_depth(context.current_depth + PaintContext::BORDER_DEPTH)
+                    .into(),
+                (*self.allocated_region.extent()).into(),
                 &border_color,
                 widget_info_index,
                 gpu,
@@ -209,12 +196,12 @@ impl Widget for Expander {
                 .allocated_region
                 .position()
                 .with_depth(context.current_depth + PaintContext::BACKGROUND_DEPTH);
-            pos.add_border(&self.border, gpu);
+            pos.offset_by_border(&self.border.as_abs(gpu), gpu);
             let mut ext = *self.allocated_region.extent();
-            ext.remove_border(&self.border, gpu);
+            ext.remove_border(&self.border.as_abs(gpu), gpu);
             WidgetVertex::push_quad_ext(
-                pos,
-                ext,
+                pos.into(),
+                ext.into(),
                 &background_color,
                 widget_info_index,
                 gpu,
@@ -228,18 +215,13 @@ impl Widget for Expander {
     fn handle_event(
         &mut self,
         _now: Instant,
-        _event: &GenericEvent,
+        event: &GenericEvent,
         _focus: &str,
         cursor_position: Position<AbsSize>,
         _interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
-        if cursor_position.left() >= self.header_position.left()
-            && cursor_position.left() <= (self.header_position.left() + self.header_extent.width())
-            && cursor_position.bottom() >= self.header_position.bottom()
-            && cursor_position.bottom()
-                <= (self.header_position.bottom() + self.header_extent.height())
-        {
-            println!("in ame column");
+        if event.is_primary_mouse_down() && self.header_region.intersects(&cursor_position) {
+            self.expanded = !self.expanded;
         }
 
         Ok(())

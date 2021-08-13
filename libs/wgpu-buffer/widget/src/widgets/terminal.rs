@@ -143,6 +143,7 @@ impl Widget for Terminal {
 
     fn layout(
         &mut self,
+        now: Instant,
         region: Region<Size>,
         gpu: &Gpu,
         font_context: &mut FontContext,
@@ -151,7 +152,9 @@ impl Widget for Terminal {
             return Ok(());
         }
 
-        self.container.write().layout(region, gpu, font_context)
+        self.container
+            .write()
+            .layout(now, region, gpu, font_context)
     }
 
     fn upload(&self, now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {

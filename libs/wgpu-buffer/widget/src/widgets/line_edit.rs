@@ -121,6 +121,7 @@ impl Widget for LineEdit {
 
     fn layout(
         &mut self,
+        _now: Instant,
         region: Region<Size>,
         gpu: &Gpu,
         _font_context: &mut FontContext,

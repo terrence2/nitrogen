@@ -22,10 +22,7 @@ use crate::{
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
-use gpu::{
-    size::{AspectMath, ScreenDir, Size},
-    Gpu,
-};
+use gpu::{size::Size, Gpu};
 use parking_lot::RwLock;
 use std::{sync::Arc, time::Instant};
 
@@ -97,16 +94,14 @@ impl Widget for Label {
 
     fn layout(
         &mut self,
+        _now: Instant,
         region: Region<Size>,
         gpu: &Gpu,
         _font_context: &mut FontContext,
     ) -> Result<()> {
-        let mut position = *region.position();
-        *position.bottom_mut() =
-            position
-                .bottom()
-                .sub(&self.metrics.descent.into(), gpu, ScreenDir::Vertical);
-        self.allocated_position = position;
+        let mut position = region.position().as_abs(gpu);
+        *position.bottom_mut() = position.bottom() - self.metrics.descent;
+        self.allocated_position = position.into();
         self.allocated_extent = *region.extent();
         Ok(())
     }

@@ -17,7 +17,7 @@ use anyhow::Result;
 use atmosphere::AtmosphereBuffer;
 use camera::{ArcBallCamera, Camera};
 use catalog::{Catalog, DirectoryDrawer};
-use chrono::{TimeZone, Utc};
+use chrono::{Duration, TimeZone, Utc};
 use composite::CompositeRenderPass;
 use fullscreen::FullscreenBuffer;
 use geodesy::{GeoSurface, Graticule, Target};
@@ -238,22 +238,25 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
 
     ///////////////////////////////////////////////////////////
     // UI Setup
-    let version_label = Label::new("Nitrogen v0.1")
-        .with_font(widgets.read().font_context().font_id_for_name("fira-sans"))
-        .with_color(Color::Green)
-        .with_size(Size::from_pts(8.0))
-        .with_pre_blended_text()
-        .wrapped();
-    let button_wp_1 = Button::new_with_text("--> ☰ <--")
-        .with_action("camera.set_whitepoint()")
-        .wrapped();
-    let button_wp_2 = Button::new_with_text("Whitepoint 2").wrapped();
-    let button_wp_3 = Button::new_with_text("Whitepoint 3").wrapped();
-    let controls_box =
-        VerticalBox::new_with_children(&[version_label, button_wp_1, button_wp_2, button_wp_3])
-            .with_background_color(Color::Gray.darken(3.).opacity(0.8))
-            .with_glass_background()
-            .wrapped();
+    let sim_time = Label::new("").with_color(Color::White).wrapped();
+    let camera_direction = Label::new("").with_color(Color::White).wrapped();
+    let camera_position = Label::new("").with_color(Color::White).wrapped();
+    let camera_fov = Label::new("").with_color(Color::White).wrapped();
+    let controls_box = VerticalBox::new_with_children(&[
+        sim_time.clone(),
+        camera_direction.clone(),
+        camera_position.clone(),
+        camera_fov.clone(),
+    ])
+    .with_background_color(Color::Gray.darken(3.).opacity(0.8))
+    .with_glass_background()
+    .with_padding(Border::new(
+        Size::zero(),
+        Size::from_px(8.),
+        Size::from_px(24.),
+        Size::from_px(8.),
+    ))
+    .wrapped();
     let expander = Expander::new_with_child("☰ Nitrogen v0.1", controls_box)
         .with_color(Color::White)
         .with_background_color(Color::Gray.darken(3.).opacity(0.8))
@@ -282,7 +285,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         .add_child("controls", expander)
         .set_float(PositionH::End, PositionV::Top);
 
-    let fps_label = Label::new("fps")
+    let fps_label = Label::new("")
         .with_font(widgets.read().font_context().font_id_for_name("sans"))
         .with_color(Color::Red)
         .with_size(Size::from_pts(13.0))
@@ -346,8 +349,12 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         system.write().add_default_bindings(interp)?;
     }
 
+    let mut loop_start = Instant::now();
     while !system.read().exit {
-        let loop_start = Instant::now();
+        orrery
+            .write()
+            .adjust_time(Duration::from_std(loop_start.elapsed())?);
+        loop_start = Instant::now();
 
         {
             let logical_extent = {
@@ -361,7 +368,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
             frame_graph
                 .widgets
                 .write()
-                .layout_for_frame(&mut gpu.write())?;
+                .layout_for_frame(loop_start, &mut gpu.write())?;
             frame_graph.widgets.write().handle_events(
                 loop_start,
                 &input_controller.poll_events()?,
@@ -403,14 +410,22 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
             gpu.write().on_resize(sz.width as i64, sz.height as i64)?;
         }
 
+        sim_time
+            .write()
+            .set_text(format!("Date: {}", orrery.read().get_time()));
+        camera_direction
+            .write()
+            .set_text(format!("Eye: {}", arcball.read().get_eye_relative()));
+        camera_position
+            .write()
+            .set_text(format!("Position: {}", arcball.read().get_target(),));
+        camera_fov.write().set_text(format!(
+            "FoV: {}",
+            degrees!(arcball.read().camera().fov_y()),
+        ));
         let frame_time = loop_start.elapsed();
         let ts = format!(
-            "eye_rel: {} | tgt: {} | asl: {}, fov: {} || Date: {:?} || frame: {}.{}ms",
-            arcball.read().get_eye_relative(),
-            arcball.read().get_target(),
-            arcball.read().get_target().distance,
-            degrees!(arcball.read().camera().fov_y()),
-            orrery.read().get_time(),
+            "frame: {}.{}ms",
             frame_time.as_secs() * 1000 + u64::from(frame_time.subsec_millis()),
             frame_time.subsec_micros(),
         );

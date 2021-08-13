@@ -179,6 +179,23 @@ impl GenericEvent {
             )
         })
     }
+
+    pub fn is_primary_mouse_down(&self) -> bool {
+        match self {
+            Self::MouseButton {
+                button,
+                press_state,
+                ..
+            } => {
+                if *button == 1 && *press_state == ElementState::Pressed {
+                    true
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

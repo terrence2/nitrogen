@@ -81,6 +81,7 @@ impl Widget for EventMapper {
 
     fn layout(
         &mut self,
+        _now: Instant,
         _region: Region<Size>,
         _gpu: &Gpu,
         _font_context: &mut FontContext,

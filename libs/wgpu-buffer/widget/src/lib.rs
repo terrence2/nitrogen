@@ -293,8 +293,9 @@ impl WidgetBuffer {
         0u32..self.paint_context.text_pool.len() as u32
     }
 
-    pub fn layout_for_frame(&mut self, gpu: &mut Gpu) -> Result<()> {
+    pub fn layout_for_frame(&mut self, now: Instant, gpu: &mut Gpu) -> Result<()> {
         self.root.write().layout(
+            now,
             Region::new(
                 Position::origin(),
                 Extent::new(Size::from_percent(100.), Size::from_percent(100.)),

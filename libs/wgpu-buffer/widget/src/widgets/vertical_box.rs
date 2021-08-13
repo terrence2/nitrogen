@@ -17,7 +17,7 @@ use crate::{
     color::Color,
     font_context::FontContext,
     paint_context::PaintContext,
-    region::{Extent, Position, Region},
+    region::{Border, Extent, Position, Region},
     widget::Widget,
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
@@ -35,13 +35,13 @@ use std::{sync::Arc, time::Instant};
 // Items packed from top to bottom.
 #[derive(Debug)]
 pub struct VerticalBox {
-    info: WidgetInfo,
-    position: Position<Size>,
-    extent: Extent<Size>,
-
+    children: Vec<BoxPacking>,
     background_color: Option<Color>,
     override_extent: Option<Extent<Size>>,
-    children: Vec<BoxPacking>,
+    padding: Border<Size>,
+
+    info: WidgetInfo,
+    region: Region<Size>,
 }
 
 impl VerticalBox {
@@ -53,10 +53,11 @@ impl VerticalBox {
                 .map(|(i, w)| BoxPacking::new(w.to_owned(), i))
                 .collect::<Vec<_>>(),
             background_color: None,
-            info: WidgetInfo::default(),
-            position: Position::origin(),
-            extent: Extent::zero(),
             override_extent: None,
+            padding: Border::empty(),
+
+            info: WidgetInfo::default(),
+            region: Region::empty(),
         }
     }
 
@@ -84,6 +85,11 @@ impl VerticalBox {
         self
     }
 
+    pub fn with_padding(mut self, padding: Border<Size>) -> Self {
+        self.padding = padding;
+        self
+    }
+
     pub fn add_child(&mut self, child: Arc<RwLock<dyn Widget>>) -> &mut BoxPacking {
         let offset = self.children.len();
         self.children.push(BoxPacking::new(child, offset));
@@ -106,7 +112,9 @@ impl VerticalBox {
 impl Widget for VerticalBox {
     fn measure(&mut self, gpu: &Gpu, font_context: &mut FontContext) -> Result<Extent<Size>> {
         // Note: we need to measure children for layout, even if we have a fixed extent.
-        let size = BoxPacking::measure(&mut self.children, ScreenDir::Vertical, gpu, font_context)?;
+        let mut size =
+            BoxPacking::measure(&mut self.children, ScreenDir::Vertical, gpu, font_context)?;
+        size.expand_with_border(&self.padding, gpu);
         if let Some(extent) = self.override_extent {
             return Ok(extent);
         }
@@ -115,21 +123,22 @@ impl Widget for VerticalBox {
 
     fn layout(
         &mut self,
-        region: Region<Size>,
+        now: Instant,
+        mut region: Region<Size>,
         gpu: &Gpu,
         font_context: &mut FontContext,
     ) -> Result<()> {
+        region.extent_mut().remove_border(&self.padding, gpu);
+        region.position_mut().offset_by_border(&self.padding, gpu);
         BoxPacking::layout(
             &mut self.children,
             ScreenDir::Vertical,
+            now,
+            region.clone(),
             gpu,
-            *region.position(),
-            *region.extent(),
             font_context,
         )?;
-        self.position = *region.position();
-        self.extent = *region.extent();
-
+        self.region = region;
         Ok(())
     }
 
@@ -144,8 +153,8 @@ impl Widget for VerticalBox {
 
         if let Some(background_color) = self.background_color {
             WidgetVertex::push_quad_ext(
-                self.position.with_depth(context.current_depth),
-                self.extent,
+                self.region.position().with_depth(context.current_depth),
+                *self.region.extent(),
                 &background_color,
                 widget_info_index,
                 gpu,

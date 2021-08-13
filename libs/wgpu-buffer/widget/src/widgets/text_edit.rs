@@ -125,6 +125,7 @@ impl Widget for TextEdit {
 
     fn layout(
         &mut self,
+        _now: Instant,
         region: Region<Size>,
         _gpu: &Gpu,
         _font_context: &mut FontContext,

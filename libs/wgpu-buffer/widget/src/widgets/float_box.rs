@@ -106,6 +106,7 @@ impl Widget for FloatBox {
 
     fn layout(
         &mut self,
+        now: Instant,
         region: Region<Size>,
         gpu: &Gpu,
         font_context: &mut FontContext,
@@ -133,6 +134,7 @@ impl Widget for FloatBox {
                 (extent.height() - top_offset).into(),
             );
             widget.layout(
+                now,
                 Region::new(
                     Position::new(left_offset.into(), top_offset.into()),
                     remaining_extent,

@@ -206,6 +206,10 @@ impl TextRun {
         }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.spans.is_empty() || self.spans.iter().all(|s| s.text.len() == 0)
+    }
+
     pub fn with_hidden_selection(mut self) -> Self {
         self.hide_selection = true;
         self
@@ -229,6 +233,10 @@ impl TextRun {
 
     pub fn set_default_color(&mut self, color: Color) {
         self.default_color = color;
+    }
+
+    pub fn default_color(&self) -> Color {
+        self.default_color
     }
 
     pub fn with_default_font(mut self, font_id: FontId) -> Self {
@@ -277,6 +285,20 @@ impl TextRun {
         size: Option<Size>,
         font_id: Option<FontId>,
     ) {
+        if self.is_empty() {
+            for span in &mut self.spans {
+                if let Some(color) = color {
+                    span.set_color(color);
+                }
+                if let Some(size) = size {
+                    span.set_size(size);
+                }
+                if let Some(font_id) = font_id {
+                    span.set_font(font_id);
+                }
+            }
+        }
+
         if self.selection.is_empty() {
             return;
         }

@@ -69,6 +69,7 @@ pub trait Widget: Debug + Send + Sync + 'static {
     /// Apply the layout algorithm to size everything for the current displayed set.
     fn layout(
         &mut self,
+        now: Instant,
         region: Region<Size>,
         gpu: &Gpu,
         font_context: &mut FontContext,
@@ -91,7 +92,4 @@ pub trait Widget: Debug + Send + Sync + 'static {
     ) -> Result<()> {
         Ok(())
     }
-
-    // fn allocated_position(&self) -> &Position<Size>;
-    // fn allocated_extent(&self) -> &Extent<Size>;
 }

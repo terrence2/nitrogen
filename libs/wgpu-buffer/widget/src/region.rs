@@ -16,7 +16,7 @@ use gpu::{
     size::{AbsSize, AspectMath, LeftBound, RelSize, ScreenDir, Size},
     Gpu,
 };
-use std::fmt::Debug;
+use std::{fmt::Debug, ops::Add};
 
 #[derive(Copy, Clone, Debug)]
 pub struct Extent<T> {
@@ -77,11 +77,11 @@ impl<T: Copy + Clone + LeftBound + AspectMath> Extent<T> {
     }
 
     pub fn with_border(mut self, border: &Border<T>, gpu: &Gpu) -> Self {
-        self.add_border(border, gpu);
+        self.expand_with_border(border, gpu);
         self
     }
 
-    pub fn add_border(&mut self, border: &Border<T>, gpu: &Gpu) {
+    pub fn expand_with_border(&mut self, border: &Border<T>, gpu: &Gpu) {
         self.width = self.width.add(&border.left, gpu, ScreenDir::Horizontal);
         self.width = self.width.add(&border.right, gpu, ScreenDir::Horizontal);
         self.height = self.height.add(&border.top, gpu, ScreenDir::Vertical);
@@ -192,19 +192,19 @@ impl<T: Copy + Clone + LeftBound + AspectMath> Position<T> {
         self
     }
 
-    pub fn add_border(&mut self, border: &Border<T>, gpu: &Gpu) {
+    pub fn offset_by_border(&mut self, border: &Border<T>, gpu: &Gpu) {
         self.bottom = self.bottom.add(&border.bottom, gpu, ScreenDir::Vertical);
         self.left = self.left.add(&border.left, gpu, ScreenDir::Horizontal);
     }
 
     pub fn with_border(mut self, border: &Border<T>, gpu: &Gpu) -> Self {
-        self.add_border(border, gpu);
+        self.offset_by_border(border, gpu);
         self
     }
 }
 
 impl Position<Size> {
-    pub fn as_rel(self, gpu: &Gpu) -> Position<RelSize> {
+    pub fn as_rel(&self, gpu: &Gpu) -> Position<RelSize> {
         Position::<RelSize>::new_with_depth(
             self.left.as_rel(gpu, ScreenDir::Horizontal),
             self.bottom.as_rel(gpu, ScreenDir::Vertical),
@@ -212,7 +212,7 @@ impl Position<Size> {
         )
     }
 
-    pub fn as_abs(self, gpu: &Gpu) -> Position<AbsSize> {
+    pub fn as_abs(&self, gpu: &Gpu) -> Position<AbsSize> {
         Position::<AbsSize>::new_with_depth(
             self.left.as_abs(gpu, ScreenDir::Horizontal),
             self.bottom.as_abs(gpu, ScreenDir::Vertical),
@@ -293,6 +293,15 @@ impl Border<Size> {
             self.right.as_rel(gpu, ScreenDir::Horizontal),
         )
     }
+
+    pub fn as_abs(&self, gpu: &Gpu) -> Border<AbsSize> {
+        Border::<AbsSize>::new(
+            self.top.as_abs(gpu, ScreenDir::Vertical),
+            self.bottom.as_abs(gpu, ScreenDir::Vertical),
+            self.left.as_abs(gpu, ScreenDir::Horizontal),
+            self.right.as_abs(gpu, ScreenDir::Horizontal),
+        )
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -319,5 +328,49 @@ impl<T: Copy + Clone + AspectMath + LeftBound> Region<T> {
 
     pub fn extent(&self) -> &Extent<T> {
         &self.extent
+    }
+
+    pub fn position_mut(&mut self) -> &mut Position<T> {
+        &mut self.position
+    }
+
+    pub fn extent_mut(&mut self) -> &mut Extent<T> {
+        &mut self.extent
+    }
+
+    pub fn set_position(&mut self, position: Position<T>) {
+        self.position = position;
+    }
+
+    pub fn set_extent(&mut self, extent: Extent<T>) {
+        self.extent = extent;
+    }
+
+    pub fn with_extent(&self, extent: Extent<T>) -> Self {
+        Self::new(*self.position(), extent)
+    }
+}
+
+impl<T> Region<T>
+where
+    T: Copy + Clone + AspectMath + LeftBound + PartialEq + PartialOrd + Add<Output = T>,
+{
+    pub fn intersects(&self, p: &Position<T>) -> bool {
+        return p.left() >= self.position.left()
+            && p.left() <= (self.position.left() + self.extent.width())
+            && p.bottom() >= self.position.bottom()
+            && p.bottom() <= (self.position.bottom() + self.extent.height());
+    }
+}
+
+impl Region<Size> {
+    pub fn as_abs(&self, gpu: &Gpu) -> Region<AbsSize> {
+        Region::new(self.position.as_abs(gpu), self.extent.as_abs(gpu))
+    }
+}
+
+impl From<Region<AbsSize>> for Region<Size> {
+    fn from(abs: Region<AbsSize>) -> Self {
+        Region::new((*abs.position()).into(), (*abs.extent()).into())
     }
 }

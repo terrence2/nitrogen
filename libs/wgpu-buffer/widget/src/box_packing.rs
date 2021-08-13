@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     font_context::FontContext,
-    region::{Extent, Position, Region},
+    region::{Extent, Region},
     widget::Widget,
 };
 use anyhow::Result;
@@ -23,7 +23,7 @@ use gpu::{
     Gpu,
 };
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 #[derive(Copy, Clone, Debug)]
 pub enum PositionH {
@@ -126,9 +126,9 @@ impl BoxPacking {
     pub fn layout(
         children: &mut [BoxPacking],
         dir: ScreenDir,
+        now: Instant,
+        region: Region<Size>,
         gpu: &Gpu,
-        position: Position<Size>,
-        extent: Extent<Size>,
         font_context: &mut FontContext,
     ) -> Result<()> {
         // Figure out how much size we need to actually allocate to our widgets.
@@ -143,11 +143,11 @@ impl BoxPacking {
             }
         }
         let fill_allocation =
-            extent.axis(dir).sub(&total_shrink_size, gpu, dir) / fill_count as f32;
+            region.extent().axis(dir).sub(&total_shrink_size, gpu, dir) / fill_count as f32;
 
-        let mut tmp_extent = extent;
-        let mut pos = position;
-        *pos.axis_mut(dir) = pos.axis(dir).add(&extent.axis(dir), gpu, dir);
+        let mut tmp_extent = *region.extent();
+        let mut pos = *region.position();
+        *pos.axis_mut(dir) = pos.axis(dir).add(&region.extent().axis(dir), gpu, dir);
         for packing in children {
             let child_alloc = match packing.expand() {
                 Expand::Shrink => packing.extent().axis(dir),
@@ -157,7 +157,7 @@ impl BoxPacking {
             tmp_extent.set_axis(dir, child_alloc);
             packing
                 .widget_mut()
-                .layout(Region::new(pos, tmp_extent), gpu, font_context)?;
+                .layout(now, Region::new(pos, tmp_extent), gpu, font_context)?;
         }
 
         Ok(())
