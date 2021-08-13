@@ -41,7 +41,7 @@ use terrain::{CpuDetailLevel, GpuDetailLevel, TerrainBuffer};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use ui::UiRenderPass;
 use widget::{
-    Border, Button, Color, Expander, Extent, Label, Labeled, PositionH, PositionV, VerticalBox,
+    Border, Color, Expander, Extent, Label, Labeled, PositionH, PositionV, VerticalBox,
     WidgetBuffer,
 };
 use winit::window::Window;

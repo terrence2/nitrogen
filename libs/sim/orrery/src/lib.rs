@@ -351,7 +351,7 @@ impl Orrery {
     }
 
     pub fn adjust_time(&mut self, dt: Duration) {
-        if let Some(rv) = self.now.checked_add_signed(dt.into()) {
+        if let Some(rv) = self.now.checked_add_signed(dt) {
             self.now = rv;
         }
     }

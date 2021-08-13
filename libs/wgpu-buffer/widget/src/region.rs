@@ -356,10 +356,10 @@ where
     T: Copy + Clone + AspectMath + LeftBound + PartialEq + PartialOrd + Add<Output = T>,
 {
     pub fn intersects(&self, p: &Position<T>) -> bool {
-        return p.left() >= self.position.left()
+        p.left() >= self.position.left()
             && p.left() <= (self.position.left() + self.extent.width())
             && p.bottom() >= self.position.bottom()
-            && p.bottom() <= (self.position.bottom() + self.extent.height());
+            && p.bottom() <= (self.position.bottom() + self.extent.height())
     }
 }
 

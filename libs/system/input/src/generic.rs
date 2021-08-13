@@ -186,13 +186,7 @@ impl GenericEvent {
                 button,
                 press_state,
                 ..
-            } => {
-                if *button == 1 && *press_state == ElementState::Pressed {
-                    true
-                } else {
-                    false
-                }
-            }
+            } => *button == 1 && *press_state == ElementState::Pressed,
             _ => false,
         }
     }
