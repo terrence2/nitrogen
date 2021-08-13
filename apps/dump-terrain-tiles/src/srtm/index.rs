@@ -120,7 +120,7 @@ impl Index {
         let features = &index_json["features"];
         let mut tiles = Vec::new();
         for feature in features.members() {
-            let tile = Tile::from_feature(&feature, directory)?;
+            let tile = Tile::from_feature(feature, directory)?;
             tiles.push(tile);
         }
 

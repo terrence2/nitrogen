@@ -11,15 +11,15 @@ nalgebra = "^ 0.24"
 parking_lot = "^ 0.11"
 wgpu = "^ 0.7"
 zerocopy = "= 0.3.0"
-absolute_unit = { path = "../../sim/absolute_unit" }
-geodesy = { path = "../../sim/geodesy" }
+absolute_unit = { path = "../../util/absolute_unit" }
+geodesy = { path = "../../util/geodesy" }
 camera = { path = "../../sim/camera" }
 gpu = { path = "../../system/gpu" }
-nitrous = { path = "../../system/nitrous" }
-nitrous_injector = { path = "../../system/nitrous_injector" }
+nitrous = { path = "../../util/nitrous" }
+nitrous_injector = { path = "../../util/nitrous_injector" }
 
 [dev-dependencies]
 winit = { version = "^ 0.24", features = ["web-sys"] }
 
 [build-dependencies]
-build_shaders = { path = "../../system/build_shaders" }
+build_shaders = { path = "../../util/build_shaders" }

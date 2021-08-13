@@ -14,54 +14,36 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     color::Color,
-    font_context::FontId,
+    font_context::{FontContext, FontId, TextSpanMetrics},
     paint_context::PaintContext,
+    region::{Extent, Position, Region},
     text_run::TextRun,
-    widget::{UploadMetrics, Widget},
+    widget::{Labeled, Widget},
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
-use gpu::Gpu;
-use input::GenericEvent;
-use nitrous::Interpreter;
+use gpu::{size::Size, Gpu};
 use parking_lot::RwLock;
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 #[derive(Debug)]
 pub struct Label {
     line: TextRun,
-    width: Option<f32>,
+
+    metrics: TextSpanMetrics,
+    allocated_position: Position<Size>,
+    allocated_extent: Extent<Size>,
 }
 
 impl Label {
     pub fn new<S: AsRef<str> + Into<String>>(content: S) -> Self {
         Self {
             line: TextRun::from_text(content.as_ref()).with_hidden_selection(),
-            width: None,
+
+            metrics: TextSpanMetrics::default(),
+            allocated_position: Position::origin(),
+            allocated_extent: Extent::zero(),
         }
-    }
-
-    pub fn with_size(mut self, size_pts: f32) -> Self {
-        self.line.set_default_size_pts(size_pts);
-        self
-    }
-
-    pub fn with_font(mut self, font_id: FontId) -> Self {
-        self.line.set_default_font(font_id);
-        // Note: this is a label; we don't allow selection, so no need to save and restore it.
-        self.line.select_all();
-        self.line.change_font(font_id);
-        self.line.select_none();
-        self
-    }
-
-    pub fn with_color(mut self, color: Color) -> Self {
-        self.line.set_default_color(color);
-        // Note: this is a label; we don't allow selection, so no need to save and restore it.
-        self.line.select_all();
-        self.line.change_color(color);
-        self.line.select_none();
-        self
     }
 
     pub fn with_pre_blended_text(mut self) -> Self {
@@ -72,33 +54,64 @@ impl Label {
     pub fn wrapped(self) -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(self))
     }
+}
 
-    pub fn set_text<S: AsRef<str> + Into<String>>(&mut self, content: S) {
+impl Labeled for Label {
+    fn set_text<S: AsRef<str> + Into<String>>(&mut self, content: S) {
         self.line.select_all();
         self.line.insert(content.as_ref());
+    }
+
+    fn set_size(&mut self, size: Size) {
+        self.line.set_default_size(size);
+    }
+
+    fn set_color(&mut self, color: Color) {
+        self.line.set_default_color(color);
+        // Note: this is a label; we don't allow selection, so no need to save and restore it.
+        self.line.select_all();
+        self.line.change_color(color);
+        self.line.select_none();
+    }
+
+    fn set_font(&mut self, font_id: FontId) {
+        self.line.set_default_font(font_id);
+        // Note: this is a label; we don't allow selection, so no need to save and restore it.
+        self.line.select_all();
+        self.line.change_font(font_id);
+        self.line.select_none();
     }
 }
 
 impl Widget for Label {
-    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<UploadMetrics> {
-        let info = WidgetInfo::default(); //.with_foreground_color(self.default_color);
-        let widget_info_index = context.push_widget(&info);
-
-        let (line_metrics, _) = self.line.upload(0f32, widget_info_index, gpu, context)?;
-
-        Ok(UploadMetrics {
-            widget_info_indexes: line_metrics.widget_info_indexes,
-            width: self.width.unwrap_or(line_metrics.width),
-            height: line_metrics.height,
-        })
+    fn measure(&mut self, gpu: &Gpu, font_context: &mut FontContext) -> Result<Extent<Size>> {
+        self.metrics = self.line.measure(gpu, font_context)?;
+        Ok(Extent::<Size>::new(
+            self.metrics.width.into(),
+            (self.metrics.height - self.metrics.descent).into(),
+        ))
     }
 
-    fn handle_event(
+    fn layout(
         &mut self,
-        _event: &GenericEvent,
-        _focus: &str,
-        _interpreter: Arc<RwLock<Interpreter>>,
+        _now: Instant,
+        region: Region<Size>,
+        gpu: &Gpu,
+        _font_context: &mut FontContext,
     ) -> Result<()> {
+        let mut position = region.position().as_abs(gpu);
+        *position.bottom_mut() = position.bottom() - self.metrics.descent;
+        self.allocated_position = position.into();
+        self.allocated_extent = *region.extent();
+        Ok(())
+    }
+
+    fn upload(&self, _now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
+        let widget_info_index = context.push_widget(&WidgetInfo::default());
+
+        self.line
+            .upload(self.allocated_position, widget_info_index, gpu, context)?;
+
         Ok(())
     }
 }

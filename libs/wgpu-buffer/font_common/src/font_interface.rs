@@ -12,6 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use gpu::size::AbsSize;
 use image::GrayImage;
 use std::fmt::Debug;
 
@@ -21,23 +22,32 @@ pub enum FontAdvance {
     Sans,
 }
 
+// Note: scale is pixels in ascender - descender: e.g. the same as gnome.
 pub trait FontInterface: Debug + Send + Sync + 'static {
     // global metrics
     fn units_per_em(&self) -> f32;
     fn advance_style(&self) -> FontAdvance;
 
     // vertical metrics
-    fn ascent(&self, scale: f32) -> f32;
-    fn descent(&self, scale: f32) -> f32;
-    fn line_gap(&self, scale: f32) -> f32;
+    fn ascent(&self, scale: AbsSize) -> AbsSize;
+    fn descent(&self, scale: AbsSize) -> AbsSize;
+    fn line_gap(&self, scale: AbsSize) -> AbsSize;
 
     // horizontal metrics
-    fn advance_width(&self, c: char, scale: f32) -> f32;
-    fn left_side_bearing(&self, c: char, scale: f32) -> f32;
-    fn pair_kerning(&self, a: char, b: char, scale: f32) -> f32;
-    fn exact_bounding_box(&self, c: char, scale: f32) -> ((f32, f32), (f32, f32));
-    fn pixel_bounding_box(&self, c: char, scale: f32) -> ((i32, i32), (i32, i32));
+    fn advance_width(&self, c: char, scale: AbsSize) -> AbsSize;
+    fn left_side_bearing(&self, c: char, scale: AbsSize) -> AbsSize;
+    fn pair_kerning(&self, a: char, b: char, scale: AbsSize) -> AbsSize;
+    fn exact_bounding_box(
+        &self,
+        c: char,
+        scale: AbsSize,
+    ) -> ((AbsSize, AbsSize), (AbsSize, AbsSize));
+    fn pixel_bounding_box(
+        &self,
+        c: char,
+        scale: AbsSize,
+    ) -> ((AbsSize, AbsSize), (AbsSize, AbsSize));
 
     // rendering
-    fn render_glyph(&self, c: char, scale: f32) -> GrayImage;
+    fn render_glyph(&self, c: char, scale: AbsSize) -> GrayImage;
 }

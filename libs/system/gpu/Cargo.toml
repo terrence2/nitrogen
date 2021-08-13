@@ -16,5 +16,5 @@ tokio = { version = "^ 1.0", features = ["rt-multi-thread", "macros", "io-util",
 zerocopy = "= 0.3.0"
 wgpu = "^ 0.7"
 winit = { version = "^ 0.24", features = ["web-sys"] }
-nitrous = { path = "../../system/nitrous" }
-nitrous_injector = { path = "../../system/nitrous_injector" }
+nitrous = { path = "../../util/nitrous" }
+nitrous_injector = { path = "../../util/nitrous_injector" }

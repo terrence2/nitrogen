@@ -350,6 +350,12 @@ impl Orrery {
         self.now
     }
 
+    pub fn adjust_time(&mut self, dt: Duration) {
+        if let Some(rv) = self.now.checked_add_signed(dt) {
+            self.now = rv;
+        }
+    }
+
     fn num_leap_seconds(&self) -> Duration {
         for (offset, date) in LEAP_SECONDS.iter().enumerate() {
             if self.now > *date {

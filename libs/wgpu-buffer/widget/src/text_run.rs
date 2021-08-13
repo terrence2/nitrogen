@@ -14,12 +14,15 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     color::Color,
-    font_context::{FontId, TextSpanMetrics, SANS_FONT_ID},
+    font_context::{FontContext, FontId, TextSpanMetrics, SANS_FONT_ID},
     paint_context::PaintContext,
-    widget::UploadMetrics,
+    region::Position,
 };
 use anyhow::Result;
-use gpu::Gpu;
+use gpu::{
+    size::{AbsSize, LeftBound, Size},
+    Gpu,
+};
 use input::ModifiersState;
 use smallvec::{smallvec, SmallVec};
 use std::{cmp::Ordering, ops::Range};
@@ -28,16 +31,16 @@ use std::{cmp::Ordering, ops::Range};
 pub struct TextSpan {
     text: String,
     color: Color,
-    size_pts: f32,
+    size: Size,
     font_id: FontId,
 }
 
 impl TextSpan {
-    pub fn new<S: Into<String>>(text: S, size_pts: f32, font_id: FontId, color: Color) -> Self {
+    pub fn new<S: Into<String>>(text: S, size: Size, font_id: FontId, color: Color) -> Self {
         Self {
             text: text.into(),
             color,
-            size_pts,
+            size,
             font_id,
         }
     }
@@ -50,8 +53,8 @@ impl TextSpan {
         self.font_id = font_id;
     }
 
-    pub fn set_size_pts(&mut self, size_pts: f32) {
-        self.size_pts = size_pts;
+    pub fn set_size(&mut self, size: Size) {
+        self.size = size;
     }
 
     pub fn set_color(&mut self, color: Color) {
@@ -66,8 +69,8 @@ impl TextSpan {
         &self.text
     }
 
-    pub fn size_pts(&self) -> f32 {
-        self.size_pts
+    pub fn size(&self) -> Size {
+        self.size
     }
 
     pub fn font(&self) -> FontId {
@@ -178,7 +181,7 @@ pub struct TextRun {
     pre_blend_text: bool,
 
     default_font_id: FontId,
-    default_size_pts: f32,
+    default_size: Size,
     default_color: Color,
 }
 
@@ -198,9 +201,13 @@ impl TextRun {
             hide_selection: false,
             pre_blend_text: false,
             default_font_id: SANS_FONT_ID,
-            default_size_pts: 12.0,
+            default_size: Size::from_pts(12.0),
             default_color: Color::Magenta,
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.spans.is_empty() || self.spans.iter().all(|s| s.text.len() == 0)
     }
 
     pub fn with_hidden_selection(mut self) -> Self {
@@ -228,6 +235,10 @@ impl TextRun {
         self.default_color = color;
     }
 
+    pub fn default_color(&self) -> Color {
+        self.default_color
+    }
+
     pub fn with_default_font(mut self, font_id: FontId) -> Self {
         self.default_font_id = font_id;
         self
@@ -237,13 +248,13 @@ impl TextRun {
         self.default_font_id = font_id;
     }
 
-    pub fn with_default_size_pts(mut self, size_pts: f32) -> Self {
-        self.default_size_pts = size_pts;
+    pub fn with_default_size(mut self, size: Size) -> Self {
+        self.default_size = size;
         self
     }
 
-    pub fn set_default_size_pts(&mut self, size_pts: f32) {
-        self.default_size_pts = size_pts;
+    pub fn set_default_size(&mut self, size: Size) {
+        self.default_size = size;
     }
 
     pub fn from_text(text: &str) -> Self {
@@ -264,16 +275,30 @@ impl TextRun {
     }
 
     /// Change the selected region's size.
-    pub fn change_size_pts(&mut self, size_pts: f32) {
-        self.change_properties(None, Some(size_pts), None);
+    pub fn change_size(&mut self, size: Size) {
+        self.change_properties(None, Some(size), None);
     }
 
     fn change_properties(
         &mut self,
         color: Option<Color>,
-        size_pts: Option<f32>,
+        size: Option<Size>,
         font_id: Option<FontId>,
     ) {
+        if self.is_empty() {
+            for span in &mut self.spans {
+                if let Some(color) = color {
+                    span.set_color(color);
+                }
+                if let Some(size) = size {
+                    span.set_size(size);
+                }
+                if let Some(font_id) = font_id {
+                    span.set_font(font_id);
+                }
+            }
+        }
+
         if self.selection.is_empty() {
             return;
         }
@@ -289,8 +314,8 @@ impl TextRun {
                     if let Some(color) = color {
                         span.set_color(color);
                     }
-                    if let Some(size_pts) = size_pts {
-                        span.set_size_pts(size_pts);
+                    if let Some(size) = size {
+                        span.set_size(size);
                     }
                     if let Some(font_id) = font_id {
                         span.set_font(font_id);
@@ -299,14 +324,14 @@ impl TextRun {
                 } else {
                     let parts = [
                         (0..span_range.start, None, None, None),
-                        (span_range.clone(), color, size_pts, font_id),
+                        (span_range.clone(), color, size, font_id),
                         (span_range.end..span.text.len(), None, None, None),
                     ];
-                    for (part_range, color, size_pts, font_id) in &parts {
+                    for (part_range, color, size, font_id) in &parts {
                         if !part_range.is_empty() {
                             next_spans.push(TextSpan::new(
                                 &span.content()[part_range.to_owned()],
-                                size_pts.unwrap_or_else(|| span.size_pts()),
+                                size.unwrap_or_else(|| span.size()),
                                 font_id.unwrap_or_else(|| span.font()),
                                 color.unwrap_or_else(|| *span.color()),
                             ));
@@ -406,7 +431,7 @@ impl TextRun {
         } else {
             self.spans.push(TextSpan::new(
                 text,
-                self.default_size_pts,
+                self.default_size,
                 self.default_font_id,
                 self.default_color,
             ));
@@ -459,21 +484,46 @@ impl TextRun {
         out
     }
 
+    pub fn measure(&self, gpu: &Gpu, font_context: &mut FontContext) -> Result<TextSpanMetrics> {
+        let mut total_width = AbsSize::zero();
+        let mut max_height = AbsSize::zero();
+        let mut max_ascent = AbsSize::zero();
+        let mut min_descent = AbsSize::zero();
+        let mut max_line_gap = AbsSize::zero();
+        for span in self.spans.iter() {
+            let span_metrics = font_context.measure_text(span, gpu)?;
+            total_width += span_metrics.width;
+            max_height = max_height.max(&span_metrics.height);
+            max_line_gap = max_line_gap.max(&span_metrics.line_gap);
+            max_ascent = max_ascent.max(&span_metrics.ascent);
+            min_descent = min_descent.min(&span_metrics.descent);
+        }
+        Ok(TextSpanMetrics {
+            width: total_width,
+            ascent: max_ascent,
+            descent: min_descent,
+            height: max_height,
+            line_gap: max_line_gap,
+        })
+    }
+
     pub fn upload(
         &self,
-        height_offset: f32,
+        initial_position: Position<Size>,
         widget_info_index: u32,
         gpu: &Gpu,
         context: &mut PaintContext,
-    ) -> Result<(UploadMetrics, TextSpanMetrics)> {
-        let mut min_text_offset = usize::MAX;
-        let mut min_background_offset = usize::MAX;
+    ) -> Result<TextSpanMetrics> {
+        context
+            .widget_mut(widget_info_index)
+            .set_pre_blend_text(self.pre_blend_text);
+        let init_pos = initial_position.as_abs(gpu);
         let mut position = 0;
-        let mut total_width = 0f32;
-        let mut max_height = 0f32;
-        let mut max_ascent = 0f32;
-        let mut min_descent = 0f32;
-        let mut max_line_gap = 0f32;
+        let mut total_width = AbsSize::zero();
+        let mut max_height = AbsSize::zero();
+        let mut max_ascent = AbsSize::zero();
+        let mut min_descent = AbsSize::zero();
+        let mut max_line_gap = AbsSize::zero();
         for span in self.spans.iter() {
             let selection_area = if self.hide_selection {
                 SpanSelection::None
@@ -484,48 +534,27 @@ impl TextRun {
             position += span.content().len();
 
             let span_metrics = context.layout_text(
-                &span,
-                [total_width, -height_offset],
+                span,
+                Position::new(init_pos.left() + total_width, init_pos.bottom()),
                 widget_info_index,
                 selection_area,
                 gpu,
             )?;
             total_width += span_metrics.width;
 
-            max_height = max_height.max(span_metrics.height);
-            max_line_gap = max_line_gap.max(span_metrics.line_gap);
-            max_ascent = max_ascent.max(span_metrics.ascent);
-            min_descent = min_descent.min(span_metrics.descent);
-            min_text_offset = min_text_offset.min(span_metrics.initial_text_offset);
-            min_background_offset =
-                min_background_offset.min(span_metrics.initial_background_offset);
-        }
-        min_text_offset = min_text_offset.min(context.text_pool.len());
-        min_background_offset = min_background_offset.min(context.background_pool.len());
-
-        for v in &mut context.text_pool[min_text_offset..] {
-            v.position[1] -= max_ascent;
-        }
-        for v in &mut context.background_pool[min_background_offset..] {
-            v.position[1] -= max_ascent;
+            max_height = max_height.max(&span_metrics.height);
+            max_line_gap = max_line_gap.max(&span_metrics.line_gap);
+            max_ascent = max_ascent.max(&span_metrics.ascent);
+            min_descent = min_descent.min(&span_metrics.descent);
         }
 
-        Ok((
-            UploadMetrics {
-                widget_info_indexes: vec![widget_info_index],
-                width: total_width,
-                height: max_height,
-            },
-            TextSpanMetrics {
-                width: total_width,
-                ascent: max_ascent,
-                descent: min_descent,
-                height: max_height,
-                line_gap: max_line_gap,
-                initial_text_offset: min_text_offset,
-                initial_background_offset: min_background_offset,
-            },
-        ))
+        Ok(TextSpanMetrics {
+            width: total_width,
+            ascent: max_ascent,
+            descent: min_descent,
+            height: max_height,
+            line_gap: max_line_gap,
+        })
     }
 }
 

@@ -193,6 +193,11 @@ impl ArcBallCamera {
     }
 
     #[method]
+    pub fn set_exposure(&mut self, value: f64) {
+        self.camera.set_exposure(value as f32);
+    }
+
+    #[method]
     pub fn handle_mousemotion(&mut self, x: f64, y: f64) {
         if self.in_rotate {
             self.eye.longitude -= degrees!(x * 0.5);

@@ -31,7 +31,7 @@ pub fn circle_vs_plane<T: RealField>(
     sidedness_offset: T,
 ) -> CirclePlaneIntersection<T> {
     // We can get the direction by crossing normals.
-    let d = circle.plane().normal().cross(&plane.normal());
+    let d = circle.plane().normal().cross(plane.normal());
 
     // Detect and reject the parallel case: e.g. direction is ~0.
     if relative_eq!(d.dot(&d), T::zero()) {

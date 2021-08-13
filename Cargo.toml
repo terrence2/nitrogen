@@ -6,31 +6,40 @@ edition = "2018"
 
 [workspace]
 members = [
+    # Various helper applications.
     "apps/dump-atmosphere-tables",
     "apps/dump-layer-pack",
     "apps/dump-terrain-tables",
     "apps/dump-terrain-tiles",
     "apps/web-demo",
 
-    "libs/sim/absolute_unit",
-    "libs/sim/animate",
-    "libs/sim/camera",
-    "libs/sim/geodesy",
-    "libs/sim/geometry",
-    "libs/sim/orrery",
-    "libs/sim/physical_constants",
-    "libs/sim/star_catalog",
-    "libs/sim/universe",
+    # Only external dependencies, appropriate for splitting
+    # out fully, once mature enough.
+    "libs/util/absolute_unit",
+    "libs/util/animate",
+    "libs/util/ansi",
+    "libs/util/build_shaders",
+    "libs/util/geodesy",
+    "libs/util/geometry",
+    "libs/util/nitrous",
+    "libs/util/nitrous_injector",
+    "libs/util/packed_struct",
+    "libs/util/physical_constants",
+    "libs/util/star_catalog",
 
-    "libs/system/ansi",
-    "libs/system/build_shaders",
+    # Only external and util dependencies. Generally adapting or wrapping
+    # system level platform capabilities.
     "libs/system/catalog",
     "libs/system/gpu",
     "libs/system/input",
-    "libs/system/nitrous",
-    "libs/system/nitrous_injector",
-    "libs/system/packed_struct",
 
+    # Only external, util, and system dependencies. Generally concerned
+    # with running the simulated environment.
+    "libs/sim/camera",
+    "libs/sim/orrery",
+    "libs/sim/universe",
+
+    # GPU buffer management and drawing pass implementations.
     "libs/wgpu-buffer/atlas",
     "libs/wgpu-buffer/atmosphere",
     "libs/wgpu-buffer/composite",
@@ -60,18 +69,18 @@ rayon = "= 1.4.0"
 structopt = "^ 0.3"
 tokio = { version = "^ 1.0", features = ["rt-multi-thread", "macros", "io-util", "fs", "sync"] }
 winit = { version = "^ 0.24", features = ["web-sys"] }
-absolute_unit = { path = "libs/sim/absolute_unit" }
+absolute_unit = { path = "libs/util/absolute_unit" }
 atmosphere = { path = "libs/wgpu-buffer/atmosphere" }
 camera = { path = "libs/sim/camera" }
 catalog = { path = "libs/system/catalog" }
 composite = { path = "libs/wgpu-buffer/composite" }
 fullscreen = { path = "libs/wgpu-buffer/fullscreen" }
-geodesy = { path = "libs/sim/geodesy" }
+geodesy = { path = "libs/util/geodesy" }
 global_data = { path = "libs/wgpu-buffer/global_data" }
 gpu = { path = "libs/system/gpu" }
 input = { path = "libs/system/input" }
-nitrous = { path = "libs/system/nitrous" }
-nitrous_injector = { path = "libs/system/nitrous_injector" }
+nitrous = { path = "libs/util/nitrous" }
+nitrous_injector = { path = "libs/util/nitrous_injector" }
 orrery = { path = "libs/sim/orrery" }
 stars = { path = "libs/wgpu-buffer/stars" }
 terrain = { path = "libs/wgpu-buffer/terrain" }

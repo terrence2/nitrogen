@@ -12,27 +12,84 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::paint_context::PaintContext;
+use crate::{
+    color::Color,
+    font_context::{FontContext, FontId},
+    paint_context::PaintContext,
+    region::{Extent, Position, Region},
+};
 use anyhow::Result;
-use gpu::Gpu;
+use gpu::{
+    size::{AbsSize, Size},
+    Gpu,
+};
 use input::GenericEvent;
 use nitrous::Interpreter;
 use parking_lot::RwLock;
-use std::{fmt::Debug, sync::Arc};
+use std::{fmt::Debug, sync::Arc, time::Instant};
 
-#[derive(Clone, Debug, Default)]
-pub struct UploadMetrics {
-    pub widget_info_indexes: Vec<u32>,
-    pub width: f32,
-    pub height: f32,
+// Note: need intersection testing before this is useful.
+// pub enum HoverState {
+//     None(Instant),
+//     Hover(Instant),
+//     Press(Instant),
+// }
+
+pub trait Labeled: Debug + Sized + Send + Sync + 'static {
+    fn set_text<S: AsRef<str> + Into<String>>(&mut self, content: S);
+    fn set_size(&mut self, size: Size);
+    fn set_color(&mut self, color: Color);
+    fn set_font(&mut self, font_id: FontId);
+
+    fn with_text<S: AsRef<str> + Into<String>>(mut self, content: S) -> Self {
+        self.set_text(content);
+        self
+    }
+
+    fn with_size(mut self, size: Size) -> Self {
+        self.set_size(size);
+        self
+    }
+
+    fn with_font(mut self, font_id: FontId) -> Self {
+        self.set_font(font_id);
+        self
+    }
+
+    fn with_color(mut self, color: Color) -> Self {
+        self.set_color(color);
+        self
+    }
 }
 
 pub trait Widget: Debug + Send + Sync + 'static {
-    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<UploadMetrics>;
+    /// Return the minimum required size for displaying this widget.
+    fn measure(&mut self, gpu: &Gpu, font_context: &mut FontContext) -> Result<Extent<Size>>;
+
+    /// Apply the layout algorithm to size everything for the current displayed set.
+    fn layout(
+        &mut self,
+        now: Instant,
+        region: Region<Size>,
+        gpu: &Gpu,
+        font_context: &mut FontContext,
+    ) -> Result<()>;
+
+    /// Mutate paint context to reflect the presence of this widget.
+    fn upload(&self, now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()>;
+
+    /// Low level event handler. The default implementation is generally suitable
+    /// such that leaf nodes can implement one of the fine-grained handle_ methods
+    /// for keyboard or mouse. Container widgets should pass through to their
+    /// children and not handle events directly, except in some rare cases.
     fn handle_event(
         &mut self,
-        event: &GenericEvent,
-        focus: &str,
-        interpreter: Arc<RwLock<Interpreter>>,
-    ) -> Result<()>;
+        _now: Instant,
+        _event: &GenericEvent,
+        _focus: &str,
+        _cursor_position: Position<AbsSize>,
+        _interpreter: Arc<RwLock<Interpreter>>,
+    ) -> Result<()> {
+        Ok(())
+    }
 }

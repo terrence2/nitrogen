@@ -12,7 +12,8 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use std::default::Default;
+use std::fmt::Formatter;
+use std::{default::Default, fmt::Display};
 
 #[derive(Copy, Clone, Debug)]
 pub enum Color {
@@ -35,6 +36,12 @@ pub enum Color {
 impl Default for Color {
     fn default() -> Self {
         Color::Black
+    }
+}
+
+impl Display for Color {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 

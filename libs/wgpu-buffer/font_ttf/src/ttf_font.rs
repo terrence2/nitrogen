@@ -14,6 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::{anyhow, Result};
 use font_common::{FontAdvance, FontInterface};
+use gpu::size::AbsSize;
 use image::{GrayImage, Luma};
 use parking_lot::RwLock;
 use rusttype::{Font, Point, Scale};
@@ -34,69 +35,93 @@ impl FontInterface for TtfFont {
         self.advance
     }
 
-    fn ascent(&self, scale: f32) -> f32 {
-        self.font.v_metrics(Scale::uniform(scale)).ascent
+    fn ascent(&self, scale: AbsSize) -> AbsSize {
+        AbsSize::from_px(self.font.v_metrics(Scale::uniform(scale.as_px())).ascent)
     }
 
-    fn descent(&self, scale: f32) -> f32 {
-        self.font.v_metrics(Scale::uniform(scale)).descent
+    fn descent(&self, scale: AbsSize) -> AbsSize {
+        AbsSize::from_px(self.font.v_metrics(Scale::uniform(scale.as_px())).descent)
     }
 
-    fn line_gap(&self, scale: f32) -> f32 {
-        self.font.v_metrics(Scale::uniform(scale)).line_gap
+    fn line_gap(&self, scale: AbsSize) -> AbsSize {
+        AbsSize::from_px(self.font.v_metrics(Scale::uniform(scale.as_px())).line_gap)
     }
 
-    fn advance_width(&self, c: char, scale: f32) -> f32 {
-        self.font
-            .glyph(c)
-            .scaled(Scale::uniform(scale))
-            .h_metrics()
-            .advance_width
+    fn advance_width(&self, c: char, scale: AbsSize) -> AbsSize {
+        AbsSize::from_px(
+            self.font
+                .glyph(c)
+                .scaled(Scale::uniform(scale.as_px()))
+                .h_metrics()
+                .advance_width,
+        )
     }
 
-    fn left_side_bearing(&self, c: char, scale: f32) -> f32 {
-        self.font
-            .glyph(c)
-            .scaled(Scale::uniform(scale))
-            .h_metrics()
-            .left_side_bearing
+    fn left_side_bearing(&self, c: char, scale: AbsSize) -> AbsSize {
+        AbsSize::from_px(
+            self.font
+                .glyph(c)
+                .scaled(Scale::uniform(scale.as_px()))
+                .h_metrics()
+                .left_side_bearing,
+        )
     }
 
-    fn pair_kerning(&self, a: char, b: char, scale: f32) -> f32 {
-        self.font.pair_kerning(Scale::uniform(scale), a, b)
+    fn pair_kerning(&self, a: char, b: char, scale: AbsSize) -> AbsSize {
+        AbsSize::from_px(self.font.pair_kerning(Scale::uniform(scale.as_px()), a, b))
     }
 
-    fn exact_bounding_box(&self, c: char, scale: f32) -> ((f32, f32), (f32, f32)) {
+    fn exact_bounding_box(
+        &self,
+        c: char,
+        scale: AbsSize,
+    ) -> ((AbsSize, AbsSize), (AbsSize, AbsSize)) {
         if let Some(bb) = self
             .font
             .glyph(c)
-            .scaled(Scale::uniform(scale))
+            .scaled(Scale::uniform(scale.as_px()))
             .exact_bounding_box()
         {
-            return ((bb.min.x, -bb.max.y), (bb.max.x, -bb.min.y));
+            return (
+                (AbsSize::from_px(bb.min.x), AbsSize::from_px(-bb.max.y)),
+                (AbsSize::from_px(bb.max.x), AbsSize::from_px(-bb.min.y)),
+            );
         }
         Default::default()
     }
 
-    fn pixel_bounding_box(&self, c: char, scale: f32) -> ((i32, i32), (i32, i32)) {
+    fn pixel_bounding_box(
+        &self,
+        c: char,
+        scale: AbsSize,
+    ) -> ((AbsSize, AbsSize), (AbsSize, AbsSize)) {
         if let Some(bb) = self
             .font
             .glyph(c)
-            .scaled(Scale::uniform(scale))
+            .scaled(Scale::uniform(scale.as_px()))
             .positioned(Default::default())
             .pixel_bounding_box()
         {
-            return ((bb.min.x, -bb.max.y), (bb.max.x, -bb.min.y));
+            return (
+                (
+                    AbsSize::from_px(bb.min.x as f32),
+                    AbsSize::from_px(-bb.max.y as f32),
+                ),
+                (
+                    AbsSize::from_px(bb.max.x as f32),
+                    AbsSize::from_px(-bb.min.y as f32),
+                ),
+            );
         }
         Default::default()
     }
 
-    fn render_glyph(&self, c: char, scale: f32) -> GrayImage {
+    fn render_glyph(&self, c: char, scale: AbsSize) -> GrayImage {
         const ORIGIN: Point<f32> = Point { x: 0.0, y: 0.0 };
         let glyph = self
             .font
             .glyph(c)
-            .scaled(Scale::uniform(scale))
+            .scaled(Scale::uniform(scale.as_px()))
             .positioned(ORIGIN);
         if let Some(bb) = glyph.pixel_bounding_box() {
             let w = (bb.max.x - bb.min.x) as u32;

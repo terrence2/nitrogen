@@ -98,7 +98,7 @@ impl Patch {
         self.cached_in_view = true;
 
         // Cross north and eye_direction to get a right vector for the polygon.
-        let sa = solid_angle_tri(&eye_position, &eye_direction, &self.pts);
+        let sa = solid_angle_tri(eye_position, eye_direction, &self.pts);
         if sa > self.cached_solid_angle {
             self.cached_solid_angle = sa;
         }
@@ -176,7 +176,7 @@ impl Patch {
 
         // bottom points
         for p in &self.pts {
-            if plane.point_is_in_front_with_offset(&p, SIDEDNESS_OFFSET) {
+            if plane.point_is_in_front_with_offset(p, SIDEDNESS_OFFSET) {
                 return false;
             }
         }
@@ -193,7 +193,7 @@ impl Patch {
             &Point3::new(0f64, 0f64, 0f64),
             EVEREST_HEIGHT_KM + EVEREST_HEIGHT_KM,
         );
-        let intersection = intersect::sphere_vs_plane(&top_sphere, &plane);
+        let intersection = intersect::sphere_vs_plane(&top_sphere, plane);
         match intersection {
             SpherePlaneIntersection::NoIntersection { side, .. } => side == PlaneSide::Above,
             SpherePlaneIntersection::Intersection(ref circle) => {

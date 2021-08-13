@@ -830,7 +830,7 @@ impl Precompute {
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::Buffer {
-                        buffer: &atmosphere_params_buffer,
+                        buffer: atmosphere_params_buffer,
                         offset: 0,
                         size: None,
                     },
@@ -885,7 +885,7 @@ impl Precompute {
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::Buffer {
-                        buffer: &atmosphere_params_buffer,
+                        buffer: atmosphere_params_buffer,
                         offset: 0,
                         size: None,
                     },
@@ -961,7 +961,7 @@ impl Precompute {
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::Buffer {
-                        buffer: &atmosphere_params_buffer,
+                        buffer: atmosphere_params_buffer,
                         offset: 0,
                         size: None,
                     },
@@ -977,7 +977,7 @@ impl Precompute {
                 wgpu::BindGroupEntry {
                     binding: 3,
                     resource: wgpu::BindingResource::Buffer {
-                        buffer: &rad_to_lum_buffer,
+                        buffer: rad_to_lum_buffer,
                         offset: 0,
                         size: None,
                     },
@@ -1094,7 +1094,7 @@ impl Precompute {
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::Buffer {
-                        buffer: &atmosphere_params_buffer,
+                        buffer: atmosphere_params_buffer,
                         offset: 0,
                         size: None,
                     },
@@ -1102,7 +1102,7 @@ impl Precompute {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Buffer {
-                        buffer: &scattering_order_buffer,
+                        buffer: scattering_order_buffer,
                         offset: 0,
                         size: None,
                     },
@@ -1224,7 +1224,7 @@ impl Precompute {
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::Buffer {
-                        buffer: &atmosphere_params_buffer,
+                        buffer: atmosphere_params_buffer,
                         offset: 0,
                         size: None,
                     },
@@ -1232,7 +1232,7 @@ impl Precompute {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Buffer {
-                        buffer: &rad_to_lum_buffer,
+                        buffer: rad_to_lum_buffer,
                         offset: 0,
                         size: None,
                     },
@@ -1240,7 +1240,7 @@ impl Precompute {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: wgpu::BindingResource::Buffer {
-                        buffer: &scattering_order_buffer,
+                        buffer: scattering_order_buffer,
                         offset: 0,
                         size: None,
                     },
@@ -1355,7 +1355,7 @@ impl Precompute {
                 wgpu::BindGroupEntry {
                     binding: 0,
                     resource: wgpu::BindingResource::Buffer {
-                        buffer: &atmosphere_params_buffer,
+                        buffer: atmosphere_params_buffer,
                         offset: 0,
                         size: None,
                     },
@@ -1363,7 +1363,7 @@ impl Precompute {
                 wgpu::BindGroupEntry {
                     binding: 1,
                     resource: wgpu::BindingResource::Buffer {
-                        buffer: &rad_to_lum_buffer,
+                        buffer: rad_to_lum_buffer,
                         offset: 0,
                         size: None,
                     },
@@ -1371,7 +1371,7 @@ impl Precompute {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: wgpu::BindingResource::Buffer {
-                        buffer: &scattering_order_buffer,
+                        buffer: scattering_order_buffer,
                         offset: 0,
                         size: None,
                     },
@@ -1507,9 +1507,9 @@ impl Precompute {
         #[allow(clippy::cast_ptr_alignment)]
         let fp = mapping.as_ptr() as *const f32;
         let floats = unsafe { slice::from_raw_parts(fp, mapping.len() / 4) };
-        Self::show_range(&floats, &prefix);
+        Self::show_range(floats, &prefix);
 
-        let (p0, p1) = Self::split_pixels(&floats, extent);
+        let (p0, p1) = Self::split_pixels(floats, extent);
         Self::save_layered(
             p0,
             3,

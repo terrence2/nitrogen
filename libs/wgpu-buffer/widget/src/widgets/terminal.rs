@@ -16,18 +16,22 @@ use crate::{
     color::Color,
     font_context::FontContext,
     paint_context::PaintContext,
-    widget::{UploadMetrics, Widget},
+    region::{Extent, Position, Region},
+    widget::Widget,
     LineEdit, TextEdit, VerticalBox,
 };
 use anyhow::Result;
-use gpu::Gpu;
+use gpu::{
+    size::{AbsSize, Size},
+    Gpu,
+};
 use input::{ElementState, GenericEvent, VirtualKeyCode};
 use nitrous::{
     ir::{Expr, Stmt, Term},
     Interpreter, Module, Script, Value,
 };
 use parking_lot::RwLock;
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 // Items packed from top to bottom.
 #[derive(Debug)]
@@ -39,6 +43,9 @@ pub struct Terminal {
 }
 
 impl Terminal {
+    const WIDTH: Size = Size::from_percent(100.);
+    const HEIGHT: Size = Size::from_percent(40.);
+
     pub fn new(font_context: &FontContext) -> Self {
         let output = TextEdit::new("")
             .with_default_font(font_context.font_id_for_name("dejavu-mono"))
@@ -48,16 +55,16 @@ impl Terminal {
         let edit = LineEdit::empty()
             .with_default_font(font_context.font_id_for_name("mono"))
             .with_default_color(Color::White)
-            .with_default_size_pts(12.0)
+            .with_default_size(Size::from_pts(12.0))
             .with_text("help()")
             .wrapped();
         edit.write().line_mut().select_all();
-        let container = VerticalBox::with_children(&[output.clone(), edit.clone()])
+        let container = VerticalBox::new_with_children(&[output.clone(), edit.clone()])
             .with_background_color(Color::Gray.darken(3.).opacity(0.8))
-            .with_width(2.0)
-            .with_height(0.9)
+            .with_glass_background()
+            .with_overridden_extent(Extent::new(Self::WIDTH, Self::HEIGHT))
+            .with_fill(0)
             .wrapped();
-        container.write().info_mut().set_glass_background(true);
         Self {
             edit,
             output,
@@ -106,7 +113,7 @@ impl Terminal {
                 }
             } else if let Expr::Attr(mod_name_term, Term::Symbol(sym)) = e.as_mut() {
                 if let Expr::Term(Term::Symbol(mod_name)) = mod_name_term.as_ref() {
-                    if let Some(Value::Module(pin)) = interpreter.read().get_global(&mod_name) {
+                    if let Some(Value::Module(pin)) = interpreter.read().get_global(mod_name) {
                         let ns = pin.read();
                         let sim = ns
                             .names()
@@ -126,18 +133,43 @@ impl Terminal {
 }
 
 impl Widget for Terminal {
-    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<UploadMetrics> {
-        if self.visible {
-            self.container.read().upload(gpu, context)
-        } else {
-            Ok(Default::default())
+    fn measure(&mut self, gpu: &Gpu, font_context: &mut FontContext) -> Result<Extent<Size>> {
+        if !self.visible {
+            return Ok(Extent::zero());
         }
+
+        self.container.write().measure(gpu, font_context)
+    }
+
+    fn layout(
+        &mut self,
+        now: Instant,
+        region: Region<Size>,
+        gpu: &Gpu,
+        font_context: &mut FontContext,
+    ) -> Result<()> {
+        if !self.visible {
+            return Ok(());
+        }
+
+        self.container
+            .write()
+            .layout(now, region, gpu, font_context)
+    }
+
+    fn upload(&self, now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
+        if !self.visible {
+            return Ok(());
+        }
+        self.container.read().upload(now, gpu, context)
     }
 
     fn handle_event(
         &mut self,
+        now: Instant,
         event: &GenericEvent,
         focus: &str,
+        cursor_position: Position<AbsSize>,
         interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
         // FIXME: don't hard-code the name
@@ -148,7 +180,7 @@ impl Widget for Terminal {
         // FIXME: set focus parameter here equal to whatever we call the line_edit child
         self.edit
             .write()
-            .handle_event(event, focus, interpreter.clone())?;
+            .handle_event(now, event, focus, cursor_position, interpreter.clone())?;
 
         // Intercept the enter key and process the command in edit into the terminal.
         if let GenericEvent::KeyboardKey {

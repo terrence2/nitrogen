@@ -88,7 +88,7 @@ impl Bindings {
     ) -> Result<()> {
         if let Some(possible_chord_list) = self.press_chords.get(&input) {
             for chord in possible_chord_list {
-                if chord.is_pressed(Some(input), &state) {
+                if chord.is_pressed(Some(input), state) {
                     interpreter.interpret(&self.script_map[chord])?;
                 }
             }
@@ -106,7 +106,7 @@ impl Bindings {
         // active in the case that it is pressed so that we don't have to look at everything.
         if let Some(possible_chord_list) = self.press_chords.get(&input) {
             for chord in possible_chord_list {
-                if chord.is_pressed(None, &state) {
+                if chord.is_pressed(None, state) {
                     self.maybe_activate_chord(chord, state, interpreter)?;
                 }
             }
@@ -131,7 +131,7 @@ impl Bindings {
     ) -> Result<()> {
         // We may have multiple binding sets active for the same KeySet, in which case the first
         // binding in the set wins and checks for subsequent activations should exit early.
-        if state.active_chords.contains(&chord) {
+        if state.active_chords.contains(chord) {
             debug!("chord {} is already active", chord);
             return Ok(());
         }
@@ -192,7 +192,7 @@ impl Bindings {
         // masked commands that were unmasked by this change.
         for released_chord in &released_chords {
             for (chord, script) in &self.script_map {
-                if chord.is_subset_of(released_chord) && chord.is_pressed(None, &state) {
+                if chord.is_subset_of(released_chord) && chord.is_pressed(None, state) {
                     state.active_chords.insert(chord.to_owned());
                     self.activate_chord(script, interpreter)?;
                 }

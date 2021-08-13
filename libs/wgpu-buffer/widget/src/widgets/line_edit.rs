@@ -14,36 +14,41 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     color::Color,
-    font_context::FontId,
+    font_context::{FontContext, FontId, TextSpanMetrics},
     paint_context::PaintContext,
+    region::{Extent, Position, Region},
     text_run::TextRun,
-    widget::{UploadMetrics, Widget},
+    widget::Widget,
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
-use gpu::Gpu;
+use gpu::{
+    size::{AbsSize, AspectMath, ScreenDir, Size},
+    Gpu,
+};
 use input::{ElementState, GenericEvent, ModifiersState, VirtualKeyCode};
 use nitrous::Interpreter;
 use parking_lot::RwLock;
-use std::{ops::Range, sync::Arc};
+use std::{ops::Range, sync::Arc, time::Instant};
 
 #[derive(Debug)]
 pub struct LineEdit {
     line: TextRun,
-    override_width: Option<f32>,
+    metrics: TextSpanMetrics,
+
+    position: Position<Size>,
+    extent: Extent<Size>,
 }
 
 impl LineEdit {
     pub fn empty() -> Self {
         Self {
             line: TextRun::empty(),
-            override_width: None,
-        }
-    }
+            metrics: TextSpanMetrics::default(),
 
-    pub fn with_width(mut self, width: f32) -> Self {
-        self.override_width = Some(width);
-        self
+            position: Position::origin(),
+            extent: Extent::zero(),
+        }
     }
 
     pub fn with_default_color(mut self, color: Color) -> Self {
@@ -56,8 +61,8 @@ impl LineEdit {
         self
     }
 
-    pub fn with_default_size_pts(mut self, size_pts: f32) -> Self {
-        self.line.set_default_size_pts(size_pts);
+    pub fn with_default_size(mut self, size: Size) -> Self {
+        self.line.set_default_size(size);
         self
     }
 
@@ -78,8 +83,8 @@ impl LineEdit {
         self.line.select(range);
     }
 
-    pub fn change_size_pts(&mut self, size_pts: f32) {
-        self.line.change_size_pts(size_pts);
+    pub fn change_size(&mut self, size: Size) {
+        self.line.change_size(size);
     }
 
     pub fn take_action(
@@ -106,22 +111,47 @@ impl LineEdit {
 }
 
 impl Widget for LineEdit {
-    fn upload(&self, gpu: &Gpu, context: &mut PaintContext) -> Result<UploadMetrics> {
+    fn measure(&mut self, gpu: &Gpu, font_context: &mut FontContext) -> Result<Extent<Size>> {
+        self.metrics = self.line.measure(gpu, font_context)?;
+        Ok(Extent::<Size>::new(
+            self.metrics.width.into(),
+            (self.metrics.height - self.metrics.descent).into(),
+        ))
+    }
+
+    fn layout(
+        &mut self,
+        _now: Instant,
+        region: Region<Size>,
+        gpu: &Gpu,
+        _font_context: &mut FontContext,
+    ) -> Result<()> {
+        let mut position = *region.position();
+        *position.bottom_mut() =
+            position
+                .bottom()
+                .sub(&self.metrics.descent.into(), gpu, ScreenDir::Vertical);
+        self.position = position;
+        self.extent = *region.extent();
+        Ok(())
+    }
+
+    fn upload(&self, _now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
         let info = WidgetInfo::default();
         let widget_info_index = context.push_widget(&info);
 
-        let (line_metrics, _) = self.line.upload(0f32, widget_info_index, gpu, context)?;
-        Ok(UploadMetrics {
-            widget_info_indexes: line_metrics.widget_info_indexes,
-            width: self.override_width.unwrap_or(line_metrics.width),
-            height: line_metrics.height,
-        })
+        self.line
+            .upload(self.position, widget_info_index, gpu, context)?;
+
+        Ok(())
     }
 
     fn handle_event(
         &mut self,
+        _now: Instant,
         event: &GenericEvent,
         _focus: &str,
+        _cursor_position: Position<AbsSize>,
         _interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
         // FIXME: add name to widget and obey focus

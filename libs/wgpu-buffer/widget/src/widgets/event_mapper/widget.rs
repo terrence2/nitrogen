@@ -13,7 +13,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    widget::{UploadMetrics, Widget},
+    font_context::FontContext,
+    region::{Extent, Position, Region},
+    widget::Widget,
     widgets::event_mapper::{
         bindings::Bindings,
         input::{Input, InputSet},
@@ -21,7 +23,10 @@ use crate::{
     PaintContext,
 };
 use anyhow::{ensure, Result};
-use gpu::Gpu;
+use gpu::{
+    size::{AbsSize, Size},
+    Gpu,
+};
 use input::{ElementState, GenericEvent, GenericSystemEvent, GenericWindowEvent, ModifiersState};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -30,6 +35,7 @@ use parking_lot::RwLock;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
+    time::Instant,
 };
 
 #[derive(Debug, Default)]
@@ -69,18 +75,30 @@ impl EventMapper {
 }
 
 impl Widget for EventMapper {
-    fn upload(&self, _gpu: &Gpu, _context: &mut PaintContext) -> Result<UploadMetrics> {
-        Ok(UploadMetrics {
-            widget_info_indexes: vec![],
-            width: 0.,
-            height: 0.,
-        })
+    fn measure(&mut self, _gpu: &Gpu, _font_context: &mut FontContext) -> Result<Extent<Size>> {
+        Ok(Extent::zero())
+    }
+
+    fn layout(
+        &mut self,
+        _now: Instant,
+        _region: Region<Size>,
+        _gpu: &Gpu,
+        _font_context: &mut FontContext,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    fn upload(&self, _now: Instant, _gpu: &Gpu, _context: &mut PaintContext) -> Result<()> {
+        Ok(())
     }
 
     fn handle_event(
         &mut self,
+        _now: Instant,
         event: &GenericEvent,
         focus: &str,
+        _cursor_position: Position<AbsSize>,
         interpreter: Arc<RwLock<Interpreter>>,
     ) -> Result<()> {
         let input = Input::from_event(event);

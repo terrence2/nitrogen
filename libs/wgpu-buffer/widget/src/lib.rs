@@ -16,6 +16,7 @@ mod box_packing;
 mod color;
 mod font_context;
 mod paint_context;
+mod region;
 mod text_run;
 mod widget;
 mod widget_info;
@@ -26,11 +27,14 @@ pub use crate::{
     box_packing::{PositionH, PositionV},
     color::Color,
     paint_context::PaintContext,
-    widget::Widget,
+    region::{Border, Extent, Position, Region},
+    widget::{Labeled, Widget},
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
     widgets::{
+        button::Button,
         event_mapper::{Bindings, EventMapper},
+        expander::Expander,
         float_box::FloatBox,
         label::Label,
         line_edit::LineEdit,
@@ -44,13 +48,16 @@ use crate::font_context::FontContext;
 use anyhow::{ensure, Result};
 use font_common::{FontAdvance, FontInterface};
 use font_ttf::TtfFont;
-use gpu::{Gpu, UploadTracker};
+use gpu::{
+    size::{AbsSize, Size},
+    Gpu, UploadTracker,
+};
 use input::{ElementState, GenericEvent, ModifiersState, VirtualKeyCode};
 use log::trace;
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
-use std::{borrow::Borrow, mem, num::NonZeroU64, ops::Range, sync::Arc};
+use std::{borrow::Borrow, mem, num::NonZeroU64, ops::Range, sync::Arc, time::Instant};
 use tokio::runtime::Runtime;
 
 // Drawing UI efficiently:
@@ -84,6 +91,7 @@ pub struct WidgetBuffer {
     root: Arc<RwLock<FloatBox>>,
     paint_context: PaintContext,
     keyboard_focus: String,
+    cursor_position: Position<AbsSize>,
 
     // Auto-inserted widgets.
     terminal: Arc<RwLock<Terminal>>,
@@ -112,10 +120,10 @@ impl WidgetBuffer {
         trace!("WidgetBuffer::new");
 
         let mut paint_context = PaintContext::new(gpu)?;
-        let fira_mono = TtfFont::from_bytes(&FIRA_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
-        let fira_sans = TtfFont::from_bytes(&FIRA_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
-        let dejavu_mono = TtfFont::from_bytes(&DEJAVU_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
-        let dejavu_sans = TtfFont::from_bytes(&DEJAVU_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
+        let fira_mono = TtfFont::from_bytes(FIRA_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
+        let fira_sans = TtfFont::from_bytes(FIRA_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
+        let dejavu_mono = TtfFont::from_bytes(DEJAVU_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
+        let dejavu_sans = TtfFont::from_bytes(DEJAVU_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
         paint_context.add_font("dejavu-sans", dejavu_sans.clone());
         paint_context.add_font("dejavu-mono", dejavu_mono);
         paint_context.add_font("fira-sans", fira_sans);
@@ -210,6 +218,7 @@ impl WidgetBuffer {
             root,
             paint_context,
             keyboard_focus: "mapper".to_owned(),
+            cursor_position: Position::origin(),
 
             terminal,
             mapper,
@@ -254,40 +263,6 @@ impl WidgetBuffer {
         self.paint_context.dump_glyphs();
     }
 
-    pub fn handle_events(
-        &mut self,
-        events: &[GenericEvent],
-        interpreter: Arc<RwLock<Interpreter>>,
-    ) -> Result<()> {
-        for event in events {
-            if let GenericEvent::KeyboardKey {
-                virtual_keycode,
-                press_state,
-                modifiers_state,
-                ..
-            } = event
-            {
-                if *virtual_keycode == VirtualKeyCode::Grave
-                    && *modifiers_state == ModifiersState::SHIFT
-                    && *press_state == ElementState::Pressed
-                {
-                    self.show_terminal = !self.show_terminal;
-                    self.set_keyboard_focus(if self.show_terminal {
-                        "terminal"
-                    } else {
-                        "mapper"
-                    });
-                    self.terminal.write().set_visible(self.show_terminal);
-                    continue;
-                }
-            }
-            self.root()
-                .write()
-                .handle_event(event, &self.keyboard_focus, interpreter.clone())?;
-        }
-        Ok(())
-    }
-
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.bind_group_layout
     }
@@ -318,14 +293,76 @@ impl WidgetBuffer {
         0u32..self.paint_context.text_pool.len() as u32
     }
 
+    pub fn layout_for_frame(&mut self, now: Instant, gpu: &mut Gpu) -> Result<()> {
+        self.root.write().layout(
+            now,
+            Region::new(
+                Position::origin(),
+                Extent::new(Size::from_percent(100.), Size::from_percent(100.)),
+            ),
+            gpu,
+            &mut self.paint_context.font_context,
+        )?;
+        Ok(())
+    }
+
+    pub fn handle_events(
+        &mut self,
+        now: Instant,
+        events: &[GenericEvent],
+        interpreter: Arc<RwLock<Interpreter>>,
+        scale_factor: f64,
+        logical_size: Extent<AbsSize>,
+    ) -> Result<()> {
+        for event in events {
+            if let GenericEvent::KeyboardKey {
+                virtual_keycode,
+                press_state,
+                modifiers_state,
+                ..
+            } = event
+            {
+                if *virtual_keycode == VirtualKeyCode::Grave
+                    && *modifiers_state == ModifiersState::SHIFT
+                    && *press_state == ElementState::Pressed
+                {
+                    self.show_terminal = !self.show_terminal;
+                    self.set_keyboard_focus(if self.show_terminal {
+                        "terminal"
+                    } else {
+                        "mapper"
+                    });
+                    self.terminal.write().set_visible(self.show_terminal);
+                    continue;
+                }
+            }
+            if let GenericEvent::CursorMove { pixel_position, .. } = event {
+                let (x, y) = *pixel_position;
+                self.cursor_position = Position::new(
+                    AbsSize::from_px((x / scale_factor) as f32),
+                    logical_size.height() - AbsSize::from_px((y / scale_factor) as f32),
+                );
+            }
+            self.root().write().handle_event(
+                now,
+                event,
+                &self.keyboard_focus,
+                self.cursor_position,
+                interpreter.clone(),
+            )?;
+        }
+        Ok(())
+    }
+
     pub fn make_upload_buffer(
         &mut self,
+        now: Instant,
         gpu: &mut Gpu,
         async_rt: &Runtime,
         tracker: &mut UploadTracker,
     ) -> Result<()> {
         self.paint_context.reset_for_frame();
-        self.root.read().upload(gpu, &mut self.paint_context)?;
+        self.root.read().upload(now, gpu, &mut self.paint_context)?;
 
         self.paint_context
             .make_upload_buffer(gpu, async_rt, tracker)?;
@@ -437,9 +474,12 @@ mod test {
         widgets.read().root().write().add_child("label", label);
 
         let mut tracker = Default::default();
-        widgets
-            .write()
-            .make_upload_buffer(&mut gpu.write(), &async_rt, &mut tracker)?;
+        widgets.write().make_upload_buffer(
+            Instant::now(),
+            &mut gpu.write(),
+            &async_rt,
+            &mut tracker,
+        )?;
 
         Ok(())
     }

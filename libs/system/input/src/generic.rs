@@ -12,7 +12,10 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use winit::event::{ButtonId, ElementState, ModifiersState, VirtualKeyCode};
+use winit::{
+    dpi::LogicalSize,
+    event::{ButtonId, ElementState, ModifiersState, VirtualKeyCode},
+};
 
 #[derive(Debug, Copy, Clone)]
 pub enum MouseAxis {
@@ -159,6 +162,33 @@ impl GenericEvent {
             } | Self::Window(_)
                 | Self::System(_)
         )
+    }
+
+    pub fn pixel_position(&self) -> Option<(f64, f64)> {
+        match self {
+            Self::CursorMove { pixel_position, .. } => Some(*pixel_position),
+            _ => None,
+        }
+    }
+
+    pub fn gpu_position(&self, logical_size: LogicalSize<f64>) -> Option<(f32, f32)> {
+        self.pixel_position().map(|(x, y)| {
+            (
+                (x / logical_size.width * 2.0) as f32,
+                (y / logical_size.height * 2.0) as f32,
+            )
+        })
+    }
+
+    pub fn is_primary_mouse_down(&self) -> bool {
+        match self {
+            Self::MouseButton {
+                button,
+                press_state,
+                ..
+            } => *button == 1 && *press_state == ElementState::Pressed,
+            _ => false,
+        }
     }
 }
 

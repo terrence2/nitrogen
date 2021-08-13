@@ -26,22 +26,21 @@ static_assertions = "^ 1"
 tokio = { version = "^ 1.0", features = ["rt-multi-thread", "macros", "io-util", "fs", "sync"] }
 wgpu = "^ 0.7"
 zerocopy = "= 0.3.0"
-absolute_unit = { path = "../../sim/absolute_unit" }
+absolute_unit = { path = "../../util/absolute_unit" }
 camera = { path = "../../sim/camera" }
 catalog = { path = "../../system/catalog" }
-geodesy = { path = "../../sim/geodesy" }
-geometry = { path = "../../sim/geometry" }
+geodesy = { path = "../../util/geodesy" }
+geometry = { path = "../../util/geometry" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 gpu = { path = "../../system/gpu" }
-nitrous = { path = "../../system/nitrous" }
-nitrous_injector = { path = "../../system/nitrous_injector" }
-packed_struct = { path = "../../system/packed_struct" }
-physical_constants = { path = "../../sim/physical_constants" }
+nitrous = { path = "../../util/nitrous" }
+nitrous_injector = { path = "../../util/nitrous_injector" }
+packed_struct = { path = "../../util/packed_struct" }
+physical_constants = { path = "../../util/physical_constants" }
 shader_shared = { path = "../../wgpu-buffer/shader_shared" }
-universe = { path = "../../sim/universe" }
 
 [dev-dependencies]
 input = { path = "../../system/input" }
 
 [build-dependencies]
-build_shaders = { path = "../../system/build_shaders" }
+build_shaders = { path = "../../util/build_shaders" }

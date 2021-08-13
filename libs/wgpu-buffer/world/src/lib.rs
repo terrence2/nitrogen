@@ -383,12 +383,12 @@ impl WorldRenderPass {
             label: Some("world-dbg-deferred-pipeline"),
             layout: Some(layout),
             vertex: wgpu::VertexState {
-                module: &vert_shader,
+                module: vert_shader,
                 entry_point: "main",
                 buffers: &[FullscreenVertex::descriptor()],
             },
             fragment: Some(wgpu::FragmentState {
-                module: &frag_shader,
+                module: frag_shader,
                 entry_point: "main",
                 targets: &[wgpu::ColorTargetState {
                     format: Gpu::SCREEN_FORMAT,
@@ -513,10 +513,10 @@ impl WorldRenderPass {
             DebugMode::NormalLocal => rpass.set_pipeline(&self.dbg_normal_local_pipeline),
             DebugMode::NormalGlobal => rpass.set_pipeline(&self.dbg_normal_global_pipeline),
         }
-        rpass.set_bind_group(Group::Globals.index(), &globals_buffer.bind_group(), &[]);
+        rpass.set_bind_group(Group::Globals.index(), globals_buffer.bind_group(), &[]);
         rpass.set_bind_group(
             Group::Atmosphere.index(),
-            &atmosphere_buffer.bind_group(),
+            atmosphere_buffer.bind_group(),
             &[],
         );
         rpass.set_bind_group(
@@ -524,13 +524,13 @@ impl WorldRenderPass {
             terrain_buffer.composite_bind_group(),
             &[],
         );
-        rpass.set_bind_group(Group::Stars.index(), &stars_buffer.bind_group(), &[]);
+        rpass.set_bind_group(Group::Stars.index(), stars_buffer.bind_group(), &[]);
         rpass.set_vertex_buffer(0, fullscreen_buffer.vertex_buffer());
         rpass.draw(0..4, 0..1);
 
         if self.show_wireframe {
             rpass.set_pipeline(&self.wireframe_pipeline);
-            rpass.set_bind_group(Group::Globals.index(), &globals_buffer.bind_group(), &[]);
+            rpass.set_bind_group(Group::Globals.index(), globals_buffer.bind_group(), &[]);
             rpass.set_vertex_buffer(0, terrain_buffer.vertex_buffer());
             for i in 0..terrain_buffer.num_patches() {
                 let winding = terrain_buffer.patch_winding(i);
