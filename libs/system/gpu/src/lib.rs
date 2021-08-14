@@ -24,6 +24,7 @@ pub use crate::upload_tracker::{
 
 // Note: re-export for use by FrameGraph when it is instantiated in other crates.
 pub use wgpu;
+pub use winit::dpi::{LogicalSize, PhysicalSize};
 
 use anyhow::{anyhow, bail, Result};
 use futures::executor::block_on;
@@ -34,10 +35,7 @@ use parking_lot::RwLock;
 use std::{fmt::Debug, fs, mem, path::PathBuf, sync::Arc};
 use tokio::runtime::Runtime;
 use wgpu::util::DeviceExt;
-use winit::{
-    dpi::{LogicalSize, PhysicalSize},
-    window::Window,
-};
+use winit::window::Window;
 use zerocopy::AsBytes;
 
 #[derive(Debug)]

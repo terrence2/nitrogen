@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use gpu::{
     size::{AbsSize, AspectMath, LeftBound, RelSize, ScreenDir, Size},
-    Gpu,
+    Gpu, LogicalSize,
 };
 use std::{fmt::Debug, ops::Add};
 
@@ -99,6 +99,15 @@ impl<T: Copy + Clone + LeftBound + AspectMath> Extent<T> {
 impl From<Extent<AbsSize>> for Extent<Size> {
     fn from(abs: Extent<AbsSize>) -> Self {
         Extent::<Size>::new(abs.width().into(), abs.height().into())
+    }
+}
+
+impl From<LogicalSize<f64>> for Extent<AbsSize> {
+    fn from(sz: LogicalSize<f64>) -> Self {
+        Extent::new(
+            AbsSize::from_px(sz.width as f32),
+            AbsSize::from_px(sz.height as f32),
+        )
     }
 }
 

@@ -357,18 +357,8 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         loop_start = Instant::now();
 
         {
-            let logical_extent = {
-                let sz = gpu.read().logical_size();
-                Extent::new(
-                    AbsSize::from_px(sz.width as f32),
-                    AbsSize::from_px(sz.height as f32),
-                )
-            };
+            let logical_extent: Extent<AbsSize> = gpu.read().logical_size().into();
             let scale_factor = { gpu.read().scale_factor() };
-            frame_graph
-                .widgets
-                .write()
-                .layout_for_frame(loop_start, &mut gpu.write())?;
             frame_graph.widgets.write().handle_events(
                 loop_start,
                 &input_controller.poll_events()?,
@@ -376,6 +366,10 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
                 scale_factor,
                 logical_extent,
             )?;
+            frame_graph
+                .widgets
+                .write()
+                .layout_for_frame(loop_start, &mut gpu.write())?;
         }
 
         arcball.write().think();
