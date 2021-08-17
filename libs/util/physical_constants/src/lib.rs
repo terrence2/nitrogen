@@ -15,8 +15,8 @@
 
 pub const FEET_TO_M: f32 = 0.304_8;
 pub const FEET_TO_DAM: f32 = 0.030_48;
-pub const FEET_TO_HM_32: f32 = 0.003_048;
-pub const FEET_TO_HM_64: f64 = 0.003_048;
+pub const FEET_TO_M_32: f32 = 0.304_800;
+pub const FEET_TO_M_64: f64 = 0.304_800;
 pub const FEET_TO_KM: f32 = 0.000_304_8;
 
 pub const EARTH_RADIUS_KM: f64 = 6360.0;

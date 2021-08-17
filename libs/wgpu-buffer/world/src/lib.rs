@@ -470,8 +470,31 @@ impl WorldRenderPass {
         &self.deferred_bind_group
     }
 
-    pub fn offscreen_target(
+    pub fn offscreen_target_cleared(
         &self,
+    ) -> (
+        [wgpu::RenderPassColorAttachmentDescriptor; 1],
+        Option<wgpu::RenderPassDepthStencilAttachmentDescriptor>,
+    ) {
+        self.offscreen_target_maybe_clear(
+            wgpu::LoadOp::Clear(wgpu::Color::RED),
+            wgpu::LoadOp::Clear(-1f32),
+        )
+    }
+
+    pub fn offscreen_target_preserved(
+        &self,
+    ) -> (
+        [wgpu::RenderPassColorAttachmentDescriptor; 1],
+        Option<wgpu::RenderPassDepthStencilAttachmentDescriptor>,
+    ) {
+        self.offscreen_target_maybe_clear(wgpu::LoadOp::Load, wgpu::LoadOp::Load)
+    }
+
+    fn offscreen_target_maybe_clear(
+        &self,
+        color_load: wgpu::LoadOp<wgpu::Color>,
+        depth_load: wgpu::LoadOp<f32>,
     ) -> (
         [wgpu::RenderPassColorAttachmentDescriptor; 1],
         Option<wgpu::RenderPassDepthStencilAttachmentDescriptor>,
@@ -481,14 +504,14 @@ impl WorldRenderPass {
                 attachment: &self.deferred_texture.1,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::RED),
+                    load: color_load,
                     store: true,
                 },
             }],
             Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
                 attachment: &self.deferred_depth.1,
                 depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(-1f32),
+                    load: depth_load,
                     store: true,
                 }),
                 stencil_ops: None,
