@@ -15,9 +15,14 @@
 use crate::{Circle, Plane};
 use approx::relative_eq;
 use nalgebra::{Point3, RealField};
+use num_traits::cast::FromPrimitive;
+use std::fmt::{Debug, Display};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum CirclePlaneIntersection<T: RealField> {
+pub enum CirclePlaneIntersection<T>
+where
+    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
+{
     Parallel,
     InFrontOfPlane,
     BehindPlane,
@@ -25,11 +30,14 @@ pub enum CirclePlaneIntersection<T: RealField> {
     Tangent(Point3<T>),
 }
 
-pub fn circle_vs_plane<T: RealField>(
+pub fn circle_vs_plane<T>(
     circle: &Circle<T>,
     plane: &Plane<T>,
     sidedness_offset: T,
-) -> CirclePlaneIntersection<T> {
+) -> CirclePlaneIntersection<T>
+where
+    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
+{
     // We can get the direction by crossing normals.
     let d = circle.plane().normal().cross(plane.normal());
 

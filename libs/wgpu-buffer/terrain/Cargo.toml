@@ -6,7 +6,7 @@ authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-approx = "^ 0.4"
+approx = "^ 0.5"
 bzip2 = "^ 0.4"
 anyhow = "^ 1"
 float-ord = "^ 0.2"
@@ -17,7 +17,8 @@ json = "^ 0.12"
 lazy_static = "^ 1"
 log = "^ 0.4"
 memoffset = "^ 0.6"
-nalgebra = "^ 0.24"
+nalgebra = "^ 0.29"
+num-traits = "^ 0.2"
 parking_lot = "^ 0.11"
 rayon = "= 1.4.0"
 smallvec = "^ 1.4"

@@ -5,14 +5,14 @@ authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-approx = "^ 0.4"
+approx = "^ 0.5"
 bitflags = ">= 1.0"
 anyhow = "^ 1"
 futures = "^ 0.3"
 image = "^ 0.23"
 lazy_static = "^ 1"
 log = "^ 0.4"
-nalgebra = "^ 0.24"
+nalgebra = "^ 0.29"
 num-traits = "^ 0.2"
 parking_lot = "^ 0.11"
 static_assertions = "^ 1"

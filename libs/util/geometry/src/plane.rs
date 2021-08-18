@@ -14,15 +14,20 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use approx::relative_eq;
 use nalgebra::{convert, Point3, RealField, Vector3};
+use num_traits::cast::FromPrimitive;
 use simba::scalar::SupersetOf;
+use std::fmt::{Debug, Display};
 
 #[derive(Clone, Copy, Debug)]
-pub struct Plane<T: RealField> {
+pub struct Plane<T> {
     normal: Vector3<T>,
     distance: T,
 }
 
-impl<T: RealField> Plane<T> {
+impl<T> Plane<T>
+where
+    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
+{
     pub fn xy() -> Self {
         Self {
             normal: Vector3::new(T::zero(), T::zero(), T::one()),
@@ -56,11 +61,11 @@ impl<T: RealField> Plane<T> {
     }
 
     pub fn point_on_plane(&self, p: &Point3<T>) -> bool {
-        relative_eq!(self.normal.dot(&p.coords) - self.distance, T::zero())
+        relative_eq!(self.normal.dot(&p.coords) - self.distance(), T::zero())
     }
 
     pub fn distance_to_point(&self, p: &Point3<T>) -> T {
-        self.normal.dot(&p.coords) - self.distance
+        self.normal.dot(&p.coords) - self.distance()
     }
 
     pub fn closest_point_on_plane(&self, p: &Point3<T>) -> Point3<T> {
@@ -68,11 +73,11 @@ impl<T: RealField> Plane<T> {
     }
 
     pub fn point_is_in_front(&self, p: &Point3<T>) -> bool {
-        self.normal.dot(&p.coords) - self.distance >= T::zero()
+        self.normal.dot(&p.coords) - self.distance() >= T::zero()
     }
 
     pub fn point_is_in_front_with_offset(&self, p: &Point3<T>, offset: T) -> bool {
-        self.normal.dot(&p.coords) - self.distance >= offset
+        self.normal.dot(&p.coords) - self.distance() >= offset
     }
 
     pub fn normal(&self) -> &Vector3<T> {
