@@ -6,4 +6,4 @@ authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 
 [dependencies]
 anyhow = "^ 1"
-zerocopy = "= 0.3.0"
+zerocopy = "^ 0.5"

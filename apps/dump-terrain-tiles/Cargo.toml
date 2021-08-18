@@ -15,7 +15,7 @@ nalgebra = "^ 0.29"
 parking_lot = "^ 0.11"
 rayon = "= 1.4.0"
 structopt = "^ 0.3"
-zerocopy = "= 0.3.0"
+zerocopy = "^ 0.5"
 absolute_unit = { path = "../../libs/util/absolute_unit" }
 geodesy = { path = "../../libs/util/geodesy" }
 terrain = { path = "../../libs/wgpu-buffer/terrain" }

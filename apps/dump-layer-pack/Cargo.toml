@@ -8,5 +8,5 @@ edition = "2018"
 anyhow = "^ 1"
 memmap = "^ 0.7"
 structopt = "^ 0.3"
-zerocopy = "= 0.3.0"
+zerocopy = "^ 0.5"
 terrain = { path = "../../libs/wgpu-buffer/terrain" }

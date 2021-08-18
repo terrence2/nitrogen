@@ -13,7 +13,7 @@ log = "^ 0.4"
 nalgebra = "^ 0.29"
 static_assertions = "^ 1"
 wgpu = "^ 0.7"
-zerocopy = "= 0.3.0"
+zerocopy = "^ 0.5"
 star_catalog = { path = "../../util/star_catalog" }
 gpu = { path = "../../system/gpu" }
 

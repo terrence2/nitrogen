@@ -25,7 +25,7 @@ smallvec = "^ 1.4"
 static_assertions = "^ 1"
 tokio = { version = "^ 1.0", features = ["rt-multi-thread", "macros", "io-util", "fs", "sync"] }
 wgpu = "^ 0.7"
-zerocopy = "= 0.3.0"
+zerocopy = "^ 0.5"
 absolute_unit = { path = "../../util/absolute_unit" }
 camera = { path = "../../sim/camera" }
 catalog = { path = "../../system/catalog" }
