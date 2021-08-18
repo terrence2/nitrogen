@@ -168,8 +168,8 @@ pub fn build() -> Result<()> {
                         pathbuf, err
                     );
                     log::warn!("{}", &msg);
-                    // Note: naga fails for many common glsl constructs in 0.4
-                    //bail!(msg)
+                    // Note: naga fails for many common glsl constructs in 0.5
+                    // bail!(msg)
                 }
             };
         }

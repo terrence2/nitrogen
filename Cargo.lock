@@ -250,7 +250,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "log",
- "naga 0.4.1",
+ "naga 0.5.0",
  "shaderc",
 ]
 
@@ -1816,9 +1816,9 @@ dependencies = [
 
 [[package]]
 name = "naga"
-version = "0.4.1"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f470a97eafcdd0dbea43d5e1a8ef3557aa31f49ba643d9430dbbf911c162b24c"
+checksum = "ef670817eef03d356d5a509ea275e7dd3a78ea9e24261ea3cb2dfed1abb08f64"
 dependencies = [
  "bit-set",
  "bitflags",
@@ -1826,6 +1826,7 @@ dependencies = [
  "log",
  "num-traits",
  "petgraph",
+ "rose_tree",
  "spirv_headers",
  "thiserror",
 ]
@@ -2510,6 +2511,15 @@ name = "regex-syntax"
 version = "0.6.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5eb417147ba9860a96cfe72a0b93bf88fee1744b5636ec99ab20c1aa9376581"
+
+[[package]]
+name = "rose_tree"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "284de9dae38774e2813aaabd7e947b4a6fe9b8c58c2309f754a487cdd50de1c2"
+dependencies = [
+ "petgraph",
+]
 
 [[package]]
 name = "rust-argon2"
