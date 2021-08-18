@@ -11,10 +11,12 @@ log = "^ 0.4"
 raw-window-handle = "^ 0.3"
 ordered-float = "^ 2"
 parking_lot = "^ 0.11"
-paste = "^ 1"
 tokio = { version = "^ 1.0", features = ["rt-multi-thread", "macros", "io-util", "fs", "sync"] }
 zerocopy = "= 0.3.0"
 wgpu = "^ 0.7"
 winit = { version = "^ 0.24", features = ["web-sys"] }
 nitrous = { path = "../../util/nitrous" }
 nitrous_injector = { path = "../../util/nitrous_injector" }
+
+[dev-dependencies]
+paste = "^ 1"
