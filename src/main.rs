@@ -53,6 +53,9 @@ struct Opt {
     /// Extra directories to treat as libraries
     #[structopt(short, long)]
     libdir: Vec<PathBuf>,
+
+    #[structopt(short, long)]
+    execute: String,
 }
 
 #[derive(Debug, NitrousModule)]
@@ -348,6 +351,9 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         world.write().add_default_bindings(interp)?;
         system.write().add_default_bindings(interp)?;
     }
+
+    let rv = interpreter.write().interpret_once(&opt.execute)?;
+    println!("{}", rv);
 
     let mut now = Instant::now();
     while !system.read().exit {
