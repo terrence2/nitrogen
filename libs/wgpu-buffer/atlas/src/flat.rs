@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
-use geometry::Aabb2;
+use geometry::Aabb;
 use gpu::{texture_format_size, Gpu, UploadTracker};
 use image::{ImageBuffer, Luma, Pixel, Rgba};
 use log::debug;
@@ -712,13 +712,13 @@ where
     }
 
     fn assert_non_overlapping(&self, lo_x: u32, lo_y: u32, w: u32, h: u32) {
-        let img = Aabb2::new(
+        let img = Aabb::new(
             [lo_x + self.padding, lo_y + self.padding],
             [lo_x + w, lo_y + h],
         );
         let mut c_x_start = 0;
         for c in self.columns.iter() {
-            let col = Aabb2::new([c_x_start, 0], [c.x_end, c.fill_height]);
+            let col = Aabb::new([c_x_start, 0], [c.x_end, c.fill_height]);
             c_x_start = c.x_end;
             assert!(!img.overlaps(&col));
         }
