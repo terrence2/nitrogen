@@ -169,7 +169,7 @@ pub fn build() -> Result<()> {
                     );
                     log::warn!("{}", &msg);
                     // Note: naga fails for many common glsl constructs in 0.5
-                    // bail!(msg)
+                    bail!(msg)
                 }
             };
         }
