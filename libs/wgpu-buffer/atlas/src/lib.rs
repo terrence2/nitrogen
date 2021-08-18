@@ -13,8 +13,5 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 
-// TODO: select the best algorithm based on platform.
-//mod array;
-
 mod flat;
 pub use crate::flat::{AtlasPacker, Frame};
