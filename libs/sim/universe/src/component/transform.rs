@@ -12,18 +12,18 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use nalgebra::Vector3;
+use absolute_unit::Kilometers;
+use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Transform(Vector3<f32>);
+pub struct Transform(Graticule<GeoSurface>);
 
 impl Transform {
-    pub fn new(v: Vector3<f32>) -> Self {
+    pub fn new(v: Graticule<GeoSurface>) -> Self {
         Self(v)
     }
 
-    // Convert to dense pack for upload.
-    pub fn compact(&self) -> [f32; 3] {
-        [self.0.x, self.0.y, self.0.z]
+    pub fn cartesian(&self) -> Cartesian<GeoCenter, Kilometers> {
+        Cartesian::<GeoCenter, Kilometers>::from(Graticule::<GeoCenter>::from(self.0))
     }
 }

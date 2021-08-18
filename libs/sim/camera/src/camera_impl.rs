@@ -15,7 +15,7 @@
 use absolute_unit::{radians, Angle, AngleUnit, Kilometers, Length, LengthUnit, Meters, Radians};
 use geodesy::{Cartesian, GeoCenter};
 use geometry::Plane;
-use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, Vector3};
+use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, UnitQuaternion, Vector3};
 
 #[derive(Debug, Default, Clone)]
 pub struct Camera {
@@ -135,7 +135,7 @@ impl Camera {
         //     0.0f,     0.0f,  0.0f, -1.0f,
         //     0.0f,     0.0f, zNear,  0.0f);
 
-        // TL;DR is that we set the the Z in clip space to zNear instead of -1 (and write z
+        // TL;DR is that we set the Z in clip space to zNear instead of -1 (and write z
         // into the w coordinate, like always). When we do the perspective divide by w, this
         // inverts the z _and_ changes the scaling.
 
@@ -162,6 +162,10 @@ impl Camera {
             &Point3::from(eye + self.forward()),
             &-self.up(),
         )
+    }
+
+    pub fn look_at_rh<T: LengthUnit>(&self) -> UnitQuaternion<f64> {
+        UnitQuaternion::look_at_rh(self.forward(), &-self.up())
     }
 
     pub fn world_space_frustum<T: LengthUnit>(&self) -> [Plane<f64>; 5] {

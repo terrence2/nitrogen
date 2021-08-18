@@ -139,7 +139,7 @@ make_frame_graph!(
             accumulate_normal_and_color: Compute() { terrain( globals ) },
 
             // world: Flatten terrain g-buffer into the final image and mix in stars.
-            render_world: Render(world, offscreen_target) {
+            render_world: Render(world, offscreen_target_cleared) {
                 world( globals, fullscreen, atmosphere, stars, terrain )
             },
 
@@ -349,33 +349,27 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         system.write().add_default_bindings(interp)?;
     }
 
-    let mut loop_start = Instant::now();
+    let mut now = Instant::now();
     while !system.read().exit {
         orrery
             .write()
-            .adjust_time(Duration::from_std(loop_start.elapsed())?);
-        loop_start = Instant::now();
+            .adjust_time(Duration::from_std(now.elapsed())?);
+        now = Instant::now();
 
         {
-            let logical_extent = {
-                let sz = gpu.read().logical_size();
-                Extent::new(
-                    AbsSize::from_px(sz.width as f32),
-                    AbsSize::from_px(sz.height as f32),
-                )
-            };
+            let logical_extent: Extent<AbsSize> = gpu.read().logical_size().into();
             let scale_factor = { gpu.read().scale_factor() };
-            frame_graph
-                .widgets
-                .write()
-                .layout_for_frame(loop_start, &mut gpu.write())?;
             frame_graph.widgets.write().handle_events(
-                loop_start,
+                now,
                 &input_controller.poll_events()?,
                 interpreter.clone(),
                 scale_factor,
                 logical_extent,
             )?;
+            frame_graph
+                .widgets
+                .write()
+                .layout_for_frame(now, &mut gpu.write())?;
         }
 
         arcball.write().think();
@@ -400,7 +394,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
             &mut tracker,
         )?;
         frame_graph.widgets.write().make_upload_buffer(
-            loop_start,
+            now,
             &mut gpu.write(),
             &async_rt,
             &mut tracker,
@@ -423,7 +417,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
             "FoV: {}",
             degrees!(arcball.read().camera().fov_y()),
         ));
-        let frame_time = loop_start.elapsed();
+        let frame_time = now.elapsed();
         let ts = format!(
             "frame: {}.{}ms",
             frame_time.as_secs() * 1000 + u64::from(frame_time.subsec_millis()),

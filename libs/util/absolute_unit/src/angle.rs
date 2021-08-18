@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::impl_unit_for_numerics;
+use crate::{impl_unit_for_numerics, radians};
 use std::{
     fmt,
     marker::PhantomData,
@@ -71,15 +71,15 @@ impl<Unit: AngleUnit> Angle<Unit> {
     }
 
     pub fn cos(self) -> f64 {
-        f64::from(self).cos()
+        f64::from(radians!(self)).cos()
     }
 
     pub fn sin(self) -> f64 {
-        f64::from(self).sin()
+        f64::from(radians!(self)).sin()
     }
 
     pub fn tan(self) -> f64 {
-        f64::from(self).tan()
+        f64::from(radians!(self)).tan()
     }
 
     pub fn f32(self) -> f32 {

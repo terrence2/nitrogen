@@ -33,7 +33,7 @@ use anyhow::Result;
 use bzip2::read::BzDecoder;
 use catalog::Catalog;
 use futures::task::noop_waker;
-use geometry::Aabb2;
+use geometry::Aabb;
 use gpu::{texture_format_size, ArcTextureCopyView, Gpu, OwnedBufferCopyView, UploadTracker};
 use image::{ImageBuffer, Rgb};
 use log::trace;
@@ -551,7 +551,7 @@ impl SphericalTileSetCommon {
         let max_lat = g0.latitude.max(g1.latitude).max(g2.latitude);
         let min_lon = g0.longitude.min(g1.longitude).min(g2.longitude);
         let max_lon = g0.longitude.max(g1.longitude).max(g2.longitude);
-        let aabb = Aabb2::new(
+        let aabb = Aabb::new(
             [
                 arcseconds!(min_lat).round() as i32,
                 arcseconds!(min_lon).round() as i32,

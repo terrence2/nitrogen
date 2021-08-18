@@ -22,6 +22,10 @@ impl Rotation {
         Self(q)
     }
 
+    pub fn quaternion(&self) -> &UnitQuaternion<f32> {
+        &self.0
+    }
+
     // Convert to dense pack for upload.
     pub fn compact(&self) -> [f32; 3] {
         let (a, b, c) = self.0.euler_angles();
