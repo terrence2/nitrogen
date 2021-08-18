@@ -8,13 +8,13 @@ edition = "2018"
 proc-macro = true
 
 [dependencies]
-anyhow = "^ 1"
 proc-macro2 = "^ 1"
 syn = "^ 1"
 quote = "^ 1"
-nitrous  = { path = "../nitrous" }
 
 [dev-dependencies]
+anyhow = "^ 1"
 log = "^ 0.4"
 ordered-float = "^ 2"
 parking_lot = "^ 0.11"
+nitrous  = { path = "../nitrous" }

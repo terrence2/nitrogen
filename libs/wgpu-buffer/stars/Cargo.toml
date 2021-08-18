@@ -14,12 +14,12 @@ nalgebra = "^ 0.24"
 static_assertions = "^ 1"
 wgpu = "^ 0.7"
 zerocopy = "= 0.3.0"
-camera = { path = "../../sim/camera" }
 star_catalog = { path = "../../util/star_catalog" }
 gpu = { path = "../../system/gpu" }
 
 [dev-dependencies]
 absolute_unit = { path = "../../util/absolute_unit" }
+camera = { path = "../../sim/camera" }
 fullscreen = { path = "../../wgpu-buffer/fullscreen" }
 geodesy = { path = "../../util/geodesy" }
 global_data = { path = "../../wgpu-buffer/global_data" }

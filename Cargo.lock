@@ -16,15 +16,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "addr2line"
-version = "0.14.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a55f82cfe485775d02112886f4169bde0c5894d75e79ead7eafe7e40a25e45f7"
-dependencies = [
- "gimli",
-]
-
-[[package]]
 name = "adler"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -170,13 +161,11 @@ dependencies = [
  "approx",
  "bitflags",
  "build_shaders",
- "camera",
  "futures",
  "gpu",
  "image",
  "lazy_static",
  "log",
- "memmap",
  "nalgebra",
  "nitrous",
  "num-traits",
@@ -210,20 +199,6 @@ name = "autocfg"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
-
-[[package]]
-name = "backtrace"
-version = "0.3.56"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d117600f438b1707d4e4ae15d3595657288f8235a0eb593e80ecc98ab34e1bc"
-dependencies = [
- "addr2line",
- "cfg-if 1.0.0",
- "libc",
- "miniz_oxide 0.4.4",
- "object",
- "rustc-demangle",
-]
 
 [[package]]
 name = "base64"
@@ -481,18 +456,6 @@ dependencies = [
  "wgpu",
  "widget",
  "world",
-]
-
-[[package]]
-name = "compression"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a82b366ae14633c67a1cbb4aa3738210a23f77d2868a0fd50faa23a956f9ec4"
-dependencies = [
- "cfg-if 1.0.0",
- "lazy_static",
- "log",
- "num-traits",
 ]
 
 [[package]]
@@ -852,7 +815,6 @@ dependencies = [
  "anyhow",
  "approx",
  "bzip2",
- "compression",
  "geodesy",
  "image",
  "json",
@@ -1307,12 +1269,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gimli"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6503fe142514ca4799d4c26297c4248239fe8838d827db6bd6065c6ed29a6ce"
-
-[[package]]
 name = "glob"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1489,7 +1445,6 @@ name = "input"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "approx",
  "futures",
  "log",
  "smallvec",
@@ -2003,7 +1958,6 @@ dependencies = [
  "terrain",
  "tokio",
  "ui",
- "universe",
  "widget",
  "winit",
  "world",
@@ -2197,12 +2151,6 @@ checksum = "ad970fb455818ad6cba4c122ad012fae53ae8b4795f86378bce65e4f6bab2ca4"
 dependencies = [
  "cc",
 ]
-
-[[package]]
-name = "object"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9a7ab5d64814df0fe4a4b5ead45ed6c5f181ee3ff04ba344313a6c80446c5d4"
 
 [[package]]
 name = "once_cell"
@@ -2615,12 +2563,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustc-demangle"
-version = "0.1.18"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e3bad0ee36814ca07d7968269dd4b7ec89ec2da10c4bb613928d3077083c232"
-
-[[package]]
 name = "rusttype"
 version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2951,7 +2893,6 @@ dependencies = [
  "absolute_unit",
  "anyhow",
  "approx",
- "backtrace",
  "build_shaders",
  "bzip2",
  "camera",
@@ -2964,7 +2905,6 @@ dependencies = [
  "global_data",
  "gpu",
  "image",
- "input",
  "json",
  "lazy_static",
  "log",
@@ -3185,7 +3125,6 @@ version = "0.1.0"
 dependencies = [
  "absolute_unit",
  "geodesy",
- "legion",
  "nalgebra",
 ]
 
@@ -3381,7 +3320,6 @@ dependencies = [
  "anyhow",
  "camera",
  "console_error_panic_hook",
- "fullscreen",
  "geodesy",
  "getrandom 0.2.2",
  "global_data",
@@ -3492,7 +3430,6 @@ dependencies = [
  "ordered-float",
  "parking_lot",
  "rayon",
- "shader_shared",
  "smallvec",
  "strsim 0.10.0",
  "tokio",

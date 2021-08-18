@@ -5,7 +5,6 @@ authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-legion = "^ 0.4"
 nalgebra = "^ 0.24"
 absolute_unit = { path = "../../util/absolute_unit" }
 geodesy = { path = "../../util/geodesy" }
