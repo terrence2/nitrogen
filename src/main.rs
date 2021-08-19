@@ -55,7 +55,7 @@ struct Opt {
     libdir: Vec<PathBuf>,
 
     #[structopt(short, long)]
-    execute: String,
+    execute: Option<String>,
 }
 
 #[derive(Debug, NitrousModule)]
@@ -352,8 +352,10 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         system.write().add_default_bindings(interp)?;
     }
 
-    let rv = interpreter.write().interpret_once(&opt.execute)?;
-    println!("{}", rv);
+    if let Some(command) = opt.execute.as_ref() {
+        let rv = interpreter.write().interpret_once(command)?;
+        println!("{}", rv);
+    }
 
     let mut now = Instant::now();
     while !system.read().exit {
