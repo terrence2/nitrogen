@@ -253,13 +253,13 @@ where
 
         let shader = if mem::size_of::<P>() == 4 {
             gpu.create_shader_module(
-                "upload_unaligned.comp",
+                "upload_unaligned_rgba.comp",
                 include_bytes!("../target/upload_unaligned_rgba.comp.spirv"),
             )?
         } else {
             assert_eq!(mem::size_of::<P>(), 1);
             gpu.create_shader_module(
-                "upload_unaligned.comp",
+                "upload_unaligned_gray.comp",
                 include_bytes!("../target/upload_unaligned_gray.comp.spirv"),
             )?
         };
@@ -738,7 +738,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use image::{Rgba, RgbaImage};
+    use image::{GrayImage, Luma, Rgba, RgbaImage};
     use nitrous::Interpreter;
     use rand::prelude::*;
     use std::{env, time::Duration};
@@ -842,6 +842,34 @@ mod test {
         )?;
         let _ = packer.push_image(
             &RgbaImage::from_pixel(254, 254, *Rgba::from_slice(&[255, 0, 0, 255])),
+            &gpu.read(),
+        )?;
+
+        let _ = packer.finish(&mut gpu.write(), &async_rt, &mut Default::default());
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_grayscale() -> Result<()> {
+        use winit::platform::unix::EventLoopExtUnix;
+        let event_loop = EventLoop::<()>::new_any_thread();
+        let window = Window::new(&event_loop).unwrap();
+        let async_rt = Runtime::new()?;
+        let interpreter = Interpreter::new();
+        let gpu = Gpu::new(window, Default::default(), &mut interpreter.write())?;
+
+        let mut packer = AtlasPacker::<Luma<u8>>::new(
+            "test_grayscale",
+            &gpu.read(),
+            256,
+            256,
+            [0, 0, 0, 0],
+            wgpu::TextureFormat::R8Unorm,
+            wgpu::FilterMode::Linear,
+        )?;
+        let _ = packer.push_image(
+            &GrayImage::from_pixel(254, 254, *Luma::from_slice(&[255])),
             &gpu.read(),
         )?;
 
