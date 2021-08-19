@@ -62,7 +62,7 @@ anyhow = "^ 1"
 image = "^ 0.23"
 legion = "^ 0.4"
 log = "^ 0.4"
-nalgebra = "^ 0.24"
+nalgebra = "^ 0.29"
 parking_lot = "^ 0.11"
 paste = "^ 1"
 rayon = "= 1.4.0"
@@ -85,6 +85,5 @@ orrery = { path = "libs/sim/orrery" }
 stars = { path = "libs/wgpu-buffer/stars" }
 terrain = { path = "libs/wgpu-buffer/terrain" }
 ui = { path = "libs/wgpu-buffer/ui" }
-universe = { path = "libs/sim/universe" }
 widget = { path = "libs/wgpu-buffer/widget" }
 world = { path = "libs/wgpu-buffer/world" }

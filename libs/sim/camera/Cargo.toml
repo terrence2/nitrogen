@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 anyhow = "^ 1"
 log = ">= 0.4"
-nalgebra = "^ 0.24"
+nalgebra = "^ 0.29"
 num = "^ 0.3"
 parking_lot = "^ 0.11"
 absolute_unit = { path = "../../util/absolute_unit" }
@@ -18,5 +18,5 @@ nitrous = { path = "../../util/nitrous" }
 nitrous_injector = { path = "../../util/nitrous_injector" }
 
 [dev-dependencies]
-approx = "^ 0.4"
+approx = "^ 0.5"
 physical_constants = { path = "../../util/physical_constants" }

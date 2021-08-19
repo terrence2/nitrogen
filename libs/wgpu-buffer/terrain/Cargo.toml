@@ -6,9 +6,8 @@ authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-approx = "^ 0.4"
+approx = "^ 0.5"
 bzip2 = "^ 0.4"
-backtrace = "^ 0.3"
 anyhow = "^ 1"
 float-ord = "^ 0.2"
 futures = "^ 0.3"
@@ -18,14 +17,15 @@ json = "^ 0.12"
 lazy_static = "^ 1"
 log = "^ 0.4"
 memoffset = "^ 0.6"
-nalgebra = "^ 0.24"
+nalgebra = "^ 0.29"
+num-traits = "^ 0.2"
 parking_lot = "^ 0.11"
 rayon = "= 1.4.0"
 smallvec = "^ 1.4"
 static_assertions = "^ 1"
 tokio = { version = "^ 1.0", features = ["rt-multi-thread", "macros", "io-util", "fs", "sync"] }
 wgpu = "^ 0.7"
-zerocopy = "= 0.3.0"
+zerocopy = "^ 0.5"
 absolute_unit = { path = "../../util/absolute_unit" }
 camera = { path = "../../sim/camera" }
 catalog = { path = "../../system/catalog" }
@@ -38,9 +38,6 @@ nitrous_injector = { path = "../../util/nitrous_injector" }
 packed_struct = { path = "../../util/packed_struct" }
 physical_constants = { path = "../../util/physical_constants" }
 shader_shared = { path = "../../wgpu-buffer/shader_shared" }
-
-[dev-dependencies]
-input = { path = "../../system/input" }
 
 [build-dependencies]
 build_shaders = { path = "../../util/build_shaders" }

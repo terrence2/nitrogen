@@ -13,14 +13,22 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use nalgebra::{convert, RealField, Vector3};
+use num_traits::FromPrimitive;
+use std::fmt::{Debug, Display};
 
-pub struct Face<T: RealField> {
+pub struct Face<T>
+where
+    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
+{
     pub indices: [u8; 3],
     pub normal: Vector3<T>,
     pub siblings: [[u8; 2]; 3], // 0-1, 1-2, 2-0
 }
 
-impl<T: RealField> Face<T> {
+impl<T> Face<T>
+where
+    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
+{
     pub fn new(indices: [u8; 3], verts: &[Vector3<T>], siblings: [[u8; 2]; 3]) -> Self {
         let v0 = &verts[indices[0] as usize];
         let v1 = &verts[indices[1] as usize];
@@ -60,12 +68,18 @@ impl<T: RealField> Face<T> {
     }
 }
 
-pub struct Icosahedron<T: RealField> {
+pub struct Icosahedron<T>
+where
+    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
+{
     pub verts: Vec<Vector3<T>>,
     pub faces: Vec<Face<T>>,
 }
 
-impl<T: RealField> Icosahedron<T> {
+impl<T> Icosahedron<T>
+where
+    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
+{
     pub fn new() -> Self {
         let t = (T::one() + convert::<f64, T>(5.0).sqrt()) / convert::<f64, T>(2.0);
 

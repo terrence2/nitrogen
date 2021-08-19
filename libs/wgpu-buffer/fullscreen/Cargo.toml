@@ -8,18 +8,18 @@ edition = "2018"
 log = "^ 0.4"
 parking_lot = "^ 0.11"
 wgpu = "^ 0.7"
-zerocopy = "= 0.3.0"
-camera = { path = "../../sim/camera" }
+zerocopy = "^ 0.5"
 gpu = { path = "../../system/gpu" }
 
 [dev-dependencies]
-absolute_unit = { path = "../../util/absolute_unit" }
 anyhow = "^ 1"
+winit = { version = "^ 0.24", features = ["web-sys"] }
+absolute_unit = { path = "../../util/absolute_unit" }
+camera = { path = "../../sim/camera" }
 geodesy = { path = "../../util/geodesy" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 input = { path = "../../system/input" }
 nitrous = { path = "../../util/nitrous" }
-winit = { version = "^ 0.24", features = ["web-sys"] }
 
 [build-dependencies]
 build_shaders = { path = "../../util/build_shaders" }

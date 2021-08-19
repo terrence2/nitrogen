@@ -13,5 +13,15 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 
-mod flat;
-pub use crate::flat::{AtlasPacker, Frame};
+// Packing work-alikes, since naga lacks support.
+
+vec4
+unpackUnorm4x8(uint v)
+{
+    return vec4(
+        ((v >> 0) & 0xFFu) / 255.0,
+        ((v >> 8) & 0xFFu) / 255.0,
+        ((v >> 16) & 0xFFu) / 255.0,
+        ((v >> 24) & 0xFFu) / 255.0
+    );
+}

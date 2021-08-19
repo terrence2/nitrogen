@@ -53,6 +53,9 @@ struct Opt {
     /// Extra directories to treat as libraries
     #[structopt(short, long)]
     libdir: Vec<PathBuf>,
+
+    #[structopt(short, long)]
+    execute: Option<String>,
 }
 
 #[derive(Debug, NitrousModule)]
@@ -347,6 +350,11 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         globals.write().add_default_bindings(interp)?;
         world.write().add_default_bindings(interp)?;
         system.write().add_default_bindings(interp)?;
+    }
+
+    if let Some(command) = opt.execute.as_ref() {
+        let rv = interpreter.write().interpret_once(command)?;
+        println!("{}", rv);
     }
 
     let mut now = Instant::now();

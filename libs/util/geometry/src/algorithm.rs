@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use nalgebra::{clamp, convert, Point3, RealField, Vector3};
+use num_traits::cast::FromPrimitive;
 
 // Note: this expects left-handed (e.g. clockwise winding).
 pub fn solid_angle<T: RealField>(
@@ -27,10 +28,10 @@ pub fn solid_angle<T: RealField>(
 
     // integrate over edges
     let mut projarea = T::zero();
-    for (i, &v) in vertices.iter().enumerate() {
+    for (i, v) in vertices.iter().enumerate() {
         let j = (i + 1) % vertices.len();
         let v0 = v - observer_position;
-        let v1 = vertices[j] - observer_position;
+        let v1 = &vertices[j] - observer_position;
         let mut tau = v0.cross(&v1);
         let v0 = v0.normalize();
         let v1 = v1.normalize();
@@ -60,10 +61,10 @@ pub fn solid_angle_tri<T: RealField>(
 
     // integrate over edges
     let mut projarea = T::zero();
-    for (i, &v) in vertices.iter().enumerate() {
+    for (i, v) in vertices.iter().enumerate() {
         let j = (i + 1) % vertices.len();
         let v0 = v - observer_position;
-        let v1 = vertices[j] - observer_position;
+        let v1 = &vertices[j] - observer_position;
         let mut tau = v0.cross(&v1);
         let v0 = v0.normalize();
         let v1 = v1.normalize();
@@ -80,9 +81,9 @@ pub fn solid_angle_tri<T: RealField>(
     projarea / T::two_pi()
 }
 
-pub fn perpendicular_vector<T: RealField>(v: &Vector3<T>) -> Vector3<T> {
+pub fn perpendicular_vector<T: FromPrimitive + RealField>(v: &Vector3<T>) -> Vector3<T> {
     let n = v.normalize();
-    if n[2].abs() > T::from_f64(0.5).unwrap() {
+    if (&n[2]).abs() > T::from_f64(0.5).unwrap() {
         n.cross(&Vector3::new(T::zero(), T::one(), T::zero()))
             .normalize()
     } else {
@@ -92,8 +93,8 @@ pub fn perpendicular_vector<T: RealField>(v: &Vector3<T>) -> Vector3<T> {
 }
 
 pub fn compute_normal<T: RealField>(p0: &Point3<T>, p1: &Point3<T>, p2: &Point3<T>) -> Vector3<T> {
-    (p1.coords - p0.coords)
-        .cross(&(p2.coords - p0.coords))
+    (&p1.coords - &p0.coords)
+        .cross(&(&p2.coords - &p0.coords))
         .normalize()
 }
 

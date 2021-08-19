@@ -13,14 +13,22 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use nalgebra::{Point3, RealField};
+use num_traits::cast::FromPrimitive;
+use std::fmt::{Debug, Display};
 
 #[derive(Clone, Copy, Debug)]
-pub struct Sphere<T: RealField> {
+pub struct Sphere<T>
+where
+    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
+{
     center: Point3<T>,
     radius: T,
 }
 
-impl<T: RealField> Sphere<T> {
+impl<T> Sphere<T>
+where
+    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
+{
     pub fn from_center_and_radius(center: &Point3<T>, radius: T) -> Self {
         Self {
             center: *center,

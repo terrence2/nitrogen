@@ -15,15 +15,23 @@
 use crate::algorithm::perpendicular_vector;
 use crate::Plane;
 use nalgebra::{Point3, RealField, Unit, UnitQuaternion};
+use num_traits::cast::FromPrimitive;
+use std::fmt::{Debug, Display};
 
-#[derive(Debug, Copy, Clone)]
-pub struct Circle<T: RealField> {
+#[derive(Debug, Clone)]
+pub struct Circle<T>
+where
+    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
+{
     plane: Plane<T>,
     center: Point3<T>,
     radius: T,
 }
 
-impl<T: RealField> Circle<T> {
+impl<T> Circle<T>
+where
+    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
+{
     pub fn from_plane_center_and_radius(plane: &Plane<T>, center: &Point3<T>, radius: T) -> Self {
         Self {
             plane: *plane,

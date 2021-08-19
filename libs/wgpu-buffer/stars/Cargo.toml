@@ -5,21 +5,21 @@ authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-approx = "^ 0.4"
+approx = "^ 0.5"
 bitflags = ">= 1.0"
 anyhow = "^ 1"
 lazy_static = "^ 1"
 log = "^ 0.4"
-nalgebra = "^ 0.24"
+nalgebra = "^ 0.29"
 static_assertions = "^ 1"
 wgpu = "^ 0.7"
-zerocopy = "= 0.3.0"
-camera = { path = "../../sim/camera" }
+zerocopy = "^ 0.5"
 star_catalog = { path = "../../util/star_catalog" }
 gpu = { path = "../../system/gpu" }
 
 [dev-dependencies]
 absolute_unit = { path = "../../util/absolute_unit" }
+camera = { path = "../../sim/camera" }
 fullscreen = { path = "../../wgpu-buffer/fullscreen" }
 geodesy = { path = "../../util/geodesy" }
 global_data = { path = "../../wgpu-buffer/global_data" }

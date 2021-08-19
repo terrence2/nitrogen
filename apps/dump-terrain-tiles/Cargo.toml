@@ -5,18 +5,17 @@ authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-approx = "^ 0.4"
+approx = "^ 0.5"
 bzip2 = "^ 0.4"
 anyhow = "^ 1"
 image = "^ 0.23"
 json = "^ 0.12"
 memmap = "^ 0.7"
-nalgebra = "^ 0.24"
+nalgebra = "^ 0.29"
 parking_lot = "^ 0.11"
 rayon = "= 1.4.0"
 structopt = "^ 0.3"
-zerocopy = "= 0.3.0"
+zerocopy = "^ 0.5"
 absolute_unit = { path = "../../libs/util/absolute_unit" }
 geodesy = { path = "../../libs/util/geodesy" }
 terrain = { path = "../../libs/wgpu-buffer/terrain" }
-compression = { version = "^ 0.1", features = ["lzhuf"]  }
