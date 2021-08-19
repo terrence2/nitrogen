@@ -555,13 +555,13 @@ where
         self.dirty_region = DirtyState::Clean;
 
         // Set up texture blits
+        let target_texture = if let Some(ref next_texture) = self.next_texture {
+            next_texture.clone()
+        } else {
+            self.texture.clone()
+        };
         self.unaligned_blit.clear();
         for (copy_buffer, img_buffer, width, height) in self.blit_list.drain(..) {
-            let target_texture = if let Some(ref next_texture) = self.next_texture {
-                next_texture.clone()
-            } else {
-                self.texture.clone()
-            };
             let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("atlas-upload-unaligned-bind-group"),
                 layout: &self.upload_unaligned_bind_group_layout,
