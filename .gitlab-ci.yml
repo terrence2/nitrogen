@@ -31,5 +31,8 @@ check_clippy:
 #
 
 check_test:
+  tags:
+    - rust
+    - nix
   script:
     - cargo test --all --all-targets
