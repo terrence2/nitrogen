@@ -1,7 +1,7 @@
-#cache:
-#  paths:
-#    - target/
-#    - libs/**/**/target/
+cache:
+  paths:
+    - target/
+    - libs/**/**/target/
 
 before_script:
   - whoami
