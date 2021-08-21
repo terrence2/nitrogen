@@ -29,6 +29,7 @@ check_clippy:
 #  script:
 #    - cargo check --all --all-targets
 #
-#check_test:
-#  script:
-#    - cargo test --all --all-targets
+
+check_test:
+  script:
+    - cargo test --all --all-targets
