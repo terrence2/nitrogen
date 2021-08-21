@@ -17,7 +17,7 @@ use geometry::Aabb;
 use gpu::{texture_format_size, ArcTextureCopyView, Gpu, OwnedBufferCopyView, UploadTracker};
 use image::{ImageBuffer, Luma, Pixel, Rgba};
 use log::debug;
-use std::{marker::PhantomData, mem, num::NonZeroU64, sync::Arc};
+use std::{marker::PhantomData, mem, sync::Arc};
 use tokio::runtime::Runtime;
 use wgpu::Origin3d;
 use zerocopy::{AsBytes, FromBytes};
@@ -71,18 +71,6 @@ impl BlitVertex {
             ],
         }
     }
-}
-
-#[repr(C)]
-#[derive(AsBytes, Copy, Clone)]
-struct BufferToTextureCopyInfo {
-    x: u32,
-    y: u32,
-    w: u32,
-    h: u32,
-    padding_px: u32,
-    px_size: u32,
-    border_color: [u8; 4],
 }
 
 // Each column indicates the filled height up to the given offset.
@@ -181,9 +169,8 @@ pub struct AtlasPacker<P: Pixel + 'static> {
     // CPU-side list of buffers that need to be blit into the target texture these can either
     // get directly encoded for aligned upload-as-copy, or need to get deferred to a gpu compute
     // pass for unaligned and palettized uploads.
-    blit_list: Vec<(wgpu::Buffer, wgpu::Buffer, (u32, u32), (u32, u32, u32))>,
+    blit_list: Vec<(wgpu::Buffer, (u32, u32), (u32, u32, u32))>,
     unaligned_blit_bind_group_layout: wgpu::BindGroupLayout,
-    //upload_unaligned_pipeline: wgpu::ComputePipeline,
     unaligned_blit_texture_sampler: wgpu::Sampler,
     unaligned_blit_pipeline: wgpu::RenderPipeline,
     unaligned_blit: Vec<(wgpu::BindGroup, wgpu::Buffer)>,
@@ -286,20 +273,9 @@ where
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("atlas-upload-unaligned-bind-group-layout"),
                     entries: &[
-                        // 0: Copy Info
+                        // Texture Source
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                        // 1: Texture Source
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
                             visibility: wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 sample_type: wgpu::TextureSampleType::Float { filterable: false },
@@ -308,9 +284,9 @@ where
                             },
                             count: None,
                         },
-                        // 2: Sampler
+                        // Sampler
                         wgpu::BindGroupLayoutEntry {
-                            binding: 2,
+                            binding: 1,
                             visibility: wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Sampler {
                                 filtering: false,
@@ -320,19 +296,6 @@ where
                         },
                     ],
                 });
-
-        // let shader = if mem::size_of::<P>() == 4 {
-        //     gpu.create_shader_module(
-        //         "upload_unaligned_rgba.comp",
-        //         include_bytes!("../target/upload_unaligned_rgba.comp.spirv"),
-        //     )?
-        // } else {
-        //     assert_eq!(mem::size_of::<P>(), 1);
-        //     gpu.create_shader_module(
-        //         "upload_unaligned_gray.comp",
-        //         include_bytes!("../target/upload_unaligned_gray.comp.spirv"),
-        //     )?
-        // };
 
         let unaligned_blit_pipeline =
             gpu.device()
@@ -504,21 +467,9 @@ where
         width: u32,
         height: u32,
         stride_bytes: u32,
-        gpu: &Gpu,
     ) -> Result<Frame> {
         let (x, y) = self.do_layout(width, height);
-        let copy_info = BufferToTextureCopyInfo {
-            x,
-            y,
-            w: width,
-            h: height,
-            padding_px: self.padding,
-            px_size: texture_format_size(self.format),
-            border_color: self.fill_color_bytes,
-        };
-        let copy_buffer = gpu.push_data("atlas-copy-info", &copy_info, wgpu::BufferUsage::UNIFORM);
         self.blit_list.push((
-            copy_buffer,
             img_buffer,
             (x + self.padding, y + self.padding),
             (width, height, stride_bytes),
@@ -551,13 +502,7 @@ where
             upload_img.as_bytes(),
             wgpu::BufferUsage::COPY_SRC,
         );
-        self.push_buffer(
-            img_buffer,
-            image.width(),
-            image.height(),
-            upload_stride,
-            gpu,
-        )
+        self.push_buffer(img_buffer, image.width(), image.height(), upload_stride)
     }
 
     pub fn push_aligned_image(
@@ -574,13 +519,7 @@ where
             image.as_bytes(),
             wgpu::BufferUsage::COPY_SRC,
         );
-        self.push_buffer(
-            img_buffer,
-            image.width(),
-            image.height(),
-            upload_stride,
-            gpu,
-        )
+        self.push_buffer(img_buffer, image.width(), image.height(), upload_stride)
     }
 
     pub fn texture_layout_entry(&self, binding: u32) -> wgpu::BindGroupLayoutEntry {
@@ -625,7 +564,6 @@ where
         self.texture.as_ref()
     }
 
-    /// Note: panics if no upload has happened.
     pub fn texture_view(&self) -> &wgpu::TextureView {
         &self.texture_view
     }
@@ -704,9 +642,7 @@ where
 
         // Set up texture blits
         self.unaligned_blit.clear();
-        for (copy_buffer, img_buffer, (x, y), (width, height, stride_bytes)) in
-            self.blit_list.drain(..)
-        {
+        for (img_buffer, (x, y), (width, height, stride_bytes)) in self.blit_list.drain(..) {
             let img_extent = wgpu::Extent3d {
                 width,
                 height,
@@ -755,18 +691,10 @@ where
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::Buffer {
-                            buffer: &copy_buffer,
-                            offset: 0,
-                            size: NonZeroU64::new(mem::size_of::<BufferToTextureCopyInfo>() as u64),
-                        },
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
                         resource: wgpu::BindingResource::TextureView(&img_view),
                     },
                     wgpu::BindGroupEntry {
-                        binding: 2,
+                        binding: 1,
                         resource: wgpu::BindingResource::Sampler(
                             &self.unaligned_blit_texture_sampler,
                         ),

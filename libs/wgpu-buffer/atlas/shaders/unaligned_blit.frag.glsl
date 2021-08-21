@@ -16,22 +16,12 @@
 layout(location = 0) in vec2 in_texcoord;
 layout(location = 0) out vec4 f_color;
 
-struct CopyInfo {
-    uint x;
-    uint y;
-    uint w;
-    uint h;
-    uint padding_px;
-    uint border_color;
-};
-layout(set = 0, binding = 0) uniform Meta { CopyInfo info; };
-layout(set = 0, binding = 1) uniform texture2D upload_texture;
-layout(set = 0, binding = 2) uniform sampler upload_sampler;
+layout(set = 0, binding = 0) uniform texture2D upload_texture;
+layout(set = 0, binding = 1) uniform sampler upload_sampler;
 
 void
 main()
 {
     vec4 clr = texture(sampler2D(upload_texture, upload_sampler), in_texcoord);
     f_color = vec4(clr.rgb, 1);
-    //f_color = vec4(clr.r, 1, 1, 1);
 }
