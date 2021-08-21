@@ -6,10 +6,8 @@
 before_script:
   - whoami
   - groups
-  #- which rustup
-  #- rustup update
+  - nix-shell --run "rustc --version"
   #- rustup target add x86_64-pc-windows-gnu
-  #- rustup component add rustfmt
 
 check_format:
   tags:
@@ -24,13 +22,6 @@ check_clippy:
     - nix
   script:
     - nix-shell --run "cargo clippy --all --all-targets -- --deny warnings"
-    #- nix-shell -p pkgconfig xorg.libX11 --run "cargo clippy --all --all-targets -- --deny warnings"
-
-# Need to figure out how to run graphical tests headless.
-#check_build:
-#  script:
-#    - cargo check --all --all-targets
-#
 
 check_test:
   tags:
