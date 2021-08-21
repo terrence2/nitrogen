@@ -14,8 +14,9 @@ before_script:
 check_format:
   tags:
     - rust
+    - nix
   script:
-    - cargo fmt --all -- --check
+    - nix-shell --run "cargo fmt --all -- --check"
 
 check_clippy:
   tags:

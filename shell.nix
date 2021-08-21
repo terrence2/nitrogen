@@ -8,6 +8,5 @@
       pkgs.rust-bin.stable.latest.default
       pkgs.gnumake
       pkgs.gmock
-      pkgs.pkc
     ];
   }
