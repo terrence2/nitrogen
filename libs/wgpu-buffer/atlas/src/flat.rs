@@ -131,6 +131,33 @@ impl Frame {
     }
 }
 
+#[derive(Debug)]
+struct BlitItem {
+    img_buffer: wgpu::Buffer,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+    stride_bytes: u32,
+}
+
+impl BlitItem {
+    fn new(
+        img_buffer: wgpu::Buffer,
+        (x, y): (u32, u32),
+        (width, height, stride_bytes): (u32, u32, u32),
+    ) -> Self {
+        Self {
+            img_buffer,
+            x,
+            y,
+            width,
+            height,
+            stride_bytes,
+        }
+    }
+}
+
 // Trades off pack complexity against efficiency. This packer is designed for online, incremental
 // usage, so tries to be faster to pack at the cost of potentially loosing out on easy space wins
 // in cases where subsequent items are differently sized or shaped. Most common uses will only
@@ -169,7 +196,7 @@ pub struct AtlasPacker<P: Pixel + 'static> {
     // CPU-side list of buffers that need to be blit into the target texture these can either
     // get directly encoded for aligned upload-as-copy, or need to get deferred to a gpu compute
     // pass for unaligned and palettized uploads.
-    blit_list: Vec<(wgpu::Buffer, (u32, u32), (u32, u32, u32))>,
+    blit_list: Vec<BlitItem>,
     unaligned_blit_bind_group_layout: wgpu::BindGroupLayout,
     unaligned_blit_texture_sampler: wgpu::Sampler,
     unaligned_blit_pipeline: wgpu::RenderPipeline,
@@ -469,7 +496,7 @@ where
         stride_bytes: u32,
     ) -> Result<Frame> {
         let (x, y) = self.do_layout(width, height);
-        self.blit_list.push((
+        self.blit_list.push(BlitItem::new(
             img_buffer,
             (x + self.padding, y + self.padding),
             (width, height, stride_bytes),
@@ -642,10 +669,10 @@ where
 
         // Set up texture blits
         self.unaligned_blit.clear();
-        for (img_buffer, (x, y), (width, height, stride_bytes)) in self.blit_list.drain(..) {
+        for item in self.blit_list.drain(..) {
             let img_extent = wgpu::Extent3d {
-                width,
-                height,
+                width: item.width,
+                height: item.height,
                 depth: 1,
             };
             let img_texture = Arc::new(Box::new(gpu.device().create_texture(
@@ -661,11 +688,11 @@ where
             )));
             tracker.copy_owned_buffer_to_arc_texture(
                 OwnedBufferCopyView {
-                    buffer: img_buffer,
+                    buffer: item.img_buffer,
                     layout: wgpu::TextureDataLayout {
                         offset: 0,
-                        bytes_per_row: stride_bytes,
-                        rows_per_image: height,
+                        bytes_per_row: item.stride_bytes,
+                        rows_per_image: item.height,
                     },
                 },
                 ArcTextureCopyView {
@@ -701,8 +728,12 @@ where
                     },
                 ],
             });
-            let vertex_buffer =
-                BlitVertex::buffer(gpu, (x, y), (width, height), (self.width, self.height));
+            let vertex_buffer = BlitVertex::buffer(
+                gpu,
+                (item.x, item.y),
+                (item.width, item.height),
+                (self.width, self.height),
+            );
             self.unaligned_blit.push((bind_group, vertex_buffer));
         }
 
