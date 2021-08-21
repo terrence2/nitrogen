@@ -6,10 +6,10 @@
 before_script:
   - whoami
   - groups
-  - which rustup
-  - rustup update
-  - rustup target add x86_64-pc-windows-gnu
-  - rustup component add rustfmt
+  #- which rustup
+  #- rustup update
+  #- rustup target add x86_64-pc-windows-gnu
+  #- rustup component add rustfmt
 
 check_format:
   tags:
@@ -22,7 +22,7 @@ check_clippy:
     - rust
     - nix
   script:
-    - nix-shell -p gnumake gmock --run "cargo clippy --all --all-targets -- --deny warnings"
+    - nix-shell --run "cargo clippy --all --all-targets -- --deny warnings"
     #- nix-shell -p pkgconfig xorg.libX11 --run "cargo clippy --all --all-targets -- --deny warnings"
 
 # Need to figure out how to run graphical tests headless.
@@ -36,4 +36,4 @@ check_test:
     - rust
     - nix
   script:
-    - nix-shell -p gnumake gmock --run "cargo test --all --all-targets"
+    - nix-shell --run "cargo test --all --all-targets"
