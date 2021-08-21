@@ -14,23 +14,63 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
 use geometry::Aabb;
-use gpu::{texture_format_size, Gpu, UploadTracker};
+use gpu::{texture_format_size, ArcTextureCopyView, Gpu, OwnedBufferCopyView, UploadTracker};
 use image::{ImageBuffer, Luma, Pixel, Rgba};
 use log::debug;
-use std::{marker::PhantomData, mem, num::NonZeroU64, sync::Arc};
+use std::{marker::PhantomData, mem, sync::Arc};
 use tokio::runtime::Runtime;
-use zerocopy::AsBytes;
+use wgpu::Origin3d;
+use zerocopy::{AsBytes, FromBytes};
 
 #[repr(C)]
-#[derive(AsBytes, Copy, Clone)]
-struct BufferToTextureCopyInfo {
-    x: u32,
-    y: u32,
-    w: u32,
-    h: u32,
-    padding_px: u32,
-    px_size: u32,
-    border_color: [u8; 4],
+#[derive(AsBytes, FromBytes, Clone, Copy, Debug)]
+pub struct BlitVertex {
+    _pos: [f32; 2],
+    _tc: [f32; 2],
+}
+
+impl BlitVertex {
+    pub fn new(pos: [f32; 2], tc: [f32; 2]) -> Self {
+        Self { _pos: pos, _tc: tc }
+    }
+
+    pub fn buffer(
+        gpu: &Gpu,
+        (x, y): (u32, u32),
+        (w, h): (u32, u32),
+        (width, height): (u32, u32),
+    ) -> wgpu::Buffer {
+        let x0 = (x as f32 / width as f32) * 2. - 1.;
+        let x1 = ((x + w) as f32 / width as f32) * 2. - 1.;
+        let y0 = 1. - (y as f32 / height as f32) * 2.;
+        let y1 = 1. - ((y + h) as f32 / height as f32) * 2.;
+        let vertices = vec![
+            Self::new([x0, y1], [0., 1.]),
+            Self::new([x0, y0], [0., 0.]),
+            Self::new([x1, y1], [1., 1.]),
+            Self::new([x1, y0], [1., 0.]),
+        ];
+        gpu.push_slice("blit-vertices", &vertices, wgpu::BufferUsage::VERTEX)
+    }
+
+    pub fn descriptor() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
+            step_mode: wgpu::InputStepMode::Vertex,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float2,
+                    offset: 0,
+                    shader_location: 0,
+                },
+                wgpu::VertexAttribute {
+                    format: wgpu::VertexFormat::Float2,
+                    offset: 4 * 2,
+                    shader_location: 1,
+                },
+            ],
+        }
+    }
 }
 
 // Each column indicates the filled height up to the given offset.
@@ -91,6 +131,33 @@ impl Frame {
     }
 }
 
+#[derive(Debug)]
+struct BlitItem {
+    img_buffer: wgpu::Buffer,
+    x: u32,
+    y: u32,
+    width: u32,
+    height: u32,
+    stride_bytes: u32,
+}
+
+impl BlitItem {
+    fn new(
+        img_buffer: wgpu::Buffer,
+        (x, y): (u32, u32),
+        (width, height, stride_bytes): (u32, u32, u32),
+    ) -> Self {
+        Self {
+            img_buffer,
+            x,
+            y,
+            width,
+            height,
+            stride_bytes,
+        }
+    }
+}
+
 // Trades off pack complexity against efficiency. This packer is designed for online, incremental
 // usage, so tries to be faster to pack at the cost of potentially loosing out on easy space wins
 // in cases where subsequent items are differently sized or shaped. Most common uses will only
@@ -129,10 +196,11 @@ pub struct AtlasPacker<P: Pixel + 'static> {
     // CPU-side list of buffers that need to be blit into the target texture these can either
     // get directly encoded for aligned upload-as-copy, or need to get deferred to a gpu compute
     // pass for unaligned and palettized uploads.
-    blit_list: Vec<(wgpu::Buffer, wgpu::Buffer, u32, u32)>,
-    upload_unaligned_bind_group_layout: wgpu::BindGroupLayout,
-    upload_unaligned_pipeline: wgpu::ComputePipeline,
-    unaligned_blit: Vec<(wgpu::BindGroup, u32, u32)>,
+    blit_list: Vec<BlitItem>,
+    unaligned_blit_bind_group_layout: wgpu::BindGroupLayout,
+    unaligned_blit_texture_sampler: wgpu::Sampler,
+    unaligned_blit_pipeline: wgpu::RenderPipeline,
+    unaligned_blit: Vec<(wgpu::BindGroup, wgpu::Buffer)>,
 
     _phantom: PhantomData<P>,
 }
@@ -163,7 +231,8 @@ where
         let usage = wgpu::TextureUsage::SAMPLED
             | wgpu::TextureUsage::COPY_SRC
             | wgpu::TextureUsage::COPY_DST
-            | wgpu::TextureUsage::STORAGE;
+            | wgpu::TextureUsage::STORAGE
+            | wgpu::TextureUsage::RENDER_ATTACHMENT;
         assert_eq!(texture_format_size(format) as usize, mem::size_of::<P>());
         let pix_size = mem::size_of::<P>() as u32;
         assert_eq!(
@@ -209,74 +278,97 @@ where
             base_array_layer: 0,
             array_layer_count: None,
         });
+        // Note: should be straight pixel-to-pixel copy so no filter
+        let unaligned_blit_texture_sampler =
+            gpu.device().create_sampler(&wgpu::SamplerDescriptor {
+                label: Some("unaligned-blit-sampler"),
+                address_mode_u: wgpu::AddressMode::ClampToEdge,
+                address_mode_v: wgpu::AddressMode::ClampToEdge,
+                address_mode_w: wgpu::AddressMode::ClampToEdge,
+                mag_filter: wgpu::FilterMode::Nearest,
+                min_filter: wgpu::FilterMode::Nearest,
+                mipmap_filter: wgpu::FilterMode::Nearest,
+                lod_min_clamp: 0.0,
+                lod_max_clamp: 0.0,
+                compare: None,
+                anisotropy_clamp: None,
+                border_color: None,
+            });
 
         let upload_unaligned_bind_group_layout =
             gpu.device()
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("atlas-upload-unaligned-bind-group-layout"),
                     entries: &[
-                        // 0: Copy Info
+                        // Texture Source
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
+                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            ty: wgpu::BindingType::Texture {
+                                sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                                view_dimension: wgpu::TextureViewDimension::D2,
+                                multisampled: false,
                             },
                             count: None,
                         },
-                        // 1: Buffer source
+                        // Sampler
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: true },
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                        // 2: Texture target
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 2,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::StorageTexture {
-                                access: wgpu::StorageTextureAccess::WriteOnly,
-                                format,
-                                view_dimension: wgpu::TextureViewDimension::D2,
+                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler {
+                                filtering: false,
+                                comparison: false,
                             },
                             count: None,
                         },
                     ],
                 });
 
-        let shader = if mem::size_of::<P>() == 4 {
-            gpu.create_shader_module(
-                "upload_unaligned.comp",
-                include_bytes!("../target/upload_unaligned_rgba.comp.spirv"),
-            )?
-        } else {
-            assert_eq!(mem::size_of::<P>(), 1);
-            gpu.create_shader_module(
-                "upload_unaligned.comp",
-                include_bytes!("../target/upload_unaligned_gray.comp.spirv"),
-            )?
-        };
-
-        let upload_unaligned_pipeline =
+        let unaligned_blit_pipeline =
             gpu.device()
-                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                    label: Some("atlas-upload-unaligned-pipeline"),
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("atlas-unaligned-blit-pipeline"),
                     layout: Some(&gpu.device().create_pipeline_layout(
                         &wgpu::PipelineLayoutDescriptor {
-                            label: Some("atlas-upload-unaligned-pipeline-layout"),
-                            bind_group_layouts: &[&upload_unaligned_bind_group_layout],
+                            label: Some("atlas-unaligned-blit-pipeline-layout"),
                             push_constant_ranges: &[],
+                            bind_group_layouts: &[&upload_unaligned_bind_group_layout],
                         },
                     )),
-                    module: &shader,
-                    entry_point: "main",
+                    vertex: wgpu::VertexState {
+                        module: &gpu.create_shader_module(
+                            "unaligned_blit.vert",
+                            include_bytes!("../target/unaligned_blit.vert.spirv"),
+                        )?,
+                        entry_point: "main",
+                        buffers: &[BlitVertex::descriptor()],
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        module: &gpu.create_shader_module(
+                            "unaligned_blit.frag",
+                            include_bytes!("../target/unaligned_blit.frag.spirv"),
+                        )?,
+                        entry_point: "main",
+                        targets: &[wgpu::ColorTargetState {
+                            format,
+                            color_blend: wgpu::BlendState::REPLACE,
+                            alpha_blend: wgpu::BlendState::REPLACE,
+                            write_mask: wgpu::ColorWrite::ALL,
+                        }],
+                    }),
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::TriangleStrip,
+                        strip_index_format: None,
+                        front_face: wgpu::FrontFace::Cw,
+                        cull_mode: wgpu::CullMode::Back,
+                        polygon_mode: wgpu::PolygonMode::Fill,
+                    },
+                    depth_stencil: None,
+                    multisample: wgpu::MultisampleState {
+                        count: 1,
+                        mask: !0,
+                        alpha_to_coverage_enabled: false,
+                    },
                 });
 
         Ok(Self {
@@ -285,7 +377,7 @@ where
             initial_width,
             initial_height,
             format,
-            usage: usage | wgpu::TextureUsage::COPY_DST,
+            usage,
             padding: Self::DEFAULT_PADDING,
             width: initial_width,
             height: initial_height,
@@ -298,8 +390,9 @@ where
             dump_texture: None,
             next_texture: None,
 
-            upload_unaligned_bind_group_layout,
-            upload_unaligned_pipeline,
+            unaligned_blit_bind_group_layout: upload_unaligned_bind_group_layout,
+            unaligned_blit_texture_sampler,
+            unaligned_blit_pipeline,
             blit_list: Vec::new(),
             unaligned_blit: Vec::new(),
 
@@ -397,23 +490,17 @@ where
 
     pub fn push_buffer(
         &mut self,
-        buffer: wgpu::Buffer,
+        img_buffer: wgpu::Buffer,
         width: u32,
         height: u32,
-        gpu: &Gpu,
+        stride_bytes: u32,
     ) -> Result<Frame> {
         let (x, y) = self.do_layout(width, height);
-        let copy_info = BufferToTextureCopyInfo {
-            x,
-            y,
-            w: width,
-            h: height,
-            padding_px: self.padding,
-            px_size: texture_format_size(self.format),
-            border_color: self.fill_color_bytes,
-        };
-        let copy_buffer = gpu.push_data("atlas-copy-info", &copy_info, wgpu::BufferUsage::UNIFORM);
-        self.blit_list.push((copy_buffer, buffer, width, height));
+        self.blit_list.push(BlitItem::new(
+            img_buffer,
+            (x + self.padding, y + self.padding),
+            (width, height, stride_bytes),
+        ));
         Ok(Frame::new(
             x + self.padding,
             y + self.padding,
@@ -427,12 +514,39 @@ where
         image: &ImageBuffer<P, Vec<P::Subpixel>>,
         gpu: &Gpu,
     ) -> Result<Frame> {
+        let native_stride = image.width() * mem::size_of::<P>() as u32;
+        let upload_stride = Gpu::stride_for_row_size(native_stride);
+        if upload_stride == native_stride {
+            return self.push_aligned_image(image, gpu);
+        }
+        let upload_width = upload_stride / mem::size_of::<P>() as u32;
+        let mut upload_img = ImageBuffer::new(upload_width, image.height());
+        for (x, y, p) in image.enumerate_pixels() {
+            *upload_img.get_pixel_mut(x, y) = *p;
+        }
+        let img_buffer = gpu.push_buffer(
+            "atlas-image-upload",
+            upload_img.as_bytes(),
+            wgpu::BufferUsage::COPY_SRC,
+        );
+        self.push_buffer(img_buffer, image.width(), image.height(), upload_stride)
+    }
+
+    pub fn push_aligned_image(
+        &mut self,
+        image: &ImageBuffer<P, Vec<P::Subpixel>>,
+        gpu: &Gpu,
+    ) -> Result<Frame> {
+        let native_stride = image.width() * mem::size_of::<P>() as u32;
+        let upload_stride = Gpu::stride_for_row_size(native_stride);
+        assert_eq!(native_stride % wgpu::COPY_BYTES_PER_ROW_ALIGNMENT, 0);
+        assert_eq!(native_stride, upload_stride);
         let img_buffer = gpu.push_buffer(
             "atlas-image-upload",
             image.as_bytes(),
-            wgpu::BufferUsage::STORAGE,
+            wgpu::BufferUsage::COPY_SRC,
         );
-        self.push_buffer(img_buffer, image.width(), image.height(), gpu)
+        self.push_buffer(img_buffer, image.width(), image.height(), upload_stride)
     }
 
     pub fn texture_layout_entry(&self, binding: u32) -> wgpu::BindGroupLayoutEntry {
@@ -477,7 +591,6 @@ where
         self.texture.as_ref()
     }
 
-    /// Note: panics if no upload has happened.
     pub fn texture_view(&self) -> &wgpu::TextureView {
         &self.texture_view
     }
@@ -556,56 +669,72 @@ where
 
         // Set up texture blits
         self.unaligned_blit.clear();
-        for (copy_buffer, img_buffer, width, height) in self.blit_list.drain(..) {
-            let target_texture = if let Some(ref next_texture) = self.next_texture {
-                next_texture.clone()
-            } else {
-                self.texture.clone()
+        for item in self.blit_list.drain(..) {
+            let img_extent = wgpu::Extent3d {
+                width: item.width,
+                height: item.height,
+                depth: 1,
             };
+            let img_texture = Arc::new(Box::new(gpu.device().create_texture(
+                &wgpu::TextureDescriptor {
+                    label: Some("atlas-img-upload-texture"),
+                    size: img_extent,
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format: self.format,
+                    usage: wgpu::TextureUsage::COPY_DST | wgpu::TextureUsage::SAMPLED,
+                },
+            )));
+            tracker.copy_owned_buffer_to_arc_texture(
+                OwnedBufferCopyView {
+                    buffer: item.img_buffer,
+                    layout: wgpu::TextureDataLayout {
+                        offset: 0,
+                        bytes_per_row: item.stride_bytes,
+                        rows_per_image: item.height,
+                    },
+                },
+                ArcTextureCopyView {
+                    texture: img_texture.clone(),
+                    mip_level: 0,
+                    origin: Origin3d::ZERO,
+                },
+                img_extent,
+            );
+            let img_view = img_texture.create_view(&wgpu::TextureViewDescriptor {
+                label: Some("atlas-img-upload-view"),
+                format: None,
+                dimension: None,
+                aspect: wgpu::TextureAspect::All,
+                base_mip_level: 0,
+                level_count: None,
+                base_array_layer: 0,
+                array_layer_count: None,
+            });
             let bind_group = gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("atlas-upload-unaligned-bind-group"),
-                layout: &self.upload_unaligned_bind_group_layout,
+                layout: &self.unaligned_blit_bind_group_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::Buffer {
-                            buffer: &copy_buffer,
-                            offset: 0,
-                            size: NonZeroU64::new(mem::size_of::<BufferToTextureCopyInfo>() as u64),
-                        },
+                        resource: wgpu::BindingResource::TextureView(&img_view),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Buffer {
-                            buffer: &img_buffer,
-                            offset: 0,
-                            size: NonZeroU64::new(
-                                (texture_format_size(self.format) * width * height) as u64,
-                            ),
-                        },
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::TextureView(&target_texture.create_view(
-                            &wgpu::TextureViewDescriptor {
-                                label: Some("atlas-texture-view"),
-                                format: None,
-                                dimension: None,
-                                aspect: wgpu::TextureAspect::All,
-                                base_mip_level: 0,
-                                level_count: None, // mip_
-                                base_array_layer: 0,
-                                array_layer_count: None,
-                            },
-                        )),
+                        resource: wgpu::BindingResource::Sampler(
+                            &self.unaligned_blit_texture_sampler,
+                        ),
                     },
                 ],
             });
-            self.unaligned_blit.push((
-                bind_group,
-                Self::align(width + 2 * self.padding),
-                Self::align(height + 2 * self.padding),
-            ));
+            let vertex_buffer = BlitVertex::buffer(
+                gpu,
+                (item.x, item.y),
+                (item.width, item.height),
+                (self.width, self.height),
+            );
+            self.unaligned_blit.push((bind_group, vertex_buffer));
         }
 
         if let Some(path_ref) = self.dump_texture.as_ref() {
@@ -646,18 +775,41 @@ where
         Ok(())
     }
 
-    pub fn maintain_gpu_resources<'a>(
-        &'a self,
-        mut cpass: wgpu::ComputePass<'a>,
-    ) -> Result<wgpu::ComputePass<'a>> {
-        cpass.set_pipeline(&self.upload_unaligned_pipeline);
-        for (bind_group, width, height) in &self.unaligned_blit {
-            assert!(*width / Self::BLOCK_SIZE > 0);
-            assert!(*height / Self::BLOCK_SIZE > 0);
-            cpass.set_bind_group(0, bind_group, &[]);
-            cpass.dispatch(*width / Self::BLOCK_SIZE, *height / Self::BLOCK_SIZE, 1);
+    pub fn maintain_gpu_resources(&self, encoder: &mut wgpu::CommandEncoder) -> Result<()> {
+        let target_texture = if let Some(ref next_texture) = self.next_texture {
+            next_texture.clone()
+        } else {
+            self.texture.clone()
+        };
+        let target_view = target_texture.create_view(&wgpu::TextureViewDescriptor {
+            label: Some("atlas-texture-view"),
+            format: None,
+            dimension: None,
+            aspect: wgpu::TextureAspect::All,
+            base_mip_level: 0,
+            level_count: None, // mip_
+            base_array_layer: 0,
+            array_layer_count: None,
+        });
+        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("atlas-finish-render-pass"),
+            color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
+                attachment: &target_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: true,
+                },
+            }],
+            depth_stencil_attachment: None,
+        });
+        rpass.set_pipeline(&self.unaligned_blit_pipeline);
+        for (bind_group, vertex_buffer) in &self.unaligned_blit {
+            rpass.set_bind_group(0, bind_group, &[]);
+            rpass.set_vertex_buffer(0, vertex_buffer.slice(..));
+            rpass.draw(0..4, 0..1);
         }
-        Ok(cpass)
+        Ok(())
     }
 
     /// Upload and then steal the texture. Useful when used as a one-shot atlas.
@@ -676,10 +828,8 @@ where
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("atlas-finish"),
             });
-        let cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("atlas-finish-compute-pass"),
-        });
-        self.maintain_gpu_resources(cpass)?;
+        tracker.dispatch_uploads_until_empty(&mut encoder);
+        self.maintain_gpu_resources(&mut encoder)?;
         gpu.queue_mut().submit(vec![encoder.finish()]);
 
         self.make_upload_buffer(gpu, async_rt, tracker)?;
@@ -738,7 +888,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use image::{Rgba, RgbaImage};
+    use image::{GrayImage, Luma, Rgba, RgbaImage};
     use nitrous::Interpreter;
     use rand::prelude::*;
     use std::{env, time::Duration};
@@ -842,6 +992,34 @@ mod test {
         )?;
         let _ = packer.push_image(
             &RgbaImage::from_pixel(254, 254, *Rgba::from_slice(&[255, 0, 0, 255])),
+            &gpu.read(),
+        )?;
+
+        let _ = packer.finish(&mut gpu.write(), &async_rt, &mut Default::default());
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_grayscale() -> Result<()> {
+        use winit::platform::unix::EventLoopExtUnix;
+        let event_loop = EventLoop::<()>::new_any_thread();
+        let window = Window::new(&event_loop).unwrap();
+        let async_rt = Runtime::new()?;
+        let interpreter = Interpreter::new();
+        let gpu = Gpu::new(window, Default::default(), &mut interpreter.write())?;
+
+        let mut packer = AtlasPacker::<Luma<u8>>::new(
+            "test_grayscale",
+            &gpu.read(),
+            256,
+            256,
+            [0, 0, 0, 0],
+            wgpu::TextureFormat::R8Unorm,
+            wgpu::FilterMode::Linear,
+        )?;
+        let _ = packer.push_image(
+            &GrayImage::from_pixel(254, 254, *Luma::from_slice(&[255])),
             &gpu.read(),
         )?;
 

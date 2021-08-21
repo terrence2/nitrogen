@@ -100,11 +100,12 @@ impl FontContext {
         self.glyph_sheet.make_upload_buffer(gpu, async_rt, tracker)
     }
 
-    pub fn maintain_font_atlas<'a>(
-        &'a self,
-        cpass: wgpu::ComputePass<'a>,
-    ) -> Result<wgpu::ComputePass<'a>> {
-        self.glyph_sheet.maintain_gpu_resources(cpass)
+    pub fn maintain_font_atlas(
+        &self,
+        mut encoder: wgpu::CommandEncoder,
+    ) -> Result<wgpu::CommandEncoder> {
+        self.glyph_sheet.maintain_gpu_resources(&mut encoder)?;
+        Ok(encoder)
     }
 
     pub fn glyph_sheet_width(&self) -> u32 {
