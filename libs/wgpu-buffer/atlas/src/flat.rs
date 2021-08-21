@@ -34,12 +34,21 @@ impl BlitVertex {
         Self { _pos: pos, _tc: tc }
     }
 
-    pub fn buffer(gpu: &Gpu, x: (f32, f32), y: (f32, f32)) -> wgpu::Buffer {
+    pub fn buffer(
+        gpu: &Gpu,
+        (x, y): (u32, u32),
+        (w, h): (u32, u32),
+        (width, height): (u32, u32),
+    ) -> wgpu::Buffer {
+        let x0 = (x as f32 / width as f32) * 2. - 1.;
+        let x1 = ((x + w) as f32 / width as f32) * 2. - 1.;
+        let y0 = 1. - (y as f32 / height as f32) * 2.;
+        let y1 = 1. - ((y + h) as f32 / height as f32) * 2.;
         let vertices = vec![
-            Self::new([x.0, y.0], [0., 1.]),
-            Self::new([x.0, y.1], [0., 0.]),
-            Self::new([x.1, y.0], [1., 1.]),
-            Self::new([x.1, y.1], [1., 0.]),
+            Self::new([x0, y1], [0., 1.]),
+            Self::new([x0, y0], [0., 0.]),
+            Self::new([x1, y1], [1., 1.]),
+            Self::new([x1, y0], [1., 0.]),
         ];
         gpu.push_slice("blit-vertices", &vertices, wgpu::BufferUsage::VERTEX)
     }
@@ -511,7 +520,7 @@ where
         self.blit_list.push((
             copy_buffer,
             img_buffer,
-            (x, y),
+            (x + self.padding, y + self.padding),
             (width, height, stride_bytes),
         ));
         Ok(Frame::new(
@@ -694,11 +703,6 @@ where
         self.dirty_region = DirtyState::Clean;
 
         // Set up texture blits
-        // let target_texture = if let Some(ref next_texture) = self.next_texture {
-        //     next_texture.clone()
-        // } else {
-        //     self.texture.clone()
-        // };
         self.unaligned_blit.clear();
         for (copy_buffer, img_buffer, (x, y), (width, height, stride_bytes)) in
             self.blit_list.drain(..)
@@ -769,17 +773,8 @@ where
                     },
                 ],
             });
-            let vertex_buffer = BlitVertex::buffer(
-                gpu,
-                (
-                    x as f32 / self.width as f32,
-                    (x + width) as f32 / self.width as f32,
-                ),
-                (
-                    y as f32 / self.height as f32,
-                    (y + height) as f32 / self.height as f32,
-                ),
-            );
+            let vertex_buffer =
+                BlitVertex::buffer(gpu, (x, y), (width, height), (self.width, self.height));
             self.unaligned_blit.push((bind_group, vertex_buffer));
         }
 
