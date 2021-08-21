@@ -22,7 +22,8 @@ check_clippy:
     - rust
     - nix
   script:
-    - nix-shell -p pkgconfig xorg.libX11 --run "cargo clippy --all --all-targets -- --deny warnings"
+    - nix-shell -p gnumake gmock --run "cargo clippy --all --all-targets -- --deny warnings"
+    #- nix-shell -p pkgconfig xorg.libX11 --run "cargo clippy --all --all-targets -- --deny warnings"
 
 # Need to figure out how to run graphical tests headless.
 #check_build:
@@ -35,4 +36,4 @@ check_test:
     - rust
     - nix
   script:
-    - cargo test --all --all-targets
+    - nix-shell -p gnumake gmock --run "cargo test --all --all-targets"
