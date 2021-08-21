@@ -126,7 +126,7 @@ make_frame_graph!(
         };
         passes: [
             // widget
-            maintain_font_atlas: Compute() { widgets() },
+            maintain_font_atlas: Any() { widgets() },
 
             // terrain
             // Update the indices so we have correct height data to tessellate with and normal
@@ -284,7 +284,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         .read()
         .root()
         .write()
-        //.add_child("controls", controls_box)
         .add_child("controls", expander)
         .set_float(PositionH::End, PositionV::Top);
 

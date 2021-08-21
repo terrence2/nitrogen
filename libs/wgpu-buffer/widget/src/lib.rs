@@ -436,11 +436,11 @@ impl WidgetBuffer {
         Ok(())
     }
 
-    pub fn maintain_font_atlas<'a>(
-        &'a self,
-        cpass: wgpu::ComputePass<'a>,
-    ) -> Result<wgpu::ComputePass<'a>> {
-        self.paint_context.maintain_font_atlas(cpass)
+    pub fn maintain_font_atlas(
+        &self,
+        encoder: wgpu::CommandEncoder,
+    ) -> Result<wgpu::CommandEncoder> {
+        self.paint_context.maintain_font_atlas(encoder)
     }
 }
 
