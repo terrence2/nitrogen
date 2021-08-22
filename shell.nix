@@ -6,9 +6,10 @@
   pkgs.mkShell {
     nativeBuildInputs = [
       pkgs.rust-bin.stable.latest.default
-      pkgs.gnumake
-      pkgs.gmock
       pkgs.glxinfo
+      pkgs.gmock
+      pkgs.gnumake
+      pkgs.shaderc
       pkgs.vulkan-tools
       pkgs.xorg.libX11
       pkgs.xorg.libXrandr
