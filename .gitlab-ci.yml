@@ -32,7 +32,7 @@ check_test:
     - nix
   script:
     - nix-shell --run "cargo test --workspace --all-targets --no-fail-fast"
-  retry: 3 # Sometimes X clients just crash
+  retry: 2 # Sometimes X clients just crash
 
 build_release_linux_x64:
 #  rules:
