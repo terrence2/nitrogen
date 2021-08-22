@@ -1,4 +1,2 @@
-## Running
+[![pipeline status](https://gitlab.com/terrence_too/nitrogen/badges/main/pipeline.svg)](https://gitlab.com/terrence_too/nitrogen/-/commits/main)
 
-We mmap every tile, so don't forget to up the max map count from 64K to something more reasonable.
-> sudo sysctl -w vm.max_map_count=1073741824
