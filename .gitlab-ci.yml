@@ -39,6 +39,9 @@ build_release_linux_x64:
 #    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME != $CI_DEFAULT_BRANCH'
 #      when: never
   interruptible: true
+  tags:
+    - rust
+    - nix
   script:
     - nix-shell --run "cargo build --release --all"
     - mkdir "nitrogen-$CI_COMMIT_TIMESTAMP"
