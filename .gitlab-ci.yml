@@ -46,7 +46,7 @@ build_release_linux_x64:
     - nix-shell --run "cargo build --release --all"
     - mkdir "nitrogen-$CI_COMMIT_TIMESTAMP"
     - find target/release/ -maxdepth 1 -type f -executable -not -iname "*.so" -exec cp \{\} "nitrogen-$CI_COMMIT_TIMESTAMP" \;
-    - tar -C "nitrogen-$CI_COMMIT_TIMESTAMP/" -cJvf "nitrogen-${CI_COMMIT_TIMESTAMP}.tar.xz" .
+    - tar -C "nitrogen-$CI_COMMIT_TIMESTAMP/" -cJvf "../nitrogen-${CI_COMMIT_TIMESTAMP}.tar.xz" .
 
 #   - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file "nitrogen-$CI_COMMIT_SHORT_SHA.tar.xz" "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nitrogen/nitrogen-${CI_COMMIT_TIMESTAMP}"'
 
