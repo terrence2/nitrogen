@@ -1,4 +1,5 @@
 cache:
+  key: nitrogen
   paths:
     - target/
     - libs/**/**/target/
@@ -17,6 +18,7 @@ check_format:
     - nix-shell --run "cargo fmt --all -- --check"
 
 check_clippy:
+  interruptible: true
   tags:
     - rust
     - nix
@@ -24,8 +26,28 @@ check_clippy:
     - nix-shell --run "cargo clippy --all --all-targets -- --deny warnings"
 
 check_test:
+  interruptible: true
   tags:
     - rust
     - nix
   script:
-    - nix-shell --run "cargo test --all --all-targets"
+    - nix-shell --run "cargo test --workspace --all-targets --no-fail-fast"
+  retry: 3 # Sometimes X clients just crash
+
+build_release_linux_x64:
+#  rules:
+#    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME != $CI_DEFAULT_BRANCH'
+#      when: never
+  interruptible: true
+  script:
+    - nix-shell --run "cargo build --release --all"
+    - mkdir "nitrogen-$CI_COMMIT_TIMESTAMP"
+    - find target/release/ -maxdepth 1 -type f -executable -not -iname "*.so" -exec cp \{\} "nitrogen-$CI_COMMIT_TIMESTAMP" \;
+    - tar -cJf "nitrogen-$CI_COMMIT_TIMESTAMP.tar.xz" -C "nitrogen-$CI_COMMIT_TIMESTAMP/" .
+
+#   - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file path/to/file.txt "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/my_package/0.0.1/file.txt"'
+#  release:
+#    tag_name: $CI_COMMIT_TIMESTAMP
+#    description: $CI_COMMIT_MESSAGE
+#    assets:
+#      links:
