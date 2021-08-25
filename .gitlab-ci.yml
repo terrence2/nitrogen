@@ -1,14 +1,8 @@
-cache:
-  key: nitrogen
-  paths:
-    - target/
-    - libs/**/**/target/
-
-variables:
-  PACKAGE_VERSION: "${CI_COMMIT_TIMESTAMP}"
-  PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nitrogen/${PACKAGE_VERSION}"
-  PACKAGE_LINUX_X64: "nitrogen-linux-x86_64.tar.xz"
-  PACKAGE_WINDOWS_X64: "nitrogen-win-x86_64.exe.xz"
+# This is actually slower because of the enormous size.
+#cache:
+#  key: nitrogen
+#  paths:
+#    - target/
 
 before_script:
   - whoami
@@ -49,17 +43,26 @@ build_release_linux_x64:
     - rust
     - nix
   script:
+    - export VERSION=$(date +%Y.%m.%d.%H.%M)
+    - export PACKAGE_REGISTRY_URL="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/nitrogen/${VERSION}"
+    - export PACKAGE_LINUX_X64="nitrogen-linux-x86_64.tar.xz"
+    - export PACKAGE_WINDOWS_X64="nitrogen-win-x86_64.exe.xz"
     - nix-shell --run "cargo build --release --all"
-    - mkdir "nitrogen-$CI_COMMIT_TIMESTAMP"
-    - cp target/release/nitrogen "nitrogen-$CI_COMMIT_TIMESTAMP"/
-    - tar -C "nitrogen-$CI_COMMIT_TIMESTAMP/" -cJvf "../${PACKAGE_LINUX_X64}" .
+    - mkdir "nitrogen-$VERSION"
+    - cp target/release/nitrogen "nitrogen-$VERSION"/
+    - tar -C "nitrogen-$VERSION/" -cJvf "../${PACKAGE_LINUX_X64}" .
     - mv "../${PACKAGE_LINUX_X64}" .
     - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${PACKAGE_LINUX_X64} "${PACKAGE_REGISTRY_URL}/${PACKAGE_LINUX_X64}"'
-    #- find target/release/ -maxdepth 1 -type f -executable -not -iname "*.so" -exec cp \{\} "nitrogen-$CI_COMMIT_TIMESTAMP" \;
-  release:
-    tag_name: $CI_COMMIT_TIMESTAMP
-    description: $CI_COMMIT_MESSAGE
-    assets:
-      links:
-        - name: "${PACKAGE_LINUX_X64}"
-          url: "${PACKAGE_REGISTRY_URL}/${PACKAGE_LINUX_X64}"
+    - |
+      /etc/nixos/release-cli create --name "Release $VERSION @ $CI_COMMIT_TAG" --tag-name $CI_COMMIT_TAG \
+        --assets-link "{\"name\":\"${PACKAGE_LINUX_X64}\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PACKAGE_LINUX_X64}\"}" \
+        --assets-link "{\"name\":\"${PACKAGE_WINDOWS_X64}\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PACKAGE_WINDOWS_X64}\"}"
+
+#    - find target/release/ -maxdepth 1 -type f -executable -not -iname "*.so" -exec cp \{\} "nitrogen-$CI_COMMIT_TIMESTAMP" \;
+#  release:
+#    tag_name: $CI_COMMIT_TIMESTAMP
+#    description: $CI_COMMIT_MESSAGE
+#    assets:
+#      links:
+#        - name: "${PACKAGE_LINUX_X64}"
+#          url: "${PACKAGE_REGISTRY_URL}/${PACKAGE_LINUX_X64}"

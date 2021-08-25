@@ -3,13 +3,21 @@
     overlays = [ (import <rust-overlay>) ];
   }
 }:
+let
+  pkg_rust = pkgs.rust-bin.stable.latest.default.override {
+    targets = [
+      "x86_64-unknown-linux-gnu"
+      "x86_64-pc-windows-gnu"
+      "arm-unknown-linux-gnueabihf"
+    ];
+  };
+in
   pkgs.mkShell {
     nativeBuildInputs = [
-      pkgs.rust-bin.stable.latest.default
-      pkgs.glxinfo
-      pkgs.gmock
+      pkg_rust
       pkgs.gnumake
-      pkgs.shaderc
+      pkgs.gmock
+      pkgs.glxinfo
       pkgs.vulkan-tools
       pkgs.xorg.libX11
       pkgs.xorg.libXrandr
