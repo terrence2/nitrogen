@@ -8,7 +8,6 @@ before_script:
   - whoami
   - groups
   - nix-shell --run "rustc --version"
-  #- rustup target add x86_64-pc-windows-gnu
 
 check_format:
   tags:
@@ -35,9 +34,9 @@ check_test:
   retry: 2 # Sometimes X clients just crash
 
 build_release_linux_x64:
-#  rules:
-#    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME != $CI_DEFAULT_BRANCH'
-#      when: never
+  rules:
+    - if: '$CI_MERGE_REQUEST_TARGET_BRANCH_NAME != $CI_DEFAULT_BRANCH'
+      when: never
   interruptible: true
   tags:
     - rust
@@ -58,12 +57,5 @@ build_release_linux_x64:
         --assets-link "{\"name\":\"${PACKAGE_LINUX_X64}\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PACKAGE_LINUX_X64}\"}" \
         --assets-link "{\"name\":\"${PACKAGE_WINDOWS_X64}\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PACKAGE_WINDOWS_X64}\"}"
 
-#
+# If we ever want to release all our misc binaries, this will do it.
 #    - find target/release/ -maxdepth 1 -type f -executable -not -iname "*.so" -exec cp \{\} "nitrogen-$CI_COMMIT_TIMESTAMP" \;
-#  release:
-#    tag_name: $CI_COMMIT_TIMESTAMP
-#    description: $CI_COMMIT_MESSAGE
-#    assets:
-#      links:
-#        - name: "${PACKAGE_LINUX_X64}"
-#          url: "${PACKAGE_REGISTRY_URL}/${PACKAGE_LINUX_X64}"
