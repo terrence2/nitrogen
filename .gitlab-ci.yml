@@ -54,10 +54,11 @@ build_release_linux_x64:
     - mv "../${PACKAGE_LINUX_X64}" .
     - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${PACKAGE_LINUX_X64} "${PACKAGE_REGISTRY_URL}/${PACKAGE_LINUX_X64}"'
     - |
-      /etc/nixos/release-cli create --name "Release $CI_COMMIT_TAG" --tag-name $CI_COMMIT_TAG \
+      /etc/nixos/release-cli create --name "Release $VERSION" \
         --assets-link "{\"name\":\"${PACKAGE_LINUX_X64}\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PACKAGE_LINUX_X64}\"}" \
         --assets-link "{\"name\":\"${PACKAGE_WINDOWS_X64}\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PACKAGE_WINDOWS_X64}\"}"
 
+# --tag-name $CI_COMMIT_TAG \
 #    - find target/release/ -maxdepth 1 -type f -executable -not -iname "*.so" -exec cp \{\} "nitrogen-$CI_COMMIT_TIMESTAMP" \;
 #  release:
 #    tag_name: $CI_COMMIT_TIMESTAMP
