@@ -54,8 +54,10 @@ build_release_linux_x64:
     - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file ${PACKAGE_LINUX_X64} "${PACKAGE_REGISTRY_URL}/${PACKAGE_LINUX_X64}"'
     - |
       /etc/nixos/release-cli create --name "Release $VERSION" --tag-name $VERSION \
-        --assets-link "{\"name\":\"${PACKAGE_LINUX_X64}\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PACKAGE_LINUX_X64}\"}" \
-        --assets-link "{\"name\":\"${PACKAGE_WINDOWS_X64}\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PACKAGE_WINDOWS_X64}\"}"
+        --assets-link "{\"name\":\"${PACKAGE_LINUX_X64}\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PACKAGE_LINUX_X64}\"}"
 
 # If we ever want to release all our misc binaries, this will do it.
 #    - find target/release/ -maxdepth 1 -type f -executable -not -iname "*.so" -exec cp \{\} "nitrogen-$CI_COMMIT_TIMESTAMP" \;
+
+# If we ever build and release windows binaries, this line will add the asset link
+#       --assets-link "{\"name\":\"${PACKAGE_WINDOWS_X64}\",\"url\":\"${PACKAGE_REGISTRY_URL}/${PACKAGE_WINDOWS_X64}\"}"
