@@ -14,11 +14,13 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::Module;
 use anyhow::{bail, Result};
+use futures::Future;
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
-use std::{fmt, fmt::Debug, sync::Arc};
+use std::fmt::Formatter;
+use std::{fmt, fmt::Debug, pin::Pin, sync::Arc};
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum Value {
     Boolean(bool),
     Integer(i64),
@@ -26,6 +28,13 @@ pub enum Value {
     String(String),
     Module(Arc<RwLock<dyn Module>>),
     Method(Arc<RwLock<dyn Module>>, String), // TODO: atoms
+    Future(Arc<RwLock<Pin<Box<dyn Future<Output = Value> + Send + Sync + Unpin + 'static>>>>),
+}
+
+impl Debug for Value {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl Value {
@@ -60,11 +69,34 @@ impl Value {
         bail!("not a float value: {}", self)
     }
 
+    pub fn to_future(
+        &self,
+    ) -> Result<Arc<RwLock<Pin<Box<(dyn Future<Output = Value> + Send + Sync + Unpin + 'static)>>>>>
+    {
+        if let Self::Future(f) = self {
+            return Ok(f.clone());
+        }
+        bail!("not a future value: {}", self)
+    }
+
     pub fn to_str(&self) -> Result<&str> {
         if let Self::String(s) = self {
             return Ok(s);
         }
         bail!("not a string value: {}", self)
+    }
+
+    pub fn to_method(&self) -> Result<(Arc<RwLock<dyn Module>>, &str)> {
+        if let Self::Method(module, name) = self {
+            return Ok((module.clone(), name));
+        }
+        bail!("not a method value: {}", self)
+    }
+}
+
+impl From<f64> for Value {
+    fn from(f: f64) -> Self {
+        Self::Float(OrderedFloat(f))
     }
 }
 
@@ -77,6 +109,7 @@ impl fmt::Display for Value {
             Self::String(v) => write!(f, "\"{}\"", v),
             Self::Module(v) => write!(f, "{}", v.read().module_name()),
             Self::Method(v, name) => write!(f, "{}.{}", v.read().module_name(), name),
+            Self::Future(_) => write!(f, "Future"),
         }
     }
 }
@@ -102,6 +135,7 @@ impl PartialEq for Value {
             },
             Self::Module(_) => false,
             Self::Method(_, _) => false,
+            Self::Future(_) => false,
         }
     }
 }
@@ -118,6 +152,7 @@ impl Value {
                 Value::Boolean(_) => bail!("cannot multiply a number to a boolean"),
                 Value::Module(_) => bail!("cannot multiply a number by a module"),
                 Value::Method(_, _) => bail!("cannot multiply a number by a method"),
+                Value::Future(_) => bail!("cannot do arithmetic on a future"),
             },
             Value::Float(lhs) => match other {
                 Value::Integer(rhs) => Value::Float(lhs * OrderedFloat(rhs as f64)),
@@ -126,6 +161,7 @@ impl Value {
                 Value::Boolean(_) => bail!("cannot multiply a number to a boolean"),
                 Value::Module(_) => bail!("cannot multiply a number by a module"),
                 Value::Method(_, _) => bail!("cannot multiply a number by a method"),
+                Value::Future(_) => bail!("cannot do arithmetic on a future"),
             },
             Value::String(lhs) => match other {
                 Value::Integer(rhs) => Value::String(lhs.repeat(rhs.max(0) as usize)),
@@ -134,10 +170,12 @@ impl Value {
                 Value::Boolean(_) => bail!("cannot multiply a number to a boolean"),
                 Value::Module(_) => bail!("cannot multiply a string by a module"),
                 Value::Method(_, _) => bail!("cannot multiply a string by a method"),
+                Value::Future(_) => bail!("cannot do arithmetic on a future"),
             },
             Value::Boolean(_) => bail!("cannot do arithmetic on a boolean"),
             Value::Module(_) => bail!("cannot do arithmetic on a module"),
             Value::Method(_, _) => bail!("cannot do arithmetic on a method"),
+            Value::Future(_) => bail!("cannot do arithmetic on a future"),
         })
     }
 
@@ -150,6 +188,7 @@ impl Value {
                 Value::Boolean(_) => bail!("cannot divide a number by a boolean"),
                 Value::Module(_) => bail!("cannot divide a number by a module"),
                 Value::Method(_, _) => bail!("cannot divide a number by a method"),
+                Value::Future(_) => bail!("cannot do arithmetic on a future"),
             },
             Value::Float(lhs) => match other {
                 Value::Integer(rhs) => Value::Float(lhs / OrderedFloat(rhs as f64)),
@@ -158,11 +197,13 @@ impl Value {
                 Value::Boolean(_) => bail!("cannot divide a number by a boolean"),
                 Value::Module(_) => bail!("cannot divide a number by a module"),
                 Value::Method(_, _) => bail!("cannot divide a number by a method"),
+                Value::Future(_) => bail!("cannot do arithmetic on a future"),
             },
             Value::String(_) => bail!("cannot divide a string by anything"),
             Value::Boolean(_) => bail!("cannot do arithmetic on a boolean"),
             Value::Module(_) => bail!("cannot do arithmetic on a module"),
             Value::Method(_, _) => bail!("cannot do arithmetic on a method"),
+            Value::Future(_) => bail!("cannot do arithmetic on a future"),
         })
     }
 
@@ -175,6 +216,7 @@ impl Value {
                 Value::Boolean(_) => bail!("cannot add a number to a boolean"),
                 Value::Module(_) => bail!("cannot add a module to a number"),
                 Value::Method(_, _) => bail!("cannot add a method to a number"),
+                Value::Future(_) => bail!("cannot do arithmetic on a future"),
             },
             Value::Float(lhs) => match other {
                 Value::Integer(rhs) => Value::Float(lhs + OrderedFloat(rhs as f64)),
@@ -183,6 +225,7 @@ impl Value {
                 Value::Boolean(_) => bail!("cannot add a number to a boolean"),
                 Value::Module(_) => bail!("cannot add a module to a number"),
                 Value::Method(_, _) => bail!("cannot add a method to a number"),
+                Value::Future(_) => bail!("cannot do arithmetic on a future"),
             },
             Value::String(lhs) => match other {
                 Value::Integer(_) => bail!("cannot add a number to a string"),
@@ -191,10 +234,12 @@ impl Value {
                 Value::Boolean(_) => bail!("cannot add a number to a boolean"),
                 Value::Module(_) => bail!("cannot add a module to a string"),
                 Value::Method(_, _) => bail!("cannot add a method to a string"),
+                Value::Future(_) => bail!("cannot do arithmetic on a future"),
             },
             Value::Boolean(_) => bail!("cannot do arithmetic on a boolean"),
             Value::Module(_) => bail!("cannot do arithmetic on a module"),
             Value::Method(_, _) => bail!("cannot do arithmetic on a method"),
+            Value::Future(_) => bail!("cannot do arithmetic on a future"),
         })
     }
 
@@ -207,6 +252,7 @@ impl Value {
                 Value::Boolean(_) => bail!("cannot subtract a boolean from a number"),
                 Value::Module(_) => bail!("cannot subtract a module from a number"),
                 Value::Method(_, _) => bail!("cannot subtract a method from a number"),
+                Value::Future(_) => bail!("cannot do arithmetic on a future"),
             },
             Value::Float(lhs) => match other {
                 Value::Integer(rhs) => Value::Float(lhs - OrderedFloat(rhs as f64)),
@@ -215,11 +261,13 @@ impl Value {
                 Value::Boolean(_) => bail!("cannot subtract a boolean from a number"),
                 Value::Module(_) => bail!("cannot subtract a module from a number"),
                 Value::Method(_, _) => bail!("cannot subtract a method from a number"),
+                Value::Future(_) => bail!("cannot do arithmetic on a future"),
             },
             Value::String(_) => bail!("cannot subtract with a string"),
             Value::Boolean(_) => bail!("cannot do arithmetic on a boolean"),
             Value::Module(_) => bail!("cannot do arithmetic on a module"),
             Value::Method(_, _) => bail!("cannot do arithmetic on a method"),
+            Value::Future(_) => bail!("cannot do arithmetic on a future"),
         })
     }
 }

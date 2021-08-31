@@ -32,19 +32,20 @@ impl fmt::Display for Stmt {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Expr {
-    BinOp(Box<Expr>, Operator, Box<Expr>),
-    Term(Term),
     Attr(Box<Expr>, Term),
+    Await(Box<Expr>),
     #[allow(clippy::vec_box)]
     Call(Box<Expr>, Vec<Box<Expr>>),
+    BinOp(Box<Expr>, Operator, Box<Expr>),
+    Term(Term),
 }
 
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::BinOp(a, op, b) => write!(f, "{} {} {}", a, op, b),
-            Self::Term(t) => write!(f, "{}", t),
             Self::Attr(b, n) => write!(f, "{}.{}", b, n),
+            Self::Await(e) => write!(f, "await {}", e),
+            Self::BinOp(a, op, b) => write!(f, "{} {} {}", a, op, b),
             Self::Call(func, args) => {
                 write!(f, "{}(", func)?;
                 for (i, a) in args.iter().enumerate() {
@@ -55,6 +56,7 @@ impl fmt::Display for Expr {
                 }
                 write!(f, ")")
             }
+            Self::Term(t) => write!(f, "{}", t),
         }
     }
 }

@@ -20,6 +20,7 @@ pub use crate::{script::Script, value::Value};
 
 use crate::ir::{Expr, Operator, Stmt, Term};
 use anyhow::{bail, ensure, Result};
+use futures::executor::block_on;
 use log::debug;
 use parking_lot::RwLock;
 use std::{borrow::Borrow, collections::HashMap, fmt::Debug, sync::Arc};
@@ -33,16 +34,16 @@ pub trait Module: Debug + Send + Sync + 'static {
     fn names(&self) -> Vec<&str>;
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Interpreter {
-    locals: HashMap<String, Value>,
+    locals: Arc<RwLock<LocalNamespace>>,
     globals: Arc<RwLock<GlobalNamespace>>,
 }
 
 impl Interpreter {
     pub fn new() -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(Self {
-            locals: HashMap::new(),
+            locals: LocalNamespace::empty(),
             globals: GlobalNamespace::new(),
         }))
     }
@@ -52,11 +53,11 @@ impl Interpreter {
         F: FnMut(&mut Interpreter) -> Result<Value>,
     {
         for (name, value) in locals {
-            self.locals.insert((*name).to_owned(), value.to_owned());
+            self.locals.write().put_local(*name, value.to_owned());
         }
         let result = callback(self);
         for (name, _) in locals {
-            self.locals.remove(*name);
+            self.locals.write().remove_local(*name);
         }
         result
     }
@@ -77,6 +78,19 @@ impl Interpreter {
         self.interpret(&Script::compile(raw_script)?)
     }
 
+    pub fn interpret_async(&mut self, raw_script: String) -> Result<()> {
+        // Note: all of our memory are behind arcs, so clone of the interpreter is very fast.
+        let mut interp = self.clone();
+        let script = Script::compile(&raw_script)?;
+        std::thread::spawn(move || match interp.interpret(&script) {
+            Ok(_) => {}
+            Err(e) => {
+                println!("Async script execution failed: {}", e);
+            }
+        });
+        Ok(())
+    }
+
     pub fn interpret(&mut self, script: &Script) -> Result<Value> {
         debug!("Interpret: {}", script);
         let mut out = Value::True();
@@ -85,7 +99,7 @@ impl Interpreter {
                 Stmt::LetAssign(target, expr) => {
                     let result = self.interpret_expr(expr)?;
                     if let Term::Symbol(name) = target {
-                        self.locals.insert(name.to_owned(), result);
+                        self.locals.write().put_local(name, result);
                     }
                 }
                 Stmt::Expr(expr) => {
@@ -104,8 +118,8 @@ impl Interpreter {
                 Term::Integer(i) => Value::Integer(*i),
                 Term::String(s) => Value::String(s.to_owned()),
                 Term::Symbol(sym) => {
-                    if let Some(v) = self.locals.get(sym) {
-                        v.clone()
+                    if let Some(v) = self.locals.read().get_local(sym) {
+                        v
                     } else if let Ok(v) = self.globals.read().get(self.globals.clone(), sym) {
                         v
                     } else {
@@ -130,6 +144,10 @@ impl Interpreter {
                 },
                 _ => bail!("attribute expr base did not evaluate to a module"),
             },
+            Expr::Await(expr) => {
+                let result = self.interpret_expr(expr)?;
+                block_on(result.to_future()?.write().as_mut())
+            }
             Expr::Call(base, args) => {
                 let base = self.interpret_expr(base)?;
                 let mut argvec = Vec::new();
@@ -144,6 +162,31 @@ impl Interpreter {
                 }
             }
         })
+    }
+}
+
+#[derive(Debug)]
+pub struct LocalNamespace {
+    memory: HashMap<String, Value>,
+}
+
+impl LocalNamespace {
+    pub fn empty() -> Arc<RwLock<Self>> {
+        Arc::new(RwLock::new(Self {
+            memory: HashMap::new(),
+        }))
+    }
+
+    pub fn put_local(&mut self, name: &str, value: Value) {
+        self.memory.insert(name.to_owned(), value);
+    }
+
+    pub fn get_local(&self, name: &str) -> Option<Value> {
+        self.memory.get(name).cloned()
+    }
+
+    pub fn remove_local(&mut self, name: &str) -> Option<Value> {
+        self.memory.remove(name)
     }
 }
 
@@ -249,6 +292,19 @@ mod test {
         let interpreter = Interpreter::new();
         let script = Script::compile("2 + 2")?;
         assert_eq!(interpreter.write().interpret(&script)?, Value::Integer(4));
+        Ok(())
+    }
+
+    #[test]
+    fn test_precedence() -> Result<()> {
+        let interpreter = Interpreter::new();
+
+        let script = Script::compile("2 + 3 * 2")?;
+        assert_eq!(interpreter.write().interpret(&script)?, Value::Integer(8));
+
+        let script = Script::compile("(2 + 3) * 2")?;
+        assert_eq!(interpreter.write().interpret(&script)?, Value::Integer(10));
+
         Ok(())
     }
 }

@@ -59,7 +59,14 @@ dependencies = [
 name = "animate"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "approx",
+ "futures",
+ "log",
+ "nitrous",
+ "nitrous_injector",
+ "parking_lot",
+ "triggered",
 ]
 
 [[package]]
@@ -1925,6 +1932,7 @@ name = "nitrogen"
 version = "0.1.0"
 dependencies = [
  "absolute_unit",
+ "animate",
  "anyhow",
  "atmosphere",
  "camera",
@@ -1962,6 +1970,7 @@ name = "nitrous"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "futures",
  "lalrpop",
  "lalrpop-util",
  "log",
@@ -2191,6 +2200,7 @@ dependencies = [
  "nalgebra",
  "nitrous",
  "nitrous_injector",
+ "ordered-float",
  "parking_lot",
 ]
 
@@ -3045,6 +3055,12 @@ checksum = "f50de3927f93d202783f4513cda820ab47ef17f624b03c096e86ef00c67e6b5f"
 dependencies = [
  "lazy_static",
 ]
+
+[[package]]
+name = "triggered"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce148eae0d1a376c1b94ae651fc3261d9cb8294788b962b7382066376503a2d1"
 
 [[package]]
 name = "ttf-parser"

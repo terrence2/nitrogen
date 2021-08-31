@@ -94,12 +94,25 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
         let mut arg_items = Vec::new();
         for (i, arg) in args.iter().enumerate() {
             let expr: Expr = match arg.ty {
-                Scalar::Boolean => parse2(quote! { args[#i].to_bool()? }).unwrap(),
-                Scalar::Integer => parse2(quote! { args[#i].to_int()? }).unwrap(),
-                Scalar::Float => parse2(quote! { args[#i].to_float()? }).unwrap(),
-                Scalar::StrRef => parse2(quote! { args[#i].to_str()? }).unwrap(),
-                Scalar::String => parse2(quote! { args[#i].to_str()?.to_owned() }).unwrap(),
-                Scalar::Value => parse2(quote! { args[#i].clone() }).unwrap(),
+                Scalar::Boolean => {
+                    parse2(quote! { args.get(#i).expect("not enough args").to_bool()? }).unwrap()
+                }
+                Scalar::Integer => {
+                    parse2(quote! { args.get(#i).expect("not enough args").to_int()? }).unwrap()
+                }
+                Scalar::Float => {
+                    parse2(quote! { args.get(#i).expect("not enough args").to_float()? }).unwrap()
+                }
+                Scalar::StrRef => {
+                    parse2(quote! { args.get(#i).expect("not enough args").to_str()? }).unwrap()
+                }
+                Scalar::String => {
+                    parse2(quote! { args.get(#i).expect("not enough args").to_str()?.to_owned() })
+                        .unwrap()
+                }
+                Scalar::Value => {
+                    parse2(quote! { args.get(#i).expect("not enough args").clone() }).unwrap()
+                }
                 Scalar::Unit => parse2(quote! { Value::True() }).unwrap(),
             };
             arg_items.push(expr);
