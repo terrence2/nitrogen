@@ -373,7 +373,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     }
 
     if let Ok(code) = std::fs::read_to_string("autoexec.n2o") {
-        let rv = interpreter.write().interpret_async(code);
+        let rv = interpreter.write().interpret_once(&code);
         println!("Execution Completed: {:?}", rv);
     }
 

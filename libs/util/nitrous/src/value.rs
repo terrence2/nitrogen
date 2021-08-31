@@ -35,7 +35,10 @@ pub enum Value {
 
 impl Debug for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            Self::Future(_) => write!(f, "FutureValue"),
+            _ => write!(f, "{}", self),
+        }
     }
 }
 

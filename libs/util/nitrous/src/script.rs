@@ -129,6 +129,17 @@ mod test {
     }
 
     #[test]
+    fn test_empty() -> Result<()> {
+        let rv = StatementsParser::new().parse("")?;
+        assert_eq!(rv, vec![]);
+
+        let script = Script::compile("// hello\n")?;
+        assert_eq!(script.stmts, vec![]);
+
+        Ok(())
+    }
+
+    #[test]
     fn test_expr() -> Result<()> {
         let rv = StatementsParser::new().parse("a + b * c")?;
         assert_eq!(
