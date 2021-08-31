@@ -20,6 +20,8 @@ use parking_lot::RwLock;
 use std::fmt::Formatter;
 use std::{fmt, fmt::Debug, pin::Pin, sync::Arc};
 
+pub type FutureValue = Pin<Box<dyn Future<Output = Value> + Send + Sync + Unpin + 'static>>;
+
 #[derive(Clone)]
 pub enum Value {
     Boolean(bool),
@@ -28,7 +30,7 @@ pub enum Value {
     String(String),
     Module(Arc<RwLock<dyn Module>>),
     Method(Arc<RwLock<dyn Module>>, String), // TODO: atoms
-    Future(Arc<RwLock<Pin<Box<dyn Future<Output = Value> + Send + Sync + Unpin + 'static>>>>),
+    Future(Arc<RwLock<FutureValue>>),
 }
 
 impl Debug for Value {
@@ -69,10 +71,7 @@ impl Value {
         bail!("not a float value: {}", self)
     }
 
-    pub fn to_future(
-        &self,
-    ) -> Result<Arc<RwLock<Pin<Box<(dyn Future<Output = Value> + Send + Sync + Unpin + 'static)>>>>>
-    {
+    pub fn to_future(&self) -> Result<Arc<RwLock<FutureValue>>> {
         if let Self::Future(f) = self {
             return Ok(f.clone());
         }
