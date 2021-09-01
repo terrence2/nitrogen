@@ -1,6 +1,6 @@
 [package]
 name = "orrery"
-version = "0.1.0"
+version = "0.0.0"
 authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 edition = "2018"
 
@@ -10,6 +10,7 @@ anyhow = "^ 1"
 lazy_static = "^ 1"
 log = "^ 0.4"
 nalgebra = "^ 0.29"
+ordered-float = "^ 2"
 parking_lot = "^ 0.11"
 nitrous = { path = "../../util/nitrous" }
 nitrous_injector = { path = "../../util/nitrous_injector" }

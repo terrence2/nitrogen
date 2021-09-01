@@ -10,7 +10,7 @@ checksum = "d9fe5e32de01730eb1f6b7f5b51c17e03e2325bf40a74f754f04f130043affff"
 
 [[package]]
 name = "absolute_unit"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "approx",
 ]
@@ -57,14 +57,21 @@ dependencies = [
 
 [[package]]
 name = "animate"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
+ "anyhow",
  "approx",
+ "futures",
+ "log",
+ "nitrous",
+ "nitrous_injector",
+ "parking_lot",
+ "triggered",
 ]
 
 [[package]]
 name = "ansi"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "bitflags",
  "libc",
@@ -137,7 +144,7 @@ dependencies = [
 
 [[package]]
 name = "atlas"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "build_shaders",
@@ -155,7 +162,7 @@ dependencies = [
 
 [[package]]
 name = "atmosphere"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "approx",
@@ -246,7 +253,7 @@ checksum = "0d8c1fef690941d3e7788d328517591fecc684c084084702d6ff1641e993699a"
 
 [[package]]
 name = "build_shaders"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "log",
@@ -311,7 +318,7 @@ dependencies = [
 
 [[package]]
 name = "camera"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "absolute_unit",
  "anyhow",
@@ -330,7 +337,7 @@ dependencies = [
 
 [[package]]
 name = "catalog"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -443,7 +450,7 @@ checksum = "3d7b894f5411737b7867f4827955924d7c254fc9f4d91a6aad6b097804b1018b"
 
 [[package]]
 name = "composite"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "build_shaders",
@@ -775,7 +782,7 @@ checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
 
 [[package]]
 name = "dump-atmosphere-tables"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "atmosphere",
@@ -790,7 +797,7 @@ dependencies = [
 
 [[package]]
 name = "dump-layer-pack"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "memmap",
@@ -801,7 +808,7 @@ dependencies = [
 
 [[package]]
 name = "dump-terrain-tables"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "nalgebra",
  "structopt",
@@ -809,7 +816,7 @@ dependencies = [
 
 [[package]]
 name = "dump-terrain-tiles"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "absolute_unit",
  "anyhow",
@@ -884,7 +891,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "font_common"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "gpu",
@@ -894,7 +901,7 @@ dependencies = [
 
 [[package]]
 name = "font_ttf"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "font_common",
@@ -938,7 +945,7 @@ checksum = "3dcaa9ae7725d12cdb85b3ad99a434db70b468c09ded17e012d86b5c1010f7a7"
 
 [[package]]
 name = "fullscreen"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "absolute_unit",
  "anyhow",
@@ -1059,7 +1066,7 @@ dependencies = [
 
 [[package]]
 name = "geodesy"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "absolute_unit",
  "approx",
@@ -1070,7 +1077,7 @@ dependencies = [
 
 [[package]]
 name = "geometry"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "approx",
  "nalgebra",
@@ -1096,10 +1103,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c9495705279e7140bf035dde1f6e750c162df8b625267cd52cc44e0b156732c8"
 dependencies = [
  "cfg-if 1.0.0",
- "js-sys",
  "libc",
  "wasi 0.10.2+wasi-snapshot-preview1",
- "wasm-bindgen",
 ]
 
 [[package]]
@@ -1266,7 +1271,7 @@ checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
 
 [[package]]
 name = "global_data"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "absolute_unit",
  "anyhow",
@@ -1298,7 +1303,7 @@ dependencies = [
 
 [[package]]
 name = "gpu"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "futures",
@@ -1432,7 +1437,7 @@ checksum = "90953f308a79fe6d62a4643e51f848fbfddcd05975a38e69fdf4ab86a7baf7ca"
 
 [[package]]
 name = "input"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "futures",
@@ -1922,9 +1927,10 @@ checksum = "e4a24736216ec316047a1fc4252e27dabb04218aa4a3f37c6e7ddbf1f9782b54"
 
 [[package]]
 name = "nitrogen"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "absolute_unit",
+ "animate",
  "anyhow",
  "atmosphere",
  "camera",
@@ -1959,9 +1965,10 @@ dependencies = [
 
 [[package]]
 name = "nitrous"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
+ "futures",
  "lalrpop",
  "lalrpop-util",
  "log",
@@ -1972,7 +1979,7 @@ dependencies = [
 
 [[package]]
 name = "nitrous_injector"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "log",
@@ -2182,7 +2189,7 @@ dependencies = [
 
 [[package]]
 name = "orrery"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2191,6 +2198,7 @@ dependencies = [
  "nalgebra",
  "nitrous",
  "nitrous_injector",
+ "ordered-float",
  "parking_lot",
 ]
 
@@ -2205,7 +2213,7 @@ dependencies = [
 
 [[package]]
 name = "packed_struct"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "zerocopy",
@@ -2269,7 +2277,7 @@ dependencies = [
 
 [[package]]
 name = "physical_constants"
-version = "0.1.0"
+version = "0.0.0"
 
 [[package]]
 name = "pico-args"
@@ -2607,7 +2615,7 @@ dependencies = [
 
 [[package]]
 name = "shader_shared"
-version = "0.1.0"
+version = "0.0.0"
 
 [[package]]
 name = "shaderc"
@@ -2722,7 +2730,7 @@ dependencies = [
 
 [[package]]
 name = "star_catalog"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "packed_struct",
@@ -2731,7 +2739,7 @@ dependencies = [
 
 [[package]]
 name = "stars"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "absolute_unit",
  "anyhow",
@@ -2869,7 +2877,7 @@ dependencies = [
 
 [[package]]
 name = "terrain"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "absolute_unit",
  "anyhow",
@@ -3047,6 +3055,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "triggered"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce148eae0d1a376c1b94ae651fc3261d9cb8294788b962b7382066376503a2d1"
+
+[[package]]
 name = "ttf-parser"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3060,7 +3074,7 @@ checksum = "373c8a200f9e67a0c95e62a4f52fbf80c23b4381c05a17845531982fa99e6b33"
 
 [[package]]
 name = "ui"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "build_shaders",
@@ -3103,7 +3117,7 @@ checksum = "f7fe0bb3479651439c9112f72b6c505038574c9fbb575ed1bf3b797fa39dd564"
 
 [[package]]
 name = "universe"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "absolute_unit",
  "geodesy",
@@ -3296,14 +3310,13 @@ dependencies = [
 
 [[package]]
 name = "web-demo"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "absolute_unit",
  "anyhow",
  "camera",
  "console_error_panic_hook",
  "geodesy",
- "getrandom 0.2.2",
  "global_data",
  "gpu",
  "input",
@@ -3405,7 +3418,7 @@ dependencies = [
 
 [[package]]
 name = "widget"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "atlas",
@@ -3518,7 +3531,7 @@ dependencies = [
 
 [[package]]
 name = "world"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "atmosphere",

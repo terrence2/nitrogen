@@ -311,19 +311,27 @@ impl Orrery {
     }
 
     #[allow(clippy::unreadable_literal)]
-    #[rustfmt::skip]
-    pub fn new(
-        initial_time: DateTime<Utc>,
-        interpreter: &mut Interpreter
-    ) -> Arc<RwLock<Self>> {
-        let orrery = Arc::new(RwLock::new(
-        Self {
+    pub fn new(initial_time: DateTime<Utc>, interpreter: &mut Interpreter) -> Arc<RwLock<Self>> {
+        let orrery = Arc::new(RwLock::new(Self {
             //EM Bary   1.00000018      0.01673163     -0.00054346      100.46691572    102.93005885     -5.11260389
             //         -0.00000003     -0.00003661     -0.01337178    35999.37306329      0.31795260     -0.24123856
             earth_moon_barycenter: KeplerianElements::new(
-                 1.00000018,  0.01673163, -0.00054346,   100.46691572, 102.93005885, -5.11260389,
-                -0.00000003, -0.00003661, -0.01337178, 35999.37306329,   0.31795260, -0.24123856,
-                0.0, 0.0, 0.0, 0.0,
+                1.00000018,
+                0.01673163,
+                -0.00054346,
+                100.46691572,
+                102.93005885,
+                -5.11260389,
+                -0.00000003,
+                -0.00003661,
+                -0.01337178,
+                35999.37306329,
+                0.31795260,
+                -0.24123856,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
             ),
 
             now: initial_time,
@@ -350,7 +358,20 @@ impl Orrery {
         self.now
     }
 
-    pub fn adjust_time(&mut self, dt: Duration) {
+    #[method]
+    pub fn get_unix_ms(&self) -> f64 {
+        self.now.timestamp_nanos() as f64 / 1_000_000.
+    }
+
+    #[method]
+    pub fn set_unix_ms(&mut self, ms: f64) {
+        self.now = DateTime::<Utc>::from_utc(
+            NaiveDateTime::from_timestamp((ms / 1000.) as i64, (ms % 1000.) as u32 * 1_000_000),
+            Utc,
+        );
+    }
+
+    pub fn step_time(&mut self, dt: Duration) {
         if let Some(rv) = self.now.checked_add_signed(dt) {
             self.now = rv;
         }

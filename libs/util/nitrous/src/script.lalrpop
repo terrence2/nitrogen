@@ -69,7 +69,6 @@ Term: Term = {
     SingleQuotedString,
     Float,
     Integer,
-    "(" <Term> ")",
 };
 
 pub Statements: Vec<Box<Stmt>> = {
@@ -86,29 +85,35 @@ LetAssignStmt: Box<Stmt> = {
 }
 
 Expr: Box<Expr> = {
-    CallExpr
+    AddExpr
 };
 
+AddExpr: Box<Expr> = {
+    AddExpr AddOp MulExpr => Box::new(Expr::BinOp(<>)),
+    MulExpr
+};
+
+MulExpr: Box<Expr> = {
+    MulExpr MulOp AwaitExpr => Box::new(Expr::BinOp(<>)),
+    AwaitExpr
+};
+
+AwaitExpr: Box<Expr> = {
+    "await" <CallExpr> => Box::new(Expr::Await(<>)),
+    CallExpr
+}
+
 CallExpr: Box<Expr> = {
-    <CallExpr> "(" <Comma<CallExpr>> ")" => Box::new(Expr::Call(<>)),
+    <CallExpr> "(" <Comma<Expr>> ")" => Box::new(Expr::Call(<>)),
     AttrExpr
 }
 
 AttrExpr: Box<Expr> = {
     <AttrExpr> "." <SymbolOrBool> => Box::new(Expr::Attr(<>)),
-    MulExpr
+    TermExpr
 }
 
-MulExpr: Box<Expr> = {
-    MulExpr MulOp AddExpr => Box::new(Expr::BinOp(<>)),
-    AddExpr
-};
-
-AddExpr: Box<Expr> = {
-    AddExpr AddOp TermExpr => Box::new(Expr::BinOp(<>)),
-    TermExpr
-};
-
 TermExpr: Box<Expr> = {
-    Term => Box::new(Expr::Term(<>))
+    Term => Box::new(Expr::Term(<>)),
+    "(" <Expr> ")",
 }

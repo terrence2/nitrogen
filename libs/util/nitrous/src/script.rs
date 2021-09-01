@@ -18,6 +18,7 @@ use script::StatementsParser;
 
 use crate::ir::Stmt;
 use anyhow::{bail, Result};
+use regex::Regex;
 use std::fmt;
 
 #[derive(Debug, Clone)]
@@ -28,10 +29,13 @@ pub struct Script {
 
 impl Script {
     pub fn compile(script: &str) -> Result<Self> {
-        Ok(match StatementsParser::new().parse(script) {
+        let re = Regex::new(r"(/\*([^*]|[\r\n]|(\*+([^*/]|[\r\n])))*\*+/)|(//.*)")?;
+        let preprocessed = re.replace_all(script, "");
+
+        Ok(match StatementsParser::new().parse(&preprocessed) {
             Ok(stmts) => Self { stmts },
             Err(e) => {
-                println!("parse failure: {}", e);
+                println!("parse failure: {}\nin: {}", e, script);
                 bail!(format!("parse failure: {}", e))
             }
         })
@@ -125,19 +129,51 @@ mod test {
     }
 
     #[test]
+    fn test_empty() -> Result<()> {
+        let rv = StatementsParser::new().parse("")?;
+        assert_eq!(rv, vec![]);
+
+        let script = Script::compile("// hello\n")?;
+        assert_eq!(script.stmts, vec![]);
+
+        Ok(())
+    }
+
+    #[test]
     fn test_expr() -> Result<()> {
         let rv = StatementsParser::new().parse("a + b * c")?;
         assert_eq!(
             rv,
             vec![Box::new(Stmt::Expr(Box::new(Expr::BinOp(
+                Box::new(Expr::Term(Term::Symbol("a".to_owned()))),
+                Operator::Add,
                 Box::new(Expr::BinOp(
-                    Box::new(Expr::Term(Term::Symbol("a".to_owned()))),
-                    Operator::Add,
                     Box::new(Expr::Term(Term::Symbol("b".to_owned()))),
+                    Operator::Multiply,
+                    Box::new(Expr::Term(Term::Symbol("c".to_owned()))),
                 )),
-                Operator::Multiply,
-                Box::new(Expr::Term(Term::Symbol("c".to_owned()))),
             ))))]
+        );
+
+        let script = Script::compile("foo.bar")?;
+        assert_eq!(
+            script.stmts,
+            vec![Box::new(Stmt::Expr(Box::new(Expr::Attr(
+                Box::new(Expr::Term(Term::Symbol("foo".to_owned()))),
+                Term::Symbol("bar".to_owned()),
+            )))),]
+        );
+
+        let script = Script::compile("foo.bar()")?;
+        assert_eq!(
+            script.stmts,
+            vec![Box::new(Stmt::Expr(Box::new(Expr::Call(
+                Box::new(Expr::Attr(
+                    Box::new(Expr::Term(Term::Symbol("foo".to_owned()))),
+                    Term::Symbol("bar".to_owned()),
+                )),
+                vec![]
+            )))),]
         );
 
         let rv = StatementsParser::new().parse("foo.bar(a * 2, b)")?;
@@ -157,6 +193,27 @@ mod test {
                     Box::new(Expr::Term(Term::Symbol("b".to_owned()))),
                 ]
             ))))]
+        );
+
+        let rv = StatementsParser::new().parse("await foo.bar(a * 2, b)")?;
+        assert_eq!(
+            rv,
+            vec![Box::new(Stmt::Expr(Box::new(Expr::Await(Box::new(
+                Expr::Call(
+                    Box::new(Expr::Attr(
+                        Box::new(Expr::Term(Term::Symbol("foo".to_owned()))),
+                        Term::Symbol("bar".to_owned()),
+                    )),
+                    vec![
+                        Box::new(Expr::BinOp(
+                            Box::new(Expr::Term(Term::Symbol("a".to_owned()))),
+                            Operator::Multiply,
+                            Box::new(Expr::Term(Term::Integer(2))),
+                        )),
+                        Box::new(Expr::Term(Term::Symbol("b".to_owned()))),
+                    ]
+                )
+            )))))]
         );
 
         let s = "a".to_owned();
@@ -194,6 +251,40 @@ mod test {
                 Box::new(Stmt::Expr(Box::new(Expr::Term(Term::Integer(3))))),
                 Box::new(Stmt::Expr(Box::new(Expr::Term(Term::Integer(4))))),
             ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn script_single_line_comments() -> Result<()> {
+        let rv = Script::compile(
+            r#"
+                // 2;
+                3;
+                // 4
+            "#,
+        )?;
+        assert_eq!(
+            rv.stmts,
+            vec![Box::new(Stmt::Expr(Box::new(Expr::Term(Term::Integer(3))))),]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn script_multi_line_comments() -> Result<()> {
+        let rv = Script::compile(
+            r#"
+                /* 2; */
+                3;
+                /*
+                 * 4
+                 */
+            "#,
+        )?;
+        assert_eq!(
+            rv.stmts,
+            vec![Box::new(Stmt::Expr(Box::new(Expr::Term(Term::Integer(3))))),]
         );
         Ok(())
     }

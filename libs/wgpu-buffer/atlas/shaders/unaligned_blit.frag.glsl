@@ -23,5 +23,5 @@ void
 main()
 {
     vec4 clr = texture(sampler2D(upload_texture, upload_sampler), in_texcoord);
-    f_color = vec4(clr.rgb, 1);
+    f_color = clr;
 }
