@@ -66,6 +66,10 @@ where
     pub fn lon<UnitAng: AngleUnit>(&self) -> Angle<UnitAng> {
         Angle::<UnitAng>::from(&self.longitude)
     }
+
+    pub fn with_origin<O: GraticuleOrigin>(&self) -> Graticule<O> {
+        Graticule::<O>::new(self.latitude, self.longitude, self.distance)
+    }
 }
 
 impl<Origin> Default for Graticule<Origin>

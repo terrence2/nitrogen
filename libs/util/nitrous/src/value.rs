@@ -15,6 +15,7 @@
 use crate::Module;
 use anyhow::{bail, Result};
 use futures::Future;
+use geodesy::{GeoSurface, Graticule, Target};
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
 use std::fmt::Formatter;
@@ -28,6 +29,7 @@ pub enum Value {
     Integer(i64),
     Float(OrderedFloat<f64>),
     String(String),
+    Graticule(Graticule<GeoSurface>),
     Module(Arc<RwLock<dyn Module>>),
     Method(Arc<RwLock<dyn Module>>, String), // TODO: atoms
     Future(Arc<RwLock<FutureValue>>),
@@ -74,11 +76,22 @@ impl Value {
         bail!("not a float value: {}", self)
     }
 
-    pub fn to_future(&self) -> Result<Arc<RwLock<FutureValue>>> {
-        if let Self::Future(f) = self {
-            return Ok(f.clone());
+    pub fn is_graticule(&self) -> bool {
+        matches!(self, Self::Graticule(_))
+    }
+
+    pub fn to_grat_surface(&self) -> Result<Graticule<GeoSurface>> {
+        if let Self::Graticule(grat) = self {
+            return Ok(*grat);
         }
-        bail!("not a future value: {}", self)
+        bail!("not a graticule value: {}", self)
+    }
+
+    pub fn to_grat_target(&self) -> Result<Graticule<Target>> {
+        if let Self::Graticule(grat) = self {
+            return Ok(grat.with_origin::<Target>());
+        }
+        bail!("not a graticule value: {}", self)
     }
 
     pub fn to_str(&self) -> Result<&str> {
@@ -94,11 +107,36 @@ impl Value {
         }
         bail!("not a method value: {}", self)
     }
+
+    pub fn to_future(&self) -> Result<Arc<RwLock<FutureValue>>> {
+        if let Self::Future(f) = self {
+            return Ok(f.clone());
+        }
+        bail!("not a future value: {}", self)
+    }
+
+    pub fn is_numeric(&self) -> bool {
+        matches!(self, Self::Float(_) | Self::Integer(_))
+    }
+
+    pub fn to_numeric(&self) -> Result<f64> {
+        Ok(match self {
+            Self::Float(f) => f.0,
+            Self::Integer(i) => *i as f64,
+            _ => bail!("not numeric"),
+        })
+    }
 }
 
 impl From<f64> for Value {
     fn from(f: f64) -> Self {
         Self::Float(OrderedFloat(f))
+    }
+}
+
+impl From<Graticule<GeoSurface>> for Value {
+    fn from(grat: Graticule<GeoSurface>) -> Self {
+        Self::Graticule(grat)
     }
 }
 
@@ -109,6 +147,7 @@ impl fmt::Display for Value {
             Self::Integer(v) => write!(f, "{}", v),
             Self::Float(v) => write!(f, "{}", v),
             Self::String(v) => write!(f, "\"{}\"", v),
+            Self::Graticule(v) => write!(f, "{}", v),
             Self::Module(v) => write!(f, "{}", v.read().module_name()),
             Self::Method(v, name) => write!(f, "{}.{}", v.read().module_name(), name),
             Self::Future(_) => write!(f, "Future"),
@@ -135,6 +174,10 @@ impl PartialEq for Value {
                 Self::String(b) => a == b,
                 _ => false,
             },
+            Self::Graticule(a) => match other {
+                Self::Graticule(b) => a == b,
+                _ => false,
+            },
             Self::Module(_) => false,
             Self::Method(_, _) => false,
             Self::Future(_) => false,
@@ -150,34 +193,19 @@ impl Value {
             Value::Integer(lhs) => match other {
                 Value::Integer(rhs) => Value::Integer(lhs * rhs),
                 Value::Float(rhs) => Value::Float(OrderedFloat(lhs as f64) * rhs),
-                Value::String(_) => bail!("cannot multiply a number by a string"),
-                Value::Boolean(_) => bail!("cannot multiply a number to a boolean"),
-                Value::Module(_) => bail!("cannot multiply a number by a module"),
-                Value::Method(_, _) => bail!("cannot multiply a number by a method"),
-                Value::Future(_) => bail!("cannot do arithmetic on a future"),
+                _ => bail!("invalid rhs type for multiply with integer"),
             },
             Value::Float(lhs) => match other {
                 Value::Integer(rhs) => Value::Float(lhs * OrderedFloat(rhs as f64)),
                 Value::Float(rhs) => Value::Float(lhs * rhs),
-                Value::String(_) => bail!("cannot multiply a number by a string"),
-                Value::Boolean(_) => bail!("cannot multiply a number to a boolean"),
-                Value::Module(_) => bail!("cannot multiply a number by a module"),
-                Value::Method(_, _) => bail!("cannot multiply a number by a method"),
-                Value::Future(_) => bail!("cannot do arithmetic on a future"),
+                _ => bail!("invalid rhs type for multiply with float"),
             },
             Value::String(lhs) => match other {
                 Value::Integer(rhs) => Value::String(lhs.repeat(rhs.max(0) as usize)),
                 Value::Float(rhs) => Value::String(lhs.repeat(rhs.floor().max(0f64) as usize)),
-                Value::String(_) => bail!("cannot multiply a string by a string"),
-                Value::Boolean(_) => bail!("cannot multiply a number to a boolean"),
-                Value::Module(_) => bail!("cannot multiply a string by a module"),
-                Value::Method(_, _) => bail!("cannot multiply a string by a method"),
-                Value::Future(_) => bail!("cannot do arithmetic on a future"),
+                _ => bail!("invalid rhs type for multiply with string"),
             },
-            Value::Boolean(_) => bail!("cannot do arithmetic on a boolean"),
-            Value::Module(_) => bail!("cannot do arithmetic on a module"),
-            Value::Method(_, _) => bail!("cannot do arithmetic on a method"),
-            Value::Future(_) => bail!("cannot do arithmetic on a future"),
+            _ => bail!("cannot do arithmetic with this type of value"),
         })
     }
 
@@ -186,26 +214,14 @@ impl Value {
             Value::Integer(lhs) => match other {
                 Value::Integer(rhs) => Value::Integer(lhs / rhs),
                 Value::Float(rhs) => Value::Float(OrderedFloat(lhs as f64) / rhs),
-                Value::String(_) => bail!("cannot divide a number by a string"),
-                Value::Boolean(_) => bail!("cannot divide a number by a boolean"),
-                Value::Module(_) => bail!("cannot divide a number by a module"),
-                Value::Method(_, _) => bail!("cannot divide a number by a method"),
-                Value::Future(_) => bail!("cannot do arithmetic on a future"),
+                _ => bail!("invalid rhs type for divide from integer"),
             },
             Value::Float(lhs) => match other {
                 Value::Integer(rhs) => Value::Float(lhs / OrderedFloat(rhs as f64)),
                 Value::Float(rhs) => Value::Float(lhs / rhs),
-                Value::String(_) => bail!("cannot divide a number by a string"),
-                Value::Boolean(_) => bail!("cannot divide a number by a boolean"),
-                Value::Module(_) => bail!("cannot divide a number by a module"),
-                Value::Method(_, _) => bail!("cannot divide a number by a method"),
-                Value::Future(_) => bail!("cannot do arithmetic on a future"),
+                _ => bail!("invalid rhs type for divide from float"),
             },
-            Value::String(_) => bail!("cannot divide a string by anything"),
-            Value::Boolean(_) => bail!("cannot do arithmetic on a boolean"),
-            Value::Module(_) => bail!("cannot do arithmetic on a module"),
-            Value::Method(_, _) => bail!("cannot do arithmetic on a method"),
-            Value::Future(_) => bail!("cannot do arithmetic on a future"),
+            _ => bail!("cannot divide from this type of value"),
         })
     }
 
@@ -214,34 +230,18 @@ impl Value {
             Value::Integer(lhs) => match other {
                 Value::Integer(rhs) => Value::Integer(lhs + rhs),
                 Value::Float(rhs) => Value::Float(OrderedFloat(lhs as f64) + rhs),
-                Value::String(_) => bail!("cannot add a string to a number"),
-                Value::Boolean(_) => bail!("cannot add a number to a boolean"),
-                Value::Module(_) => bail!("cannot add a module to a number"),
-                Value::Method(_, _) => bail!("cannot add a method to a number"),
-                Value::Future(_) => bail!("cannot do arithmetic on a future"),
+                _ => bail!("invalid rhs type for add to integer"),
             },
             Value::Float(lhs) => match other {
                 Value::Integer(rhs) => Value::Float(lhs + OrderedFloat(rhs as f64)),
                 Value::Float(rhs) => Value::Float(lhs + rhs),
-                Value::String(_) => bail!("cannot add a string to a number"),
-                Value::Boolean(_) => bail!("cannot add a number to a boolean"),
-                Value::Module(_) => bail!("cannot add a module to a number"),
-                Value::Method(_, _) => bail!("cannot add a method to a number"),
-                Value::Future(_) => bail!("cannot do arithmetic on a future"),
+                _ => bail!("invalid rhs type for add to float"),
             },
             Value::String(lhs) => match other {
-                Value::Integer(_) => bail!("cannot add a number to a string"),
-                Value::Float(_) => bail!("cannot add a number to a string"),
                 Value::String(rhs) => Value::String(lhs + &rhs),
-                Value::Boolean(_) => bail!("cannot add a number to a boolean"),
-                Value::Module(_) => bail!("cannot add a module to a string"),
-                Value::Method(_, _) => bail!("cannot add a method to a string"),
-                Value::Future(_) => bail!("cannot do arithmetic on a future"),
+                _ => bail!("invalid rhs type for add to string"),
             },
-            Value::Boolean(_) => bail!("cannot do arithmetic on a boolean"),
-            Value::Module(_) => bail!("cannot do arithmetic on a module"),
-            Value::Method(_, _) => bail!("cannot do arithmetic on a method"),
-            Value::Future(_) => bail!("cannot do arithmetic on a future"),
+            _ => bail!("cannot add to this type of value"),
         })
     }
 
@@ -250,26 +250,14 @@ impl Value {
             Value::Integer(lhs) => match other {
                 Value::Integer(rhs) => Value::Integer(lhs - rhs),
                 Value::Float(rhs) => Value::Float(OrderedFloat(lhs as f64) - rhs),
-                Value::String(_) => bail!("cannot subtract a string from a number"),
-                Value::Boolean(_) => bail!("cannot subtract a boolean from a number"),
-                Value::Module(_) => bail!("cannot subtract a module from a number"),
-                Value::Method(_, _) => bail!("cannot subtract a method from a number"),
-                Value::Future(_) => bail!("cannot do arithmetic on a future"),
+                _ => bail!("invalid rhs type for subtract from integer"),
             },
             Value::Float(lhs) => match other {
                 Value::Integer(rhs) => Value::Float(lhs - OrderedFloat(rhs as f64)),
                 Value::Float(rhs) => Value::Float(lhs - rhs),
-                Value::String(_) => bail!("cannot subtract a string from a number"),
-                Value::Boolean(_) => bail!("cannot subtract a boolean from a number"),
-                Value::Module(_) => bail!("cannot subtract a module from a number"),
-                Value::Method(_, _) => bail!("cannot subtract a method from a number"),
-                Value::Future(_) => bail!("cannot do arithmetic on a future"),
+                _ => bail!("invalid rhs type for subtract from float"),
             },
-            Value::String(_) => bail!("cannot subtract with a string"),
-            Value::Boolean(_) => bail!("cannot do arithmetic on a boolean"),
-            Value::Module(_) => bail!("cannot do arithmetic on a module"),
-            Value::Method(_, _) => bail!("cannot do arithmetic on a method"),
-            Value::Future(_) => bail!("cannot do arithmetic on a future"),
+            _ => bail!("cannot subtract from this type of value"),
         })
     }
 }

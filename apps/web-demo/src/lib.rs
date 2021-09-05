@@ -80,7 +80,7 @@ async fn async_main() -> Result<()> {
     // let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
 
     let arcball = ArcBallCamera::new(meters!(0.1), &mut gpu.write(), &mut interpreter.write());
-    arcball.write().set_eye_relative(Graticule::<Target>::new(
+    arcball.write().set_eye(Graticule::<Target>::new(
         degrees!(0),
         degrees!(0),
         meters!(10),

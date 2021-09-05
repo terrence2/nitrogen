@@ -110,6 +110,14 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
                     parse2(quote! { args.get(#i).expect("not enough args").to_str()?.to_owned() })
                         .unwrap()
                 }
+                Scalar::GraticuleSurface => {
+                    parse2(quote! { args.get(#i).expect("not enough args").to_grat_surface()? })
+                        .unwrap()
+                }
+                Scalar::GraticuleTarget => {
+                    parse2(quote! { args.get(#i).expect("not enough args").to_grat_target()? })
+                        .unwrap()
+                }
                 Scalar::Value => {
                     parse2(quote! { args.get(#i).expect("not enough args").clone() }).unwrap()
                 }
@@ -143,6 +151,12 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
                 Scalar::StrRef => {
                     quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_items),* ).to_owned())) } }
                 }
+                Scalar::GraticuleSurface => {
+                    quote! { #name => { Ok(::nitrous::Value::Graticule(self.#item( #(#arg_items),* ))) } }
+                }
+                Scalar::GraticuleTarget => {
+                    quote! { #name => { Ok(::nitrous::Value::Graticule(self.#item( #(#arg_items),* ).with_origin::<::geodesy::GeoSurface>())) } }
+                }
                 Scalar::Value => {
                     quote! { #name => { Ok(self.#item( #(#arg_items),* )) } }
                 }
@@ -165,6 +179,12 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
                 }
                 Scalar::StrRef => {
                     quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_items),* )?.to_owned())) } }
+                }
+                Scalar::GraticuleSurface => {
+                    quote! { #name => { Ok(::nitrous::Value::Graticule(self.#item( #(#arg_items),* )?)) } }
+                }
+                Scalar::GraticuleTarget => {
+                    quote! { #name => { Ok(::nitrous::Value::Graticule(self.#item( #(#arg_items),* )?.with_origin::<::geodesy::GeoSurface>())) } }
                 }
                 Scalar::Value => {
                     quote! { #name => { self.#item( #(#arg_items),* ) } }
@@ -252,6 +272,8 @@ enum Scalar {
     Float,
     String,
     StrRef,
+    GraticuleSurface,
+    GraticuleTarget,
     Value,
     Unit,
 }
@@ -299,6 +321,28 @@ impl Scalar {
             "str" => Scalar::StrRef,
             "String" => Scalar::String,
             "Value" => Scalar::Value,
+            "Graticule" => {
+                if let PathArguments::AngleBracketed(args) =
+                    &p.path.segments.first().unwrap().arguments
+                {
+                    let grat_arg = args.args.first().unwrap();
+                    if let GenericArgument::Type(ty_inner) = grat_arg {
+                        if let Type::Path(p_inner) = ty_inner {
+                            match Self::type_path_name(p_inner).as_str() {
+                                "GeoSurface" => Scalar::GraticuleSurface,
+                                "Target" => Scalar::GraticuleTarget,
+                                _ => panic!("nitrous scale Graticule does not know {:#?}", p_inner),
+                            }
+                        } else {
+                            panic!("nitrous scalar Graticule expected one type path argument")
+                        }
+                    } else {
+                        panic!("Result parameter must be a type");
+                    }
+                } else {
+                    panic!("nitrous scalar Graticule expected one type argument")
+                }
+            }
             _ => panic!(
                 "nitrous Scalar only supports basic types, not: {:#?}",
                 p.path.segments.first().unwrap()

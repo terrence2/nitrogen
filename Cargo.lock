@@ -59,10 +59,13 @@ dependencies = [
 name = "animate"
 version = "0.0.0"
 dependencies = [
+ "absolute_unit",
  "anyhow",
  "approx",
  "futures",
+ "geodesy",
  "log",
+ "lyon_geom",
  "nitrous",
  "nitrous_injector",
  "parking_lot",
@@ -331,6 +334,7 @@ dependencies = [
  "nitrous",
  "nitrous_injector",
  "num",
+ "ordered-float",
  "parking_lot",
  "physical_constants",
 ]
@@ -869,6 +873,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0465971a8cc1fa2455c8465aaa377131e1f1cf4983280f474a13e68793aa770c"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "euclid"
+version = "0.22.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "da96828553a086d7b18dcebfc579bd9628b016f86590d7453c115e490fa74b80"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
@@ -1661,6 +1674,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "lyon_geom"
+version = "0.17.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe153a6ce93cb97c85ba47a007fd437079bbff5592b9c0f77195973b8b169d69"
+dependencies = [
+ "arrayvec",
+ "euclid",
+ "num-traits",
+]
+
+[[package]]
 name = "malloc_buf"
 version = "0.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1969,6 +1993,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "futures",
+ "geodesy",
  "lalrpop",
  "lalrpop-util",
  "log",

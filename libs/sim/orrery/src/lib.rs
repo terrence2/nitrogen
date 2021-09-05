@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use chrono::{prelude::*, Duration};
 use lazy_static::lazy_static;
 use nalgebra::{Point3, Unit, UnitQuaternion, Vector3, Vector4};
@@ -369,6 +369,16 @@ impl Orrery {
             NaiveDateTime::from_timestamp((ms / 1000.) as i64, (ms % 1000.) as u32 * 1_000_000),
             Utc,
         );
+    }
+
+    #[method]
+    pub fn unix_ms_for_hour_and_minute(&self, hour: i64, minute: i64) -> Result<f64> {
+        let t = self
+            .now
+            .with_hour(hour as u32)
+            .and_then(|t| t.with_minute(minute as u32))
+            .ok_or_else(|| anyhow!("invalid hour or minute"))?;
+        Ok(t.timestamp_nanos() as f64 / 1_000_000.)
     }
 
     pub fn step_time(&mut self, dt: Duration) {

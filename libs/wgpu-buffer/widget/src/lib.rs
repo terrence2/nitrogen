@@ -322,9 +322,10 @@ impl WidgetBuffer {
                 ..
             } = event
             {
-                if *virtual_keycode == VirtualKeyCode::Grave
-                    && *modifiers_state == ModifiersState::SHIFT
-                    && *press_state == ElementState::Pressed
+                if self.show_terminal && *virtual_keycode == VirtualKeyCode::Escape
+                    || *virtual_keycode == VirtualKeyCode::Grave
+                        && *modifiers_state == ModifiersState::SHIFT
+                        && *press_state == ElementState::Pressed
                 {
                     self.show_terminal = !self.show_terminal;
                     self.set_keyboard_focus(if self.show_terminal {

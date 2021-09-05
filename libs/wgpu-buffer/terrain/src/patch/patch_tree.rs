@@ -1116,7 +1116,7 @@ mod test {
         let mut tree = PatchTree::new(15, 150.0, 300);
         let mut live_patches = Vec::new();
         let mut arcball = ArcBallCamera::detached(16.0 / 9.0, meters!(0.1));
-        arcball.set_eye_relative(Graticule::<Target>::new(
+        arcball.set_eye(Graticule::<Target>::new(
             degrees!(89),
             degrees!(0),
             meters!(4_000_000),
@@ -1161,7 +1161,7 @@ mod test {
 
         const CNT: i64 = 40;
         for i in 0..CNT {
-            arcball.set_eye_relative(Graticule::<Target>::new(
+            arcball.set_eye(Graticule::<Target>::new(
                 degrees!(89),
                 degrees!(0),
                 meters!(4_000_000 - i * (4_000_000 / CNT)),
@@ -1183,7 +1183,7 @@ mod test {
             degrees!(0),
             meters!(1000),
         ));
-        arcball.set_eye_relative(Graticule::<Target>::new(
+        arcball.set_eye(Graticule::<Target>::new(
             degrees!(1),
             degrees!(90),
             meters!(1_500_000),

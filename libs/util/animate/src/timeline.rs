@@ -12,8 +12,11 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use anyhow::Result;
+use absolute_unit::{meters, radians};
+use anyhow::{ensure, Result};
 use futures::future::{ready, FutureExt};
+use geodesy::Graticule;
+use lyon_geom::{cubic_bezier::CubicBezierSegment, Point};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
@@ -22,6 +25,33 @@ use std::{
     time::{Duration, Instant},
 };
 use triggered::{trigger, Trigger};
+
+#[derive(Debug)]
+pub struct CubicBezierCurve {
+    bezier: CubicBezierSegment<f64>,
+}
+
+impl CubicBezierCurve {
+    pub const fn new((x1, y1): (f64, f64), (x2, y2): (f64, f64)) -> Self {
+        Self {
+            bezier: CubicBezierSegment {
+                from: Point::new(0., 0.),
+                ctrl1: Point::new(x1, y1),
+                ctrl2: Point::new(x2, y2),
+                to: Point::new(1., 1.),
+            },
+        }
+    }
+
+    pub fn interpolate(&self, x: f64) -> f64 {
+        let ts = self.bezier.solve_t_for_x(x);
+        if let Some(&t) = ts.get(0) {
+            self.bezier.y(t)
+        } else {
+            1.
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AnimationState {
@@ -34,10 +64,9 @@ pub enum AnimationState {
 struct ScriptableAnimation {
     trigger: Trigger,
     callable: Value,
-    start: f64,
-    end: f64,
-    extent: f64,
-    direction: i8,
+    start: Value,
+    end: Value,
+    bezier: CubicBezierCurve,
     duration: Duration,
     duration_f64: f64,
     start_time: Option<Instant>,
@@ -48,17 +77,17 @@ impl ScriptableAnimation {
     pub fn new(
         trigger: Trigger,
         callable: Value,
-        start: f64,
-        extent: f64,
+        start: Value,
+        end: Value,
+        bezier: CubicBezierCurve,
         duration: Duration,
     ) -> Self {
         Self {
             trigger,
             callable,
             start,
-            end: start + extent,
-            extent,
-            direction: if extent > 0. { 1 } else { -1 },
+            end,
+            bezier,
             duration,
             duration_f64: duration.as_secs_f64(),
             start_time: None,
@@ -66,21 +95,46 @@ impl ScriptableAnimation {
         }
     }
 
+    pub fn apply_fract(&self, f: f64) -> Result<Value> {
+        Ok(if self.start.is_numeric() {
+            let t0 = self.start.to_numeric()?;
+            let t1 = self.end.to_numeric()?;
+            (t0 + (t1 - t0) * f).into()
+        } else {
+            assert!(self.start.is_graticule());
+            let lat0 = self.start.to_grat_surface()?.latitude.f64();
+            let lat1 = self.end.to_grat_surface()?.latitude.f64();
+            let lon0 = self.start.to_grat_surface()?.longitude.f64();
+            let lon1 = self.end.to_grat_surface()?.longitude.f64();
+            let dist0 = self.start.to_grat_surface()?.distance.f64();
+            let dist1 = self.end.to_grat_surface()?.distance.f64();
+            Value::Graticule(Graticule::new(
+                radians!(lat0 + (lat1 - lat0) * f),
+                radians!(lon0 + (lon1 - lon0) * f),
+                meters!(dist0 + (dist1 - dist0) * f),
+            ))
+        })
+    }
+
     pub fn step_time(&mut self, now: &Instant) -> Result<()> {
         assert_ne!(self.state, AnimationState::Finished);
-        let current = if let Some(start_time) = self.start_time {
-            let f = (*now - start_time).as_secs_f64() / self.duration_f64;
-            self.start + self.extent * f
+        let (current, ended) = if let Some(start_time) = self.start_time {
+            let f0 = (*now - start_time).as_secs_f64() / self.duration_f64;
+            let f = self.bezier.interpolate(f0);
+            let current = self.apply_fract(f)?;
+            if (*now - start_time) >= self.duration {
+                (self.end.clone(), true)
+            } else {
+                (current, false)
+            }
         } else {
             self.start_time = Some(*now);
             self.state = AnimationState::Running;
-            self.start
+            (self.start.clone(), false)
         };
         let (module, name) = self.callable.to_method()?;
         module.write().call_method(name, &[current.into()])?;
-        if (self.direction > 0 && current >= self.end)
-            || (self.direction < 0 && current <= self.end)
-        {
+        if ended {
             self.state = AnimationState::Finished;
             self.trigger.trigger();
         }
@@ -100,6 +154,12 @@ pub struct Timeline {
 
 #[inject_nitrous_module]
 impl Timeline {
+    pub const LINEAR_BEZIER: CubicBezierCurve = CubicBezierCurve::new((0., 0.), (1., 1.));
+    pub const EASE_BEZIER: CubicBezierCurve = CubicBezierCurve::new((0.25, 0.1), (0.25, 1.));
+    pub const EASE_IN_BEZIER: CubicBezierCurve = CubicBezierCurve::new((0.42, 0.), (1., 1.));
+    pub const EASE_OUT_BEZIER: CubicBezierCurve = CubicBezierCurve::new((0., 0.), (0.58, 1.));
+    pub const EASE_IN_OUT_BEZIER: CubicBezierCurve = CubicBezierCurve::new((0.42, 0.), (0.58, 1.));
+
     pub fn new(interpreter: &mut Interpreter) -> Arc<RwLock<Self>> {
         let timeline = Arc::new(RwLock::new(Self { animations: vec![] }));
         interpreter.put_global("timeline", Value::Module(timeline.clone()));
@@ -114,33 +174,124 @@ impl Timeline {
         Ok(())
     }
 
-    #[method]
-    pub fn lerp(&mut self, callable: Value, start: f64, offset: f64, duration_sec: f64) -> Value {
+    pub fn with_curve(
+        &mut self,
+        callable: Value,
+        start: Value,
+        end: Value,
+        duration_sec: f64,
+        bezier: CubicBezierCurve,
+    ) -> Result<Value> {
+        ensure!(
+            start.is_numeric() && end.is_numeric() || start.is_graticule() && end.is_graticule()
+        );
         let (trigger, listener) = trigger();
         self.animations.push(ScriptableAnimation::new(
             trigger,
             callable,
             start,
-            offset,
+            end,
+            bezier,
             Duration::from_secs_f64(duration_sec),
         ));
-        Value::Future(Arc::new(RwLock::new(Box::pin(
+        Ok(Value::Future(Arc::new(RwLock::new(Box::pin(
             listener.then(|_| ready(Value::True())),
-        ))))
+        )))))
     }
 
     #[method]
-    pub fn lerp_to(&mut self, callable: Value, start: f64, end: f64, duration_sec: f64) -> Value {
-        let (trigger, listener) = trigger();
-        self.animations.push(ScriptableAnimation::new(
-            trigger,
+    pub fn lerp(
+        &mut self,
+        callable: Value,
+        start: f64,
+        offset: f64,
+        duration_sec: f64,
+    ) -> Result<Value> {
+        self.with_curve(
             callable,
-            start,
-            end - start,
-            Duration::from_secs_f64(duration_sec),
-        ));
-        Value::Future(Arc::new(RwLock::new(Box::pin(
-            listener.then(|_| ready(Value::True())),
-        ))))
+            start.into(),
+            (start + offset).into(),
+            duration_sec,
+            Self::LINEAR_BEZIER,
+        )
+    }
+
+    #[method]
+    pub fn ease(
+        &mut self,
+        callable: Value,
+        start: f64,
+        offset: f64,
+        duration_sec: f64,
+    ) -> Result<Value> {
+        self.with_curve(
+            callable,
+            start.into(),
+            (start + offset).into(),
+            duration_sec,
+            Self::EASE_BEZIER,
+        )
+    }
+
+    #[method]
+    pub fn ease_in(
+        &mut self,
+        callable: Value,
+        start: f64,
+        offset: f64,
+        duration_sec: f64,
+    ) -> Result<Value> {
+        self.with_curve(
+            callable,
+            start.into(),
+            (start + offset).into(),
+            duration_sec,
+            Self::EASE_IN_BEZIER,
+        )
+    }
+
+    #[method]
+    pub fn ease_out(
+        &mut self,
+        callable: Value,
+        start: f64,
+        offset: f64,
+        duration_sec: f64,
+    ) -> Result<Value> {
+        self.with_curve(
+            callable,
+            start.into(),
+            (start + offset).into(),
+            duration_sec,
+            Self::EASE_OUT_BEZIER,
+        )
+    }
+
+    #[method]
+    pub fn ease_in_out(
+        &mut self,
+        callable: Value,
+        start: f64,
+        offset: f64,
+        duration_sec: f64,
+    ) -> Result<Value> {
+        self.with_curve(
+            callable,
+            start.into(),
+            (start + offset).into(),
+            duration_sec,
+            Self::EASE_IN_OUT_BEZIER,
+        )
+    }
+
+    #[method]
+    pub fn ease_to(
+        &mut self,
+        callable: Value,
+        start: Value,
+        end: Value,
+        duration_sec: f64,
+    ) -> Result<Value> {
+        self.with_curve(callable, start, end, duration_sec, Self::EASE_BEZIER)
     }
 }

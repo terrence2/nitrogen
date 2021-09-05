@@ -21,7 +21,6 @@ use catalog::{Catalog, DirectoryDrawer};
 use chrono::{Duration as ChronoDuration, TimeZone, Utc};
 use composite::CompositeRenderPass;
 use fullscreen::FullscreenBuffer;
-use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
 use gpu::{
     make_frame_graph,
@@ -102,7 +101,7 @@ impl System {
     }
 
     #[method]
-    pub fn println(&self, message: &str) {
+    pub fn println(&self, message: Value) {
         println!("{}", message);
     }
 
@@ -316,47 +315,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         .add_child("fps", fps_label.clone())
         .set_float(PositionH::Start, PositionV::Bottom);
 
-    /*
-    let mut camera = UfoCamera::new(gpu.read().aspect_ratio(), 0.1f64, 3.4e+38f64);
-    camera.set_position(6_378.0, 0.0, 0.0);
-    camera.set_rotation(&Vector3::new(0.0, 0.0, 1.0), PI / 2.0);
-    camera.apply_rotation(&Vector3::new(0.0, 1.0, 0.0), PI);
-    */
-
-    // London: 51.5,-0.1
-    // arcball.write().set_target(Graticule::<GeoSurface>::new(
-    //     degrees!(51.5),
-    //     degrees!(-0.1),
-    //     meters!(8000.),
-    // ));
-    // arcball.write().set_eye_relative(Graticule::<Target>::new(
-    //     degrees!(11.5),
-    //     degrees!(869.5),
-    //     meters!(67668.5053),
-    // ))?;
-    // everest: 27.9880704,86.9245623
-    arcball.write().set_target(Graticule::<GeoSurface>::new(
-        degrees!(27.9880704),
-        degrees!(-86.9245623), // FIXME: wat?
-        meters!(8000.),
-    ));
-    arcball.write().set_eye_relative(Graticule::<Target>::new(
-        degrees!(11.5),
-        degrees!(869.5),
-        meters!(67668.5053),
-    ))?;
-    // ISS: 408km up
-    // arcball.write().set_target(Graticule::<GeoSurface>::new(
-    //     degrees!(27.9880704),
-    //     degrees!(-86.9245623), // FIXME: wat?
-    //     meters!(408_000.),
-    // ));
-    // arcball.write().set_eye_relative(Graticule::<Target>::new(
-    //     degrees!(58),
-    //     degrees!(668.0),
-    //     meters!(1308.7262),
-    // ))?;
-
     {
         let interp = &mut interpreter.write();
         gpu.write().add_default_bindings(interp)?;
@@ -454,10 +412,10 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
             .set_text(format!("Date: {}", orrery.read().get_time()));
         camera_direction
             .write()
-            .set_text(format!("Eye: {}", arcball.read().get_eye_relative()));
+            .set_text(format!("Eye: {}", arcball.read().eye()));
         camera_position
             .write()
-            .set_text(format!("Position: {}", arcball.read().get_target(),));
+            .set_text(format!("Position: {}", arcball.read().target(),));
         camera_fov.write().set_text(format!(
             "FoV: {}",
             degrees!(arcball.read().camera().fov_y()),
