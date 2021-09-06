@@ -16,7 +16,7 @@ use crate::Camera;
 use absolute_unit::{
     degrees, meters, radians, Angle, Degrees, Kilometers, Length, LengthUnit, Meters,
 };
-use anyhow::{ensure, Result};
+use anyhow::{bail, ensure, Result};
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
 use gpu::{Gpu, ResizeHint};
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
@@ -54,12 +54,12 @@ impl ArcBallCamera {
         let fov_y = radians!(PI / 2f64);
         Self {
             camera: Camera::from_parameters(fov_y, aspect_ratio, z_near),
-            target: Graticule::<GeoSurface>::new(radians!(0), radians!(0), meters!(0)),
+            target: Graticule::<GeoSurface>::new(radians!(0), radians!(0), meters!(10.)),
             target_height_delta: meters!(0),
             eye: Graticule::<Target>::new(
-                radians!(PI / 2.0),
-                radians!(3f64 * PI / 4.0),
-                meters!(1),
+                radians!(degrees!(10.)),
+                radians!(degrees!(25.)),
+                meters!(10.),
             ),
             fov_delta: degrees!(0),
             in_rotate: false,
@@ -96,19 +96,50 @@ impl ArcBallCamera {
         &mut self.camera
     }
 
-    pub fn get_target(&self) -> Graticule<GeoSurface> {
+    #[method]
+    pub fn notable_location(&self, name: &str) -> Result<Graticule<GeoSurface>> {
+        Ok(match name {
+            "ISS" => Graticule::<GeoSurface>::new(
+                degrees!(27.9880704),
+                degrees!(-86.9245623), // FIXME: wat?
+                meters!(408_000.),
+            ),
+            "Everest" => Graticule::<GeoSurface>::new(
+                degrees!(27.9880704),
+                degrees!(-86.9245623),
+                meters!(8000.),
+            ),
+            "London" => Graticule::<GeoSurface>::new(degrees!(51.5), degrees!(-0.1), meters!(100.)),
+            _ => bail!("unknown notable location: {}", name),
+        })
+    }
+
+    #[method]
+    pub fn eye_for(&self, kind: &str) -> Graticule<Target> {
+        match kind {
+            "ISS" => Graticule::<Target>::new(degrees!(58), degrees!(308.0), meters!(1_308.)),
+            "Everest" => Graticule::<Target>::new(degrees!(9), degrees!(130), meters!(12_000.)),
+            _ => Graticule::<Target>::new(degrees!(11.5), degrees!(149.5), meters!(67_668.)),
+        }
+    }
+
+    #[method]
+    pub fn target(&self) -> Graticule<GeoSurface> {
         self.target
     }
 
+    #[method]
     pub fn set_target(&mut self, target: Graticule<GeoSurface>) {
         self.target = target;
     }
 
-    pub fn get_eye_relative(&self) -> Graticule<Target> {
+    #[method]
+    pub fn eye(&self) -> Graticule<Target> {
         self.eye
     }
 
-    pub fn set_eye_relative(&mut self, eye: Graticule<Target>) -> Result<()> {
+    #[method]
+    pub fn set_eye(&mut self, eye: Graticule<Target>) -> Result<()> {
         ensure!(
             eye.latitude < radians!(degrees!(90)),
             "eye coordinate past limits"
@@ -117,7 +148,7 @@ impl ArcBallCamera {
         Ok(())
     }
 
-    pub fn get_distance(&self) -> Length<Meters> {
+    pub fn distance(&self) -> Length<Meters> {
         self.eye.distance
     }
 
@@ -136,6 +167,66 @@ impl ArcBallCamera {
         out += &format!("eye dst: {}\n", self.eye.distance.f64());
         println!("{}", out);
         out
+    }
+
+    #[method]
+    pub fn target_latitude_degrees(&self) -> f64 {
+        self.target.lat::<Degrees>().f64()
+    }
+
+    #[method]
+    pub fn target_longitude_degrees(&self) -> f64 {
+        self.target.lon::<Degrees>().f64()
+    }
+
+    #[method]
+    pub fn target_height_meters(&self) -> f64 {
+        meters!(self.target.distance).f64()
+    }
+
+    #[method]
+    pub fn set_target_latitude_degrees(&mut self, v: f64) {
+        self.target.latitude = radians!(degrees!(v));
+    }
+
+    #[method]
+    pub fn set_target_longitude_degrees(&mut self, v: f64) {
+        self.target.longitude = radians!(degrees!(v));
+    }
+
+    #[method]
+    pub fn set_target_height_meters(&mut self, v: f64) {
+        self.target.distance = meters!(v);
+    }
+
+    #[method]
+    pub fn eye_latitude_degrees(&self) -> f64 {
+        self.eye.lat::<Degrees>().f64()
+    }
+
+    #[method]
+    pub fn eye_longitude_degrees(&self) -> f64 {
+        self.eye.lon::<Degrees>().f64()
+    }
+
+    #[method]
+    pub fn eye_distance_meters(&self) -> f64 {
+        meters!(self.eye.distance).f64()
+    }
+
+    #[method]
+    pub fn set_eye_latitude_degrees(&mut self, v: f64) {
+        self.eye.latitude = radians!(degrees!(v));
+    }
+
+    #[method]
+    pub fn set_eye_longitude_degrees(&mut self, v: f64) {
+        self.eye.longitude = radians!(degrees!(v));
+    }
+
+    #[method]
+    pub fn set_eye_distance_meters(&mut self, v: f64) {
+        self.eye.distance = meters!(v);
     }
 
     fn cartesian_target_position<Unit: LengthUnit>(&self) -> Cartesian<GeoCenter, Unit> {
@@ -211,7 +302,7 @@ impl ArcBallCamera {
         }
 
         if self.in_move {
-            let sensitivity: f64 = f64::from(self.get_distance()) / 60_000_000.0;
+            let sensitivity: f64 = f64::from(self.distance()) / 60_000_000.0;
 
             let dir = self.eye.longitude;
             let lat = f64::from(degrees!(self.target.latitude)) + dir.cos() * y * sensitivity;
@@ -319,6 +410,8 @@ mod tests {
     #[test]
     fn it_can_compute_eye_positions_at_origin() -> Result<()> {
         let mut c = ArcBallCamera::detached(1f64, meters!(0.1f64));
+        c.set_eye(Graticule::new(radians!(0), radians!(0), meters!(0)))?;
+        c.set_target(Graticule::new(radians!(0), radians!(0), meters!(0)));
 
         // Verify base target position.
         let t = c.cartesian_target_position::<Kilometers>();
@@ -330,7 +423,7 @@ mod tests {
         {
             // Longitude 0 maps to south, latitude 90 to up,
             // when rotated into the surface frame.
-            c.set_eye_relative(Graticule::<Target>::new(
+            c.set_eye(Graticule::<Target>::new(
                 degrees!(0),
                 degrees!(0),
                 meters!(1),
@@ -340,7 +433,7 @@ mod tests {
             assert_abs_diff_eq!(e.coords[1], kilometers!(-0.001));
             assert_abs_diff_eq!(e.coords[2], kilometers!(EARTH_RADIUS_KM));
 
-            c.set_eye_relative(Graticule::<Target>::new(
+            c.set_eye(Graticule::<Target>::new(
                 degrees!(0),
                 degrees!(90),
                 meters!(1),
@@ -350,7 +443,7 @@ mod tests {
             assert_abs_diff_eq!(e.coords[1], kilometers!(0));
             assert_abs_diff_eq!(e.coords[2], kilometers!(EARTH_RADIUS_KM));
 
-            c.set_eye_relative(Graticule::<Target>::new(
+            c.set_eye(Graticule::<Target>::new(
                 degrees!(0),
                 degrees!(-90),
                 meters!(1),
@@ -360,7 +453,7 @@ mod tests {
             assert_abs_diff_eq!(e.coords[1], kilometers!(0));
             assert_abs_diff_eq!(e.coords[2], kilometers!(EARTH_RADIUS_KM));
 
-            c.set_eye_relative(Graticule::<Target>::new(
+            c.set_eye(Graticule::<Target>::new(
                 degrees!(0),
                 degrees!(-180),
                 meters!(1),
@@ -377,6 +470,8 @@ mod tests {
     #[test]
     fn it_can_compute_eye_positions_with_offset_latitude() -> Result<()> {
         let mut c = ArcBallCamera::detached(1f64, meters!(0.1f64));
+        c.set_eye(Graticule::new(radians!(0), radians!(0), meters!(0)))?;
+        c.set_target(Graticule::new(radians!(0), radians!(0), meters!(0)));
 
         // Verify base target position.
         let t = c.cartesian_target_position::<Kilometers>();
@@ -386,7 +481,7 @@ mod tests {
 
         // Target: 0/0; at latitude of 45
         {
-            c.set_eye_relative(Graticule::<Target>::new(
+            c.set_eye(Graticule::<Target>::new(
                 degrees!(45),
                 degrees!(0),
                 meters!(1),
@@ -399,7 +494,7 @@ mod tests {
                 kilometers!(EARTH_RADIUS_KM + 0.000_707_106_781)
             );
 
-            c.set_eye_relative(Graticule::<Target>::new(
+            c.set_eye(Graticule::<Target>::new(
                 degrees!(45),
                 degrees!(90),
                 meters!(1),
@@ -419,6 +514,8 @@ mod tests {
     #[test]
     fn it_can_compute_eye_positions_with_offset_longitude() -> Result<()> {
         let mut c = ArcBallCamera::detached(1f64, meters!(0.1f64));
+        c.set_eye(Graticule::new(radians!(0), radians!(0), meters!(0)))?;
+        c.set_target(Graticule::new(radians!(0), radians!(0), meters!(0)));
 
         // Verify base target position.
         let t = c.cartesian_target_position::<Kilometers>();
@@ -433,7 +530,7 @@ mod tests {
                 meters!(0),
             ));
 
-            c.set_eye_relative(Graticule::<Target>::new(
+            c.set_eye(Graticule::<Target>::new(
                 degrees!(0),
                 degrees!(0),
                 kilometers!(1),
@@ -443,7 +540,7 @@ mod tests {
             assert_abs_diff_eq!(e.coords[1], kilometers!(-1));
             assert_abs_diff_eq!(e.coords[2], kilometers!(0));
 
-            c.set_eye_relative(Graticule::<Target>::new(
+            c.set_eye(Graticule::<Target>::new(
                 degrees!(0),
                 degrees!(90),
                 kilometers!(1),

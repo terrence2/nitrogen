@@ -252,7 +252,7 @@ mod test {
             degrees!(0),
             meters!(2),
         ));
-        arcball.set_eye_relative(Graticule::<Target>::new(
+        arcball.set_eye(Graticule::<Target>::new(
             degrees!(89),
             degrees!(0),
             meters!(4_000_000),

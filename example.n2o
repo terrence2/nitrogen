@@ -1,0 +1,9 @@
+camera.set_target(camera.notable_location("ISS"));
+camera.set_eye(camera.eye_for("ISS"));
+
+timeline.ease_to(orrery.set_unix_ms, orrery.get_unix_ms(), orrery.unix_ms_for_hour_and_minute(2, 55), 3.0);
+timeline.ease_to(camera.set_target, camera.target(), camera.notable_location("Everest"), 3.0);
+await timeline.ease_to(camera.set_eye, camera.eye(), camera.eye_for("Everest"), 3.0);
+
+system.println("Animation Complete!");
+
