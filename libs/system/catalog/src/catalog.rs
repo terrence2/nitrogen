@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{DrawerFileId, DrawerInterface, FileMetadata};
-use anyhow::{bail, ensure, Result};
+use anyhow::{anyhow, bail, ensure, Context, Result};
 use glob::{MatchOptions, Pattern};
 use log::debug;
 use smallvec::SmallVec;
@@ -211,7 +211,9 @@ impl Catalog {
     }
 
     pub fn read_labeled_name_sync(&self, label: &str, name: &str) -> Result<Cow<[u8]>> {
-        self.shelves[&self.shelf_index[label]].read_name_sync(name)
+        self.shelves[&self.shelf_index[label]]
+            .read_name_sync(name)
+            .with_context(|| anyhow!("read_name_sync(label:{}, name:{})", label, name))
     }
 
     pub fn default_label(&self) -> &str {
@@ -367,7 +369,7 @@ impl Shelf {
     }
 
     pub fn read_name_sync(&self, name: &str) -> Result<Cow<[u8]>> {
-        ensure!(self.index.contains_key(name), "file not found");
+        ensure!(self.index.contains_key(name), "file not found: {}", name);
         self.read_sync(self.index[name])
     }
 }
