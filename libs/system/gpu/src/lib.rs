@@ -405,7 +405,7 @@ impl Gpu {
         &self,
         label: &'static str,
         data: &[T],
-        target: Arc<Box<wgpu::Buffer>>,
+        target: Arc<wgpu::Buffer>,
         tracker: &mut UploadTracker,
     ) {
         if let Some(source) = self.maybe_push_slice(label, data, wgpu::BufferUsage::COPY_SRC) {

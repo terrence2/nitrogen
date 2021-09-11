@@ -23,7 +23,7 @@ pub struct OwnedBufferCopyView {
 
 #[derive(Debug)]
 pub struct ArcTextureCopyView {
-    pub texture: Arc<Box<wgpu::Texture>>,
+    pub texture: Arc<wgpu::Texture>,
     pub mip_level: u32,
     pub origin: wgpu::Origin3d,
 }
@@ -53,7 +53,7 @@ impl CopyOwnedBufferToArcTextureDescriptor {
 pub struct CopyBufferToBufferDescriptor {
     source: wgpu::Buffer,
     source_offset: wgpu::BufferAddress,
-    destination: Arc<Box<wgpu::Buffer>>,
+    destination: Arc<wgpu::Buffer>,
     destination_offset: wgpu::BufferAddress,
     copy_size: wgpu::BufferAddress,
 }
@@ -61,7 +61,7 @@ pub struct CopyBufferToBufferDescriptor {
 impl CopyBufferToBufferDescriptor {
     pub fn new(
         source: wgpu::Buffer,
-        destination: Arc<Box<wgpu::Buffer>>,
+        destination: Arc<wgpu::Buffer>,
         copy_size: wgpu::BufferAddress,
     ) -> Self {
         Self {
@@ -76,7 +76,7 @@ impl CopyBufferToBufferDescriptor {
     pub fn new_raw(
         source: wgpu::Buffer,
         source_offset: wgpu::BufferAddress,
-        destination: Arc<Box<wgpu::Buffer>>,
+        destination: Arc<wgpu::Buffer>,
         destination_offset: wgpu::BufferAddress,
         copy_size: wgpu::BufferAddress,
     ) -> Self {
@@ -92,18 +92,18 @@ impl CopyBufferToBufferDescriptor {
 
 #[derive(Debug)]
 pub struct CopyTextureToTextureDescriptor {
-    source: Arc<Box<wgpu::Texture>>,
+    source: Arc<wgpu::Texture>,
     source_layer: u32,
-    target: Arc<Box<wgpu::Texture>>,
+    target: Arc<wgpu::Texture>,
     target_layer: u32,
     size: wgpu::Extent3d,
 }
 
 impl CopyTextureToTextureDescriptor {
     pub fn new(
-        source: Arc<Box<wgpu::Texture>>,
+        source: Arc<wgpu::Texture>,
         source_layer: u32,
-        target: Arc<Box<wgpu::Texture>>,
+        target: Arc<wgpu::Texture>,
         target_layer: u32,
         size: wgpu::Extent3d,
     ) -> Self {
@@ -137,7 +137,7 @@ impl UploadTracker {
     pub fn upload(
         &mut self,
         source: wgpu::Buffer,
-        destination: Arc<Box<wgpu::Buffer>>,
+        destination: Arc<wgpu::Buffer>,
         copy_size: usize,
     ) {
         assert!(copy_size < wgpu::BufferAddress::MAX as usize);
@@ -147,7 +147,7 @@ impl UploadTracker {
     pub fn upload_ba(
         &mut self,
         source: wgpu::Buffer,
-        destination: Arc<Box<wgpu::Buffer>>,
+        destination: Arc<wgpu::Buffer>,
         copy_size: wgpu::BufferAddress,
     ) {
         self.b2b_uploads.push(CopyBufferToBufferDescriptor::new(
@@ -160,7 +160,7 @@ impl UploadTracker {
     pub fn upload_to_array_element<T: Sized>(
         &mut self,
         source: wgpu::Buffer,
-        target_array: Arc<Box<wgpu::Buffer>>,
+        target_array: Arc<wgpu::Buffer>,
         array_offset: usize,
     ) {
         self.b2b_uploads.push(CopyBufferToBufferDescriptor::new_raw(
@@ -186,9 +186,9 @@ impl UploadTracker {
 
     pub fn copy_texture_to_texture(
         &mut self,
-        source: Arc<Box<wgpu::Texture>>,
+        source: Arc<wgpu::Texture>,
         source_layer: u32,
-        target: Arc<Box<wgpu::Texture>>,
+        target: Arc<wgpu::Texture>,
         target_layer: u32,
         size: wgpu::Extent3d,
     ) {

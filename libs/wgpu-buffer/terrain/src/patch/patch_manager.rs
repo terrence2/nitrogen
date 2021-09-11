@@ -69,7 +69,7 @@ pub(crate) struct PatchManager {
     live_vertices: Vec<TerrainUploadVertex>,
 
     // CPU generated patch corner vertices. Input to subdivision.
-    patch_upload_buffer: Arc<Box<wgpu::Buffer>>,
+    patch_upload_buffer: Arc<wgpu::Buffer>,
 
     // Metadata about the subdivision. We upload this in a buffer, then save the uploaded context
     // in our manager as a reference so that the CPU and GPU can share some constant (per run)
@@ -88,7 +88,7 @@ pub(crate) struct PatchManager {
 
     // The final buffer containing the fully tessellated and height-offset vertices.
     target_vertex_count: u32,
-    target_vertex_buffer: Arc<Box<wgpu::Buffer>>,
+    target_vertex_buffer: Arc<wgpu::Buffer>,
 
     // Index buffers for each patch size and winding.
     wireframe_index_buffers: Vec<wgpu::Buffer>,
@@ -115,25 +115,23 @@ impl PatchManager {
         let patch_upload_byte_size = TerrainUploadVertex::mem_size() * patch_upload_stride;
         let patch_upload_buffer_size =
             (patch_upload_byte_size * desired_patch_count) as wgpu::BufferAddress;
-        let patch_upload_buffer = Arc::new(Box::new(gpu.device().create_buffer(
-            &wgpu::BufferDescriptor {
-                label: Some("terrain-geo-patch-vertex-buffer"),
-                size: patch_upload_buffer_size,
-                usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::COPY_DST,
-                mapped_at_creation: false,
-            },
-        )));
+        let patch_upload_buffer = Arc::new(gpu.device().create_buffer(&wgpu::BufferDescriptor {
+            label: Some("terrain-geo-patch-vertex-buffer"),
+            size: patch_upload_buffer_size,
+            usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::COPY_DST,
+            mapped_at_creation: false,
+        }));
 
         // Create the context buffer for uploading uniform data to our subdivision process.
         let subdivide_context = SubdivisionContext {
             target_stride: GpuDetailLevel::vertices_per_subdivision(max_subdivisions) as u32,
             target_subdivision_level: max_subdivisions as u32,
         };
-        let subdivide_context_buffer = Arc::new(Box::new(gpu.push_data(
+        let subdivide_context_buffer = Arc::new(gpu.push_data(
             "subdivision-context",
             &subdivide_context,
             wgpu::BufferUsage::UNIFORM,
-        )));
+        ));
 
         // Create target vertex buffer.
         let target_vertex_count = subdivide_context.target_stride * desired_patch_count as u32;
@@ -142,14 +140,12 @@ impl PatchManager {
         assert_eq!(target_patch_byte_size % 4, 0);
         let target_vertex_buffer_size =
             (target_patch_byte_size * desired_patch_count) as wgpu::BufferAddress;
-        let target_vertex_buffer = Arc::new(Box::new(gpu.device().create_buffer(
-            &wgpu::BufferDescriptor {
-                label: Some("terrain-geo-sub-vertex-buffer"),
-                size: target_vertex_buffer_size,
-                usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::VERTEX,
-                mapped_at_creation: false,
-            },
-        )));
+        let target_vertex_buffer = Arc::new(gpu.device().create_buffer(&wgpu::BufferDescriptor {
+            label: Some("terrain-geo-sub-vertex-buffer"),
+            size: target_vertex_buffer_size,
+            usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::VERTEX,
+            mapped_at_creation: false,
+        }));
 
         let subdivide_prepare_bind_group_layout =
             gpu.device()

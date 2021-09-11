@@ -42,7 +42,7 @@ pub struct AtmosphereBuffer {
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
 
-    sun_direction_buffer: Arc<Box<wgpu::Buffer>>,
+    sun_direction_buffer: Arc<wgpu::Buffer>,
 }
 
 impl AtmosphereBuffer {
@@ -58,14 +58,12 @@ impl AtmosphereBuffer {
         ) = TableHelpers::initial_textures(gpu)?;
 
         let camera_and_sun_buffer_size = mem::size_of::<[[f32; 4]; 1]>() as u64;
-        let camera_and_sun_buffer = Arc::new(Box::new(gpu.device().create_buffer(
-            &wgpu::BufferDescriptor {
-                label: Some("atmosphere-sun-buffer"),
-                size: camera_and_sun_buffer_size,
-                usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
-                mapped_at_creation: false,
-            },
-        )));
+        let camera_and_sun_buffer = Arc::new(gpu.device().create_buffer(&wgpu::BufferDescriptor {
+            label: Some("atmosphere-sun-buffer"),
+            size: camera_and_sun_buffer_size,
+            usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+            mapped_at_creation: false,
+        }));
 
         let bind_group_layout =
             gpu.device()

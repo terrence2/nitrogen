@@ -111,16 +111,16 @@ pub(crate) struct SphericalTileSetCommon {
 
     index_paint_pipeline: wgpu::RenderPipeline,
     index_paint_range: Range<u32>,
-    index_paint_vert_buffer: Arc<Box<wgpu::Buffer>>,
+    index_paint_vert_buffer: Arc<wgpu::Buffer>,
 
     atlas_texture_format: wgpu::TextureFormat,
     atlas_texture_extent: wgpu::Extent3d,
-    atlas_texture: Arc<Box<wgpu::Texture>>,
+    atlas_texture: Arc<wgpu::Texture>,
     #[allow(unused)]
     atlas_texture_view: wgpu::TextureView,
     #[allow(unused)]
     atlas_texture_sampler: wgpu::Sampler,
-    atlas_tile_info: Arc<Box<wgpu::Buffer>>,
+    atlas_tile_info: Arc<wgpu::Buffer>,
 
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
@@ -326,14 +326,12 @@ impl SphericalTileSetCommon {
         });
         let atlas_tile_info_buffer_size =
             (mem::size_of::<TileInfo>() as u32 * gpu_detail.tile_cache_size) as wgpu::BufferAddress;
-        let atlas_tile_info = Arc::new(Box::new(gpu.device().create_buffer(
-            &wgpu::BufferDescriptor {
-                label: Some("terrain-geo-tile-info-buffer"),
-                size: atlas_tile_info_buffer_size,
-                mapped_at_creation: false,
-                usage: wgpu::BufferUsage::all(),
-            },
-        )));
+        let atlas_tile_info = Arc::new(gpu.device().create_buffer(&wgpu::BufferDescriptor {
+            label: Some("terrain-geo-tile-info-buffer"),
+            size: atlas_tile_info_buffer_size,
+            mapped_at_creation: false,
+            usage: wgpu::BufferUsage::all(),
+        }));
 
         // Note: layout has to correspond to kind.texture_format()
         let bind_group_layout =
@@ -440,11 +438,11 @@ impl SphericalTileSetCommon {
 
             index_paint_pipeline,
             index_paint_range,
-            index_paint_vert_buffer: Arc::new(Box::new(index_paint_vert_buffer)),
+            index_paint_vert_buffer: Arc::new(index_paint_vert_buffer),
 
             atlas_texture_format,
             atlas_texture_extent,
-            atlas_texture: Arc::new(Box::new(atlas_texture)),
+            atlas_texture: Arc::new(atlas_texture),
             atlas_texture_view,
             atlas_texture_sampler,
             atlas_tile_info,

@@ -159,7 +159,7 @@ pub struct GlobalParametersBuffer {
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
     buffer_size: wgpu::BufferAddress,
-    parameters_buffer: Arc<Box<wgpu::Buffer>>,
+    parameters_buffer: Arc<wgpu::Buffer>,
     tone_gamma: f32,
 }
 
@@ -169,12 +169,12 @@ impl GlobalParametersBuffer {
 
     pub fn new(device: &wgpu::Device, interpreter: &mut Interpreter) -> Arc<RwLock<Self>> {
         let buffer_size = mem::size_of::<Globals>() as wgpu::BufferAddress;
-        let parameters_buffer = Arc::new(Box::new(device.create_buffer(&wgpu::BufferDescriptor {
+        let parameters_buffer = Arc::new(device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("globals-buffer"),
             size: buffer_size,
             usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::COPY_DST,
             mapped_at_creation: false,
-        })));
+        }));
 
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("globals-bind-group-layout"),
