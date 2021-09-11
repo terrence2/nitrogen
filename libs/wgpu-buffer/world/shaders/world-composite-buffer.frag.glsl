@@ -21,6 +21,7 @@
 #include <wgpu-buffer/atmosphere/include/descriptorset.glsl>
 #include <wgpu-buffer/atmosphere/include/library.glsl>
 #include <wgpu-buffer/stars/include/stars.glsl>
+#include <wgpu-buffer/world/include/world.glsl>
 
 layout(location = 0) out vec4 f_color;
 layout(location = 0) in vec2 v_tc;
@@ -67,93 +68,36 @@ fullscreen_to_world_km(vec2 v_fullscreen, float z_ndc)
     return camera_inverse_view_km * inverse_scale * camera_inverse_perspective_m * clip;
 }
 
+vec4 ground_diffuse_color() {
+    // Load the accumulated color at the current screen position.
+    return texture(sampler2D(terrain_color_acc_texture, terrain_linear_sampler), v_tc);
+}
+
+vec3 ground_normal() {
+    // Load the accumulated normal at the current screen position and translate
+    // that from the storage format into a local vector assuming up is the y axis.
+    ivec2 ground_normal_raw = texture(isampler2D(terrain_normal_acc_texture, terrain_nearest_sampler), v_tc).xy;
+    vec2 ground_normal_flat = ground_normal_raw / 32768.0;
+    vec3 ground_normal_local = vec3(
+        ground_normal_flat.x,
+        sqrt(1.0 - (ground_normal_flat.x * ground_normal_flat.x + ground_normal_flat.y * ground_normal_flat.y)),
+        ground_normal_flat.y
+    );
+
+    // Translate the normal's local coordinates into global coordinates by using the lat/lon.
+    vec2 latlon = texture(sampler2D(terrain_deferred_texture, terrain_linear_sampler), v_tc).xy;
+    vec4 r_lon = quat_from_axis_angle(vec3(0, 1, 0), latlon.y);
+    vec3 lat_axis = quat_rotate(r_lon, vec3(1, 0, 0)).xyz;
+    vec4 r_lat = quat_from_axis_angle(lat_axis, PI / 2.0 - latlon.x);
+    return quat_rotate(r_lat, quat_rotate(r_lon, ground_normal_local).xyz).xyz;
+}
+
 void
 main()
 {
-    vec3 camera_view_direction_w = normalize(v_ray_world);
+    vec3 camera_direction_w = normalize(v_ray_world);
     vec3 camera_position_w_km = camera_position_km.xyz;
-    vec3 sun_direction = sun_direction.xyz;
-
-    // Compute ground alpha and radiance.
-    float ground_alpha = 0.0;
-    vec3 ground_radiance = vec3(0);
-
-    float depth_sample = texture(sampler2D(terrain_deferred_depth, terrain_linear_sampler), v_tc).x;
-    if (depth_sample > -1) {
-        ground_alpha = 1.0;
-
-        vec3 ground_intersect_w_km = fullscreen_to_world_km(v_fullscreen, depth_sample).xyz;
-
-        // These can be subtracted into the output to check if the inverse transform is working correctly.
-        // vec3 fake_view_direction_w = normalize(ground_intersect_w_km - camera_position_w_km);
-        // assert(fake_view_direction_w == camera_view_direction_w);
-
-        // Load the accumulated color at the current screen position.
-        vec3 ground_albedo = texture(sampler2D(terrain_color_acc_texture, terrain_linear_sampler), v_tc).xyz;
-
-        // Load the accumulated normal at the current screen position and translate
-        // that from the storage format into a local vector assuming up is the y axis.
-        ivec2 ground_normal_raw = texture(isampler2D(terrain_normal_acc_texture, terrain_nearest_sampler), v_tc).xy;
-        vec2 ground_normal_flat = ground_normal_raw / 32768.0;
-        vec3 ground_normal_local = vec3(
-            ground_normal_flat.x,
-            sqrt(1.0 - (ground_normal_flat.x * ground_normal_flat.x + ground_normal_flat.y * ground_normal_flat.y)),
-            ground_normal_flat.y
-        );
-
-        // Translate the normal's local coordinates into global coordinates by using the lat/lon.
-        vec2 latlon = texture(sampler2D(terrain_deferred_texture, terrain_linear_sampler), v_tc).xy;
-        vec4 r_lon = quat_from_axis_angle(vec3(0, 1, 0), latlon.y);
-        vec3 lat_axis = quat_rotate(r_lon, vec3(1, 0, 0)).xyz;
-        vec4 r_lat = quat_from_axis_angle(lat_axis, PI / 2.0 - latlon.x);
-        vec3 ground_normal_w = quat_rotate(r_lat, quat_rotate(r_lon, ground_normal_local).xyz).xyz;
-
-        // Get sun and sky irradiance at the ground point and modulate
-        // by the ground albedo.
-        vec3 sky_irradiance;
-        vec3 sun_irradiance;
-        get_sun_and_sky_irradiance(
-            atmosphere,
-            transmittance_texture,
-            transmittance_sampler,
-            irradiance_texture,
-            irradiance_sampler,
-            ground_intersect_w_km,
-            ground_normal_w,
-            sun_direction,
-            sun_irradiance,
-            sky_irradiance
-        );
-
-        // FIXME: this ground albedo scaling factor is arbitrary and dependent on our source material
-        ground_radiance = ground_albedo * 2 * (
-            // Todo: properer shadow maps so we can get sun visibility
-            sun_irradiance * get_sun_visibility(ground_intersect_w_km, sun_direction) +
-            sky_irradiance * get_sky_visibility(ground_intersect_w_km)
-        );
-
-        // Fade the radiance on the ground by the amount of atmosphere
-        // between us and that point and brighten by ambient in-scatter
-        // to the camera on that path.
-        vec3 transmittance;
-        vec3 in_scatter;
-        get_sky_radiance_to_point(
-            atmosphere,
-            transmittance_texture,
-            transmittance_sampler,
-            scattering_texture,
-            scattering_sampler,
-            single_mie_scattering_texture,
-            single_mie_scattering_sampler,
-            camera_position_w_km,
-            ground_intersect_w_km,
-            camera_view_direction_w,
-            sun_direction,
-            transmittance,
-            in_scatter
-        );
-        ground_radiance = ground_radiance * transmittance + in_scatter;
-    }
+    vec3 sun_direction_w = sun_direction.xyz;
 
     // Sky and stars
     vec3 sky_radiance = vec3(0);
@@ -167,14 +111,35 @@ main()
         single_mie_scattering_texture,
         single_mie_scattering_sampler,
         camera_position_w_km,
-        camera_view_direction_w,
-        sun_direction,
+        camera_direction_w,
+        sun_direction_w,
         transmittance,
-        sky_radiance);
+        sky_radiance
+    );
 
-    if (depth_sample == -1 &&
-        dot(camera_view_direction_w, sun_direction) > cos(atmosphere.sun_angular_radius))
-    {
+    // Compute ground alpha and radiance.
+    vec4 ground_albedo = vec4(0);
+    vec3 ground_radiance = vec3(0);
+    float depth_sample = texture(sampler2D(terrain_deferred_depth, terrain_linear_sampler), v_tc).x;
+    if (depth_sample > -1) {
+        vec3 ground_intersect_w_km = fullscreen_to_world_km(v_fullscreen, depth_sample).xyz;
+
+        // These can be subtracted into the output to check if the inverse transform is working correctly.
+        // vec3 fake_view_direction_w = normalize(ground_intersect_w_km - camera_position_w_km);
+        // assert(fake_view_direction_w == camera_direction_w);
+
+        ground_albedo = ground_diffuse_color();
+        vec3 ground_normal_w = ground_normal();
+
+        ground_radiance = radiance_at_point(
+            ground_intersect_w_km,
+            ground_normal_w,
+            ground_albedo.rgb,
+            sun_direction_w,
+            camera_position_w_km,
+            camera_direction_w
+        );
+    } else if (dot(camera_direction_w, sun_direction_w) > cos(atmosphere.sun_angular_radius)) {
         vec3 sun_lums = get_solar_luminance(
             vec3(atmosphere.sun_irradiance),
             atmosphere.sun_angular_radius,
@@ -185,15 +150,12 @@ main()
 
     vec3 star_radiance;
     float star_alpha = 0.5;
-    show_stars(camera_view_direction_w, star_radiance, star_alpha);
+    show_stars(camera_direction_w, star_radiance, star_alpha);
 
     vec3 radiance = sky_radiance + star_radiance * star_alpha;
-    radiance = mix(radiance, ground_radiance, ground_alpha);
+    radiance = mix(radiance, ground_radiance, ground_albedo.w);
 
-    vec3 color = pow(
-        vec3(1.0) - exp(-radiance / vec3(atmosphere.whitepoint) * MAX_LUMINOUS_EFFICACY * camera_exposure),
-        vec3(1.0 / tone_gamma)
-    );
+    vec3 color = tone_mapping(radiance);
 
     f_color = vec4(color, 1);
 }

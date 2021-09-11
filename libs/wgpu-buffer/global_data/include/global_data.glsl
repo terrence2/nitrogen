@@ -38,6 +38,7 @@ layout(set = 0, binding = 0) buffer CameraParameters {
     mat4 camera_view_km;
     mat4 camera_inverse_view_m;
     mat4 camera_inverse_view_km;
+    mat4 camera_look_at_rhs_m;
     float camera_exposure;
 
     // Tone mapping

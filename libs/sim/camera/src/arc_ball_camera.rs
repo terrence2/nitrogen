@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::Camera;
 use absolute_unit::{
-    degrees, meters, radians, Angle, Degrees, Kilometers, Length, LengthUnit, Meters,
+    degrees, meters, radians, Angle, Degrees, Kilometers, Length, LengthUnit, Meters, Radians,
 };
 use anyhow::{bail, ensure, Result};
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
@@ -180,6 +180,16 @@ impl ArcBallCamera {
     }
 
     #[method]
+    pub fn target_latitude_radians(&self) -> f64 {
+        self.target.lat::<Radians>().f64()
+    }
+
+    #[method]
+    pub fn target_longitude_radians(&self) -> f64 {
+        self.target.lon::<Radians>().f64()
+    }
+
+    #[method]
     pub fn target_height_meters(&self) -> f64 {
         meters!(self.target.distance).f64()
     }
@@ -192,6 +202,16 @@ impl ArcBallCamera {
     #[method]
     pub fn set_target_longitude_degrees(&mut self, v: f64) {
         self.target.longitude = radians!(degrees!(v));
+    }
+
+    #[method]
+    pub fn set_target_latitude_radians(&mut self, v: f64) {
+        self.target.latitude = radians!(v);
+    }
+
+    #[method]
+    pub fn set_target_longitude_radians(&mut self, v: f64) {
+        self.target.longitude = radians!(v);
     }
 
     #[method]
@@ -210,6 +230,16 @@ impl ArcBallCamera {
     }
 
     #[method]
+    pub fn eye_latitude_radians(&self) -> f64 {
+        self.eye.lat::<Radians>().f64()
+    }
+
+    #[method]
+    pub fn eye_longitude_radians(&self) -> f64 {
+        self.eye.lon::<Radians>().f64()
+    }
+
+    #[method]
     pub fn eye_distance_meters(&self) -> f64 {
         meters!(self.eye.distance).f64()
     }
@@ -222,6 +252,16 @@ impl ArcBallCamera {
     #[method]
     pub fn set_eye_longitude_degrees(&mut self, v: f64) {
         self.eye.longitude = radians!(degrees!(v));
+    }
+
+    #[method]
+    pub fn set_eye_latitude_radians(&mut self, v: f64) {
+        self.eye.latitude = radians!(v);
+    }
+
+    #[method]
+    pub fn set_eye_longitude_radians(&mut self, v: f64) {
+        self.eye.longitude = radians!(v);
     }
 
     #[method]

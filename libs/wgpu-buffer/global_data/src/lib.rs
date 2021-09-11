@@ -82,6 +82,7 @@ struct Globals {
     camera_view_km: [[f32; 4]; 4],
     camera_inverse_view_m: [[f32; 4]; 4],
     camera_inverse_view_km: [[f32; 4]; 4],
+    camera_look_at_rhs_m: [[f32; 4]; 4],
     camera_exposure: f32,
 
     // Tone mapping
@@ -137,6 +138,12 @@ impl Globals {
         self.camera_inverse_view_m = m44_to_v(&camera.view::<Meters>().inverse().to_homogeneous());
         self.camera_inverse_view_km =
             m44_to_v(&camera.view::<Kilometers>().inverse().to_homogeneous());
+        self.camera_look_at_rhs_m = m44_to_v(
+            &camera
+                .look_at_rh::<Meters>()
+                .to_rotation_matrix()
+                .to_homogeneous(),
+        );
         self.camera_exposure = camera.exposure();
         self
     }

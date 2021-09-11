@@ -25,4 +25,8 @@ impl Scale {
     pub fn compact(self) -> [f32; 1] {
         [self.0]
     }
+
+    pub fn scale(&self) -> f32 {
+        self.0
+    }
 }

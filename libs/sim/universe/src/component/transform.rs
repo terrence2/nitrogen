@@ -26,4 +26,8 @@ impl Transform {
     pub fn cartesian(&self) -> Cartesian<GeoCenter, Kilometers> {
         Cartesian::<GeoCenter, Kilometers>::from(Graticule::<GeoCenter>::from(self.0))
     }
+
+    pub fn graticule(&self) -> &Graticule<GeoSurface> {
+        &self.0
+    }
 }

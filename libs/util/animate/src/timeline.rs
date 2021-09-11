@@ -294,4 +294,37 @@ impl Timeline {
     ) -> Result<Value> {
         self.with_curve(callable, start, end, duration_sec, Self::EASE_BEZIER)
     }
+
+    #[method]
+    pub fn ease_in_to(
+        &mut self,
+        callable: Value,
+        start: Value,
+        end: Value,
+        duration_sec: f64,
+    ) -> Result<Value> {
+        self.with_curve(callable, start, end, duration_sec, Self::EASE_IN_BEZIER)
+    }
+
+    #[method]
+    pub fn ease_out_to(
+        &mut self,
+        callable: Value,
+        start: Value,
+        end: Value,
+        duration_sec: f64,
+    ) -> Result<Value> {
+        self.with_curve(callable, start, end, duration_sec, Self::EASE_OUT_BEZIER)
+    }
+
+    #[method]
+    pub fn ease_in_out_to(
+        &mut self,
+        callable: Value,
+        start: Value,
+        end: Value,
+        duration_sec: f64,
+    ) -> Result<Value> {
+        self.with_curve(callable, start, end, duration_sec, Self::EASE_IN_OUT_BEZIER)
+    }
 }
