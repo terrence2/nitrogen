@@ -63,7 +63,7 @@ pub enum AnimationState {
 #[derive(Debug)]
 struct ScriptableAnimation {
     trigger: Trigger,
-    callable: Value,
+    callable: Option<Value>,
     start: Value,
     end: Value,
     bezier: CubicBezierCurve,
@@ -84,10 +84,24 @@ impl ScriptableAnimation {
     ) -> Self {
         Self {
             trigger,
-            callable,
+            callable: Some(callable),
             start,
             end,
             bezier,
+            duration,
+            duration_f64: duration.as_secs_f64(),
+            start_time: None,
+            state: AnimationState::Starting,
+        }
+    }
+
+    pub fn empty(trigger: Trigger, duration: Duration) -> Self {
+        Self {
+            trigger,
+            callable: None,
+            start: 0.0.into(),
+            end: 0.0.into(),
+            bezier: Timeline::LINEAR_BEZIER,
             duration,
             duration_f64: duration.as_secs_f64(),
             start_time: None,
@@ -132,8 +146,10 @@ impl ScriptableAnimation {
             self.state = AnimationState::Running;
             (self.start.clone(), false)
         };
-        let (module, name) = self.callable.to_method()?;
-        module.write().call_method(name, &[current])?;
+        if let Some(callable) = &self.callable {
+            let (module, name) = callable.to_method()?;
+            module.write().call_method(name, &[current])?;
+        }
         if ended {
             self.state = AnimationState::Finished;
             self.trigger.trigger();
@@ -326,5 +342,17 @@ impl Timeline {
         duration_sec: f64,
     ) -> Result<Value> {
         self.with_curve(callable, start, end, duration_sec, Self::EASE_IN_OUT_BEZIER)
+    }
+
+    #[method]
+    pub fn sleep(&mut self, duration_sec: f64) -> Result<Value> {
+        let (trigger, listener) = trigger();
+        self.animations.push(ScriptableAnimation::empty(
+            trigger,
+            Duration::from_secs_f64(duration_sec),
+        ));
+        Ok(Value::Future(Arc::new(RwLock::new(Box::pin(
+            listener.then(|_| ready(Value::True())),
+        )))))
     }
 }

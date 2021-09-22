@@ -21,11 +21,13 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use gpu::{
-    size::{AbsSize, LeftBound, RelSize, Size},
+    size::{AbsSize, LeftBound, RelSize, ScreenDir, Size},
     Gpu,
 };
 use input::GenericEvent;
 use nitrous::Interpreter;
+use nitrous::Value;
+use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use std::{collections::HashMap, sync::Arc, time::Instant};
 
@@ -36,6 +38,11 @@ pub struct FloatPacking {
     widget: Arc<RwLock<dyn Widget>>,
     float_h: PositionH,
     float_v: PositionV,
+    offset_x: Size,
+    offset_y: Size,
+
+    /// Whether to take all remaining space, or just the asked for amount
+    expand: bool,
 }
 
 impl FloatPacking {
@@ -45,6 +52,9 @@ impl FloatPacking {
             widget,
             float_h: PositionH::Start,
             float_v: PositionV::Top,
+            offset_x: Size::zero(),
+            offset_y: Size::zero(),
+            expand: true,
         }
     }
 
@@ -60,10 +70,19 @@ impl FloatPacking {
         self.float_h = float_h;
         self.float_v = float_v;
     }
+
+    pub fn set_offset(&mut self, offset_x: Size, offset_y: Size) {
+        self.offset_x = offset_x;
+        self.offset_y = offset_y;
+    }
+
+    pub fn set_expand(&mut self, expand: bool) {
+        self.expand = expand;
+    }
 }
 
 // Items packed from top to bottom.
-#[derive(Debug)]
+#[derive(Debug, NitrousModule)]
 pub struct FloatBox {
     children: HashMap<String, FloatPacking>,
 
@@ -71,6 +90,7 @@ pub struct FloatBox {
     extent: Extent<RelSize>,
 }
 
+#[inject_nitrous_module]
 impl FloatBox {
     pub fn new() -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(Self {
@@ -97,6 +117,46 @@ impl FloatBox {
             .get_mut(name)
             .ok_or_else(|| anyhow!("mut request for unknown widget in float"))
     }
+
+    #[method]
+    pub fn child_float(&mut self, name: &str, horizontal: &str, vertical: &str) -> Value {
+        if let Some(child) = self.children.get_mut(name) {
+            let float_h = match horizontal {
+                "start" => PositionH::Start,
+                "center" => PositionH::Center,
+                "end" => PositionH::End,
+                _ => {
+                    return "unknown horizontal float, expected one of start, center, or end"
+                        .to_owned()
+                        .into()
+                }
+            };
+            let float_v = match vertical {
+                "top" => PositionV::Top,
+                "center" => PositionV::Center,
+                "bottom" => PositionV::Bottom,
+                _ => {
+                    return "unknown vertical float, expected one of top, center, or bottom"
+                        .to_owned()
+                        .into()
+                }
+            };
+            child.set_float(float_h, float_v);
+            Value::True()
+        } else {
+            format!("no such child: {}", name).into()
+        }
+    }
+
+    #[method]
+    pub fn child_offset(&mut self, name: &str, x: f64, y: f64) -> Value {
+        if let Some(child) = self.children.get_mut(name) {
+            child.set_offset(Size::from_percent(x as f32), Size::from_percent(y as f32));
+            Value::True()
+        } else {
+            format!("no such child: {}", name).into()
+        }
+    }
 }
 
 impl Widget for FloatBox {
@@ -122,17 +182,33 @@ impl Widget for FloatBox {
                     PositionH::Start => RelSize::from_percent(0.),
                     PositionH::Center => (extent.width() / 2.) - (child_extent.width() / 2.),
                     PositionH::End => extent.width() - child_extent.width(),
-                };
+                }
+                + pack.offset_x.as_rel(gpu, ScreenDir::Horizontal);
             let top_offset = position.bottom()
                 + match pack.float_v {
                     PositionV::Top => extent.height() - child_extent.height(),
                     PositionV::Center => (extent.height() / 2.) - (child_extent.height() / 2.),
                     PositionV::Bottom => RelSize::zero(),
-                };
-            let remaining_extent = Extent::<Size>::new(
+                }
+                + pack.offset_y.as_rel(gpu, ScreenDir::Vertical);
+            let mut remaining_extent = Extent::<Size>::new(
                 (extent.width() - left_offset).into(),
                 (extent.height() - top_offset).into(),
             );
+            if !pack.expand {
+                remaining_extent.set_width(Size::from_percent(
+                    remaining_extent
+                        .width()
+                        .as_percent(gpu, ScreenDir::Horizontal)
+                        .min(child_extent.width().as_percent()),
+                ));
+                remaining_extent.set_height(Size::from_percent(
+                    remaining_extent
+                        .height()
+                        .as_percent(gpu, ScreenDir::Vertical)
+                        .min(child_extent.height().as_percent()),
+                ));
+            }
             widget.layout(
                 now,
                 Region::new(

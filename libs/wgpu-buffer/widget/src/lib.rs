@@ -231,8 +231,13 @@ impl WidgetBuffer {
         Ok(widget)
     }
 
-    pub fn root(&self) -> Arc<RwLock<FloatBox>> {
+    pub fn root_container(&self) -> Arc<RwLock<FloatBox>> {
         self.root.clone()
+    }
+
+    #[method]
+    pub fn root(&self) -> Value {
+        Value::Module(self.root.clone())
     }
 
     pub fn set_keyboard_focus(&mut self, name: &str) {
@@ -337,7 +342,7 @@ impl WidgetBuffer {
                     logical_size.height() - AbsSize::from_px((y / scale_factor) as f32),
                 );
             }
-            self.root().write().handle_event(
+            self.root_container().write().handle_event(
                 now,
                 event,
                 &self.keyboard_focus,
@@ -465,7 +470,11 @@ mod test {
             Y [ˈʏpsilɔn], Yen [jɛn], Yoga [ˈjoːgɑ]",
         )
         .wrapped();
-        widgets.read().root().write().add_child("label", label);
+        widgets
+            .read()
+            .root_container()
+            .write()
+            .add_child("label", label);
 
         let mut tracker = Default::default();
         widgets.write().make_upload_buffer(

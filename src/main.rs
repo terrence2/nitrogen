@@ -297,7 +297,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         .wrapped();
     widgets
         .read()
-        .root()
+        .root_container()
         .write()
         .add_child("controls", expander)
         .set_float(PositionH::End, PositionV::Top);
@@ -310,7 +310,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         .wrapped();
     widgets
         .read()
-        .root()
+        .root_container()
         .write()
         .add_child("fps", fps_label.clone())
         .set_float(PositionH::Start, PositionV::Bottom);

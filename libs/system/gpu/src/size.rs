@@ -418,6 +418,13 @@ impl Size {
         }
     }
 
+    pub fn as_percent(self, gpu: &Gpu, screen_dir: ScreenDir) -> f32 {
+        match self {
+            Self::Rel(v) => v.as_percent(),
+            Self::Abs(v) => v.as_rel(gpu, screen_dir).as_percent(),
+        }
+    }
+
     pub fn as_px(self, gpu: &Gpu, screen_dir: ScreenDir) -> f32 {
         match self {
             Self::Rel(v) => v.as_abs(gpu, screen_dir).as_px(),
