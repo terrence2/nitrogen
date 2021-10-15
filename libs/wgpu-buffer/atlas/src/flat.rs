@@ -114,6 +114,10 @@ impl Frame {
         }
     }
 
+    pub fn raw_base(&self) -> (u32, u32) {
+        (self.s0, self.t0)
+    }
+
     pub fn s0(&self, width: u32) -> f32 {
         self.s0 as f32 / width as f32
     }
@@ -408,6 +412,10 @@ where
 
     pub fn height(&self) -> u32 {
         self.height
+    }
+
+    pub fn atlas_size(&self) -> usize {
+        self.width as usize * self.height as usize * mem::size_of::<P>()
     }
 
     pub fn with_padding(mut self, padding: u32) -> Self {

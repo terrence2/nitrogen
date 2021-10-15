@@ -101,7 +101,7 @@ impl ArcBallCamera {
         Ok(match name {
             "ISS" => Graticule::<GeoSurface>::new(
                 degrees!(27.9880704),
-                degrees!(-86.9245623), // FIXME: wat?
+                degrees!(-86.9245623),
                 meters!(408_000.),
             ),
             "Everest" => Graticule::<GeoSurface>::new(

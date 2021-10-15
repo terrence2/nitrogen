@@ -345,6 +345,27 @@ impl Timeline {
     }
 
     #[method]
+    pub fn ease_bezier_to(
+        &mut self,
+        callable: Value,
+        start: Value,
+        end: Value,
+        duration_sec: f64,
+        x1: f64,
+        y1: f64,
+        x2: f64,
+        y2: f64,
+    ) -> Result<Value> {
+        self.with_curve(
+            callable,
+            start,
+            end,
+            duration_sec,
+            CubicBezierCurve::new((x1, y1), (x2, y2)),
+        )
+    }
+
+    #[method]
     pub fn sleep(&mut self, duration_sec: f64) -> Result<Value> {
         let (trigger, listener) = trigger();
         self.animations.push(ScriptableAnimation::empty(

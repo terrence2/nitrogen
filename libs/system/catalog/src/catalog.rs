@@ -178,6 +178,10 @@ impl Catalog {
             .add_drawer(shelf_id, drawer)
     }
 
+    pub fn list_labels(&self) -> Vec<String> {
+        self.shelf_index.keys().cloned().collect()
+    }
+
     pub fn find_labeled_matching(
         &self,
         label: &str,

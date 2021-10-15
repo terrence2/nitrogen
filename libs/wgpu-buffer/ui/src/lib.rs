@@ -49,7 +49,7 @@ impl UiRenderPass {
         let deferred_bind_group_layout =
             gpu.device()
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("world-deferred-bind-group-layout"),
+                    label: Some("ui-deferred-bind-group-layout"),
                     entries: &[
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
@@ -74,7 +74,7 @@ impl UiRenderPass {
                 });
 
         let deferred_sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("world-deferred-sampler"),
+            label: Some("ui-deferred-sampler"),
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
@@ -360,7 +360,7 @@ impl UiRenderPass {
             Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
                 attachment: &self.deferred_depth.1,
                 depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(-1f32),
+                    load: wgpu::LoadOp::Clear(0f32),
                     store: true,
                 }),
                 stencil_ops: None,
