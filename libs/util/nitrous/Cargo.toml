@@ -8,7 +8,7 @@ edition = "2018"
 lalrpop = "0.19.4"
 
 [dependencies]
-anyhow = "^ 1"
+anyhow = { version = "^ 1", features = ["backtrace"] }
 lalrpop-util = "0.19.4"
 log = "^ 0.4"
 futures = "^ 0.3"

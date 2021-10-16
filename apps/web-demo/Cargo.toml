@@ -8,7 +8,7 @@ edition = "2018"
 crate-type = ["cdylib"]
 
 [dependencies]
-anyhow = "^ 1"
+anyhow = { version = "^ 1", features = ["backtrace"] }
 console_error_panic_hook = "^ 0.1"
 log = "^ 0.4"
 parking_lot = "^ 0.11"

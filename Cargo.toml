@@ -58,7 +58,7 @@ members = [
 [dependencies]
 chrono = "^ 0.4"
 env_logger = "^ 0.8"
-anyhow = "^ 1"
+anyhow = { version = "^ 1", features = ["backtrace"] }
 image = "^ 0.23"
 legion = "^ 0.4"
 log = "^ 0.4"

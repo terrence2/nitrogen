@@ -7,7 +7,7 @@ edition = "2018"
 [dependencies]
 approx = "^ 0.5"
 bzip2 = "^ 0.4"
-anyhow = "^ 1"
+anyhow = { version = "^ 1", features = ["backtrace"] }
 image = "^ 0.23"
 json = "^ 0.12"
 memmap = "^ 0.7"
