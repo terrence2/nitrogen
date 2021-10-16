@@ -189,9 +189,9 @@ dependencies = [
 
 [[package]]
 name = "atomic_refcell"
-version = "0.1.6"
+version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3bc31dce067eab974c815a9deb95f6217806de7b53685d7fc31f8ccf3fb2539f"
+checksum = "73b5e5f48b927f04e952dedc932f31995a65a0bf65ec971c74436e51bf6e970d"
 
 [[package]]
 name = "atty"
@@ -233,9 +233,9 @@ checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
 
 [[package]]
 name = "bitflags"
-version = "1.2.1"
+version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf1de2fe8c75bc145a2f577add951f8134889b4795d47466a54a5c846d691693"
+checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "blake2b_simd"
@@ -272,27 +272,27 @@ checksum = "63396b8a4b9de3f4fdfb320ab6080762242f66a8ef174c49d8e19b674db4cdbe"
 
 [[package]]
 name = "bytemuck"
-version = "1.5.1"
+version = "1.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bed57e2090563b83ba8f83366628ce535a7584c9afa4c9fc0612a03925c6df58"
+checksum = "72957246c41db82b8ef88a5486143830adeb8227ef9837740bdec67724cf2c5b"
 
 [[package]]
 name = "byteorder"
-version = "1.4.2"
+version = "1.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae44d1a3d5a19df61dd0c8beb138458ac2a53a7ac09eba97d55592540004306b"
+checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
 name = "bytes"
-version = "1.0.1"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b700ce4376041dcd0a327fd0097c41095743c4c8af8887265942faf1100bd040"
+checksum = "c4872d67bab6358e59559027aa3b9157c53d9358c51423c17554809a8858e0f8"
 
 [[package]]
 name = "bzip2"
-version = "0.4.2"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "abf8012c8a15d5df745fcf258d93e6149dcf102882c8d8702d9cff778eab43a8"
+checksum = "6afcd980b5f3a45017c57e57a2fcccbb351cc43a356ce117ef760ef8052b89b0"
 dependencies = [
  "bzip2-sys",
  "libc",
@@ -300,9 +300,9 @@ dependencies = [
 
 [[package]]
 name = "bzip2-sys"
-version = "0.1.10+1.0.8"
+version = "0.1.11+1.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17fa3d1ac1ca21c5c4e36a97f3c3eb25084576f6fc47bf0139c1123434216c6c"
+checksum = "736a955f3fa7875102d57c82b8cac37ec45224a07fd32d58f9f7a186b6cd4cdc"
 dependencies = [
  "cc",
  "libc",
@@ -471,11 +471,11 @@ dependencies = [
 
 [[package]]
 name = "console_error_panic_hook"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8d976903543e0c48546a91908f21588a680a8c8f984df9a5d69feccb2b2a211"
+checksum = "a06aeb73f470f66dcdbf7223caeebb85984942f22f1adb2a088cf9668146bbbc"
 dependencies = [
- "cfg-if 0.1.10",
+ "cfg-if 1.0.0",
  "wasm-bindgen",
 ]
 
