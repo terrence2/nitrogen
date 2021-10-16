@@ -344,6 +344,7 @@ impl Timeline {
         self.with_curve(callable, start, end, duration_sec, Self::EASE_IN_OUT_BEZIER)
     }
 
+    #[allow(clippy::too_many_arguments)]
     #[method]
     pub fn ease_bezier_to(
         &mut self,
