@@ -221,6 +221,9 @@ impl Widget for Terminal {
                             .write()
                             .append_line(&("> ".to_owned() + &command));
 
+                        // And print to the console in case we need to copy the transaction.
+                        println!("{}", command);
+
                         let output = self.output.clone();
                         rayon::spawn(move || match interpreter.write().interpret_once(&command) {
                             Ok(value) => {
@@ -230,6 +233,7 @@ impl Widget for Terminal {
                                 };
                                 for line in s.lines() {
                                     output.write().append_line(line);
+                                    println!("{}", line);
                                 }
                             }
                             Err(err) => {

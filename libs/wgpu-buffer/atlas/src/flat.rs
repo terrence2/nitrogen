@@ -114,6 +114,10 @@ impl Frame {
         }
     }
 
+    pub fn raw_base(&self) -> (u32, u32) {
+        (self.s0, self.t0)
+    }
+
     pub fn s0(&self, width: u32) -> f32 {
         self.s0 as f32 / width as f32
     }
@@ -187,11 +191,11 @@ pub struct AtlasPacker<P: Pixel + 'static> {
 
     // Upload state
     dirty_region: DirtyState,
-    texture: Arc<Box<wgpu::Texture>>,
+    texture: Arc<wgpu::Texture>,
     texture_view: wgpu::TextureView,
     sampler: wgpu::Sampler,
     dump_texture: Option<String>,
-    next_texture: Option<Arc<Box<wgpu::Texture>>>,
+    next_texture: Option<Arc<wgpu::Texture>>,
 
     // CPU-side list of buffers that need to be blit into the target texture these can either
     // get directly encoded for aligned upload-as-copy, or need to get deferred to a gpu compute
@@ -253,21 +257,19 @@ where
             compare: None,
             border_color: None,
         });
-        let texture = Arc::new(Box::new(gpu.device().create_texture(
-            &wgpu::TextureDescriptor {
-                label: Some("atlas-texture"),
-                size: wgpu::Extent3d {
-                    width: initial_width,
-                    height: initial_height,
-                    depth: 1,
-                },
-                mip_level_count: 1, // TODO: mip-mapping for atlas textures?
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format,
-                usage,
+        let texture = Arc::new(gpu.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("atlas-texture"),
+            size: wgpu::Extent3d {
+                width: initial_width,
+                height: initial_height,
+                depth: 1,
             },
-        )));
+            mip_level_count: 1, // TODO: mip-mapping for atlas textures?
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format,
+            usage,
+        }));
         let texture_view = texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some("atlas-texture-view"),
             format: None,
@@ -410,6 +412,10 @@ where
 
     pub fn height(&self) -> u32 {
         self.height
+    }
+
+    pub fn atlas_size(&self) -> usize {
+        self.width as usize * self.height as usize * mem::size_of::<P>()
     }
 
     pub fn with_padding(mut self, padding: u32) -> Self {
@@ -636,8 +642,8 @@ where
                 // We create a fresh binding every frame so that we can drop in a new texture
                 // here easily, however, the content is going to take a frame to upload, so we
                 // need to actually delay replacing it until the next frame.
-                let next_texture = Arc::new(Box::new(gpu.device().create_texture(
-                    &wgpu::TextureDescriptor {
+                let next_texture =
+                    Arc::new(gpu.device().create_texture(&wgpu::TextureDescriptor {
                         label: Some("atlas-texture"),
                         size: wgpu::Extent3d {
                             width: self.width,
@@ -649,8 +655,7 @@ where
                         dimension: wgpu::TextureDimension::D2,
                         format: self.format,
                         usage: self.usage,
-                    },
-                )));
+                    }));
                 tracker.copy_texture_to_texture(
                     self.texture.clone(),
                     0,
@@ -675,17 +680,15 @@ where
                 height: item.height,
                 depth: 1,
             };
-            let img_texture = Arc::new(Box::new(gpu.device().create_texture(
-                &wgpu::TextureDescriptor {
-                    label: Some("atlas-img-upload-texture"),
-                    size: img_extent,
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: self.format,
-                    usage: wgpu::TextureUsage::COPY_DST | wgpu::TextureUsage::SAMPLED,
-                },
-            )));
+            let img_texture = Arc::new(gpu.device().create_texture(&wgpu::TextureDescriptor {
+                label: Some("atlas-img-upload-texture"),
+                size: img_extent,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: self.format,
+                usage: wgpu::TextureUsage::COPY_DST | wgpu::TextureUsage::SAMPLED,
+            }));
             tracker.copy_owned_buffer_to_arc_texture(
                 OwnedBufferCopyView {
                     buffer: item.img_buffer,
@@ -818,7 +821,7 @@ where
         gpu: &mut Gpu,
         async_rt: &Runtime,
         tracker: &mut UploadTracker,
-    ) -> Result<(Arc<Box<wgpu::Texture>>, wgpu::TextureView, wgpu::Sampler)> {
+    ) -> Result<(Arc<wgpu::Texture>, wgpu::TextureView, wgpu::Sampler)> {
         // Note: we need to crank make_upload_buffer twice because of the way
         // we defer moving to a new texture to ensure in-flight uploads happen.
         self.make_upload_buffer(gpu, async_rt, tracker)?;

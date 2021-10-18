@@ -99,10 +99,10 @@ pub struct WidgetBuffer {
     show_terminal: bool,
 
     // The four key buffers.
-    widget_info_buffer: Arc<Box<wgpu::Buffer>>,
-    background_vertex_buffer: Arc<Box<wgpu::Buffer>>,
-    image_vertex_buffer: Arc<Box<wgpu::Buffer>>,
-    text_vertex_buffer: Arc<Box<wgpu::Buffer>>,
+    widget_info_buffer: Arc<wgpu::Buffer>,
+    background_vertex_buffer: Arc<wgpu::Buffer>,
+    image_vertex_buffer: Arc<wgpu::Buffer>,
+    text_vertex_buffer: Arc<wgpu::Buffer>,
 
     // The accumulated bind group for all widget rendering, encompassing everything we uploaded above.
     bind_group_layout: wgpu::BindGroupLayout,
@@ -134,50 +134,43 @@ impl WidgetBuffer {
         // Create the core widget info buffer.
         let widget_info_buffer_size =
             (mem::size_of::<WidgetInfo>() * Self::MAX_WIDGETS) as wgpu::BufferAddress;
-        let widget_info_buffer = Arc::new(Box::new(gpu.device().create_buffer(
-            &wgpu::BufferDescriptor {
-                label: Some("widget-info-buffer"),
-                size: widget_info_buffer_size,
-                usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::UNIFORM,
-                mapped_at_creation: false,
-            },
-        )));
+        let widget_info_buffer = Arc::new(gpu.device().create_buffer(&wgpu::BufferDescriptor {
+            label: Some("widget-info-buffer"),
+            size: widget_info_buffer_size,
+            usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::UNIFORM,
+            mapped_at_creation: false,
+        }));
 
         // Create the background vertex buffer.
         let background_vertex_buffer_size =
             (mem::size_of::<WidgetVertex>() * Self::MAX_BACKGROUND_VERTICES) as wgpu::BufferAddress;
-        let background_vertex_buffer = Arc::new(Box::new(gpu.device().create_buffer(
-            &wgpu::BufferDescriptor {
+        let background_vertex_buffer =
+            Arc::new(gpu.device().create_buffer(&wgpu::BufferDescriptor {
                 label: Some("widget-bg-vertex-buffer"),
                 size: background_vertex_buffer_size,
                 usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::VERTEX,
                 mapped_at_creation: false,
-            },
-        )));
+            }));
 
         // Create the image vertex buffer.
         let image_vertex_buffer_size =
             (mem::size_of::<WidgetVertex>() * Self::MAX_IMAGE_VERTICES) as wgpu::BufferAddress;
-        let image_vertex_buffer = Arc::new(Box::new(gpu.device().create_buffer(
-            &wgpu::BufferDescriptor {
-                label: Some("widget-image-vertex-buffer"),
-                size: image_vertex_buffer_size,
-                usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::VERTEX,
-                mapped_at_creation: false,
-            },
-        )));
+        let image_vertex_buffer = Arc::new(gpu.device().create_buffer(&wgpu::BufferDescriptor {
+            label: Some("widget-image-vertex-buffer"),
+            size: image_vertex_buffer_size,
+            usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::VERTEX,
+            mapped_at_creation: false,
+        }));
 
         // Create the text vertex buffer.
         let text_vertex_buffer_size =
             (mem::size_of::<WidgetVertex>() * Self::MAX_TEXT_VERTICES) as wgpu::BufferAddress;
-        let text_vertex_buffer = Arc::new(Box::new(gpu.device().create_buffer(
-            &wgpu::BufferDescriptor {
-                label: Some("widget-text-vertex-buffer"),
-                size: text_vertex_buffer_size,
-                usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::VERTEX,
-                mapped_at_creation: false,
-            },
-        )));
+        let text_vertex_buffer = Arc::new(gpu.device().create_buffer(&wgpu::BufferDescriptor {
+            label: Some("widget-text-vertex-buffer"),
+            size: text_vertex_buffer_size,
+            usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::VERTEX,
+            mapped_at_creation: false,
+        }));
 
         let bind_group_layout =
             gpu.device()
@@ -238,8 +231,13 @@ impl WidgetBuffer {
         Ok(widget)
     }
 
-    pub fn root(&self) -> Arc<RwLock<FloatBox>> {
+    pub fn root_container(&self) -> Arc<RwLock<FloatBox>> {
         self.root.clone()
+    }
+
+    #[method]
+    pub fn root(&self) -> Value {
+        Value::Module(self.root.clone())
     }
 
     pub fn set_keyboard_focus(&mut self, name: &str) {
@@ -344,7 +342,7 @@ impl WidgetBuffer {
                     logical_size.height() - AbsSize::from_px((y / scale_factor) as f32),
                 );
             }
-            self.root().write().handle_event(
+            self.root_container().write().handle_event(
                 now,
                 event,
                 &self.keyboard_focus,
@@ -472,7 +470,11 @@ mod test {
             Y [ˈʏpsilɔn], Yen [jɛn], Yoga [ˈjoːgɑ]",
         )
         .wrapped();
-        widgets.read().root().write().add_child("label", label);
+        widgets
+            .read()
+            .root_container()
+            .write()
+            .add_child("label", label);
 
         let mut tracker = Default::default();
         widgets.write().make_upload_buffer(

@@ -134,6 +134,12 @@ impl From<f64> for Value {
     }
 }
 
+impl From<String> for Value {
+    fn from(s: String) -> Self {
+        Self::String(s)
+    }
+}
+
 impl From<Graticule<GeoSurface>> for Value {
     fn from(grat: Graticule<GeoSurface>) -> Self {
         Self::Graticule(grat)

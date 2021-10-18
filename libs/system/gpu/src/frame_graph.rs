@@ -63,7 +63,7 @@ macro_rules! make_frame_graph_pass {
     ) => {{
         let (color_attachments, depth_stencil_attachment) = $pass_target_buffer.$pass_target_func();
         let render_pass_desc_ref = $crate::wgpu::RenderPassDescriptor {
-            label: Some("non-screen-render-pass"),
+            label: Some(concat!("non-screen-render-pass-", stringify!($pass_target_buffer))),
             color_attachments: &color_attachments,
             depth_stencil_attachment,
         };
