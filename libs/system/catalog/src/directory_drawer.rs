@@ -48,7 +48,8 @@ impl DirectoryDrawer {
             if let Some(raw_name) = entry.path().file_name() {
                 let name = raw_name.to_string_lossy().to_string();
                 if let Some(ext) = only_extension {
-                    if !name.ends_with(ext) {
+                    if !name.ends_with(&ext.to_lowercase()) && !name.ends_with(&ext.to_uppercase())
+                    {
                         continue;
                     }
                 }
