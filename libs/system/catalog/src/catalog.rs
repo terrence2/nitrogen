@@ -238,8 +238,13 @@ impl Catalog {
         println!("Catalog:");
         for (shelf_name, shelf_id) in &self.shelf_index {
             println!("  Shelf {}", shelf_name);
+            let mut drawers = vec![];
             for (drawer_prio, drawer_name) in self.shelves[shelf_id].drawer_index.keys() {
-                println!("    Drawer {} - {}", drawer_prio, drawer_name,);
+                drawers.push((drawer_prio, drawer_name));
+            }
+            drawers.sort();
+            for (drawer_prio, drawer_name) in &drawers {
+                println!("    Shelf {} - {}", drawer_prio, drawer_name);
             }
         }
     }
