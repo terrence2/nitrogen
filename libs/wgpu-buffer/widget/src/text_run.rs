@@ -305,11 +305,11 @@ impl TextRun {
         let mut next_spans = Vec::new();
         let mut position = 0;
         for mut span in self.spans.drain(..) {
+            position += span.content().len();
             if let SpanSelection::Select { range: span_range } = self
                 .selection
                 .intersect(position..position + span.content().len())
             {
-                position += span.content().len();
                 if span_range.start == 0 && span_range.end == span.content().len() {
                     if let Some(color) = color {
                         span.set_color(color);
@@ -339,7 +339,6 @@ impl TextRun {
                     }
                 }
             } else {
-                position += span.content().len();
                 next_spans.push(span);
             }
         }
