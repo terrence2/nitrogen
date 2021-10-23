@@ -3,7 +3,7 @@ name = "absolute_unit"
 description = "A system of scalars with units."
 version = "0.0.0"
 authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 approx = "^ 0.5"

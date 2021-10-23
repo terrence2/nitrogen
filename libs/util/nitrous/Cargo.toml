@@ -2,14 +2,14 @@
 name = "nitrous"
 version = "0.0.0"
 authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [build-dependencies]
 lalrpop = "0.19.4"
 
 [dependencies]
 anyhow = { version = "^ 1", features = ["backtrace"] }
-lalrpop-util = "0.19.4"
+lalrpop-util = { version = "0.19.4", features = ["lexer"] }
 log = "^ 0.4"
 futures = "^ 0.3"
 ordered-float = "^ 2"
