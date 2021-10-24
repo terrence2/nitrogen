@@ -124,6 +124,11 @@ impl Catalog {
         self.find_labeled_matching_names(&self.default_label, glob)
     }
 
+    /// Return all fids that have the given extension, insensitive.
+    pub fn find_with_extension(&self, ext: &str) -> Result<Vec<FileId>> {
+        self.find_labeled_with_extension(&self.default_label, ext)
+    }
+
     /// Get metadata about the given file by id.
     pub fn stat_sync(&self, fid: FileId) -> Result<FileMetadata> {
         self.shelves[&fid.shelf_id].stat_sync(fid)
@@ -208,6 +213,10 @@ impl Catalog {
 
     pub fn find_labeled_matching_names(&self, label: &str, glob: &str) -> Result<Vec<String>> {
         self.shelves[&self.shelf_index[label]].find_matching_names(glob)
+    }
+
+    pub fn find_labeled_with_extension(&self, label: &str, ext: &str) -> Result<Vec<FileId>> {
+        self.shelves[&self.shelf_index[label]].find_with_extension(ext)
     }
 
     pub fn stat_labeled_name_sync(&self, label: &str, name: &str) -> Result<FileMetadata> {
@@ -342,6 +351,20 @@ impl Shelf {
         for key in self.index.keys() {
             if pattern.matches_with(key, opts) {
                 matching.push(key.to_owned());
+            }
+        }
+        Ok(matching)
+    }
+
+    pub fn find_with_extension(&self, ext: &str) -> Result<Vec<FileId>> {
+        debug!("find_with_extension({})", ext);
+        let mut matching = vec![];
+        let pattern = ".".to_owned() + ext;
+        let pattern_upper = pattern.to_uppercase();
+        let pattern_lower = pattern.to_lowercase();
+        for (key, fid) in self.index.iter() {
+            if key.ends_with(&pattern_upper) || key.ends_with(&pattern_lower) {
+                matching.push(*fid);
             }
         }
         Ok(matching)
