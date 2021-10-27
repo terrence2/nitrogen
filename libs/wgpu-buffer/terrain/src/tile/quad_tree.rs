@@ -97,7 +97,7 @@ impl QuadTree {
         // Find all layers in this set.
         let mut layer_packs = Vec::new();
         let layer_glob = format!("{}-L??.mip", prefix);
-        for layer_fid in catalog.find_labeled_matching("default", &layer_glob, Some("mip"))? {
+        for layer_fid in catalog.find_glob_with_extension(&layer_glob, Some("mip"))? {
             layer_packs.push(LayerPack::new(layer_fid, catalog)?);
         }
         layer_packs.sort_by_key(|lp| *lp.terrain_level());

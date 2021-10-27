@@ -189,7 +189,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     let mut async_rt = Runtime::new()?;
     let mut _legion = World::default();
 
-    let mut catalog = Catalog::empty();
+    let mut catalog = Catalog::empty("main");
     for (i, d) in opt.libdir.iter().enumerate() {
         catalog.add_drawer(DirectoryDrawer::from_directory(100 + i as i64, d)?)?;
     }

@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{DrawerFileId, DrawerInterface, FileMetadata};
-use anyhow::{anyhow, bail, ensure, Context, Result};
+use anyhow::{ensure, Result};
 use glob::{MatchOptions, Pattern};
 use log::debug;
 use smallvec::SmallVec;
@@ -25,8 +25,6 @@ struct DrawerId(u16);
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 struct ShelfId(u16);
 
-pub const DEFAULT_LABEL: &str = "default";
-
 pub fn from_utf8_string(input: Cow<[u8]>) -> Result<Cow<str>> {
     Ok(match input {
         Cow::Borrowed(r) => Cow::from(std::str::from_utf8(r)?),
@@ -37,239 +35,28 @@ pub fn from_utf8_string(input: Cow<[u8]>) -> Result<Cow<str>> {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub struct FileId {
     drawer_file_id: DrawerFileId,
-    shelf_id: ShelfId,
     drawer_id: DrawerId,
 }
 
+/// A catalog is a uniform, indexed interface to a collection of Drawers. This
+/// allows a game engine to expose several sources of data through a single interface.
+/// Common uses are allowing loose files when developing, while shipping compacted
+/// asset packs in production and combining data from multiple packs, e.g. when assets
+/// are shipped on multiple disks, or where assets may get extended and overridden
+/// with mod content.
 pub struct Catalog {
-    last_shelf: u16,
-    shelf_index: HashMap<String, ShelfId>,
-    shelves: HashMap<ShelfId, Shelf>,
-    default_label: String,
-}
-
-// A catalog is a uniform, indexed interface to a collection of Drawers. This
-// allows a game engine to expose several sources of data through a single interface.
-// Common uses are allowing loose files when developing, while shipping compacted
-// asset packs in production and combining data from multiple packs, e.g. when assets
-// are shipped on multiple disks, or where assets may get extended and overridden
-// with mod content.
-//
-// In addition to the above behavior, files in a catalog may be tagged with a label,
-// allowing for multiple sets of unrelated data. This is useful for testing multiple
-// file-sets at once, e.g. in a multi-game situation.
-impl Catalog {
-    /// Create and return a new empty catalog.
-    pub fn empty() -> Self {
-        let shelf_id = ShelfId(0);
-        let mut shelf_index = HashMap::new();
-        shelf_index.insert(DEFAULT_LABEL.to_owned(), shelf_id);
-        let mut shelves = HashMap::new();
-        shelves.insert(shelf_id, Shelf::empty());
-        Self {
-            last_shelf: 1,
-            shelf_index,
-            shelves,
-            default_label: DEFAULT_LABEL.to_owned(),
-        }
-    }
-
-    /// Create a new catalog with the given drawers.
-    pub fn with_drawers(mut drawers: Vec<Box<dyn DrawerInterface>>) -> Result<Self> {
-        let mut catalog = Self::empty();
-        for drawer in drawers.drain(..) {
-            catalog.add_labeled_drawer(DEFAULT_LABEL, drawer)?;
-        }
-        Ok(catalog)
-    }
-
-    /// Add a drawer full of files to the catalog.
-    pub fn add_drawer(&mut self, drawer: Box<dyn DrawerInterface>) -> Result<()> {
-        self.add_labeled_drawer(&self.default_label.clone(), drawer)
-    }
-
-    /// Get the label of a given file by id.
-    pub fn file_label(&self, fid: FileId) -> Result<String> {
-        for (name, &sid) in &self.shelf_index {
-            if fid.shelf_id == sid {
-                return Ok(name.to_owned());
-            }
-        }
-        bail!("unknown shelf")
-    }
-
-    /// Check if the given name exists in the catalog.
-    pub fn exists(&self, name: &str) -> bool {
-        self.exists_labeled(&self.default_label, name)
-    }
-
-    /// Get the file id of the given name.
-    pub fn lookup(&self, name: &str) -> Option<FileId> {
-        self.lookup_labeled(&self.default_label, name)
-    }
-
-    /// Find all files that match the given glob. If with_extension is provided, the name must also
-    /// have the given extension. This can greatly improve the speed of matching, if the extension
-    /// is known up front.
-    pub fn find_matching(
-        &self,
-        glob: &str,
-        with_extension: Option<&str>,
-    ) -> Result<SmallVec<[FileId; 4]>> {
-        self.find_labeled_matching(&self.default_label, glob, with_extension)
-    }
-
-    // TODO: replace uses and remove.
-    pub fn find_matching_names(&self, glob: &str) -> Result<Vec<String>> {
-        self.find_labeled_matching_names(&self.default_label, glob)
-    }
-
-    /// Return all fids that have the given extension, insensitive.
-    pub fn find_with_extension(&self, ext: &str) -> Result<Vec<FileId>> {
-        self.find_labeled_with_extension(&self.default_label, ext)
-    }
-
-    /// Get metadata about the given file by id.
-    pub fn stat_sync(&self, fid: FileId) -> Result<FileMetadata> {
-        self.shelves[&fid.shelf_id].stat_sync(fid)
-    }
-
-    /// Read the given file id and return the contents. Blocks until complete.
-    pub fn read_sync(&self, fid: FileId) -> Result<Cow<[u8]>> {
-        self.shelves[&fid.shelf_id].read_sync(fid)
-    }
-
-    /// Read the given file id and return the contents. Blocks until complete.
-    pub fn read_slice_sync(&self, fid: FileId, extent: Range<usize>) -> Result<Cow<[u8]>> {
-        self.shelves[&fid.shelf_id].read_slice_sync(fid, extent)
-    }
-
-    /// Read the given file id and return a Future with the contents.
-    pub async fn read(&self, fid: FileId) -> Result<Vec<u8>> {
-        Ok(self.shelves[&fid.shelf_id].read(fid).await?)
-    }
-
-    /// Read the given file id and return a Future with the given slice from that file.
-    pub async fn read_slice(&self, fid: FileId, extent: Range<usize>) -> Result<Vec<u8>> {
-        Ok(self.shelves[&fid.shelf_id].read_slice(fid, extent).await?)
-    }
-
-    /// Get metadata about the given file by name.
-    pub fn stat_name_sync(&self, name: &str) -> Result<FileMetadata> {
-        self.stat_labeled_name_sync(&self.default_label, name)
-    }
-
-    /// Read the given file name and return the contents. Blocks until complete.
-    pub fn read_name_sync(&self, name: &str) -> Result<Cow<[u8]>> {
-        self.read_labeled_name_sync(&self.default_label, name)
-    }
-
-    pub fn add_labeled_drawer(
-        &mut self,
-        label: &str,
-        drawer: Box<dyn DrawerInterface>,
-    ) -> Result<()> {
-        debug!("add_labeled_drawer: {}, {}", label, drawer.name());
-        if !self.shelf_index.contains_key(label) {
-            let shelf_id = ShelfId(self.last_shelf);
-            self.last_shelf += 1;
-            self.shelf_index.insert(label.to_owned(), shelf_id);
-            self.shelves.insert(shelf_id, Shelf::empty());
-        }
-        let shelf_id = self.shelf_index[label];
-        self.shelves
-            .get_mut(&shelf_id)
-            .unwrap()
-            .add_drawer(shelf_id, drawer)
-    }
-
-    pub fn list_labels(&self) -> Vec<String> {
-        self.shelf_index.keys().cloned().collect()
-    }
-
-    pub fn find_labeled_matching(
-        &self,
-        label: &str,
-        glob: &str,
-        with_extension: Option<&str>,
-    ) -> Result<SmallVec<[FileId; 4]>> {
-        self.shelves[&self.shelf_index[label]].find_matching(glob, with_extension)
-    }
-
-    pub fn exists_labeled(&self, label: &str, name: &str) -> bool {
-        let exists = self.shelves[&self.shelf_index[label]]
-            .index
-            .contains_key(name);
-        debug!("exists_labeled {}:{} => {}", label, name, exists);
-        exists
-    }
-
-    pub fn lookup_labeled(&self, label: &str, name: &str) -> Option<FileId> {
-        self.shelves[&self.shelf_index[label]]
-            .index
-            .get(name)
-            .copied()
-    }
-
-    pub fn find_labeled_matching_names(&self, label: &str, glob: &str) -> Result<Vec<String>> {
-        self.shelves[&self.shelf_index[label]].find_matching_names(glob)
-    }
-
-    pub fn find_labeled_with_extension(&self, label: &str, ext: &str) -> Result<Vec<FileId>> {
-        self.shelves[&self.shelf_index[label]].find_with_extension(ext)
-    }
-
-    pub fn stat_labeled_name_sync(&self, label: &str, name: &str) -> Result<FileMetadata> {
-        self.shelves[&self.shelf_index[label]].stat_name_sync(name)
-    }
-
-    pub fn read_labeled_name_sync(&self, label: &str, name: &str) -> Result<Cow<[u8]>> {
-        self.shelves[&self.shelf_index[label]]
-            .read_name_sync(name)
-            .with_context(|| anyhow!("read_name_sync(label:{}, name:{})", label, name))
-    }
-
-    pub fn default_label(&self) -> &str {
-        &self.default_label
-    }
-
-    pub fn set_default_label(&mut self, context: &str) {
-        assert!(
-            self.shelf_index.contains_key(context),
-            "cannot set default label to unknown shelf: {}",
-            context
-        );
-        self.default_label = context.to_owned()
-    }
-
-    #[allow(unused)]
-    pub fn dump_layout(&self) {
-        println!("Catalog:");
-        for (shelf_name, shelf_id) in &self.shelf_index {
-            println!("  Shelf {}", shelf_name);
-            let mut drawers = vec![];
-            for (drawer_prio, drawer_name) in self.shelves[shelf_id].drawer_index.keys() {
-                drawers.push((drawer_prio, drawer_name));
-            }
-            drawers.sort();
-            for (drawer_prio, drawer_name) in &drawers {
-                println!("    Shelf {} - {}", drawer_prio, drawer_name);
-            }
-        }
-    }
-}
-
-// A shelf is a subset of a catalog that contains the same label.
-pub struct Shelf {
+    label: String,
     last_drawer: u16,
     drawer_index: HashMap<(i64, String), DrawerId>,
     drawers: HashMap<DrawerId, Box<dyn DrawerInterface>>,
     index: HashMap<String, FileId>,
 }
 
-impl Shelf {
-    pub fn empty() -> Self {
+impl Catalog {
+    /// Create and return a new empty catalog.
+    pub fn empty<S: ToString>(label: S) -> Self {
         Self {
+            label: label.to_string(),
             last_drawer: 0,
             drawer_index: HashMap::new(),
             drawers: HashMap::new(),
@@ -277,7 +64,26 @@ impl Shelf {
         }
     }
 
-    fn add_drawer(&mut self, shelf_id: ShelfId, drawer: Box<dyn DrawerInterface>) -> Result<()> {
+    /// Create a new catalog with the given drawers.
+    pub fn with_drawers<S: ToString>(
+        label: S,
+        mut drawers: Vec<Box<dyn DrawerInterface>>,
+    ) -> Result<Self> {
+        let mut catalog = Self::empty(label);
+        for drawer in drawers.drain(..) {
+            catalog.add_drawer(drawer)?;
+        }
+        Ok(catalog)
+    }
+
+    /// Return the catalog's label; useful if the app is juggling multiple catalogs.
+    pub fn label(&self) -> &str {
+        &self.label
+    }
+
+    /// Add a drawer full of files to the catalog.
+    pub fn add_drawer(&mut self, drawer: Box<dyn DrawerInterface>) -> Result<()> {
+        debug!("add_drawer: {}:{}", self.label, drawer.name());
         let next_priority = drawer.priority();
         let index = drawer.index()?;
         let drawer_key = (drawer.priority(), drawer.name().to_owned());
@@ -302,7 +108,6 @@ impl Shelf {
                 name.to_owned(),
                 FileId {
                     drawer_file_id,
-                    shelf_id,
                     drawer_id,
                 },
             );
@@ -310,7 +115,54 @@ impl Shelf {
         Ok(())
     }
 
-    pub fn find_matching(
+    /// Check if the given name exists in the catalog.
+    pub fn exists(&self, name: &str) -> bool {
+        let exists = self.index.contains_key(name);
+        debug!("exists {}:{} => {}", self.label, name, exists);
+        exists
+    }
+
+    /// Get the file id of the given name.
+    pub fn lookup(&self, name: &str) -> Option<FileId> {
+        self.index.get(name).cloned()
+    }
+
+    /// Search for and return the FileID of all items matching the given glob.
+    pub fn find_glob(&self, glob: &str) -> Result<Vec<FileId>> {
+        debug!("find_matching_names({})", glob);
+        let mut matching = Vec::new();
+        let opts = MatchOptions {
+            case_sensitive: false,
+            require_literal_leading_dot: false,
+            require_literal_separator: true,
+        };
+        let pattern = Pattern::new(glob)?;
+        for (key, &fid) in self.index.iter() {
+            if pattern.matches_with(key, opts) {
+                matching.push(fid);
+            }
+        }
+        Ok(matching)
+    }
+
+    /// Return all fids that have the given extension, insensitive.
+    pub fn find_with_extension(&self, ext: &str) -> Result<Vec<FileId>> {
+        debug!("{}:find_with_extension({})", self.label, ext);
+        let mut matching = vec![];
+        let pattern = ".".to_owned() + ext;
+        let pattern_upper = pattern.to_uppercase();
+        let pattern_lower = pattern.to_lowercase();
+        for (key, fid) in self.index.iter() {
+            if key.ends_with(&pattern_upper) || key.ends_with(&pattern_lower) {
+                matching.push(*fid);
+            }
+        }
+        Ok(matching)
+    }
+
+    /// Find all FileID that match the given glob and have an extension, case sensitive.
+    /// This can be significantly faster than find_glob, if the extension is constant.
+    pub fn find_glob_with_extension(
         &self,
         glob: &str,
         with_extension: Option<&str>,
@@ -339,70 +191,60 @@ impl Shelf {
         Ok(matching)
     }
 
-    pub fn find_matching_names(&self, glob: &str) -> Result<Vec<String>> {
-        debug!("find_matching_names({})", glob);
-        let mut matching = Vec::new();
-        let opts = MatchOptions {
-            case_sensitive: false,
-            require_literal_leading_dot: false,
-            require_literal_separator: true,
-        };
-        let pattern = Pattern::new(glob)?;
-        for key in self.index.keys() {
-            if pattern.matches_with(key, opts) {
-                matching.push(key.to_owned());
-            }
-        }
-        Ok(matching)
-    }
-
-    pub fn find_with_extension(&self, ext: &str) -> Result<Vec<FileId>> {
-        debug!("find_with_extension({})", ext);
-        let mut matching = vec![];
-        let pattern = ".".to_owned() + ext;
-        let pattern_upper = pattern.to_uppercase();
-        let pattern_lower = pattern.to_lowercase();
-        for (key, fid) in self.index.iter() {
-            if key.ends_with(&pattern_upper) || key.ends_with(&pattern_lower) {
-                matching.push(*fid);
-            }
-        }
-        Ok(matching)
-    }
-
+    /// Get metadata about the given file by id.
     pub fn stat_sync(&self, fid: FileId) -> Result<FileMetadata> {
         let drawer_meta = self.drawers[&fid.drawer_id].stat_sync(fid.drawer_file_id)?;
         Ok(FileMetadata::from_drawer(fid, drawer_meta))
     }
 
+    /// Get metadata about the given file by name.
     pub fn stat_name_sync(&self, name: &str) -> Result<FileMetadata> {
         ensure!(self.index.contains_key(name), "file not found");
         self.stat_sync(self.index[name])
     }
 
+    /// Read the given file id and return the contents. Blocks until complete.
     pub fn read_sync(&self, fid: FileId) -> Result<Cow<[u8]>> {
         self.drawers[&fid.drawer_id].read_sync(fid.drawer_file_id)
     }
 
+    /// Read the given file id and return the contents. Blocks until complete.
     pub fn read_slice_sync(&self, fid: FileId, extent: Range<usize>) -> Result<Cow<[u8]>> {
         self.drawers[&fid.drawer_id].read_slice_sync(fid.drawer_file_id, extent)
     }
 
+    /// Read the given file id and return a Future with the contents.
     pub async fn read(&self, fid: FileId) -> Result<Vec<u8>> {
         Ok(self.drawers[&fid.drawer_id]
             .read(fid.drawer_file_id)
             .await?)
     }
 
+    /// Read the given file id and return a Future with the given slice from that file.
     pub async fn read_slice(&self, fid: FileId, extent: Range<usize>) -> Result<Vec<u8>> {
         Ok(self.drawers[&fid.drawer_id]
             .read_slice(fid.drawer_file_id, extent)
             .await?)
     }
 
+    /// Read the given file name and return the contents. Blocks until complete.
     pub fn read_name_sync(&self, name: &str) -> Result<Cow<[u8]>> {
         ensure!(self.index.contains_key(name), "file not found: {}", name);
         self.read_sync(self.index[name])
+    }
+
+    /// Print out the structure of the catalog to stdout.
+    #[allow(unused)]
+    pub fn dump_layout(&self) {
+        println!("Catalog:");
+        let mut drawers = vec![];
+        for (drawer_prio, drawer_name) in self.drawer_index.keys() {
+            drawers.push((drawer_prio, drawer_name));
+        }
+        drawers.sort();
+        for (drawer_prio, drawer_name) in &drawers {
+            println!("    Shelf {} - {}", drawer_prio, drawer_name);
+        }
     }
 }
 
@@ -414,10 +256,10 @@ mod tests {
 
     #[test]
     fn test_basic_functionality() -> Result<()> {
-        let mut catalog = Catalog::with_drawers(vec![DirectoryDrawer::from_directory(
-            0,
-            "./masking_test_data/a",
-        )?])?;
+        let mut catalog = Catalog::with_drawers(
+            "main",
+            vec![DirectoryDrawer::from_directory(0, "./masking_test_data/a")?],
+        )?;
 
         // Expect success
         let meta = catalog.stat_name_sync("a.txt")?;
@@ -464,10 +306,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_async_functionality() -> Result<()> {
-        let catalog = Catalog::with_drawers(vec![DirectoryDrawer::from_directory(
-            0,
-            "./masking_test_data/a",
-        )?])?;
+        let catalog = Catalog::with_drawers(
+            "main",
+            vec![DirectoryDrawer::from_directory(0, "./masking_test_data/a")?],
+        )?;
 
         let meta = catalog.stat_name_sync("a.txt")?;
         let data = catalog.read(meta.id()).await?;
