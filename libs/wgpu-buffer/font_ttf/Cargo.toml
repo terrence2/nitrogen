@@ -2,12 +2,12 @@
 name = "font_ttf"
 version = "0.0.0"
 authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "^ 1"
+anyhow = { version = "^ 1", features = ["backtrace"] }
 image = "^ 0.23"
 rusttype = "^ 0.9"
 parking_lot = "^ 0.11"

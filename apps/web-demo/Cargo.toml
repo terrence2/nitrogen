@@ -2,13 +2,13 @@
 name = "web-demo"
 version = "0.0.0"
 authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-anyhow = "^ 1"
+anyhow = { version = "^ 1", features = ["backtrace"] }
 console_error_panic_hook = "^ 0.1"
 log = "^ 0.4"
 parking_lot = "^ 0.11"
@@ -16,7 +16,7 @@ smallvec = "^ 1.4"
 tokio = { version = "^ 1.0", features = ["rt-multi-thread", "macros", "io-util", "fs", "sync"] }
 wasm-bindgen = "=0.2.69"
 wasm-bindgen-futures = "=0.4.19"
-web-sys = "=0.3.46"
+web-sys = { version = "=0.3.46", features = ["console"] }
 wgpu = "=0.7.0"
 winit = { version = "^ 0.24", features = ["web-sys"] }
 absolute_unit = { path = "../../libs/util/absolute_unit" }

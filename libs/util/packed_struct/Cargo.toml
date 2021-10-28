@@ -1,9 +1,9 @@
 [package]
 name = "packed_struct"
 version = "0.0.0"
-edition = "2018"
+edition = "2021"
 authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 
 [dependencies]
-anyhow = "^ 1"
+anyhow = { version = "^ 1", features = ["backtrace"] }
 zerocopy = "^ 0.5"

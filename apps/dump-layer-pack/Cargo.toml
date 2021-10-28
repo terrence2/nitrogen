@@ -2,10 +2,10 @@
 name = "dump-layer-pack"
 version = "0.0.0"
 authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
-anyhow = "^ 1"
+anyhow = { version = "^ 1", features = ["backtrace"] }
 memmap = "^ 0.7"
 structopt = "^ 0.3"
 zerocopy = "^ 0.5"

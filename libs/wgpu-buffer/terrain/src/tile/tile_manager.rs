@@ -144,7 +144,7 @@ impl TileManager {
         //       tree for all spherical tiles
         // Scan catalog for all tile sets.
         let tile_sets = catalog
-            .find_labeled_matching("default", "*-index.json", Some("json"))?
+            .find_glob_with_extension("*-index.json", Some("json"))?
             .par_iter()
             .map(|&index_fid| {
                 // Parse the index to figure out what sort of TileSet to create.

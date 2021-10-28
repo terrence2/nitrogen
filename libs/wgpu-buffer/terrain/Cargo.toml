@@ -3,12 +3,12 @@ name = "terrain"
 description = "Mesh for sampling terrain properties."
 version = "0.0.0"
 authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 approx = "^ 0.5"
 bzip2 = "^ 0.4"
-anyhow = "^ 1"
+anyhow = { version = "^ 1", features = ["backtrace"] }
 float-ord = "^ 0.2"
 futures = "^ 0.3"
 fxhash = "^ 0.2"

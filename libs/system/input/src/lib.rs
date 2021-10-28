@@ -170,7 +170,7 @@ impl InputSystem {
         // Spawn the game thread.
         std::thread::spawn(move || {
             if let Err(e) = window_main(window, &input_controller) {
-                println!("Error: {}", e);
+                println!("Error: {:?}", e);
             }
             input_controller.quit().ok();
         });

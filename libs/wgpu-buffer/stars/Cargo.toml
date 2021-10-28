@@ -2,12 +2,12 @@
 name = "stars"
 version = "0.0.0"
 authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 approx = "^ 0.5"
 bitflags = ">= 1.0"
-anyhow = "^ 1"
+anyhow = { version = "^ 1", features = ["backtrace"] }
 lazy_static = "^ 1"
 log = "^ 0.4"
 nalgebra = "^ 0.29"

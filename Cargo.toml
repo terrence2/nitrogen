@@ -2,7 +2,7 @@
 name = "nitrogen"
 version = "0.0.0"
 authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [workspace]
 members = [
@@ -58,7 +58,7 @@ members = [
 [dependencies]
 chrono = "^ 0.4"
 env_logger = "^ 0.8"
-anyhow = "^ 1"
+anyhow = { version = "^ 1", features = ["backtrace"] }
 image = "^ 0.23"
 legion = "^ 0.4"
 log = "^ 0.4"

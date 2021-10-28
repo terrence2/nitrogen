@@ -2,10 +2,10 @@
 name = "camera"
 version = "0.0.0"
 authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
-anyhow = "^ 1"
+anyhow = { version = "^ 1", features = ["backtrace"] }
 log = ">= 0.4"
 nalgebra = "^ 0.29"
 num = "^ 0.3"
