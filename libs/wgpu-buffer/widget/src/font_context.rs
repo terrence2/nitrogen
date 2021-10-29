@@ -29,7 +29,7 @@ use gpu::{
 use image::Luma;
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
-use std::{borrow::Borrow, collections::HashMap, sync::Arc};
+use std::{borrow::Borrow, collections::HashMap, env, sync::Arc};
 use tokio::runtime::Runtime;
 
 #[derive(Debug)]
@@ -183,8 +183,12 @@ impl FontContext {
         self.name_manager.lookup_by_id(font_id)
     }
 
-    pub fn dump_glyphs(&mut self) {
-        self.glyph_sheet.dump("__dump__/font_context_glyphs.png");
+    pub fn dump_glyphs(&mut self) -> Result<()> {
+        let mut path = env::current_dir()?;
+        path.push("font_context");
+        path.push("glyphs.png");
+        self.glyph_sheet.dump(path);
+        Ok(())
     }
 
     fn align_to_px(phys_w: f32, x_pos: &mut AbsSize) {
