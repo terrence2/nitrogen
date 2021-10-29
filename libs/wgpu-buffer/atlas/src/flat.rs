@@ -17,7 +17,7 @@ use geometry::Aabb;
 use gpu::{texture_format_size, ArcTextureCopyView, Gpu, OwnedBufferCopyView, UploadTracker};
 use image::{ImageBuffer, Luma, Pixel, Rgba};
 use log::debug;
-use std::{marker::PhantomData, mem, sync::Arc};
+use std::{marker::PhantomData, mem, path::PathBuf, sync::Arc};
 use tokio::runtime::Runtime;
 use wgpu::Origin3d;
 use zerocopy::{AsBytes, FromBytes};
@@ -194,7 +194,7 @@ pub struct AtlasPacker<P: Pixel + 'static> {
     texture: Arc<wgpu::Texture>,
     texture_view: wgpu::TextureView,
     sampler: wgpu::Sampler,
-    dump_texture: Option<String>,
+    dump_texture: Option<PathBuf>,
     next_texture: Option<Arc<wgpu::Texture>>,
 
     // CPU-side list of buffers that need to be blit into the target texture these can either
@@ -423,8 +423,8 @@ where
         self
     }
 
-    pub fn dump(&mut self, path: &str) {
-        self.dump_texture = Some(path.to_owned());
+    pub fn dump(&mut self, path: PathBuf) {
+        self.dump_texture = Some(path);
     }
 
     fn do_layout(&mut self, w: u32, h: u32) -> (u32, u32) {
@@ -748,14 +748,14 @@ where
                         let img =
                             ImageBuffer::<Luma<u8>, _>::from_raw(extent.width, extent.height, data)
                                 .expect("built image");
-                        println!("writing to {}", path);
+                        println!("writing to {}", path.to_string_lossy());
                         img.save(path).expect("wrote file");
                     }
                     wgpu::TextureFormat::Rgba8Unorm => {
                         let img =
                             ImageBuffer::<Rgba<u8>, _>::from_raw(extent.width, extent.height, data)
                                 .expect("built image");
-                        println!("writing to {}", path);
+                        println!("writing to {}", path.to_string_lossy());
                         img.save(path).expect("wrote file");
                     }
                     _ => panic!("don't know how to dump texture format: {:?}", fmt),

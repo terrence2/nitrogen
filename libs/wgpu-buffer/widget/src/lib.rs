@@ -257,8 +257,8 @@ impl WidgetBuffer {
     }
 
     #[method]
-    pub fn dump_glyphs(&mut self) {
-        self.paint_context.dump_glyphs();
+    pub fn dump_glyphs(&mut self) -> Result<()> {
+        self.paint_context.dump_glyphs()
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
