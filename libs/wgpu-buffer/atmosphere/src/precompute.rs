@@ -1619,8 +1619,8 @@ mod test {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;
-        let interpreter = Interpreter::new();
-        let gpu = gpu::Gpu::new(window, Default::default(), &mut interpreter.write())?;
+        let mut interpreter = Interpreter::default();
+        let gpu = gpu::Gpu::new(window, Default::default(), &mut interpreter)?;
         let precompute_start = Instant::now();
         let pcp = Precompute::new(&gpu.read())?;
         let _atmosphere_params_buf = pcp.build_textures(&mut gpu.write());

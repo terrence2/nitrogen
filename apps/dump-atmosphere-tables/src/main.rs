@@ -46,8 +46,8 @@ fn main() -> Result<()> {
 
 fn window_main(window: Window, _input_controller: &InputController) -> Result<()> {
     let opt = Opt::from_args();
-    let interpreter = Interpreter::new();
-    let gpu = Gpu::new(window, Default::default(), &mut interpreter.write())?;
+    let mut interpreter = Interpreter::default();
+    let gpu = Gpu::new(window, Default::default(), &mut interpreter)?;
 
     let precompute_start = Instant::now();
     let pcp = Precompute::new(&gpu.read())?;

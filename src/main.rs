@@ -194,20 +194,17 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         catalog.add_drawer(DirectoryDrawer::from_directory(100 + i as i64, d)?)?;
     }
 
-    let interpreter = Interpreter::new();
-    let timeline = Timeline::new(&mut interpreter.write());
-    let gpu = Gpu::new(window, Default::default(), &mut interpreter.write())?;
+    let mut interpreter = Interpreter::default();
+    let timeline = Timeline::new(&mut interpreter);
+    let gpu = Gpu::new(window, Default::default(), &mut interpreter)?;
 
-    let orrery = Orrery::new(
-        Utc.ymd(1964, 2, 24).and_hms(12, 0, 0),
-        &mut interpreter.write(),
-    );
-    let arcball = ArcBallCamera::new(meters!(0.5), &mut gpu.write(), &mut interpreter.write());
+    let orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0), &mut interpreter);
+    let arcball = ArcBallCamera::new(meters!(0.5), &mut gpu.write(), &mut interpreter);
 
     ///////////////////////////////////////////////////////////
     let atmosphere_buffer = AtmosphereBuffer::new(&mut gpu.write())?;
     let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
-    let globals = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter.write());
+    let globals = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter);
     let stars_buffer = Arc::new(RwLock::new(StarsBuffer::new(&gpu.read())?));
     let terrain_buffer = TerrainBuffer::new(
         &catalog,
@@ -215,18 +212,18 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         gpu_detail,
         &globals.read(),
         &mut gpu.write(),
-        &mut interpreter.write(),
+        &mut interpreter,
     )?;
     let catalog = Arc::new(AsyncRwLock::new(catalog));
     let world = WorldRenderPass::new(
         &mut gpu.write(),
-        &mut interpreter.write(),
+        &mut interpreter,
         &globals.read(),
         &atmosphere_buffer.read(),
         &stars_buffer.read(),
         &terrain_buffer.read(),
     )?;
-    let widgets = WidgetBuffer::new(&mut gpu.write(), &mut interpreter.write())?;
+    let widgets = WidgetBuffer::new(&mut gpu.write(), &mut interpreter)?;
     let ui = UiRenderPass::new(
         &mut gpu.write(),
         &globals.read(),
@@ -252,7 +249,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         composite,
     )?;
 
-    let system = System::new(&mut interpreter.write());
+    let system = System::new(&mut interpreter);
 
     ///////////////////////////////////////////////////////////
     // UI Setup
@@ -316,7 +313,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         .set_float(PositionH::Start, PositionV::Bottom);
 
     {
-        let interp = &mut interpreter.write();
+        let interp = &mut interpreter;
         gpu.write().add_default_bindings(interp)?;
         orrery.write().add_default_bindings(interp)?;
         arcball.write().add_default_bindings(interp)?;
@@ -326,19 +323,19 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     }
 
     if let Some(command) = opt.command.as_ref() {
-        let rv = interpreter.write().interpret_once(command)?;
+        let rv = interpreter.interpret_once(command)?;
         println!("{}", rv);
     }
 
     if let Ok(code) = std::fs::read_to_string("autoexec.n2o") {
-        let rv = interpreter.write().interpret_once(&code);
+        let rv = interpreter.interpret_once(&code);
         println!("Execution Completed: {:?}", rv);
     }
 
     if let Some(exec_file) = opt.execute {
         match std::fs::read_to_string(&exec_file) {
             Ok(code) => {
-                let rv = interpreter.write().interpret_async(code);
+                let rv = interpreter.interpret_async(code);
                 println!("Execution Completed: {:?}", rv);
             }
             Err(e) => {

@@ -92,8 +92,8 @@ mod tests {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;
-        let interpreter = Interpreter::new();
-        let gpu = Gpu::new(window, Default::default(), &mut interpreter.write())?;
+        let mut interpreter = Interpreter::default();
+        let gpu = Gpu::new(window, Default::default(), &mut interpreter)?;
         let _fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
         Ok(())
     }

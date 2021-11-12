@@ -25,8 +25,7 @@ use gpu::{
 };
 use input::GenericEvent;
 use nitrous::Interpreter;
-use parking_lot::RwLock;
-use std::{fmt::Debug, sync::Arc, time::Instant};
+use std::{fmt::Debug, time::Instant};
 
 // Note: need intersection testing before this is useful.
 // pub enum HoverState {
@@ -88,7 +87,7 @@ pub trait Widget: Debug + Send + Sync + 'static {
         _event: &GenericEvent,
         _focus: &str,
         _cursor_position: Position<AbsSize>,
-        _interpreter: Arc<RwLock<Interpreter>>,
+        _interpreter: Interpreter,
     ) -> Result<()> {
         Ok(())
     }

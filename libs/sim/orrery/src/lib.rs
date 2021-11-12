@@ -470,39 +470,30 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let interpreter = Interpreter::new();
-        let orrery = Orrery::new(Utc::now(), &mut interpreter.write());
+        let mut interpreter = Interpreter::default();
+        let orrery = Orrery::new(Utc::now(), &mut interpreter);
         orrery.read().sun_direction();
     }
 
     #[test]
     fn test_leap_seconds() {
-        let interpreter = Interpreter::new();
+        let mut interpreter = Interpreter::default();
         assert_eq!(
-            Orrery::new(
-                Utc.ymd(2020, 1, 1).and_hms(12, 0, 0),
-                &mut interpreter.write()
-            )
-            .read()
-            .num_leap_seconds(),
+            Orrery::new(Utc.ymd(2020, 1, 1).and_hms(12, 0, 0), &mut interpreter)
+                .read()
+                .num_leap_seconds(),
             Duration::seconds(27)
         );
         assert_eq!(
-            Orrery::new(
-                Utc.ymd(2010, 1, 1).and_hms(12, 0, 0),
-                &mut interpreter.write()
-            )
-            .read()
-            .num_leap_seconds(),
+            Orrery::new(Utc.ymd(2010, 1, 1).and_hms(12, 0, 0), &mut interpreter)
+                .read()
+                .num_leap_seconds(),
             Duration::seconds(24)
         );
         assert_eq!(
-            Orrery::new(
-                Utc.ymd(1969, 1, 1).and_hms(12, 0, 0),
-                &mut interpreter.write()
-            )
-            .read()
-            .num_leap_seconds(),
+            Orrery::new(Utc.ymd(1969, 1, 1).and_hms(12, 0, 0), &mut interpreter)
+                .read()
+                .num_leap_seconds(),
             Duration::seconds(0)
         );
     }

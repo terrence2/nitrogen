@@ -99,7 +99,7 @@ impl Widget for EventMapper {
         event: &GenericEvent,
         focus: &str,
         _cursor_position: Position<AbsSize>,
-        interpreter: Arc<RwLock<Interpreter>>,
+        mut interpreter: Interpreter,
     ) -> Result<()> {
         let input = Input::from_event(event);
         if input.is_none() {
@@ -174,7 +174,7 @@ impl Widget for EventMapper {
             _ => {}
         }
 
-        interpreter.write().with_locals(&variables, |inner| {
+        interpreter.with_locals(&variables, |inner| {
             for bindings in self.bindings.values() {
                 bindings
                     .read()
