@@ -27,6 +27,7 @@ use gpu::{
     Gpu, UploadTracker,
 };
 use image::Luma;
+use nitrous::Value;
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
 use std::{borrow::Borrow, collections::HashMap, env, sync::Arc};
@@ -388,6 +389,16 @@ impl FontContext {
 
 #[derive(Copy, Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct FontId(u32);
+
+impl FontId {
+    pub fn from_value(v: Value) -> Result<Self> {
+        Ok(Self(v.to_int()? as u32))
+    }
+
+    pub fn as_value(&self) -> Value {
+        Value::Integer(self.0 as i64)
+    }
+}
 
 pub const SANS_FONT_ID: FontId = FontId(0);
 

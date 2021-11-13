@@ -257,6 +257,14 @@ impl WidgetBuffer {
     }
 
     #[method]
+    pub fn font_id_for_name(&self, font_name: &str) -> Value {
+        self.paint_context
+            .font_context
+            .font_id_for_name(font_name)
+            .as_value()
+    }
+
+    #[method]
     pub fn dump_glyphs(&mut self) -> Result<()> {
         self.paint_context.dump_glyphs()
     }
