@@ -90,17 +90,13 @@ impl Terminal {
         self.output.write().append_line(line);
     }
 
-    pub fn try_completion(
-        &self,
-        mut partial: Script,
-        interpreter: Arc<RwLock<Interpreter>>,
-    ) -> Option<String> {
+    pub fn try_completion(&self, mut partial: Script, interpreter: Interpreter) -> Option<String> {
         if partial.statements().len() != 1 {
             return None;
         }
         if let Stmt::Expr(e) = partial.statements_mut()[0].as_mut() {
             if let Expr::Term(Term::Symbol(sym)) = e.as_mut() {
-                let pin = interpreter.read().globals();
+                let pin = interpreter.globals();
                 let globals = pin.read();
                 let sim = globals
                     .names()
@@ -113,7 +109,7 @@ impl Terminal {
                 }
             } else if let Expr::Attr(mod_name_term, Term::Symbol(sym)) = e.as_mut() {
                 if let Expr::Term(Term::Symbol(mod_name)) = mod_name_term.as_ref() {
-                    if let Some(Value::Module(pin)) = interpreter.read().get_global(mod_name) {
+                    if let Some(Value::Module(pin)) = interpreter.get_global(mod_name) {
                         let ns = pin.read();
                         let sim = ns
                             .names()
@@ -170,7 +166,7 @@ impl Widget for Terminal {
         event: &GenericEvent,
         focus: &str,
         cursor_position: Position<AbsSize>,
-        interpreter: Arc<RwLock<Interpreter>>,
+        mut interpreter: Interpreter,
     ) -> Result<()> {
         // FIXME: don't hard-code the name
         if focus != "terminal" {
@@ -225,7 +221,7 @@ impl Widget for Terminal {
                         println!("{}", command);
 
                         let output = self.output.clone();
-                        rayon::spawn(move || match interpreter.write().interpret_once(&command) {
+                        rayon::spawn(move || match interpreter.interpret_once(&command) {
                             Ok(value) => {
                                 let s = match value {
                                     Value::String(s) => s,

@@ -207,7 +207,7 @@ impl Widget for VerticalBox {
         event: &GenericEvent,
         focus: &str,
         cursor_position: Position<AbsSize>,
-        interpreter: Arc<RwLock<Interpreter>>,
+        interpreter: Interpreter,
     ) -> Result<()> {
         for child in &self.children {
             child.widget_mut().handle_event(

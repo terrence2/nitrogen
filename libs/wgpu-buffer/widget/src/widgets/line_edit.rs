@@ -152,7 +152,7 @@ impl Widget for LineEdit {
         event: &GenericEvent,
         _focus: &str,
         _cursor_position: Position<AbsSize>,
-        _interpreter: Arc<RwLock<Interpreter>>,
+        _interpreter: Interpreter,
     ) -> Result<()> {
         // FIXME: add name to widget and obey focus
         if let GenericEvent::KeyboardKey {

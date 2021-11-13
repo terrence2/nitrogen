@@ -218,7 +218,7 @@ impl Widget for Expander {
         event: &GenericEvent,
         _focus: &str,
         cursor_position: Position<AbsSize>,
-        _interpreter: Arc<RwLock<Interpreter>>,
+        _interpreter: Interpreter,
     ) -> Result<()> {
         if event.is_primary_mouse_down() && self.header_region.intersects(&cursor_position) {
             self.expanded = !self.expanded;

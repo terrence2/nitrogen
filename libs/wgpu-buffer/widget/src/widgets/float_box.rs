@@ -243,7 +243,7 @@ impl Widget for FloatBox {
         event: &GenericEvent,
         focus: &str,
         cursor_position: Position<AbsSize>,
-        interpreter: Arc<RwLock<Interpreter>>,
+        interpreter: Interpreter,
     ) -> Result<()> {
         for packing in self.children.values() {
             packing.widget.write().handle_event(

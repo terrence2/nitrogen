@@ -257,6 +257,14 @@ impl WidgetBuffer {
     }
 
     #[method]
+    pub fn font_id_for_name(&self, font_name: &str) -> Value {
+        self.paint_context
+            .font_context
+            .font_id_for_name(font_name)
+            .as_value()
+    }
+
+    #[method]
     pub fn dump_glyphs(&mut self) -> Result<()> {
         self.paint_context.dump_glyphs()
     }
@@ -304,11 +312,32 @@ impl WidgetBuffer {
         Ok(())
     }
 
+    pub fn toggle_terminal(&mut self) {
+        match self.show_terminal {
+            true => self.hide_terminal(true),
+            false => self.show_terminal(true),
+        }
+    }
+
+    #[method]
+    pub fn show_terminal(&mut self, _pressed: bool) {
+        self.show_terminal = true;
+        self.set_keyboard_focus("terminal");
+        self.terminal.write().set_visible(true);
+    }
+
+    #[method]
+    pub fn hide_terminal(&mut self, _pressed: bool) {
+        self.show_terminal = false;
+        self.set_keyboard_focus("mapper");
+        self.terminal.write().set_visible(false);
+    }
+
     pub fn handle_events(
         &mut self,
         now: Instant,
         events: &[GenericEvent],
-        interpreter: Arc<RwLock<Interpreter>>,
+        interpreter: Interpreter,
         scale_factor: f64,
         logical_size: Extent<AbsSize>,
     ) -> Result<()> {
@@ -325,13 +354,7 @@ impl WidgetBuffer {
                         && *modifiers_state == ModifiersState::SHIFT
                         && *press_state == ElementState::Pressed
                 {
-                    self.show_terminal = !self.show_terminal;
-                    self.set_keyboard_focus(if self.show_terminal {
-                        "terminal"
-                    } else {
-                        "mapper"
-                    });
-                    self.terminal.write().set_visible(self.show_terminal);
+                    self.toggle_terminal();
                     continue;
                 }
             }
@@ -455,10 +478,10 @@ mod test {
         let event_loop = EventLoop::<()>::new_any_thread();
         let window = Window::new(&event_loop)?;
         let async_rt = Runtime::new()?;
-        let interpreter = Interpreter::new();
-        let gpu = Gpu::new(window, Default::default(), &mut interpreter.write())?;
+        let mut interpreter = Interpreter::default();
+        let gpu = Gpu::new(window, Default::default(), &mut interpreter)?;
 
-        let widgets = WidgetBuffer::new(&mut gpu.write(), &mut interpreter.write())?;
+        let widgets = WidgetBuffer::new(&mut gpu.write(), &mut interpreter)?;
         let label = Label::new(
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\
             สิบสองกษัตริย์ก่อนหน้าแลถัดไป       สององค์ไซร้โง่เขลาเบาปัญญา\

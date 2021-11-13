@@ -31,10 +31,10 @@ fn main() -> Result<()> {
 }
 
 fn window_main(window: Window, input_controller: &InputController) -> Result<()> {
-    let interpreter = Interpreter::new();
-    let gpu = Gpu::new(window, Default::default(), &mut interpreter.write())?;
+    let mut interpreter = Interpreter::default();
+    let gpu = Gpu::new(window, Default::default(), &mut interpreter)?;
 
-    let globals_buffer = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter.write());
+    let globals_buffer = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter);
     let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
 
     let vert_shader = gpu.read().create_shader_module(
@@ -106,7 +106,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
             },
         });
 
-    let arcball = ArcBallCamera::new(meters!(0.1), &mut gpu.write(), &mut interpreter.write());
+    let arcball = ArcBallCamera::new(meters!(0.1), &mut gpu.write(), &mut interpreter);
     arcball.write().pan_view(true);
     arcball.write().set_eye(Graticule::<Target>::new(
         degrees!(0),

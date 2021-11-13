@@ -88,60 +88,47 @@ impl TestInjector {
 
 #[test]
 fn test_it_works() -> Result<()> {
-    let interpreter = Interpreter::new();
+    let mut interpreter = Interpreter::default();
     let inj = Arc::new(RwLock::new(TestInjector {}));
-    interpreter.write().put_global("test", Value::Module(inj));
+    interpreter.put_global("test", Value::Module(inj));
 
+    assert_eq!(interpreter.interpret_once("test.plain()")?, Value::True());
     assert_eq!(
-        interpreter.write().interpret_once("test.plain()")?,
+        interpreter.interpret_once("test.boolean(True)")?,
         Value::True()
     );
     assert_eq!(
-        interpreter.write().interpret_once("test.boolean(True)")?,
-        Value::True()
-    );
-    assert_eq!(
-        interpreter.write().interpret_once("test.integer(42)")?,
+        interpreter.interpret_once("test.integer(42)")?,
         Value::Integer(84)
     );
     assert_eq!(
-        interpreter.write().interpret_once("test.float(42.0)")?,
+        interpreter.interpret_once("test.float(42.0)")?,
         Value::Float(OrderedFloat(84.0))
     );
     assert_eq!(
-        interpreter
-            .write()
-            .interpret_once(r#"test.string("hello")"#)?,
+        interpreter.interpret_once(r#"test.string("hello")"#)?,
         Value::String("hello, world!".to_string())
     );
     assert_eq!(
-        interpreter.write().interpret_once(r#"test.value(2)"#)?,
+        interpreter.interpret_once(r#"test.value(2)"#)?,
         Value::Integer(2)
     );
 
     // Result versions
     assert_eq!(
-        interpreter
-            .write()
-            .interpret_once("test.fail_boolean(True)")?,
+        interpreter.interpret_once("test.fail_boolean(True)")?,
         Value::True()
     );
     assert_eq!(
-        interpreter
-            .write()
-            .interpret_once("test.fail_integer(42)")?,
+        interpreter.interpret_once("test.fail_integer(42)")?,
         Value::Integer(84)
     );
     assert_eq!(
-        interpreter
-            .write()
-            .interpret_once(r#"test.fail_string("hello")"#)?,
+        interpreter.interpret_once(r#"test.fail_string("hello")"#)?,
         Value::String("hello, world!".to_string())
     );
     assert_eq!(
-        interpreter
-            .write()
-            .interpret_once(r#"test.fail_value(2)"#)?,
+        interpreter.interpret_once(r#"test.fail_value(2)"#)?,
         Value::Integer(2)
     );
 

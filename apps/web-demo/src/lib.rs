@@ -47,7 +47,7 @@ async fn async_trampoline() {
 
 #[allow(unused)]
 struct AppContext {
-    interpreter: Arc<RwLock<Interpreter>>,
+    interpreter: Interpreter,
     gpu: Arc<RwLock<Gpu>>,
     arcball: Arc<RwLock<ArcBallCamera>>,
     // //async_rt: Runtime,
@@ -71,15 +71,15 @@ async fn async_main() -> Result<()> {
         js_body.append_child(&canvas).unwrap();
     }
 
-    let interpreter = Interpreter::new();
-    let gpu = Gpu::new_async(window, Default::default(), &mut interpreter.write()).await?;
+    let mut interpreter = Interpreter::default();
+    let gpu = Gpu::new_async(window, Default::default(), &mut interpreter).await?;
     //let mut async_rt = Runtime::new()?;
     //let legion = World::default();
 
-    let globals_buffer = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter.write());
+    let globals_buffer = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter);
     // let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
 
-    let arcball = ArcBallCamera::new(meters!(0.1), &mut gpu.write(), &mut interpreter.write());
+    let arcball = ArcBallCamera::new(meters!(0.1), &mut gpu.write(), &mut interpreter);
     arcball.write().set_eye(Graticule::<Target>::new(
         degrees!(0),
         degrees!(0),

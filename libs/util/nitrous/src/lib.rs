@@ -40,14 +40,16 @@ pub struct Interpreter {
     globals: Arc<RwLock<GlobalNamespace>>,
 }
 
-impl Interpreter {
-    pub fn new() -> Arc<RwLock<Self>> {
-        Arc::new(RwLock::new(Self {
+impl Default for Interpreter {
+    fn default() -> Self {
+        Self {
             locals: LocalNamespace::empty(),
             globals: GlobalNamespace::new(),
-        }))
+        }
     }
+}
 
+impl Interpreter {
     pub fn with_locals<F>(&mut self, locals: &[(&str, Value)], mut callback: F) -> Result<Value>
     where
         F: FnMut(&mut Interpreter) -> Result<Value>,
@@ -289,21 +291,21 @@ mod test {
 
     #[test]
     fn test_interpret_basic() -> Result<()> {
-        let interpreter = Interpreter::new();
+        let mut interpreter = Interpreter::default();
         let script = Script::compile("2 + 2")?;
-        assert_eq!(interpreter.write().interpret(&script)?, Value::Integer(4));
+        assert_eq!(interpreter.interpret(&script)?, Value::Integer(4));
         Ok(())
     }
 
     #[test]
     fn test_precedence() -> Result<()> {
-        let interpreter = Interpreter::new();
+        let mut interpreter = Interpreter::default();
 
         let script = Script::compile("2 + 3 * 2")?;
-        assert_eq!(interpreter.write().interpret(&script)?, Value::Integer(8));
+        assert_eq!(interpreter.interpret(&script)?, Value::Integer(8));
 
         let script = Script::compile("(2 + 3) * 2")?;
-        assert_eq!(interpreter.write().interpret(&script)?, Value::Integer(10));
+        assert_eq!(interpreter.interpret(&script)?, Value::Integer(10));
 
         Ok(())
     }

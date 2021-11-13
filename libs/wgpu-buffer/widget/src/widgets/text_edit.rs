@@ -160,7 +160,7 @@ impl Widget for TextEdit {
         _event: &GenericEvent,
         _focus: &str,
         _cursor_position: Position<AbsSize>,
-        _interpreter: Arc<RwLock<Interpreter>>,
+        _interpreter: Interpreter,
     ) -> Result<()> {
         assert!(self.read_only);
         Ok(())

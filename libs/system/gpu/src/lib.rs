@@ -516,11 +516,11 @@ mod tests {
     #[test]
     fn test_create() -> Result<()> {
         use winit::platform::unix::EventLoopExtUnix;
-        let interpreter = Interpreter::new();
+        let mut interpreter = Interpreter::default();
         let _gpu = Gpu::new(
             Window::new(&EventLoop::<()>::new_any_thread())?,
             Default::default(),
-            &mut interpreter.write(),
+            &mut interpreter,
         )?;
         Ok(())
     }

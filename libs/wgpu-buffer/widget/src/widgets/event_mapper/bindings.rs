@@ -276,11 +276,9 @@ mod test {
 
     #[test]
     fn test_modifier_planes_disable_bare() -> Result<()> {
-        let interpreter = Interpreter::new();
+        let mut interpreter = Interpreter::default();
         let player = Arc::new(RwLock::new(Player::default()));
-        interpreter
-            .write()
-            .put_global("player", Value::Module(player.clone()));
+        interpreter.put_global("player", Value::Module(player.clone()));
 
         let w_key = Input::KeyboardKey(VirtualKeyCode::W);
         let shift_key = Input::KeyboardKey(VirtualKeyCode::LShift);
@@ -294,7 +292,7 @@ mod test {
             shift_key,
             Some(ElementState::Pressed),
             &mut state,
-            &mut interpreter.write(),
+            &mut interpreter,
         )?;
         assert!(!player.read().walking);
 
@@ -303,7 +301,7 @@ mod test {
             w_key,
             Some(ElementState::Pressed),
             &mut state,
-            &mut interpreter.write(),
+            &mut interpreter,
         )?;
         assert!(!player.read().walking);
 
@@ -312,11 +310,9 @@ mod test {
 
     #[test]
     fn test_matches_exact_modifier_plane() -> Result<()> {
-        let interpreter = Interpreter::new();
+        let mut interpreter = Interpreter::default();
         let player = Arc::new(RwLock::new(Player::default()));
-        interpreter
-            .write()
-            .put_global("player", Value::Module(player.clone()));
+        interpreter.put_global("player", Value::Module(player.clone()));
 
         let w_key = Input::KeyboardKey(VirtualKeyCode::W);
         let shift_key = Input::KeyboardKey(VirtualKeyCode::LShift);
@@ -334,7 +330,7 @@ mod test {
             w_key,
             Some(ElementState::Pressed),
             &mut state,
-            &mut interpreter.write(),
+            &mut interpreter,
         )?;
         assert!(!player.read().walking);
 
@@ -343,11 +339,9 @@ mod test {
 
     #[test]
     fn test_masking() -> Result<()> {
-        let interpreter = Interpreter::new();
+        let mut interpreter = Interpreter::default();
         let player = Arc::new(RwLock::new(Player::default()));
-        interpreter
-            .write()
-            .put_global("player", Value::Module(player.clone()));
+        interpreter.put_global("player", Value::Module(player.clone()));
 
         let w_key = Input::KeyboardKey(VirtualKeyCode::W);
         let shift_key = Input::KeyboardKey(VirtualKeyCode::LShift);
@@ -362,7 +356,7 @@ mod test {
             w_key,
             Some(ElementState::Pressed),
             &mut state,
-            &mut interpreter.write(),
+            &mut interpreter,
         )?;
         assert!(player.read().walking);
         assert!(!player.read().running);
@@ -373,7 +367,7 @@ mod test {
             shift_key,
             Some(ElementState::Pressed),
             &mut state,
-            &mut interpreter.write(),
+            &mut interpreter,
         )?;
         assert!(player.read().running);
         assert!(!player.read().walking);
@@ -384,7 +378,7 @@ mod test {
             shift_key,
             Some(ElementState::Released),
             &mut state,
-            &mut interpreter.write(),
+            &mut interpreter,
         )?;
         assert!(player.read().walking);
         assert!(!player.read().running);
@@ -395,7 +389,7 @@ mod test {
             shift_key,
             Some(ElementState::Pressed),
             &mut state,
-            &mut interpreter.write(),
+            &mut interpreter,
         )?;
         assert!(!player.read().walking);
         assert!(player.read().running);
@@ -405,7 +399,7 @@ mod test {
             w_key,
             Some(ElementState::Released),
             &mut state,
-            &mut interpreter.write(),
+            &mut interpreter,
         )?;
         assert!(!player.read().walking);
         assert!(!player.read().running);
@@ -415,7 +409,7 @@ mod test {
             w_key,
             Some(ElementState::Pressed),
             &mut state,
-            &mut interpreter.write(),
+            &mut interpreter,
         )?;
         assert!(!player.read().walking);
         assert!(player.read().running);

@@ -298,11 +298,11 @@ mod test {
     fn test_basic() -> Result<()> {
         use winit::platform::unix::EventLoopExtUnix;
         let event_loop = EventLoop::<()>::new_any_thread();
-        let interpreter = Interpreter::new();
+        let mut interpreter = Interpreter::default();
         let gpu = Gpu::new(
             Window::new(&event_loop)?,
             Default::default(),
-            &mut interpreter.write(),
+            &mut interpreter,
         )?;
         let test_buffer = Arc::new(RwLock::new(TestBuffer::new(&gpu.read())));
         let test_renderer = Arc::new(RwLock::new(TestRenderer::new(

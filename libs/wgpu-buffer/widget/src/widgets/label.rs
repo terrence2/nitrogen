@@ -62,6 +62,18 @@ impl Label {
     fn show(&mut self, content: &str) {
         self.set_text(content);
     }
+
+    #[method]
+    fn set_font_by_id(&mut self, font_id: Value) -> Result<()> {
+        self.set_font(FontId::from_value(font_id)?);
+        Ok(())
+    }
+
+    #[method]
+    fn set_font_size(&mut self, size: Value) -> Result<()> {
+        self.set_size(Size::from_pts(size.to_float()? as f32));
+        Ok(())
+    }
 }
 
 impl Labeled for Label {
@@ -72,6 +84,9 @@ impl Labeled for Label {
 
     fn set_size(&mut self, size: Size) {
         self.line.set_default_size(size);
+        self.line.select_all();
+        self.line.change_size(size);
+        self.line.select_none();
     }
 
     fn set_color(&mut self, color: Color) {
