@@ -29,7 +29,6 @@ use gpu::{
 };
 use input::{InputController, InputSystem};
 use legion::world::World;
-use nalgebra::convert;
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use orrery::Orrery;
@@ -377,11 +376,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         let mut tracker = Default::default();
         frame_graph.globals().make_upload_buffer(
             arcball.read().camera(),
-            &gpu.read(),
-            &mut tracker,
-        )?;
-        frame_graph.atmosphere().make_upload_buffer(
-            convert(orrery.read().sun_direction()),
+            &orrery.read(),
             &gpu.read(),
             &mut tracker,
         )?;

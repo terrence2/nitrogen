@@ -20,6 +20,9 @@ layout(set = 0, binding = 0) buffer CameraParameters {
     float screen_logical_width;
     float screen_logical_height;
 
+    // Orrery
+    vec4 orrery_sun_direction;
+
     // Camera
     float camera_fov_y;
     float camera_aspect_ratio;
@@ -46,8 +49,6 @@ layout(set = 0, binding = 0) buffer CameraParameters {
 
     // Padding
     float pad1[2];
-
-    // Orrery
 };
 
 mat4 screen_letterbox_projection() { return globals_screen_letterbox_projection; }

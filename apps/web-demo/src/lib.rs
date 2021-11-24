@@ -16,6 +16,7 @@ use absolute_unit::{degrees, meters};
 use anyhow::{bail, Result};
 use camera::ArcBallCamera;
 //use fullscreen::FullscreenBuffer;
+use chrono::{TimeZone, Utc};
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
 use gpu::Gpu;
@@ -23,6 +24,7 @@ use input::{GenericEvent, InputController, InputSystem, VirtualKeyCode};
 //use legion::*;
 // use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use nitrous::Interpreter;
+use orrery::Orrery;
 use parking_lot::RwLock;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
@@ -50,6 +52,7 @@ struct AppContext {
     interpreter: Interpreter,
     gpu: Arc<RwLock<Gpu>>,
     arcball: Arc<RwLock<ArcBallCamera>>,
+    orrery: Arc<RwLock<Orrery>>,
     // //async_rt: Runtime,
     // //legion: World,
     globals_buffer: Arc<RwLock<GlobalParametersBuffer>>,
@@ -91,6 +94,7 @@ async fn async_main() -> Result<()> {
         meters!(10),
     ));
     arcball.write().set_distance(meters!(40.0));
+    let orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0), &mut interpreter);
 
     let _ctx = AppContext {
         interpreter,
@@ -100,6 +104,7 @@ async fn async_main() -> Result<()> {
         //legion,
         globals_buffer,
         // fullscreen_buffer,
+        orrery,
     };
     #[cfg(target_arch = "wasm32")]
     InputSystem::run_forever(event_loop, window, window_loop, _ctx).await?;
@@ -137,6 +142,7 @@ fn window_loop(
     let mut tracker = Default::default();
     app.globals_buffer.write().make_upload_buffer(
         app.arcball.read().camera(),
+        &app.orrery.read(),
         &app.gpu.read(),
         &mut tracker,
     )?;

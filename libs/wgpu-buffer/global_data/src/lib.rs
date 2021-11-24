@@ -20,6 +20,7 @@ use gpu::{Gpu, UploadTracker};
 use nalgebra::{convert, Matrix3, Matrix4, Point3, Vector3, Vector4};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use orrery::Orrery;
 use parking_lot::RwLock;
 use std::{mem, sync::Arc};
 use zerocopy::{AsBytes, FromBytes};
@@ -63,6 +64,9 @@ struct Globals {
     screen_physical_height: f32,
     screen_logical_width: f32,
     screen_logical_height: f32,
+
+    // Orrery
+    orrery_sun_direction: [f32; 4],
 
     // Camera properties
     camera_fov_y: f32,
@@ -145,6 +149,11 @@ impl Globals {
                 .to_homogeneous(),
         );
         self.camera_exposure = camera.exposure();
+        self
+    }
+
+    pub fn with_orrery(mut self, orrery: &Orrery) -> Self {
+        self.orrery_sun_direction = v3_to_v(&orrery.sun_direction());
         self
     }
 
@@ -254,6 +263,7 @@ impl GlobalParametersBuffer {
     pub fn make_upload_buffer(
         &self,
         camera: &Camera,
+        orrery: &Orrery,
         gpu: &Gpu,
         tracker: &mut UploadTracker,
     ) -> Result<()> {
@@ -261,6 +271,7 @@ impl GlobalParametersBuffer {
         let globals = globals
             .with_screen_overlay_projection(gpu)
             .with_camera(camera)
+            .with_orrery(orrery)
             .with_tone(self.tone_gamma);
         let buffer = gpu.push_data(
             "global-upload-buffer",

@@ -9,6 +9,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 anyhow = { version = "^ 1", features = ["backtrace"] }
+chrono = "^ 0.4"
 console_error_panic_hook = "^ 0.1"
 log = "^ 0.4"
 parking_lot = "^ 0.11"
@@ -27,3 +28,4 @@ global_data = { path = "../../libs/wgpu-buffer/global_data" }
 gpu = { path = "../../libs/system/gpu" }
 input = { path = "../../libs/system/input" }
 nitrous = { path = "../../libs/util/nitrous" }
+orrery = { path = "../../libs/sim/orrery" }

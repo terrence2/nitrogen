@@ -15,6 +15,7 @@
 use absolute_unit::{degrees, meters};
 use anyhow::Result;
 use camera::ArcBallCamera;
+use chrono::{TimeZone, Utc};
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
@@ -24,6 +25,7 @@ use input::{
     VirtualKeyCode,
 };
 use nitrous::Interpreter;
+use orrery::Orrery;
 use winit::window::Window;
 
 fn main() -> Result<()> {
@@ -33,6 +35,7 @@ fn main() -> Result<()> {
 fn window_main(window: Window, input_controller: &InputController) -> Result<()> {
     let mut interpreter = Interpreter::default();
     let gpu = Gpu::new(window, Default::default(), &mut interpreter)?;
+    let orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0), &mut interpreter);
 
     let globals_buffer = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter);
     let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
@@ -151,6 +154,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         let mut tracker = Default::default();
         globals_buffer.read().make_upload_buffer(
             arcball.read().camera(),
+            &orrery.read(),
             &gpu.read(),
             &mut tracker,
         )?;
