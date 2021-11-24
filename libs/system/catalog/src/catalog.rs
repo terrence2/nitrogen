@@ -252,7 +252,6 @@ impl Catalog {
 mod tests {
     use super::*;
     use crate::DirectoryDrawer;
-    use std::path::PathBuf;
 
     #[test]
     fn test_basic_functionality() -> Result<()> {
@@ -264,10 +263,7 @@ mod tests {
         // Expect success
         let meta = catalog.stat_name_sync("a.txt")?;
         assert_eq!(meta.name(), "a.txt");
-        assert_eq!(
-            meta.path(),
-            Some(PathBuf::from("./masking_test_data/a/a.txt").as_path())
-        );
+        assert_eq!(meta.path(), "./masking_test_data/a/a.txt");
         let data = catalog.read_name_sync("a.txt")?;
         assert_eq!(data, b"hello" as &[u8]);
 
@@ -283,10 +279,7 @@ mod tests {
         )?)?;
         let meta = catalog.stat_name_sync("a.txt")?;
         assert_eq!(meta.name(), "a.txt");
-        assert_eq!(
-            meta.path(),
-            Some(PathBuf::from("./masking_test_data/a/a.txt").as_path())
-        );
+        assert_eq!(meta.path(), "./masking_test_data/a/a.txt");
         let data = catalog.read_name_sync("a.txt")?;
         assert_eq!(data, b"hello" as &[u8]);
 
@@ -294,10 +287,7 @@ mod tests {
         catalog.add_drawer(DirectoryDrawer::from_directory(1, "./masking_test_data/b")?)?;
         let meta = catalog.stat_name_sync("a.txt")?;
         assert_eq!(meta.name(), "a.txt");
-        assert_eq!(
-            meta.path(),
-            Some(PathBuf::from("./masking_test_data/b/a.txt").as_path())
-        );
+        assert_eq!(meta.path(), "./masking_test_data/b/a.txt");
         let data = catalog.read_name_sync("a.txt")?;
         assert_eq!(data, b"world" as &[u8]);
 
