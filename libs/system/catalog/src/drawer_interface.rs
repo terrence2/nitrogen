@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
 use async_trait::async_trait;
-use std::{borrow::Cow, collections::HashMap, ops::Range, path::PathBuf};
+use std::{borrow::Cow, collections::HashMap, ops::Range};
 
 // Files are identified by an id internally.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
@@ -36,7 +36,7 @@ pub struct DrawerFileMetadata {
     pub compression: Option<&'static str>,
     pub packed_size: u64,
     pub unpacked_size: u64,
-    pub path: Option<PathBuf>,
+    pub path: String,
 }
 
 // A drawer is one related section of a catalog. It is a uniform interface for a group of files.

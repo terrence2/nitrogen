@@ -117,7 +117,7 @@ impl DrawerInterface for DirectoryDrawer {
             compression: None,
             packed_size: meta.len(),
             unpacked_size: meta.len(),
-            path: Some(global_path),
+            path: global_path.to_string_lossy().into(),
         })
     }
 
