@@ -317,7 +317,7 @@ impl QuadTree {
         }
     }
 
-    pub(crate) fn finish_update(
+    pub(crate) fn finish_visibility_updates(
         &mut self,
         additions: &mut Vec<(u32, QuadTreeId)>,
         removals: &mut Vec<QuadTreeId>,

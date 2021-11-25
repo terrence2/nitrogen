@@ -75,23 +75,25 @@ impl SphericalHeightTileSet {
 }
 
 impl TileSet for SphericalHeightTileSet {
-    fn begin_update(&mut self) {
-        self.common.begin_update()
+    fn begin_visibility_update(&mut self) {
+        self.common.begin_visibility_update();
     }
 
     fn note_required(&mut self, visible_patch: &VisiblePatch) {
         self.common.note_required(visible_patch)
     }
 
-    fn finish_update(
+    fn finish_visibility_update(
         &mut self,
         _camera: &Camera,
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &Runtime,
-        gpu: &Gpu,
-        tracker: &mut UploadTracker,
     ) {
-        self.common.finish_update(catalog, async_rt, gpu, tracker)
+        self.common.finish_visibility_update(catalog, async_rt);
+    }
+
+    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) {
+        self.common.ensure_uploaded(gpu, tracker);
     }
 
     fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut Gpu) {
@@ -188,23 +190,25 @@ impl SphericalColorTileSet {
 }
 
 impl TileSet for SphericalColorTileSet {
-    fn begin_update(&mut self) {
-        self.common.begin_update()
+    fn begin_visibility_update(&mut self) {
+        self.common.begin_visibility_update()
     }
 
     fn note_required(&mut self, visible_patch: &VisiblePatch) {
         self.common.note_required(visible_patch)
     }
 
-    fn finish_update(
+    fn finish_visibility_update(
         &mut self,
         _camera: &Camera,
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &Runtime,
-        gpu: &Gpu,
-        tracker: &mut UploadTracker,
     ) {
-        self.common.finish_update(catalog, async_rt, gpu, tracker)
+        self.common.finish_visibility_update(catalog, async_rt)
+    }
+
+    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) {
+        self.common.ensure_uploaded(gpu, tracker);
     }
 
     fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut Gpu) {
@@ -306,23 +310,25 @@ impl SphericalNormalsTileSet {
 }
 
 impl TileSet for SphericalNormalsTileSet {
-    fn begin_update(&mut self) {
-        self.common.begin_update()
+    fn begin_visibility_update(&mut self) {
+        self.common.begin_visibility_update();
     }
 
     fn note_required(&mut self, visible_patch: &VisiblePatch) {
-        self.common.note_required(visible_patch)
+        self.common.note_required(visible_patch);
     }
 
-    fn finish_update(
+    fn finish_visibility_update(
         &mut self,
         _camera: &Camera,
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &Runtime,
-        gpu: &Gpu,
-        tracker: &mut UploadTracker,
     ) {
-        self.common.finish_update(catalog, async_rt, gpu, tracker)
+        self.common.finish_visibility_update(catalog, async_rt);
+    }
+
+    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) {
+        self.common.ensure_uploaded(gpu, tracker);
     }
 
     fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut Gpu) {

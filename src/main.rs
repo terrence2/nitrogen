@@ -355,7 +355,10 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         }
         now = next_now;
 
+        arcball.write().think();
+
         {
+            // Inputs: gpu, window, events, interp
             let logical_extent: Extent<AbsSize> = gpu.read().logical_size().into();
             let scale_factor = { gpu.read().scale_factor() };
             frame_graph.widgets.write().handle_events(
@@ -366,32 +369,27 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
                 logical_extent,
             )?;
             frame_graph
-                .widgets
-                .write()
-                .layout_for_frame(now, &mut gpu.write())?;
+                .globals_mut()
+                .track_state_changes(arcball.read().camera(), &orrery.read());
+            frame_graph.terrain_mut().track_state_changes(
+                arcball.read().camera(),
+                system.write().current_camera(arcball.read().camera()),
+                catalog.clone(),
+                &mut async_rt,
+            )?;
         }
 
-        arcball.write().think();
-
-        let mut tracker = Default::default();
-        frame_graph.globals().make_upload_buffer(
-            arcball.read().camera(),
-            &orrery.read(),
-            &gpu.read(),
-            &mut tracker,
-        )?;
-        frame_graph.terrain_mut().make_upload_buffer(
-            arcball.read().camera(),
-            system.write().current_camera(arcball.read().camera()),
-            catalog.clone(),
-            &mut async_rt,
-            &mut gpu.write(),
-            &mut tracker,
-        )?;
-        frame_graph.widgets.write().make_upload_buffer(
+a       let mut tracker = Default::default();
+        frame_graph
+            .globals_mut()
+            .ensure_uploaded(&gpu.read(), &mut tracker)?;
+        frame_graph
+            .terrain_mut()
+            .ensure_uploaded(&async_rt, &mut gpu.write(), &mut tracker)?;
+        frame_graph.widgets.write().ensure_uploaded(
             now,
-            &mut gpu.write(),
             &async_rt,
+            &mut gpu.write(),
             &mut tracker,
         )?;
         if !frame_graph.run(&mut gpu.write(), tracker)? {

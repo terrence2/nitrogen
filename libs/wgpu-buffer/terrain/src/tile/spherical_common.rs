@@ -36,7 +36,6 @@ use futures::task::noop_waker;
 use geometry::Aabb;
 use gpu::{texture_format_size, ArcTextureCopyView, Gpu, OwnedBufferCopyView, UploadTracker};
 use image::{ImageBuffer, Rgb};
-use log::trace;
 use std::{
     collections::{BTreeMap, BinaryHeap},
     io::Read,
@@ -533,7 +532,7 @@ impl SphericalTileSetCommon {
         self.atlas_free_list.push(atlas_slot);
     }
 
-    pub(crate) fn begin_update(&mut self) {
+    pub(crate) fn begin_visibility_update(&mut self) {
         self.tile_tree.begin_update();
     }
 
@@ -562,18 +561,17 @@ impl SphericalTileSetCommon {
         self.tile_tree.note_required(&aabb, angular_resolution);
     }
 
-    pub(crate) fn finish_update(
+    pub(crate) fn finish_visibility_update(
         &mut self,
         catalog: Arc<RwLock<Catalog>>,
         async_rt: &Runtime,
-        gpu: &Gpu,
-        tracker: &mut UploadTracker,
     ) {
         let mut additions = Vec::new();
         let mut removals = Vec::new();
-        self.tile_tree.finish_update(&mut additions, &mut removals);
+        self.tile_tree
+            .finish_visibility_updates(&mut additions, &mut removals);
 
-        // Apply removals and additions.
+        // Apply removals and additions to CPU tracking.
         for &qtid in &removals {
             self.deallocate_atlas_slot(qtid);
         }
@@ -627,6 +625,7 @@ impl SphericalTileSetCommon {
                         }
                     };
                     // FIXME: encode this in the header
+                    // FIXME: do upscale on the GPU somehow?
                     let data = if closure_kind == DataSetDataKind::Color {
                         // Re-encode from rgb to rgba
                         let mut data2 = vec![255u8; TILE_PHYSICAL_SIZE * TILE_PHYSICAL_SIZE * 4];
@@ -645,6 +644,22 @@ impl SphericalTileSetCommon {
                 }
             });
         }
+
+        log::trace!(
+            "{:?} +:{} -:{} st:{} out:{}",
+            self.kind,
+            additions.len(),
+            removals.len(),
+            reads_started_count,
+            self.tile_read_count,
+        );
+    }
+
+    pub(crate) fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) {
+        // FIXME: precompute this
+        let raw_tile_size = self.atlas_texture_extent.width as usize
+            * self.atlas_texture_extent.height as usize
+            * texture_format_size(self.atlas_texture_format) as usize;
 
         // Check for any completed reads.
         let mut reads_ended_count = 0;
@@ -713,7 +728,8 @@ impl SphericalTileSetCommon {
             );
         }
 
-        // Use the list of allocated tiles to generate a vertex buffer to upload.
+        // Use the list of allocated tiles to generate a vertex buffer to upload for
+        // painting the new data into the index.
         // FIXME: don't re-allocate every frame
         let index_ang_extent = TerrainLevel::index_extent();
         let iextent_lat = index_ang_extent.0.f32() / 2.; // range from [-1,1]
@@ -757,25 +773,17 @@ impl SphericalTileSetCommon {
         while tris.len() < self.index_paint_range.end as usize {
             tris.push(IndexPaintVertex::new([0f32, 0f32], 0));
         }
-        let upload_buffer = gpu.push_slice(
+        gpu.upload_slice_to(
             "index-paint-tris-upload",
             &tris,
-            wgpu::BufferUsage::COPY_SRC,
-        );
-        tracker.upload(
-            upload_buffer,
             self.index_paint_vert_buffer.clone(),
-            IndexPaintVertex::mem_size() * tris.len(),
+            tracker,
         );
 
-        trace!(
-            "{:?} +:{} -:{} st:{} ed:{} out:{}, act:{}, d:{}",
+        log::trace!(
+            "{:?} ed:{} act:{}, d:{}",
             self.kind,
-            additions.len(),
-            removals.len(),
-            reads_started_count,
             reads_ended_count,
-            self.tile_read_count,
             active_atlas_slots,
             max_active_level
         );

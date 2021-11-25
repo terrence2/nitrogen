@@ -501,12 +501,10 @@ impl PatchManager {
         }
     }
 
-    pub fn make_upload_buffer(
+    pub fn track_state_changes(
         &mut self,
         camera: &Camera,
         optimize_camera: &Camera,
-        gpu: &mut Gpu,
-        tracker: &mut UploadTracker,
         visible_regions: &mut Vec<VisiblePatch>,
     ) -> Result<()> {
         // Select optimal live patches from our coherent patch tree.
@@ -575,15 +573,18 @@ impl PatchManager {
         while self.live_vertices.len() < 3 * self.desired_patch_count {
             self.live_vertices.push(TerrainUploadVertex::empty());
         }
+
+        //println!("dt: {:?}", Instant::now() - loop_start);
+        Ok(())
+    }
+
+    pub fn ensure_uploaded(&self, gpu: &Gpu, tracker: &mut UploadTracker) {
         gpu.upload_slice_to(
             "terrain-geo-patch-vertex-upload-buffer",
             &self.live_vertices,
             self.patch_upload_buffer.clone(),
             tracker,
         );
-
-        //println!("dt: {:?}", Instant::now() - loop_start);
-        Ok(())
     }
 
     pub fn tessellate<'a>(

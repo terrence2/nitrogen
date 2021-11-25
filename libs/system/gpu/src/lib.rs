@@ -323,6 +323,8 @@ impl Gpu {
         }
     }
 
+    /// Push `data` to the GPU and return a new buffer. Returns None if data is empty
+    /// instead of crashing.
     pub fn maybe_push_buffer(
         &self,
         label: &'static str,
@@ -344,6 +346,8 @@ impl Gpu {
         )
     }
 
+    /// Push `data` to the GPU and return a new buffer. Returns None if data is empty
+    /// instead of crashing.
     pub fn maybe_push_slice<T: AsBytes>(
         &self,
         label: &'static str,
@@ -365,6 +369,7 @@ impl Gpu {
         )
     }
 
+    /// Push `data` to the GPU and return a new buffer. Panics if data is empty.
     pub fn push_buffer(
         &self,
         label: &'static str,
@@ -375,6 +380,7 @@ impl Gpu {
             .expect("push non-empty buffer")
     }
 
+    /// Push `data` to the GPU and return a new buffer. Panics if data is empty.
     pub fn push_slice<T: AsBytes>(
         &self,
         label: &'static str,
@@ -385,6 +391,7 @@ impl Gpu {
             .expect("push non-empty slice")
     }
 
+    /// Push `data` to the GPU and return a new buffer. Panics if data is empty.
     pub fn push_data<T: AsBytes>(
         &self,
         label: &'static str,
@@ -401,6 +408,10 @@ impl Gpu {
             })
     }
 
+    /// Push `data` to the GPU and copy it to `target`. Does nothing if data is empty.
+    /// The copy appears to currently be fenced with respect to usages of the target,
+    /// but this is not specified as of the time of writing. This is optimized under
+    /// the hood and is supposed to be, I think, faster than creating a new bind group.
     pub fn upload_slice_to<T: AsBytes>(
         &self,
         label: &'static str,

@@ -299,19 +299,6 @@ impl WidgetBuffer {
         0u32..self.paint_context.text_pool.len() as u32
     }
 
-    pub fn layout_for_frame(&mut self, now: Instant, gpu: &mut Gpu) -> Result<()> {
-        self.root.write().layout(
-            now,
-            Region::new(
-                Position::origin(),
-                Extent::new(Size::from_percent(100.), Size::from_percent(100.)),
-            ),
-            gpu,
-            &mut self.paint_context.font_context,
-        )?;
-        Ok(())
-    }
-
     pub fn toggle_terminal(&mut self) {
         match self.show_terminal {
             true => self.hide_terminal(true),
@@ -376,16 +363,29 @@ impl WidgetBuffer {
         Ok(())
     }
 
-    pub fn make_upload_buffer(
+    pub fn ensure_uploaded(
         &mut self,
         now: Instant,
-        gpu: &mut Gpu,
         async_rt: &Runtime,
+        gpu: &mut Gpu,
         tracker: &mut UploadTracker,
     ) -> Result<()> {
+        // Perform recursive layout algorithm against retained state.
+        self.root.write().layout(
+            now,
+            Region::new(
+                Position::origin(),
+                Extent::new(Size::from_percent(100.), Size::from_percent(100.)),
+            ),
+            gpu,
+            &mut self.paint_context.font_context,
+        )?;
+
+        // Draw into the paint context.
         self.paint_context.reset_for_frame();
         self.root.read().upload(now, gpu, &mut self.paint_context)?;
 
+        // Upload: copy all of the CPU paint context to the GPU buffers we maintain.
         self.paint_context
             .make_upload_buffer(gpu, async_rt, tracker)?;
 
@@ -429,6 +429,8 @@ impl WidgetBuffer {
             );
         }
 
+        // FIXME: We should only need a new bind group if the underlying texture
+        // FIXME: atlas grew and we have a new texture reference, not every frame.
         self.bind_group = Some(
             gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("widget-bind-group"),

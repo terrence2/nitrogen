@@ -715,33 +715,42 @@ impl TerrainBuffer {
         })
     }
 
-    pub fn make_upload_buffer(
+    // Given the new camera position, update our internal CPU tracking.
+    pub fn track_state_changes(
         &mut self,
         camera: &Camera,
         optimize_camera: &Camera,
         catalog: Arc<AsyncRwLock<Catalog>>,
         async_rt: &mut Runtime,
-        gpu: &mut Gpu,
-        tracker: &mut UploadTracker,
     ) -> Result<()> {
         // Upload patches and capture visibility regions.
         self.visible_regions.clear();
-        self.patch_manager.make_upload_buffer(
+        self.patch_manager.track_state_changes(
             camera,
             optimize_camera,
-            gpu,
-            tracker,
             &mut self.visible_regions,
         )?;
 
         // Dispatch visibility to tiles so that they can manage the actively loaded set.
-        self.tile_manager.begin_update();
+        self.tile_manager.begin_visibility_update();
         for visible_patch in &self.visible_regions {
             self.tile_manager.note_required(visible_patch);
         }
         self.tile_manager
-            .finish_update(camera, catalog, async_rt, gpu, tracker);
+            .finish_visibility_update(camera, catalog, async_rt);
 
+        Ok(())
+    }
+
+    // Push CPU state to GPU
+    pub fn ensure_uploaded(
+        &mut self,
+        async_rt: &Runtime,
+        gpu: &mut Gpu,
+        tracker: &mut UploadTracker,
+    ) -> Result<()> {
+        self.patch_manager.ensure_uploaded(gpu, tracker);
+        self.tile_manager.ensure_uploaded(async_rt, gpu, tracker);
         Ok(())
     }
 
