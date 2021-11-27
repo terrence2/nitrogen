@@ -20,16 +20,17 @@ use crate::{
     widget::Widget,
 };
 use anyhow::{anyhow, Result};
-use gpu::{
-    size::{AbsSize, LeftBound, RelSize, ScreenDir, Size},
-    Gpu,
-};
+use gpu::Gpu;
 use input::GenericEvent;
 use nitrous::Interpreter;
 use nitrous::Value;
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use std::{collections::HashMap, sync::Arc, time::Instant};
+use window::{
+    size::{AbsSize, LeftBound, RelSize, ScreenDir, Size},
+    WindowHandle,
+};
 
 // Pack boxes at an edge.
 #[derive(Debug)]
@@ -160,7 +161,11 @@ impl FloatBox {
 }
 
 impl Widget for FloatBox {
-    fn measure(&mut self, _gpu: &Gpu, _font_context: &mut FontContext) -> Result<Extent<Size>> {
+    fn measure(
+        &mut self,
+        _win: &WindowHandle,
+        _font_context: &mut FontContext,
+    ) -> Result<Extent<Size>> {
         Ok(Extent::zero())
     }
 
@@ -168,14 +173,14 @@ impl Widget for FloatBox {
         &mut self,
         now: Instant,
         region: Region<Size>,
-        gpu: &Gpu,
+        win: &WindowHandle,
         font_context: &mut FontContext,
     ) -> Result<()> {
-        let position = region.position().as_rel(gpu);
-        let extent = region.extent().as_rel(gpu);
+        let position = region.position().as_rel(win);
+        let extent = region.extent().as_rel(win);
         for pack in self.children.values() {
             let mut widget = pack.widget.write();
-            let child_extent = widget.measure(gpu, font_context)?.as_rel(gpu);
+            let child_extent = widget.measure(win, font_context)?.as_rel(win);
 
             let left_offset = position.left()
                 + match pack.float_h {
@@ -183,14 +188,14 @@ impl Widget for FloatBox {
                     PositionH::Center => (extent.width() / 2.) - (child_extent.width() / 2.),
                     PositionH::End => extent.width() - child_extent.width(),
                 }
-                + pack.offset_x.as_rel(gpu, ScreenDir::Horizontal);
+                + pack.offset_x.as_rel(win, ScreenDir::Horizontal);
             let top_offset = position.bottom()
                 + match pack.float_v {
                     PositionV::Top => extent.height() - child_extent.height(),
                     PositionV::Center => (extent.height() / 2.) - (child_extent.height() / 2.),
                     PositionV::Bottom => RelSize::zero(),
                 }
-                + pack.offset_y.as_rel(gpu, ScreenDir::Vertical);
+                + pack.offset_y.as_rel(win, ScreenDir::Vertical);
             let mut remaining_extent = Extent::<Size>::new(
                 (extent.width() - left_offset).into(),
                 (extent.height() - top_offset).into(),
@@ -199,13 +204,13 @@ impl Widget for FloatBox {
                 remaining_extent.set_width(Size::from_percent(
                     remaining_extent
                         .width()
-                        .as_percent(gpu, ScreenDir::Horizontal)
+                        .as_percent(win, ScreenDir::Horizontal)
                         .min(child_extent.width().as_percent()),
                 ));
                 remaining_extent.set_height(Size::from_percent(
                     remaining_extent
                         .height()
-                        .as_percent(gpu, ScreenDir::Vertical)
+                        .as_percent(win, ScreenDir::Vertical)
                         .min(child_extent.height().as_percent()),
                 ));
             }
@@ -215,7 +220,7 @@ impl Widget for FloatBox {
                     Position::new(left_offset.into(), top_offset.into()),
                     remaining_extent,
                 ),
-                gpu,
+                win,
                 font_context,
             )?;
         }

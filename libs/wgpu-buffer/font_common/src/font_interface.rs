@@ -12,9 +12,9 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use gpu::size::AbsSize;
 use image::GrayImage;
 use std::fmt::Debug;
+use window::size::AbsSize;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum FontAdvance {

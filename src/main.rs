@@ -22,11 +22,7 @@ use chrono::{Duration as ChronoDuration, TimeZone, Utc};
 use composite::CompositeRenderPass;
 use fullscreen::FullscreenBuffer;
 use global_data::GlobalParametersBuffer;
-use gpu::{
-    make_frame_graph,
-    size::{AbsSize, LeftBound, Size},
-    Gpu,
-};
+use gpu::{make_frame_graph, Gpu};
 use input::{InputController, InputSystem};
 use legion::world::World;
 use nitrous::{Interpreter, Value};
@@ -44,10 +40,12 @@ use terrain::{CpuDetailLevel, GpuDetailLevel, TerrainBuffer};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use ui::UiRenderPass;
 use widget::{
-    Border, Color, Expander, Extent, Label, Labeled, PositionH, PositionV, VerticalBox,
-    WidgetBuffer,
+    Border, Color, Expander, Label, Labeled, PositionH, PositionV, VerticalBox, WidgetBuffer,
 };
-use winit::window::Window;
+use window::{
+    size::{LeftBound, Size},
+    WindowHandle,
+};
 use world::WorldRenderPass;
 
 /// Demonstrate the capabilities of the Nitrogen engine
@@ -177,7 +175,7 @@ fn main() -> Result<()> {
     InputSystem::run_forever(window_main)
 }
 
-fn window_main(window: Window, input_controller: &InputController) -> Result<()> {
+fn window_main(window: WindowHandle, input_controller: &InputController) -> Result<()> {
     let opt = Opt::from_args();
     let (cpu_detail, gpu_detail) = if cfg!(debug_assertions) {
         (CpuDetailLevel::Low, GpuDetailLevel::Low)
@@ -195,10 +193,10 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
 
     let mut interpreter = Interpreter::default();
     let timeline = Timeline::new(&mut interpreter);
-    let gpu = Gpu::new(window, Default::default(), &mut interpreter)?;
+    let gpu = Gpu::new(window.clone(), Default::default(), &mut interpreter)?;
 
     let orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0), &mut interpreter);
-    let arcball = ArcBallCamera::new(meters!(0.5), &mut gpu.write(), &mut interpreter);
+    let arcball = ArcBallCamera::new(meters!(0.5), &mut gpu.write(), &window, &mut interpreter);
 
     ///////////////////////////////////////////////////////////
     let atmosphere_buffer = AtmosphereBuffer::new(&mut gpu.write())?;
@@ -239,11 +237,11 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
     let mut frame_graph = FrameGraph::new(
         atmosphere_buffer,
         fullscreen_buffer,
-        globals.clone(),
+        globals,
         stars_buffer,
         terrain_buffer,
         widgets.clone(),
-        world.clone(),
+        world,
         ui,
         composite,
     )?;
@@ -316,8 +314,8 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         gpu.write().add_default_bindings(interp)?;
         orrery.write().add_default_bindings(interp)?;
         arcball.write().add_default_bindings(interp)?;
-        globals.write().add_default_bindings(interp)?;
-        world.write().add_default_bindings(interp)?;
+        frame_graph.globals_mut().add_debug_bindings(interp)?;
+        frame_graph.world_mut().add_debug_bindings(interp)?;
         system.write().add_default_bindings(interp)?;
     }
 
@@ -358,19 +356,17 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
         arcball.write().think();
 
         {
-            // Inputs: gpu, window, events, interp
-            let logical_extent: Extent<AbsSize> = gpu.read().logical_size().into();
-            let scale_factor = { gpu.read().scale_factor() };
-            frame_graph.widgets.write().handle_events(
+            frame_graph.widgets.write().track_state_changes(
                 now,
                 &input_controller.poll_events()?,
                 interpreter.clone(),
-                scale_factor,
-                logical_extent,
+                &window,
             )?;
-            frame_graph
-                .globals_mut()
-                .track_state_changes(arcball.read().camera(), &orrery.read());
+            frame_graph.globals_mut().track_state_changes(
+                arcball.read().camera(),
+                &orrery.read(),
+                &window,
+            );
             frame_graph.terrain_mut().track_state_changes(
                 arcball.read().camera(),
                 system.write().current_camera(arcball.read().camera()),
@@ -379,7 +375,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
             )?;
         }
 
-a       let mut tracker = Default::default();
+        let mut tracker = Default::default();
         frame_graph
             .globals_mut()
             .ensure_uploaded(&gpu.read(), &mut tracker)?;
@@ -393,7 +389,7 @@ a       let mut tracker = Default::default();
             &mut tracker,
         )?;
         if !frame_graph.run(&mut gpu.write(), tracker)? {
-            let sz = gpu.read().physical_size();
+            let sz = window.physical_size();
             gpu.write().on_resize(sz.width as i64, sz.height as i64)?;
         }
 

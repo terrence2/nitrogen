@@ -48,10 +48,7 @@ use crate::font_context::FontContext;
 use anyhow::{ensure, Result};
 use font_common::{FontAdvance, FontInterface};
 use font_ttf::TtfFont;
-use gpu::{
-    size::{AbsSize, Size},
-    Gpu, UploadTracker,
-};
+use gpu::{Gpu, UploadTracker};
 use input::{ElementState, GenericEvent, ModifiersState, VirtualKeyCode};
 use log::trace;
 use nitrous::{Interpreter, Value};
@@ -59,6 +56,10 @@ use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use std::{borrow::Borrow, mem, num::NonZeroU64, ops::Range, sync::Arc, time::Instant};
 use tokio::runtime::Runtime;
+use window::{
+    size::{AbsSize, Size},
+    WindowHandle,
+};
 
 // Drawing UI efficiently:
 //
@@ -320,13 +321,14 @@ impl WidgetBuffer {
         self.terminal.write().set_visible(false);
     }
 
-    pub fn handle_events(
+    pub fn track_state_changes(
         &mut self,
         now: Instant,
         events: &[GenericEvent],
         interpreter: Interpreter,
-        scale_factor: f64,
-        logical_size: Extent<AbsSize>,
+        win: &WindowHandle,
+        // scale_factor: f64,
+        // logical_size: Extent<AbsSize>,
     ) -> Result<()> {
         for event in events {
             if let GenericEvent::KeyboardKey {
@@ -347,9 +349,11 @@ impl WidgetBuffer {
             }
             if let GenericEvent::CursorMove { pixel_position, .. } = event {
                 let (x, y) = *pixel_position;
+                let s = win.scale_factor();
+                let sz: Extent<AbsSize> = win.logical_size().into();
                 self.cursor_position = Position::new(
-                    AbsSize::from_px((x / scale_factor) as f32),
-                    logical_size.height() - AbsSize::from_px((y / scale_factor) as f32),
+                    AbsSize::from_px((x / s) as f32),
+                    sz.height() - AbsSize::from_px((y / s) as f32),
                 );
             }
             self.root_container().write().handle_event(
@@ -360,6 +364,18 @@ impl WidgetBuffer {
                 interpreter.clone(),
             )?;
         }
+
+        // Perform recursive layout algorithm against retained state.
+        self.root.write().layout(
+            now,
+            Region::new(
+                Position::origin(),
+                Extent::new(Size::from_percent(100.), Size::from_percent(100.)),
+            ),
+            win,
+            &mut self.paint_context.font_context,
+        )?;
+
         Ok(())
     }
 
@@ -370,17 +386,6 @@ impl WidgetBuffer {
         gpu: &mut Gpu,
         tracker: &mut UploadTracker,
     ) -> Result<()> {
-        // Perform recursive layout algorithm against retained state.
-        self.root.write().layout(
-            now,
-            Region::new(
-                Position::origin(),
-                Extent::new(Size::from_percent(100.), Size::from_percent(100.)),
-            ),
-            gpu,
-            &mut self.paint_context.font_context,
-        )?;
-
         // Draw into the paint context.
         self.paint_context.reset_for_frame();
         self.root.read().upload(now, gpu, &mut self.paint_context)?;

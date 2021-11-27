@@ -21,13 +21,11 @@ use crate::{
 };
 use anyhow::Result;
 use font_common::FontInterface;
-use gpu::{
-    size::{AbsSize, LeftBound, RelSize},
-    Gpu, UploadTracker,
-};
+use gpu::{Gpu, UploadTracker};
 use parking_lot::RwLock;
 use std::{borrow::Borrow, sync::Arc};
 use tokio::runtime::Runtime;
+use window::size::{AbsSize, LeftBound, RelSize};
 
 #[derive(Debug)]
 pub struct PaintContext {

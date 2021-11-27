@@ -253,7 +253,7 @@ impl UiRenderPass {
     }
 
     fn _make_deferred_texture_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let sz = gpu.physical_size();
+        let sz = gpu.window().physical_size();
         let target = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("world-offscreen-texture-target"),
             size: wgpu::Extent3d {
@@ -283,7 +283,7 @@ impl UiRenderPass {
     }
 
     fn _make_deferred_depth_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let sz = gpu.physical_size();
+        let sz = gpu.window().physical_size();
         let depth_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("world-offscreen-depth-texture"),
             size: wgpu::Extent3d {

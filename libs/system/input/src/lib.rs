@@ -23,12 +23,12 @@ use std::{
     collections::HashMap,
     sync::mpsc::{channel, Receiver, TryRecvError},
 };
+use window::WindowHandle;
 use winit::{
     event::{
         DeviceEvent, DeviceId, Event, KeyboardInput, MouseScrollDelta, StartCause, WindowEvent,
     },
     event_loop::{ControlFlow, EventLoop, EventLoopProxy},
-    window::Window,
 };
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -158,18 +158,19 @@ impl InputSystem {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn run_forever<M>(mut window_main: M) -> Result<()>
     where
-        M: 'static + Send + FnMut(Window, &InputController) -> Result<()>,
+        M: 'static + Send + FnMut(WindowHandle, &InputController) -> Result<()>,
     {
         let event_loop = EventLoop::<MetaEvent>::with_user_event();
         let window = winit::window::WindowBuilder::new()
-            .with_title("Nitrogen")
+            .with_title("Nitrogen Engine")
             .build(&event_loop)?;
+        let win_handle = WindowHandle::new(window);
         let (tx_event, rx_event) = channel();
         let input_controller = InputController::new(event_loop.create_proxy(), rx_event);
 
         // Spawn the game thread.
         std::thread::spawn(move || {
-            if let Err(e) = window_main(window, &input_controller) {
+            if let Err(e) = window_main(win_handle, &input_controller) {
                 println!("Error: {:?}", e);
             }
             input_controller.quit().ok();

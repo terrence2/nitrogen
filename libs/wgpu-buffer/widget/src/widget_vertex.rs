@@ -16,12 +16,10 @@ use crate::{
     color::Color,
     region::{Extent, Position},
 };
-use gpu::{
-    size::{AspectMath, ScreenDir, Size},
-    Gpu,
-};
+use gpu::Gpu;
 use memoffset::offset_of;
 use std::mem;
+use window::size::{AspectMath, ScreenDir, Size};
 use zerocopy::{AsBytes, FromBytes};
 
 #[repr(C)]
@@ -98,10 +96,11 @@ impl WidgetVertex {
         gpu: &Gpu,
         pool: &mut Vec<WidgetVertex>,
     ) {
-        let x0 = x0.as_rel(gpu, ScreenDir::Horizontal).as_gpu();
-        let y0 = y0.as_rel(gpu, ScreenDir::Vertical).as_gpu();
-        let x1 = x1.as_rel(gpu, ScreenDir::Horizontal).as_gpu();
-        let y1 = y1.as_rel(gpu, ScreenDir::Vertical).as_gpu();
+        let win = gpu.window();
+        let x0 = x0.as_rel(win, ScreenDir::Horizontal).as_gpu();
+        let y0 = y0.as_rel(win, ScreenDir::Vertical).as_gpu();
+        let x1 = x1.as_rel(win, ScreenDir::Horizontal).as_gpu();
+        let y1 = y1.as_rel(win, ScreenDir::Vertical).as_gpu();
 
         // Build 4 corner vertices.
         let v00 = WidgetVertex {
@@ -168,15 +167,16 @@ impl WidgetVertex {
         gpu: &Gpu,
         pool: &mut Vec<WidgetVertex>,
     ) {
+        let win = gpu.window();
         Self::push_textured_quad(
             [position.left(), position.bottom()],
             [
                 position
                     .left()
-                    .add(&extent.width(), gpu, ScreenDir::Horizontal),
+                    .add(&extent.width(), win, ScreenDir::Horizontal),
                 position
                     .bottom()
-                    .add(&extent.height(), gpu, ScreenDir::Vertical),
+                    .add(&extent.height(), win, ScreenDir::Vertical),
             ],
             position.depth().as_depth(),
             [0f32, 0f32],

@@ -19,13 +19,14 @@ use crate::{
     region::{Extent, Position, Region},
 };
 use anyhow::Result;
-use gpu::{
-    size::{AbsSize, Size},
-    Gpu,
-};
+use gpu::Gpu;
 use input::GenericEvent;
 use nitrous::Interpreter;
 use std::{fmt::Debug, time::Instant};
+use window::{
+    size::{AbsSize, Size},
+    WindowHandle,
+};
 
 // Note: need intersection testing before this is useful.
 // pub enum HoverState {
@@ -63,14 +64,18 @@ pub trait Labeled: Debug + Sized + Send + Sync + 'static {
 
 pub trait Widget: Debug + Send + Sync + 'static {
     /// Return the minimum required size for displaying this widget.
-    fn measure(&mut self, gpu: &Gpu, font_context: &mut FontContext) -> Result<Extent<Size>>;
+    fn measure(
+        &mut self,
+        win: &WindowHandle,
+        font_context: &mut FontContext,
+    ) -> Result<Extent<Size>>;
 
     /// Apply the layout algorithm to size everything for the current displayed set.
     fn layout(
         &mut self,
         now: Instant,
         region: Region<Size>,
-        gpu: &Gpu,
+        win: &WindowHandle,
         font_context: &mut FontContext,
     ) -> Result<()>;
 

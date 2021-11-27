@@ -24,6 +24,7 @@ use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use std::{f64::consts::PI, sync::Arc};
+use window::WindowHandle;
 
 #[derive(Debug, NitrousModule)]
 pub struct ArcBallCamera {
@@ -41,11 +42,12 @@ pub struct ArcBallCamera {
 impl ArcBallCamera {
     pub fn new(
         z_near: Length<Meters>,
-        gpu: &mut Gpu,
+        _gpu: &mut Gpu,
+        win: &WindowHandle,
         interpreter: &mut Interpreter,
     ) -> Arc<RwLock<Self>> {
-        let arcball = Arc::new(RwLock::new(Self::detached(gpu.aspect_ratio(), z_near)));
-        gpu.add_resize_observer(arcball.clone());
+        let arcball = Arc::new(RwLock::new(Self::detached(win.aspect_ratio(), z_near)));
+        //gpu.add_resize_observer(arcball.clone());
         interpreter.put_global("camera", Value::Module(arcball.clone()));
         arcball
     }
@@ -433,12 +435,13 @@ impl ArcBallCamera {
     }
 }
 
-impl ResizeHint for ArcBallCamera {
-    fn note_resize(&mut self, gpu: &Gpu) -> Result<()> {
-        self.camera.set_aspect_ratio(gpu.aspect_ratio());
-        Ok(())
-    }
-}
+// impl ResizeHint for ArcBallCamera {
+//     fn note_resize(&mut self, gpu: &Gpu) -> Result<()> {
+//         self.camera
+//             .set_aspect_ratio(gpu.window().lock().aspect_ratio());
+//         Ok(())
+//     }
+// }
 
 #[cfg(test)]
 mod tests {

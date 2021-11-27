@@ -18,6 +18,7 @@ gpu = { path = "../../system/gpu" }
 nitrous = { path = "../../util/nitrous" }
 nitrous_injector = { path = "../../util/nitrous_injector" }
 orrery = { path = "../../sim/orrery" }
+window = { path = "../../system/window" }
 
 [dev-dependencies]
 winit = { version = "^ 0.24", features = ["web-sys"] }

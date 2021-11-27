@@ -341,6 +341,7 @@ dependencies = [
  "ordered-float",
  "parking_lot",
  "physical_constants",
+ "window",
 ]
 
 [[package]]
@@ -934,9 +935,9 @@ name = "font_common"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "gpu",
  "image",
  "wgpu",
+ "window",
 ]
 
 [[package]]
@@ -945,11 +946,11 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "font_common",
- "gpu",
  "image",
  "parking_lot",
  "rusttype",
  "wgpu",
+ "window",
 ]
 
 [[package]]
@@ -1326,6 +1327,7 @@ dependencies = [
  "orrery",
  "parking_lot",
  "wgpu",
+ "window",
  "winit",
  "zerocopy",
 ]
@@ -1357,6 +1359,7 @@ dependencies = [
  "raw-window-handle",
  "tokio",
  "wgpu",
+ "window",
  "winit",
  "zerocopy",
 ]
@@ -1492,6 +1495,7 @@ dependencies = [
  "smallvec",
  "wasm-bindgen",
  "web-sys",
+ "window",
  "winit",
 ]
 
@@ -2023,7 +2027,7 @@ dependencies = [
  "tokio",
  "ui",
  "widget",
- "winit",
+ "window",
  "world",
 ]
 
@@ -3491,6 +3495,7 @@ dependencies = [
  "tokio",
  "unicase",
  "wgpu",
+ "window",
  "winit",
  "zerocopy",
 ]
@@ -3537,6 +3542,16 @@ name = "winapi-x86_64-pc-windows-gnu"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
+
+[[package]]
+name = "window"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "log",
+ "parking_lot",
+ "winit",
+]
 
 [[package]]
 name = "winit"

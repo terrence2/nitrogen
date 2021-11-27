@@ -8,4 +8,4 @@ edition = "2021"
 anyhow = { version = "^ 1", features = ["backtrace"] }
 image = "^ 0.23"
 wgpu = "^ 0.7"
-gpu = { path = "../../system/gpu" }
+window = { path = "../../system/window" }

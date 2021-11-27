@@ -22,11 +22,12 @@ use crate::{
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
-use gpu::{size::Size, Gpu};
+use gpu::Gpu;
 use nitrous::Value;
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use std::{sync::Arc, time::Instant};
+use window::{size::Size, WindowHandle};
 
 #[derive(Debug, NitrousModule)]
 pub struct Label {
@@ -107,8 +108,12 @@ impl Labeled for Label {
 }
 
 impl Widget for Label {
-    fn measure(&mut self, gpu: &Gpu, font_context: &mut FontContext) -> Result<Extent<Size>> {
-        self.metrics = self.line.measure(gpu, font_context)?;
+    fn measure(
+        &mut self,
+        win: &WindowHandle,
+        font_context: &mut FontContext,
+    ) -> Result<Extent<Size>> {
+        self.metrics = self.line.measure(win, font_context)?;
         Ok(Extent::<Size>::new(
             self.metrics.width.into(),
             (self.metrics.height - self.metrics.descent).into(),
@@ -119,10 +124,10 @@ impl Widget for Label {
         &mut self,
         _now: Instant,
         region: Region<Size>,
-        gpu: &Gpu,
+        win: &WindowHandle,
         _font_context: &mut FontContext,
     ) -> Result<()> {
-        let mut position = region.position().as_abs(gpu);
+        let mut position = region.position().as_abs(win);
         *position.bottom_mut() = position.bottom() - self.metrics.descent;
         self.allocated_position = position.into();
         self.allocated_extent = *region.extent();

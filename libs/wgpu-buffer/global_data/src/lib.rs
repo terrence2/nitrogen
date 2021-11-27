@@ -23,6 +23,7 @@ use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use orrery::Orrery;
 use parking_lot::RwLock;
 use std::{mem, sync::Arc};
+use window::WindowHandle;
 use zerocopy::{AsBytes, FromBytes};
 
 pub fn m2v(m: &Matrix4<f32>) -> [[f32; 4]; 4] {
@@ -101,10 +102,10 @@ impl Globals {
     // cutouts or left-right cutouts, depending on the aspect. This lets our screen drawing
     // routines (e.g. for text) assume that everything is undistorted, even if coordinates at
     // the edges go outside the +/- 1 range.
-    pub fn set_screen_overlay_projection(&mut self, gpu: &Gpu) {
-        let dim = gpu.physical_size();
-        let aspect = gpu.aspect_ratio_f32() * 4f32 / 3f32;
-        let (w, h) = if dim.width > dim.height {
+    pub fn set_screen_overlay_projection(&mut self, win: &WindowHandle) {
+        let physical = win.physical_size();
+        let aspect = win.aspect_ratio_f32() * 4f32 / 3f32;
+        let (w, h) = if physical.width > physical.height {
             (aspect, -1f32)
         } else {
             (1f32, -1f32 / aspect)
@@ -112,8 +113,8 @@ impl Globals {
         self.screen_letterbox_projection =
             m2v(&Matrix4::new_nonuniform_scaling(&Vector3::new(w, h, 1f32)));
 
-        let physical = gpu.physical_size();
-        let logical = gpu.logical_size();
+        let physical = win.physical_size();
+        let logical = win.logical_size();
         self.screen_physical_width = physical.width as f32;
         self.screen_physical_height = physical.width as f32;
         self.screen_logical_width = logical.width as f32;
@@ -222,7 +223,7 @@ impl GlobalParametersBuffer {
         globals
     }
 
-    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
+    pub fn add_debug_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
         interpreter.interpret_once(
             r#"
                 let bindings := mapper.create_bindings("globals");
@@ -235,7 +236,6 @@ impl GlobalParametersBuffer {
 
     #[method]
     pub fn increase_gamma(&mut self, pressed: bool) {
-        println!("GAMMA INCREASE");
         if pressed {
             self.tone_gamma *= 1.1;
         }
@@ -243,7 +243,6 @@ impl GlobalParametersBuffer {
 
     #[method]
     pub fn decrease_gamma(&mut self, pressed: bool) {
-        println!("GAMMA DECREASE");
         if pressed {
             self.tone_gamma /= 1.1;
         }
@@ -257,14 +256,14 @@ impl GlobalParametersBuffer {
         &self.bind_group
     }
 
-    pub fn track_state_changes(&mut self, camera: &Camera, orrery: &Orrery) {
+    pub fn track_state_changes(&mut self, camera: &Camera, orrery: &Orrery, win: &WindowHandle) {
         self.globals.set_camera(camera);
         self.globals.set_orrery(orrery);
         self.globals.set_tone(self.tone_gamma);
+        self.globals.set_screen_overlay_projection(win);
     }
 
     pub fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) -> Result<()> {
-        self.globals.set_screen_overlay_projection(gpu);
         let buffer = gpu.push_data(
             "global-upload-buffer",
             &self.globals,

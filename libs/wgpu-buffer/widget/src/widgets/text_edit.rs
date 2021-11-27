@@ -22,14 +22,15 @@ use crate::{
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
-use gpu::{
-    size::{AbsSize, LeftBound, Size},
-    Gpu,
-};
+use gpu::Gpu;
 use input::GenericEvent;
 use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::{sync::Arc, time::Instant};
+use window::{
+    size::{AbsSize, LeftBound, Size},
+    WindowHandle,
+};
 
 #[derive(Debug)]
 pub struct TextEdit {
@@ -108,11 +109,15 @@ impl TextEdit {
 }
 
 impl Widget for TextEdit {
-    fn measure(&mut self, gpu: &Gpu, font_context: &mut FontContext) -> Result<Extent<Size>> {
+    fn measure(
+        &mut self,
+        win: &WindowHandle,
+        font_context: &mut FontContext,
+    ) -> Result<Extent<Size>> {
         let mut width = AbsSize::zero();
         let mut height_offset = AbsSize::zero();
         for (i, line) in self.lines.iter().enumerate() {
-            let span_metrics = line.measure(gpu, font_context)?;
+            let span_metrics = line.measure(win, font_context)?;
             if i != self.lines.len() - 1 {
                 height_offset += span_metrics.line_gap;
             }
@@ -127,7 +132,7 @@ impl Widget for TextEdit {
         &mut self,
         _now: Instant,
         region: Region<Size>,
-        _gpu: &Gpu,
+        _win: &WindowHandle,
         _font_context: &mut FontContext,
     ) -> Result<()> {
         self.layout_position = *region.position();
@@ -139,10 +144,10 @@ impl Widget for TextEdit {
         let info = WidgetInfo::default();
         let widget_info_index = context.push_widget(&info);
 
-        let mut pos = self.layout_position.as_abs(gpu);
+        let mut pos = self.layout_position.as_abs(gpu.window());
         *pos.bottom_mut() += self.measured_extent.height();
         for (i, line) in self.lines.iter().enumerate() {
-            let span_metrics = line.measure(gpu, &mut context.font_context)?;
+            let span_metrics = line.measure(gpu.window(), &mut context.font_context)?;
             *pos.bottom_mut() -= span_metrics.height;
             //println!("{}: {}", line.flatten(), pos.top().as_px());
             let span_metrics = line.upload(pos.into(), widget_info_index, gpu, context)?;

@@ -21,10 +21,7 @@ use crate::{
     LineEdit, TextEdit, VerticalBox,
 };
 use anyhow::Result;
-use gpu::{
-    size::{AbsSize, Size},
-    Gpu,
-};
+use gpu::Gpu;
 use input::{ElementState, GenericEvent, VirtualKeyCode};
 use nitrous::{
     ir::{Expr, Stmt, Term},
@@ -32,6 +29,10 @@ use nitrous::{
 };
 use parking_lot::RwLock;
 use std::{sync::Arc, time::Instant};
+use window::{
+    size::{AbsSize, Size},
+    WindowHandle,
+};
 
 // Items packed from top to bottom.
 #[derive(Debug)]
@@ -129,19 +130,23 @@ impl Terminal {
 }
 
 impl Widget for Terminal {
-    fn measure(&mut self, gpu: &Gpu, font_context: &mut FontContext) -> Result<Extent<Size>> {
+    fn measure(
+        &mut self,
+        win: &WindowHandle,
+        font_context: &mut FontContext,
+    ) -> Result<Extent<Size>> {
         if !self.visible {
             return Ok(Extent::zero());
         }
 
-        self.container.write().measure(gpu, font_context)
+        self.container.write().measure(win, font_context)
     }
 
     fn layout(
         &mut self,
         now: Instant,
         region: Region<Size>,
-        gpu: &Gpu,
+        win: &WindowHandle,
         font_context: &mut FontContext,
     ) -> Result<()> {
         if !self.visible {
@@ -150,7 +155,7 @@ impl Widget for Terminal {
 
         self.container
             .write()
-            .layout(now, region, gpu, font_context)
+            .layout(now, region, win, font_context)
     }
 
     fn upload(&self, now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {

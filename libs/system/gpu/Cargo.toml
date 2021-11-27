@@ -17,6 +17,7 @@ wgpu = "^ 0.7"
 winit = { version = "^ 0.24", features = ["web-sys"] }
 nitrous = { path = "../../util/nitrous" }
 nitrous_injector = { path = "../../util/nitrous_injector" }
+window = { path = "../../system/window" }
 
 [dev-dependencies]
 paste = "^ 1"

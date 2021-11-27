@@ -17,6 +17,7 @@ geometry = { path = "../../util/geometry" }
 gpu = { path = "../../system/gpu" }
 nitrous = { path = "../../util/nitrous" }
 nitrous_injector = { path = "../../util/nitrous_injector" }
+window = { path = "../../system/window" }
 
 [dev-dependencies]
 approx = "^ 0.5"

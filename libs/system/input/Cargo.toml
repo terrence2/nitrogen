@@ -9,6 +9,7 @@ log = "^ 0.4"
 anyhow = { version = "^ 1", features = ["backtrace"] }
 smallvec = "^ 1.4"
 winit = { version = "^ 0.24", features = ["web-sys"] }
+window = { path = "../../system/window" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Note: need to match wgpu exactly

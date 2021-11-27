@@ -23,14 +23,15 @@ use crate::{
     widget_vertex::WidgetVertex,
 };
 use anyhow::Result;
-use gpu::{
-    size::{AbsSize, ScreenDir, Size},
-    Gpu,
-};
+use gpu::Gpu;
 use input::GenericEvent;
 use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::{sync::Arc, time::Instant};
+use window::{
+    size::{AbsSize, ScreenDir, Size},
+    WindowHandle,
+};
 
 // Items packed from top to bottom.
 #[derive(Debug)]
@@ -122,12 +123,16 @@ impl VerticalBox {
 }
 
 impl Widget for VerticalBox {
-    fn measure(&mut self, gpu: &Gpu, font_context: &mut FontContext) -> Result<Extent<Size>> {
+    fn measure(
+        &mut self,
+        win: &WindowHandle,
+        font_context: &mut FontContext,
+    ) -> Result<Extent<Size>> {
         // Note: we need to measure children for layout, even if we have a fixed extent.
         let mut size =
-            BoxPacking::measure(&mut self.children, ScreenDir::Vertical, gpu, font_context)?;
-        size.expand_with_border(&self.border, gpu);
-        size.expand_with_border(&self.padding, gpu);
+            BoxPacking::measure(&mut self.children, ScreenDir::Vertical, win, font_context)?;
+        size.expand_with_border(&self.border, win);
+        size.expand_with_border(&self.padding, win);
         if let Some(extent) = self.override_extent {
             return Ok(extent);
         }
@@ -138,20 +143,20 @@ impl Widget for VerticalBox {
         &mut self,
         now: Instant,
         mut region: Region<Size>,
-        gpu: &Gpu,
+        win: &WindowHandle,
         font_context: &mut FontContext,
     ) -> Result<()> {
         self.allocated_region = region.clone();
-        region.extent_mut().remove_border(&self.border, gpu);
-        region.extent_mut().remove_border(&self.padding, gpu);
-        region.position_mut().offset_by_border(&self.border, gpu);
-        region.position_mut().offset_by_border(&self.padding, gpu);
+        region.extent_mut().remove_border(&self.border, win);
+        region.extent_mut().remove_border(&self.padding, win);
+        region.position_mut().offset_by_border(&self.border, win);
+        region.position_mut().offset_by_border(&self.padding, win);
         BoxPacking::layout(
             &mut self.children,
             ScreenDir::Vertical,
             now,
             region.clone(),
-            gpu,
+            win,
             font_context,
         )?;
         self.child_region = region;
@@ -185,9 +190,9 @@ impl Widget for VerticalBox {
                 .allocated_region
                 .position()
                 .with_depth(context.current_depth + PaintContext::BACKGROUND_DEPTH);
-            pos.offset_by_border(&self.border, gpu);
+            pos.offset_by_border(&self.border, gpu.window());
             let mut ext = *self.allocated_region.extent();
-            ext.remove_border(&self.border, gpu);
+            ext.remove_border(&self.border, gpu.window());
             WidgetVertex::push_quad_ext(
                 pos,
                 ext,

@@ -510,7 +510,7 @@ impl TerrainBuffer {
     }
 
     fn _make_deferred_texture_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let sz = gpu.physical_size();
+        let sz = gpu.window().physical_size();
         let target = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("deferred-texture-target"),
             size: wgpu::Extent3d {
@@ -540,7 +540,7 @@ impl TerrainBuffer {
     }
 
     fn _make_deferred_depth_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let sz = gpu.physical_size();
+        let sz = gpu.window().physical_size();
         let depth_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("deferred-depth-texture"),
             size: wgpu::Extent3d {
@@ -570,7 +570,7 @@ impl TerrainBuffer {
     }
 
     fn _make_color_accumulator_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let sz = gpu.physical_size();
+        let sz = gpu.window().physical_size();
         let color_acc = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("terrain-color-acc-texture"),
             size: wgpu::Extent3d {
@@ -600,7 +600,7 @@ impl TerrainBuffer {
     }
 
     fn _make_normal_accumulator_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let sz = gpu.physical_size();
+        let sz = gpu.window().physical_size();
         let normal_acc = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("terrain-normal-acc-texture"),
             size: wgpu::Extent3d {

@@ -292,7 +292,7 @@ impl WorldRenderPass {
 
     fn _make_deferred_texture_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
         // FIXME: centralize the offscreen render size.
-        let sz = gpu.physical_size();
+        let sz = gpu.window().physical_size();
         let target = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("world-offscreen-texture-target"),
             size: wgpu::Extent3d {
@@ -322,7 +322,7 @@ impl WorldRenderPass {
     }
 
     fn _make_deferred_depth_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let sz = gpu.physical_size();
+        let sz = gpu.window().physical_size();
         let depth_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("world-offscreen-depth-texture"),
             size: wgpu::Extent3d {
@@ -429,7 +429,7 @@ impl WorldRenderPass {
         })
     }
 
-    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
+    pub fn add_debug_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
         interpreter.interpret_once(
             r#"
                 let bindings := mapper.create_bindings("world");

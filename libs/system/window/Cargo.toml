@@ -1,0 +1,11 @@
+[package]
+name = "window"
+description = "Clonable Send+Sync wrapper around raw-window-handle"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+log = "^ 0.4"
+anyhow = { version = "^ 1", features = ["backtrace"] }
+parking_lot = "^ 0.11"
+winit = { version = "^ 0.24", features = ["web-sys"] }

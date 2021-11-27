@@ -23,14 +23,15 @@ use crate::{
     WidgetInfo,
 };
 use anyhow::Result;
-use gpu::{
-    size::{AbsSize, Size},
-    Gpu,
-};
+use gpu::Gpu;
 use input::GenericEvent;
 use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::{sync::Arc, time::Instant};
+use window::{
+    size::{AbsSize, Size},
+    WindowHandle,
+};
 
 #[derive(Debug)]
 pub struct Expander {
@@ -114,11 +115,15 @@ impl Labeled for Expander {
 }
 
 impl Widget for Expander {
-    fn measure(&mut self, gpu: &Gpu, font_context: &mut FontContext) -> Result<Extent<Size>> {
+    fn measure(
+        &mut self,
+        win: &WindowHandle,
+        font_context: &mut FontContext,
+    ) -> Result<Extent<Size>> {
         // Measure label and add border and padding from the box.
-        let mut extent = self.header.write().measure(gpu, font_context)?.as_abs(gpu);
-        extent.expand_with_border(&self.border.as_abs(gpu), gpu);
-        extent.expand_with_border(&self.padding.as_abs(gpu), gpu);
+        let mut extent = self.header.write().measure(win, font_context)?.as_abs(win);
+        extent.expand_with_border(&self.border.as_abs(win), win);
+        extent.expand_with_border(&self.padding.as_abs(win), win);
 
         // Copy the full area to what we use for hit testing.
         self.header_region.set_extent(extent);
@@ -126,7 +131,7 @@ impl Widget for Expander {
         // If we are expanded, add the full size of the child.
         if self.expanded {
             // TODO: what about internal border / line between?
-            let child = self.child.write().measure(gpu, font_context)?.as_abs(gpu);
+            let child = self.child.write().measure(win, font_context)?.as_abs(win);
             *extent.width_mut() = extent.width().max(&child.width());
             *extent.height_mut() = extent.height() + child.height();
         }
@@ -137,10 +142,10 @@ impl Widget for Expander {
         &mut self,
         now: Instant,
         region: Region<Size>,
-        gpu: &Gpu,
+        win: &WindowHandle,
         font_context: &mut FontContext,
     ) -> Result<()> {
-        let region = region.as_abs(gpu);
+        let region = region.as_abs(win);
 
         // Put the expanded content at the bottom of the box.
         let mut extent = *region.extent();
@@ -148,7 +153,7 @@ impl Widget for Expander {
         if self.expanded {
             self.child
                 .write()
-                .layout(now, region.with_extent(extent).into(), gpu, font_context)?;
+                .layout(now, region.with_extent(extent).into(), win, font_context)?;
         }
 
         // Recompute position from top using the header.
@@ -156,12 +161,12 @@ impl Widget for Expander {
         *pos.bottom_mut() = pos.bottom() + region.extent().height();
         *pos.bottom_mut() = pos.bottom() - self.header_region.extent().height();
         self.header_region.set_position(pos);
-        pos.offset_by_border(&self.border.as_abs(gpu), gpu);
-        pos.offset_by_border(&self.padding.as_abs(gpu), gpu);
+        pos.offset_by_border(&self.border.as_abs(win), win);
+        pos.offset_by_border(&self.padding.as_abs(win), win);
         self.header.write().layout(
             now,
             Region::new(pos.into(), (*self.header_region.extent()).into()),
-            gpu,
+            win,
             font_context,
         )?;
 
@@ -192,13 +197,14 @@ impl Widget for Expander {
             );
         }
         if let Some(background_color) = self.background_color {
+            let win = gpu.window();
             let mut pos = self
                 .allocated_region
                 .position()
                 .with_depth(context.current_depth + PaintContext::BACKGROUND_DEPTH);
-            pos.offset_by_border(&self.border.as_abs(gpu), gpu);
+            pos.offset_by_border(&self.border.as_abs(win), win);
             let mut ext = *self.allocated_region.extent();
-            ext.remove_border(&self.border.as_abs(gpu), gpu);
+            ext.remove_border(&self.border.as_abs(win), win);
             WidgetVertex::push_quad_ext(
                 pos.into(),
                 ext.into(),

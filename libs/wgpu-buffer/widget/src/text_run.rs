@@ -19,13 +19,14 @@ use crate::{
     region::Position,
 };
 use anyhow::Result;
-use gpu::{
-    size::{AbsSize, LeftBound, Size},
-    Gpu,
-};
+use gpu::Gpu;
 use input::ModifiersState;
 use smallvec::{smallvec, SmallVec};
 use std::{cmp::Ordering, ops::Range};
+use window::{
+    size::{AbsSize, LeftBound, Size},
+    WindowHandle,
+};
 
 #[derive(Debug)]
 pub struct TextSpan {
@@ -483,14 +484,18 @@ impl TextRun {
         out
     }
 
-    pub fn measure(&self, gpu: &Gpu, font_context: &mut FontContext) -> Result<TextSpanMetrics> {
+    pub fn measure(
+        &self,
+        win: &WindowHandle,
+        font_context: &mut FontContext,
+    ) -> Result<TextSpanMetrics> {
         let mut total_width = AbsSize::zero();
         let mut max_height = AbsSize::zero();
         let mut max_ascent = AbsSize::zero();
         let mut min_descent = AbsSize::zero();
         let mut max_line_gap = AbsSize::zero();
         for span in self.spans.iter() {
-            let span_metrics = font_context.measure_text(span, gpu)?;
+            let span_metrics = font_context.measure_text(span, &win)?;
             total_width += span_metrics.width;
             max_height = max_height.max(&span_metrics.height);
             max_line_gap = max_line_gap.max(&span_metrics.line_gap);
@@ -516,7 +521,7 @@ impl TextRun {
         context
             .widget_mut(widget_info_index)
             .set_pre_blend_text(self.pre_blend_text);
-        let init_pos = initial_position.as_abs(gpu);
+        let init_pos = initial_position.as_abs(gpu.window());
         let mut position = 0;
         let mut total_width = AbsSize::zero();
         let mut max_height = AbsSize::zero();

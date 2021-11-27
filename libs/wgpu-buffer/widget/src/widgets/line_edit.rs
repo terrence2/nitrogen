@@ -22,14 +22,15 @@ use crate::{
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
-use gpu::{
-    size::{AbsSize, AspectMath, ScreenDir, Size},
-    Gpu,
-};
+use gpu::Gpu;
 use input::{ElementState, GenericEvent, ModifiersState, VirtualKeyCode};
 use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::{ops::Range, sync::Arc, time::Instant};
+use window::{
+    size::{AbsSize, AspectMath, ScreenDir, Size},
+    WindowHandle,
+};
 
 #[derive(Debug)]
 pub struct LineEdit {
@@ -111,8 +112,12 @@ impl LineEdit {
 }
 
 impl Widget for LineEdit {
-    fn measure(&mut self, gpu: &Gpu, font_context: &mut FontContext) -> Result<Extent<Size>> {
-        self.metrics = self.line.measure(gpu, font_context)?;
+    fn measure(
+        &mut self,
+        win: &WindowHandle,
+        font_context: &mut FontContext,
+    ) -> Result<Extent<Size>> {
+        self.metrics = self.line.measure(win, font_context)?;
         Ok(Extent::<Size>::new(
             self.metrics.width.into(),
             (self.metrics.height - self.metrics.descent).into(),
@@ -123,14 +128,14 @@ impl Widget for LineEdit {
         &mut self,
         _now: Instant,
         region: Region<Size>,
-        gpu: &Gpu,
+        win: &WindowHandle,
         _font_context: &mut FontContext,
     ) -> Result<()> {
         let mut position = *region.position();
         *position.bottom_mut() =
             position
                 .bottom()
-                .sub(&self.metrics.descent.into(), gpu, ScreenDir::Vertical);
+                .sub(&self.metrics.descent.into(), win, ScreenDir::Vertical);
         self.position = position;
         self.extent = *region.extent();
         Ok(())

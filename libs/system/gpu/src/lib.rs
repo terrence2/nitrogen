@@ -12,8 +12,6 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-pub mod size;
-
 mod frame_graph;
 mod upload_tracker;
 
@@ -35,6 +33,7 @@ use parking_lot::RwLock;
 use std::{fmt::Debug, fs, mem, path::PathBuf, sync::Arc};
 use tokio::runtime::Runtime;
 use wgpu::util::DeviceExt;
+use window::WindowHandle;
 use winit::window::Window;
 use zerocopy::AsBytes;
 
@@ -57,7 +56,8 @@ pub trait ResizeHint: Debug + Send + Sync + 'static {
 
 #[derive(Debug, NitrousModule)]
 pub struct Gpu {
-    window: Window,
+    win_handle: WindowHandle,
+
     instance: wgpu::Instance,
     surface: wgpu::Surface,
     _adapter: wgpu::Adapter,
@@ -69,9 +69,6 @@ pub struct Gpu {
     resize_observers: Vec<Arc<RwLock<dyn ResizeHint>>>,
 
     config: GpuConfig,
-    scale_factor: f64,
-    physical_size: PhysicalSize<u32>,
-    logical_size: LogicalSize<f64>,
     frame_count: usize,
 }
 
@@ -84,26 +81,8 @@ impl Gpu {
         self.resize_observers.push(observer);
     }
 
-    #[method]
-    pub fn aspect_ratio(&self) -> f64 {
-        self.logical_size.height.floor() / self.logical_size.width.floor()
-    }
-
-    pub fn aspect_ratio_f32(&self) -> f32 {
-        (self.logical_size.height.floor() / self.logical_size.width.floor()) as f32
-    }
-
-    #[method]
-    pub fn scale_factor(&self) -> f64 {
-        self.scale_factor
-    }
-
-    pub fn logical_size(&self) -> LogicalSize<f64> {
-        self.logical_size
-    }
-
-    pub fn physical_size(&self) -> PhysicalSize<u32> {
-        self.physical_size
+    pub fn window(&self) -> &WindowHandle {
+        &self.win_handle
     }
 
     pub fn frame_count(&self) -> usize {
@@ -111,21 +90,19 @@ impl Gpu {
     }
 
     pub fn new(
-        window: Window,
+        win: WindowHandle,
         config: GpuConfig,
         interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
-        block_on(Self::new_async(window, config, interpreter))
+        block_on(Self::new_async(win, config, interpreter))
     }
 
     pub async fn new_async(
-        window: Window,
+        win: WindowHandle,
         config: GpuConfig,
         interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
-        window.set_title("Nitrogen");
         let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
-
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
@@ -134,7 +111,12 @@ impl Gpu {
             .await
             .ok_or_else(|| anyhow!("no suitable graphics adapter"))?;
 
-        let surface = unsafe { instance.create_surface(&window) };
+        let surface = {
+            // Note: RawWindowHandle is not implemented on MutexGuard
+            let rwh_guard = win.lock();
+            let rwh: &Window = &rwh_guard;
+            unsafe { instance.create_surface(rwh) }
+        };
 
         let trace_path = PathBuf::from("api_tracing.txt");
         let (device, queue) = adapter
@@ -148,9 +130,7 @@ impl Gpu {
             )
             .await?;
 
-        let scale_factor = window.scale_factor();
-        let physical_size = window.inner_size();
-        let logical_size = physical_size.to_logical::<f64>(scale_factor);
+        let physical_size = win.physical_size();
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
             format: Self::SCREEN_FORMAT,
@@ -162,7 +142,7 @@ impl Gpu {
         let depth_texture = Self::create_depth_texture(&device, &sc_desc);
 
         let gpu = Arc::new(RwLock::new(Self {
-            window,
+            win_handle: win,
             instance,
             surface,
             _adapter: adapter,
@@ -172,9 +152,6 @@ impl Gpu {
             depth_texture,
             resize_observers: Vec::new(),
             config,
-            scale_factor,
-            physical_size,
-            logical_size,
             frame_count: 0,
         }));
 
@@ -196,30 +173,32 @@ impl Gpu {
 
     #[method]
     pub fn on_resize(&mut self, width: i64, height: i64) -> Result<()> {
+        let win = self.win_handle.lock();
         info!(
             "received resize event: {}x{}; cached: {}x{}",
             width,
             height,
-            self.window.inner_size().width,
-            self.window.inner_size().height,
+            win.inner_size().width,
+            win.inner_size().height,
         );
-        self.physical_size = PhysicalSize {
+        let new_size = PhysicalSize {
             width: width as u32,
             height: height as u32,
         };
-        self.window.set_inner_size(self.physical_size);
-        let new_size = self.window.inner_size();
+        win.set_inner_size(new_size);
+
+        // note: we don't always get the option to set, so use whatever is real, regardless.
+        let new_size = win.inner_size();
         info!(
             "after resize, size is: {}x{}",
             new_size.width, new_size.height
         );
-        self.physical_size = new_size;
-        self.logical_size = self.physical_size.to_logical(self.scale_factor);
+
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
             format: Self::SCREEN_FORMAT,
-            width: self.physical_size.width,
-            height: self.physical_size.height,
+            width: new_size.width,
+            height: new_size.height,
             present_mode: self.config.present_mode,
         };
         self.swap_chain = self.device.create_swap_chain(&self.surface, &sc_desc);
@@ -234,8 +213,9 @@ impl Gpu {
 
     #[method]
     pub fn on_dpi_change(&mut self, scale: f64) -> Result<()> {
-        self.scale_factor = scale;
-        self.logical_size = self.physical_size.to_logical(self.scale_factor);
+        // FIXME: font's may need to resize and relayout, but it shouldn't have impacts on us?
+        // self.scale_factor = scale;
+        // self.logical_size = self.physical_size.to_logical(self.scale_factor);
         Ok(())
     }
 
@@ -269,9 +249,11 @@ impl Gpu {
     }
 
     pub fn attachment_extent(&self) -> wgpu::Extent3d {
+        // FIXME: cache this... it shouldn't always line up with our window
+        let sz = self.win_handle.physical_size();
         wgpu::Extent3d {
-            width: self.physical_size.width,
-            height: self.physical_size.height,
+            width: sz.width,
+            height: sz.height,
             depth: 1,
         }
     }
