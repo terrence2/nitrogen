@@ -30,7 +30,7 @@ use parking_lot::RwLock;
 use std::{sync::Arc, time::Instant};
 use window::{
     size::{AbsSize, ScreenDir, Size},
-    WindowHandle,
+    Window,
 };
 
 // Items packed from top to bottom.
@@ -123,11 +123,7 @@ impl VerticalBox {
 }
 
 impl Widget for VerticalBox {
-    fn measure(
-        &mut self,
-        win: &WindowHandle,
-        font_context: &mut FontContext,
-    ) -> Result<Extent<Size>> {
+    fn measure(&mut self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>> {
         // Note: we need to measure children for layout, even if we have a fixed extent.
         let mut size =
             BoxPacking::measure(&mut self.children, ScreenDir::Vertical, win, font_context)?;
@@ -143,7 +139,7 @@ impl Widget for VerticalBox {
         &mut self,
         now: Instant,
         mut region: Region<Size>,
-        win: &WindowHandle,
+        win: &Window,
         font_context: &mut FontContext,
     ) -> Result<()> {
         self.allocated_region = region.clone();
@@ -186,13 +182,14 @@ impl Widget for VerticalBox {
         }
 
         if let Some(background_color) = self.background_color {
+            let win = gpu.window().read();
             let mut pos = self
                 .allocated_region
                 .position()
                 .with_depth(context.current_depth + PaintContext::BACKGROUND_DEPTH);
-            pos.offset_by_border(&self.border, gpu.window());
+            pos.offset_by_border(&self.border, &win);
             let mut ext = *self.allocated_region.extent();
-            ext.remove_border(&self.border, gpu.window());
+            ext.remove_border(&self.border, &win);
             WidgetVertex::push_quad_ext(
                 pos,
                 ext,

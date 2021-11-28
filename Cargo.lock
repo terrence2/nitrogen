@@ -1350,6 +1350,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "futures",
+ "input",
  "log",
  "nitrous",
  "nitrous_injector",
@@ -1492,10 +1493,10 @@ dependencies = [
  "anyhow",
  "futures",
  "log",
+ "parking_lot",
  "smallvec",
  "wasm-bindgen",
  "web-sys",
- "window",
  "winit",
 ]
 
@@ -3549,6 +3550,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "log",
+ "nitrous",
+ "nitrous_injector",
  "parking_lot",
  "winit",
 ]

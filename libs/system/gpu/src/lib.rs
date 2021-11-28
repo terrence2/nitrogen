@@ -26,6 +26,7 @@ pub use winit::dpi::{LogicalSize, PhysicalSize};
 
 use anyhow::{anyhow, bail, Result};
 use futures::executor::block_on;
+use input::{GenericWindowEvent, InputController, WindowEventReceiver};
 use log::{info, trace};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -33,17 +34,19 @@ use parking_lot::RwLock;
 use std::{fmt::Debug, fs, mem, path::PathBuf, sync::Arc};
 use tokio::runtime::Runtime;
 use wgpu::util::DeviceExt;
-use window::WindowHandle;
-use winit::window::Window;
+use window::{DisplayMode, OsWindow, Window};
 use zerocopy::AsBytes;
 
 #[derive(Debug)]
-pub struct GpuConfig {
+pub struct RenderConfig {
+    render_scale: f32,
     present_mode: wgpu::PresentMode,
 }
-impl Default for GpuConfig {
+
+impl Default for RenderConfig {
     fn default() -> Self {
         Self {
+            render_scale: 0f32,
             present_mode: wgpu::PresentMode::Mailbox,
         }
     }
@@ -56,20 +59,40 @@ pub trait ResizeHint: Debug + Send + Sync + 'static {
 
 #[derive(Debug, NitrousModule)]
 pub struct Gpu {
-    win_handle: WindowHandle,
+    window: Arc<RwLock<Window>>,
 
     instance: wgpu::Instance,
     surface: wgpu::Surface,
     _adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
+
+    // Render extent doesn't necessarily match window size, so most resources don't
+    // actually need to get re-created in most window size change cases. However, the
+    // backing screen resources that we eventually project into each frame do need
+    // to follow the window size exactly.
+    render_extent: wgpu::Extent3d,
     swap_chain: wgpu::SwapChain,
     depth_texture: wgpu::TextureView,
 
     resize_observers: Vec<Arc<RwLock<dyn ResizeHint>>>,
 
-    config: GpuConfig,
+    config: RenderConfig,
     frame_count: usize,
+}
+
+impl WindowEventReceiver for Gpu {
+    fn on_window_event(&mut self, event: GenericWindowEvent) {
+        match event {
+            GenericWindowEvent::ScaleFactorChanged { .. } => {
+                // Note: we don't actually care about scaling changing, since we're still putting
+                // the same number of pixels on screen, but the text display system might.
+            }
+            GenericWindowEvent::Resized { width, height } => {
+                self.on_resize(width as i64, height as i64).ok();
+            }
+        }
+    }
 }
 
 #[inject_nitrous_module]
@@ -81,8 +104,8 @@ impl Gpu {
         self.resize_observers.push(observer);
     }
 
-    pub fn window(&self) -> &WindowHandle {
-        &self.win_handle
+    pub fn window(&self) -> &Arc<RwLock<Window>> {
+        &self.window
     }
 
     pub fn frame_count(&self) -> usize {
@@ -90,16 +113,18 @@ impl Gpu {
     }
 
     pub fn new(
-        win: WindowHandle,
-        config: GpuConfig,
+        win: Arc<RwLock<Window>>,
+        input: &mut InputController,
+        config: RenderConfig,
         interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
-        block_on(Self::new_async(win, config, interpreter))
+        block_on(Self::new_async(win, input, config, interpreter))
     }
 
     pub async fn new_async(
-        win: WindowHandle,
-        config: GpuConfig,
+        window: Arc<RwLock<Window>>,
+        input: &mut InputController,
+        config: RenderConfig,
         interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
         let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
@@ -112,10 +137,9 @@ impl Gpu {
             .ok_or_else(|| anyhow!("no suitable graphics adapter"))?;
 
         let surface = {
-            // Note: RawWindowHandle is not implemented on MutexGuard
-            let rwh_guard = win.lock();
-            let rwh: &Window = &rwh_guard;
-            unsafe { instance.create_surface(rwh) }
+            // Note: RawWindowHandle is not implemented on MutexGuard, so we need to dig a bit.
+            let win_guard = window.read();
+            unsafe { instance.create_surface(win_guard.os_window()) }
         };
 
         let trace_path = PathBuf::from("api_tracing.txt");
@@ -130,7 +154,7 @@ impl Gpu {
             )
             .await?;
 
-        let physical_size = win.physical_size();
+        let physical_size = window.read().physical_size();
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
             format: Self::SCREEN_FORMAT,
@@ -141,8 +165,17 @@ impl Gpu {
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
         let depth_texture = Self::create_depth_texture(&device, &sc_desc);
 
+        let render_extent = match window.read().display_mode() {
+            DisplayMode::ResizableWindowed => wgpu::Extent3d {
+                width: physical_size.width,
+                height: physical_size.height,
+                depth: 1,
+            },
+            v => panic!("unsupported display mode: {:?}", v),
+        };
+
         let gpu = Arc::new(RwLock::new(Self {
-            win_handle: win,
+            window,
             instance,
             surface,
             _adapter: adapter,
@@ -150,50 +183,70 @@ impl Gpu {
             queue,
             swap_chain,
             depth_texture,
+            render_extent,
             resize_observers: Vec::new(),
             config,
             frame_count: 0,
         }));
+        input.register_window_event_handler(gpu.clone());
 
+        // Resize is a non-optional bindings.
+        // FIXME: we don't care about DPI here, move to UI
         interpreter.put_global("gpu", Value::Module(gpu.clone()));
+        // interpreter.interpret_once(
+        //     r#"
+        //         let bindings := mapper.create_bindings("gpu");
+        //         bindings.bind("windowResized", "gpu.on_resize(width, height)");
+        //         bindings.bind("windowDpiChanged", "gpu.on_dpi_change(scale)");
+        //     "#,
+        // )?;
 
         Ok(gpu)
     }
 
-    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
-        interpreter.interpret_once(
-            r#"
-                let bindings := mapper.create_bindings("gpu");
-                bindings.bind("windowResized", "gpu.on_resize(width, height)");
-                bindings.bind("windowDpiChanged", "gpu.on_dpi_change(scale)");
-            "#,
-        )?;
-        Ok(())
-    }
+    // pub fn add_system_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
+    //     interpreter.interpret_once(
+    //         r#"
+    //             let bindings := mapper.create_bindings("gpu");
+    //             bindings.bind("windowResized", "gpu.on_resize(width, height)");
+    //             bindings.bind("windowDpiChanged", "gpu.on_dpi_change(scale)");
+    //         "#,
+    //     )?;
+    //     Ok(())
+    // }
 
-    #[method]
     pub fn on_resize(&mut self, width: i64, height: i64) -> Result<()> {
-        let win = self.win_handle.lock();
+        let win = self.window.read();
+        let os_window = win.os_window();
         info!(
             "received resize event: {}x{}; cached: {}x{}",
             width,
             height,
-            win.inner_size().width,
-            win.inner_size().height,
+            os_window.inner_size().width,
+            os_window.inner_size().height,
         );
+
+        // On X11 (maybe others?), the w/h pair we get in the change event maybe has not
+        // made it to / been fully processed by, the window, so try to make sure the window
+        // knows what size the window is. :facepalm:
         let new_size = PhysicalSize {
             width: width as u32,
             height: height as u32,
         };
-        win.set_inner_size(new_size);
+        os_window.set_inner_size(new_size);
 
-        // note: we don't always get the option to set, so use whatever is real, regardless.
-        let new_size = win.inner_size();
+        // note: the OS doesn't always give us the option to set the exact window size,
+        // so use whatever is real, regardless of what happened above. It is possible
+        // (AwesomeWM, X11) that the size change event reflects the full usable area
+        // and not the ultimate client size, in which case using the new numbers passed
+        // in the change event will cause us to resize every frame.
+        let new_size = os_window.inner_size();
         info!(
             "after resize, size is: {}x{}",
             new_size.width, new_size.height
         );
 
+        // Recreate the screen resources for the new window size.
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
             format: Self::SCREEN_FORMAT,
@@ -204,6 +257,12 @@ impl Gpu {
         self.swap_chain = self.device.create_swap_chain(&self.surface, &sc_desc);
         self.depth_texture = Self::create_depth_texture(&self.device, &sc_desc);
 
+        // Compute our new render extent, given the screen size change, if needed.
+        match self.window.read().display_mode() {
+            DisplayMode::ResizableWindowed => {}
+            v => panic!("unsupported display mode: {:?}", v),
+        }
+
         for module in &self.resize_observers {
             module.write().note_resize(self)?;
         }
@@ -211,13 +270,13 @@ impl Gpu {
         Ok(())
     }
 
-    #[method]
-    pub fn on_dpi_change(&mut self, scale: f64) -> Result<()> {
-        // FIXME: font's may need to resize and relayout, but it shouldn't have impacts on us?
-        // self.scale_factor = scale;
-        // self.logical_size = self.physical_size.to_logical(self.scale_factor);
-        Ok(())
-    }
+    // #[method]
+    // pub fn on_dpi_change(&mut self, scale: f64) -> Result<()> {
+    //     // FIXME: font's may need to resize and relayout, but it shouldn't have impacts on us?
+    //     // self.scale_factor = scale;
+    //     // self.logical_size = self.physical_size.to_logical(self.scale_factor);
+    //     Ok(())
+    // }
 
     fn create_depth_texture(
         device: &wgpu::Device,
@@ -249,13 +308,11 @@ impl Gpu {
     }
 
     pub fn attachment_extent(&self) -> wgpu::Extent3d {
-        // FIXME: cache this... it shouldn't always line up with our window
-        let sz = self.win_handle.physical_size();
-        wgpu::Extent3d {
-            width: sz.width,
-            height: sz.height,
-            depth: 1,
-        }
+        self.render_extent
+    }
+
+    pub fn render_extent(&self) -> wgpu::Extent3d {
+        self.render_extent
     }
 
     pub fn get_next_framebuffer(&mut self) -> Result<Option<wgpu::SwapChainFrame>> {
@@ -503,18 +560,20 @@ impl Gpu {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use input::MetaEvent;
+    use window::{DisplayConfig, OsWindow, Window};
     use winit::event_loop::EventLoop;
 
     #[cfg(unix)]
     #[test]
     fn test_create() -> Result<()> {
-        use winit::platform::unix::EventLoopExtUnix;
         let mut interpreter = Interpreter::default();
-        let _gpu = Gpu::new(
-            Window::new(&EventLoop::<()>::new_any_thread())?,
-            Default::default(),
-            &mut interpreter,
-        )?;
+        use winit::platform::unix::EventLoopExtUnix;
+        let event_loop = EventLoop::<MetaEvent>::new_any_thread();
+        let os_window = OsWindow::new(&event_loop)?;
+        let mut input = InputController::for_test(&event_loop);
+        let window = Window::new(os_window, DisplayConfig::default(), &mut interpreter)?;
+        let _gpu = Gpu::new(window, &mut input, Default::default(), &mut interpreter)?;
         Ok(())
     }
 }

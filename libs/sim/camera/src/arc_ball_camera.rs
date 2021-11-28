@@ -24,7 +24,7 @@ use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use std::{f64::consts::PI, sync::Arc};
-use window::WindowHandle;
+use window::Window;
 
 #[derive(Debug, NitrousModule)]
 pub struct ArcBallCamera {
@@ -43,7 +43,7 @@ impl ArcBallCamera {
     pub fn new(
         z_near: Length<Meters>,
         _gpu: &mut Gpu,
-        win: &WindowHandle,
+        win: &Window,
         interpreter: &mut Interpreter,
     ) -> Arc<RwLock<Self>> {
         let arcball = Arc::new(RwLock::new(Self::detached(win.aspect_ratio(), z_near)));

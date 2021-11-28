@@ -14,29 +14,95 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 pub mod size;
 
-use parking_lot::{Mutex, MutexGuard};
+use anyhow::Result;
+use nitrous::{Interpreter, Value};
+use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use parking_lot::{Mutex, MutexGuard, RwLock};
 use std::sync::Arc;
 
 pub use winit::{
     dpi::{LogicalSize, PhysicalSize},
-    window::Window,
+    window::Window as OsWindow,
 };
 
-#[derive(Clone, Debug)]
-pub struct WindowHandle {
-    window: Arc<Mutex<Window>>,
+/// Fullscreen or windowed and how to do that.
+#[derive(Copy, Clone, Debug)]
+pub enum DisplayMode {
+    /// Render: whatever size the window is right now (scaled by render scaling)
+    /// Window: don't change what the OS gives us
+    /// Monitor: leave alone
+    ResizableWindowed,
+
+    /// Render: at the given size (scaled by render scaling)
+    /// Window: attempt to set the size as given; on failure, letterbox.
+    /// Monitor: leave alone
+    Windowed(PhysicalSize<u32>),
+
+    /// Render: at the specified size (scaled by render scaling)
+    /// Window: Attempt to make the window cover the full screen, but don't be
+    ///         obnoxious about it. Only present configuration options for resolution
+    ///         that match the aspect ratio of the monitor.
+    /// Monitor: leave alone
+    SoftFullscreen(PhysicalSize<u32>),
+
+    /// Render: at the specified size (scaled by render scaling)
+    /// Window: Attempt to cover the full screen; be obnoxious about it to be
+    ///         successful more often on common platforms. Only show configuration
+    ///         options for resolutions that the monitor supports.
+    /// Monitor: Resize to the indicated size. If the provided dimensions are not
+    ///          supported by the monitor, fall back to SoftFullscreen transparently.
+    HardFullscreen(PhysicalSize<u32>),
 }
 
-impl WindowHandle {
-    pub fn new(window: Window) -> Self {
+#[derive(Clone, Debug)]
+pub struct DisplayConfig {
+    mode: DisplayMode,
+}
+
+impl Default for DisplayConfig {
+    fn default() -> Self {
         Self {
-            window: Arc::new(Mutex::new(window)),
+            //mode: DisplayMode::SoftFullscreen(PhysicalSize::new(1920, 1080)),
+            mode: DisplayMode::ResizableWindowed,
         }
+    }
+}
+
+#[derive(Debug, NitrousModule)]
+pub struct Window {
+    os_window: OsWindow,
+    config: DisplayConfig,
+}
+
+#[inject_nitrous_module]
+impl Window {
+    pub fn new(
+        os_window: OsWindow,
+        config: DisplayConfig,
+        interpreter: &mut Interpreter,
+    ) -> Result<Arc<RwLock<Self>>> {
+        let win = Arc::new(RwLock::new(Self { os_window, config }));
+        interpreter.put_global("window", Value::Module(win.clone()));
+
+        // TODO: the renderer cares about screen size changes, but we don't really.
+        // interpreter.interpret_once(
+        //     r#"
+        //         let bindings := mapper.create_bindings("window");
+        //         bindings.bind("windowResized", "window.on_resize(width, height)");
+        //         bindings.bind("windowDpiChanged", "window.on_dpi_change(scale)");
+        //     "#,
+        // )?;
+
+        Ok(win)
+    }
+
+    pub fn display_mode(&self) -> &DisplayMode {
+        &self.config.mode
     }
 
     // Grab the raw window for sync reads.
-    pub fn lock(&self) -> MutexGuard<Window> {
-        self.window.lock()
+    pub fn os_window(&self) -> &OsWindow {
+        &self.os_window
     }
 
     pub fn aspect_ratio(&self) -> f64 {
@@ -49,21 +115,17 @@ impl WindowHandle {
     }
 
     pub fn scale_factor(&self) -> f64 {
-        self.window.lock().scale_factor()
+        self.os_window.scale_factor()
     }
 
     pub fn logical_size(&self) -> LogicalSize<f64> {
-        let win = self.window.lock();
-        win.inner_size().to_logical(win.scale_factor())
+        self.os_window
+            .inner_size()
+            .to_logical(self.os_window.scale_factor())
     }
 
-    // pub fn logical_width(&self) -> f64 {
-    //     let win = self.window.lock();
-    //     win.inner_size().to_logical(win.scale_factor()).width
-    // }
-
     pub fn physical_size(&self) -> PhysicalSize<u32> {
-        self.window.lock().inner_size()
+        self.os_window.inner_size()
     }
 }
 
@@ -79,7 +141,7 @@ mod tests {
         let window = winit::window::WindowBuilder::new()
             .with_title("Nitrogen Engine")
             .build(&event_loop)?;
-        let _win_handle = WindowHandle::new(window);
+        let _win_handle = Window::new(window);
         Ok(())
     }
 }

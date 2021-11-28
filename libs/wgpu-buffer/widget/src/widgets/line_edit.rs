@@ -29,7 +29,7 @@ use parking_lot::RwLock;
 use std::{ops::Range, sync::Arc, time::Instant};
 use window::{
     size::{AbsSize, AspectMath, ScreenDir, Size},
-    WindowHandle,
+    Window,
 };
 
 #[derive(Debug)]
@@ -112,11 +112,7 @@ impl LineEdit {
 }
 
 impl Widget for LineEdit {
-    fn measure(
-        &mut self,
-        win: &WindowHandle,
-        font_context: &mut FontContext,
-    ) -> Result<Extent<Size>> {
+    fn measure(&mut self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>> {
         self.metrics = self.line.measure(win, font_context)?;
         Ok(Extent::<Size>::new(
             self.metrics.width.into(),
@@ -128,7 +124,7 @@ impl Widget for LineEdit {
         &mut self,
         _now: Instant,
         region: Region<Size>,
-        win: &WindowHandle,
+        win: &Window,
         _font_context: &mut FontContext,
     ) -> Result<()> {
         let mut position = *region.position();

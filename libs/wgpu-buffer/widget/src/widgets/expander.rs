@@ -30,7 +30,7 @@ use parking_lot::RwLock;
 use std::{sync::Arc, time::Instant};
 use window::{
     size::{AbsSize, Size},
-    WindowHandle,
+    Window,
 };
 
 #[derive(Debug)]
@@ -115,11 +115,7 @@ impl Labeled for Expander {
 }
 
 impl Widget for Expander {
-    fn measure(
-        &mut self,
-        win: &WindowHandle,
-        font_context: &mut FontContext,
-    ) -> Result<Extent<Size>> {
+    fn measure(&mut self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>> {
         // Measure label and add border and padding from the box.
         let mut extent = self.header.write().measure(win, font_context)?.as_abs(win);
         extent.expand_with_border(&self.border.as_abs(win), win);
@@ -142,7 +138,7 @@ impl Widget for Expander {
         &mut self,
         now: Instant,
         region: Region<Size>,
-        win: &WindowHandle,
+        win: &Window,
         font_context: &mut FontContext,
     ) -> Result<()> {
         let region = region.as_abs(win);
@@ -197,14 +193,14 @@ impl Widget for Expander {
             );
         }
         if let Some(background_color) = self.background_color {
-            let win = gpu.window();
+            let win = gpu.window().read();
             let mut pos = self
                 .allocated_region
                 .position()
                 .with_depth(context.current_depth + PaintContext::BACKGROUND_DEPTH);
-            pos.offset_by_border(&self.border.as_abs(win), win);
+            pos.offset_by_border(&self.border.as_abs(&win), &win);
             let mut ext = *self.allocated_region.extent();
-            ext.remove_border(&self.border.as_abs(win), win);
+            ext.remove_border(&self.border.as_abs(&win), &win);
             WidgetVertex::push_quad_ext(
                 pos.into(),
                 ext.into(),

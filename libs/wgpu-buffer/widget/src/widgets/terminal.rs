@@ -31,7 +31,7 @@ use parking_lot::RwLock;
 use std::{sync::Arc, time::Instant};
 use window::{
     size::{AbsSize, Size},
-    WindowHandle,
+    Window,
 };
 
 // Items packed from top to bottom.
@@ -130,11 +130,7 @@ impl Terminal {
 }
 
 impl Widget for Terminal {
-    fn measure(
-        &mut self,
-        win: &WindowHandle,
-        font_context: &mut FontContext,
-    ) -> Result<Extent<Size>> {
+    fn measure(&mut self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>> {
         if !self.visible {
             return Ok(Extent::zero());
         }
@@ -146,7 +142,7 @@ impl Widget for Terminal {
         &mut self,
         now: Instant,
         region: Region<Size>,
-        win: &WindowHandle,
+        win: &Window,
         font_context: &mut FontContext,
     ) -> Result<()> {
         if !self.visible {

@@ -18,17 +18,21 @@ pub use generic::{GenericEvent, GenericSystemEvent, GenericWindowEvent, MouseAxi
 pub use winit::event::{ButtonId, ElementState, ModifiersState, VirtualKeyCode};
 
 use anyhow::{bail, Result};
+use parking_lot::RwLock;
 use smallvec::SmallVec;
 use std::{
     collections::HashMap,
-    sync::mpsc::{channel, Receiver, TryRecvError},
+    sync::{
+        mpsc::{channel, Receiver, TryRecvError},
+        Arc,
+    },
 };
-use window::WindowHandle;
 use winit::{
     event::{
         DeviceEvent, DeviceId, Event, KeyboardInput, MouseScrollDelta, StartCause, WindowEvent,
     },
     event_loop::{ControlFlow, EventLoop, EventLoopProxy},
+    window::Window,
 };
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -43,9 +47,15 @@ pub struct InputState {
     window_focused: bool,
 }
 
+pub trait WindowEventReceiver {
+    fn on_window_event(&mut self, event: GenericWindowEvent);
+}
+
 pub struct InputController {
     proxy: EventLoopProxy<MetaEvent>,
     event_source: Receiver<GenericEvent>,
+
+    window_event_callbacks: Vec<Arc<RwLock<dyn WindowEventReceiver + Send + Sync + 'static>>>,
 }
 
 impl InputController {
@@ -53,7 +63,13 @@ impl InputController {
         Self {
             proxy,
             event_source,
+            window_event_callbacks: Vec::new(),
         }
+    }
+
+    pub fn for_test(event_loop: &EventLoop<MetaEvent>) -> Self {
+        let (_, rx_event) = channel();
+        InputController::new(event_loop.create_proxy(), rx_event)
     }
 
     pub fn quit(&self) -> Result<()> {
@@ -61,14 +77,30 @@ impl InputController {
         Ok(())
     }
 
+    pub fn register_window_event_handler<T: WindowEventReceiver + Send + Sync + 'static>(
+        &mut self,
+        callback: Arc<RwLock<T>>,
+    ) {
+        self.window_event_callbacks.push(callback);
+    }
+
     pub fn poll_events(&self) -> Result<SmallVec<[GenericEvent; 8]>> {
         let mut out = SmallVec::new();
-        let mut event_input = self.event_source.try_recv();
-        while event_input.is_ok() {
-            out.push(event_input?);
-            event_input = self.event_source.try_recv();
+        let mut maybe_event_input = self.event_source.try_recv();
+        while maybe_event_input.is_ok() {
+            let event_input = maybe_event_input?;
+            match event_input {
+                GenericEvent::Window(gwe) => {
+                    for receiver in self.window_event_callbacks.iter() {
+                        receiver.write().on_window_event(gwe);
+                    }
+                }
+                _ => {}
+            };
+            out.push(event_input);
+            maybe_event_input = self.event_source.try_recv();
         }
-        match event_input.err().unwrap() {
+        match maybe_event_input.err().unwrap() {
             TryRecvError::Empty => Ok(out),
             TryRecvError::Disconnected => bail!("input system stopped"),
         }
@@ -158,19 +190,18 @@ impl InputSystem {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn run_forever<M>(mut window_main: M) -> Result<()>
     where
-        M: 'static + Send + FnMut(WindowHandle, &InputController) -> Result<()>,
+        M: 'static + Send + FnMut(Window, &mut InputController) -> Result<()>,
     {
         let event_loop = EventLoop::<MetaEvent>::with_user_event();
         let window = winit::window::WindowBuilder::new()
             .with_title("Nitrogen Engine")
             .build(&event_loop)?;
-        let win_handle = WindowHandle::new(window);
         let (tx_event, rx_event) = channel();
-        let input_controller = InputController::new(event_loop.create_proxy(), rx_event);
+        let mut input_controller = InputController::new(event_loop.create_proxy(), rx_event);
 
         // Spawn the game thread.
         std::thread::spawn(move || {
-            if let Err(e) = window_main(win_handle, &input_controller) {
+            if let Err(e) = window_main(window, &mut input_controller) {
                 println!("Error: {:?}", e);
             }
             input_controller.quit().ok();

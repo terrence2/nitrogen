@@ -25,7 +25,7 @@ use smallvec::{smallvec, SmallVec};
 use std::{cmp::Ordering, ops::Range};
 use window::{
     size::{AbsSize, LeftBound, Size},
-    WindowHandle,
+    Window,
 };
 
 #[derive(Debug)]
@@ -484,11 +484,7 @@ impl TextRun {
         out
     }
 
-    pub fn measure(
-        &self,
-        win: &WindowHandle,
-        font_context: &mut FontContext,
-    ) -> Result<TextSpanMetrics> {
+    pub fn measure(&self, win: &Window, font_context: &mut FontContext) -> Result<TextSpanMetrics> {
         let mut total_width = AbsSize::zero();
         let mut max_height = AbsSize::zero();
         let mut max_ascent = AbsSize::zero();
@@ -521,7 +517,7 @@ impl TextRun {
         context
             .widget_mut(widget_info_index)
             .set_pre_blend_text(self.pre_blend_text);
-        let init_pos = initial_position.as_abs(gpu.window());
+        let init_pos = initial_position.as_abs(&gpu.window().read());
         let mut position = 0;
         let mut total_width = AbsSize::zero();
         let mut max_height = AbsSize::zero();

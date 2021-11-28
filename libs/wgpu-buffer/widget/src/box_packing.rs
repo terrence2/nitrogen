@@ -22,7 +22,7 @@ use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::{sync::Arc, time::Instant};
 use window::{
     size::{AspectMath, LeftBound, ScreenDir, Size},
-    WindowHandle,
+    Window,
 };
 
 #[derive(Copy, Clone, Debug)]
@@ -99,7 +99,7 @@ impl BoxPacking {
     pub fn measure(
         children: &mut [BoxPacking],
         screen_dir: ScreenDir,
-        win: &WindowHandle,
+        win: &Window,
         font_context: &mut FontContext,
     ) -> Result<Extent<Size>> {
         let off_dir = screen_dir.other();
@@ -128,7 +128,7 @@ impl BoxPacking {
         dir: ScreenDir,
         now: Instant,
         region: Region<Size>,
-        win: &WindowHandle,
+        win: &Window,
         font_context: &mut FontContext,
     ) -> Result<()> {
         // Figure out how much size we need to actually allocate to our widgets.

@@ -510,14 +510,10 @@ impl TerrainBuffer {
     }
 
     fn _make_deferred_texture_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let sz = gpu.window().physical_size();
+        let size = gpu.render_extent();
         let target = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("deferred-texture-target"),
-            size: wgpu::Extent3d {
-                width: sz.width as u32,
-                height: sz.height as u32,
-                depth: 1,
-            },
+            size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -540,14 +536,10 @@ impl TerrainBuffer {
     }
 
     fn _make_deferred_depth_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let sz = gpu.window().physical_size();
+        let size = gpu.render_extent();
         let depth_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("deferred-depth-texture"),
-            size: wgpu::Extent3d {
-                width: sz.width as u32,
-                height: sz.height as u32,
-                depth: 1,
-            },
+            size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -570,14 +562,10 @@ impl TerrainBuffer {
     }
 
     fn _make_color_accumulator_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let sz = gpu.window().physical_size();
+        let size = gpu.render_extent();
         let color_acc = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("terrain-color-acc-texture"),
-            size: wgpu::Extent3d {
-                width: sz.width as u32,
-                height: sz.height as u32,
-                depth: 1,
-            },
+            size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -600,14 +588,10 @@ impl TerrainBuffer {
     }
 
     fn _make_normal_accumulator_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let sz = gpu.window().physical_size();
+        let size = gpu.render_extent();
         let normal_acc = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("terrain-normal-acc-texture"),
-            size: wgpu::Extent3d {
-                width: sz.width as u32,
-                height: sz.height as u32,
-                depth: 1,
-            },
+            size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,

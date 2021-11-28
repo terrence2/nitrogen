@@ -36,7 +36,7 @@ use std::{
 };
 use window::{
     size::{AbsSize, Size},
-    WindowHandle,
+    Window,
 };
 
 #[derive(Debug, Default)]
@@ -76,11 +76,7 @@ impl EventMapper {
 }
 
 impl Widget for EventMapper {
-    fn measure(
-        &mut self,
-        _win: &WindowHandle,
-        _font_context: &mut FontContext,
-    ) -> Result<Extent<Size>> {
+    fn measure(&mut self, _win: &Window, _font_context: &mut FontContext) -> Result<Extent<Size>> {
         Ok(Extent::zero())
     }
 
@@ -88,7 +84,7 @@ impl Widget for EventMapper {
         &mut self,
         _now: Instant,
         _region: Region<Size>,
-        _win: &WindowHandle,
+        _win: &Window,
         _font_context: &mut FontContext,
     ) -> Result<()> {
         Ok(())

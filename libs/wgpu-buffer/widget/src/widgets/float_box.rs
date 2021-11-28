@@ -29,7 +29,7 @@ use parking_lot::RwLock;
 use std::{collections::HashMap, sync::Arc, time::Instant};
 use window::{
     size::{AbsSize, LeftBound, RelSize, ScreenDir, Size},
-    WindowHandle,
+    Window,
 };
 
 // Pack boxes at an edge.
@@ -161,11 +161,7 @@ impl FloatBox {
 }
 
 impl Widget for FloatBox {
-    fn measure(
-        &mut self,
-        _win: &WindowHandle,
-        _font_context: &mut FontContext,
-    ) -> Result<Extent<Size>> {
+    fn measure(&mut self, _win: &Window, _font_context: &mut FontContext) -> Result<Extent<Size>> {
         Ok(Extent::zero())
     }
 
@@ -173,7 +169,7 @@ impl Widget for FloatBox {
         &mut self,
         now: Instant,
         region: Region<Size>,
-        win: &WindowHandle,
+        win: &Window,
         font_context: &mut FontContext,
     ) -> Result<()> {
         let position = region.position().as_rel(win);

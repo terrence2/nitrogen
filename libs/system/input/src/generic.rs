@@ -192,7 +192,7 @@ impl GenericEvent {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum GenericWindowEvent {
     // Note that the sizes passed here may race with the ones returned by the surface/window,
     // so code should be careful to use these values instead of the ones returned by those apis.
@@ -203,7 +203,7 @@ pub enum GenericWindowEvent {
     ScaleFactorChanged { scale: f64 },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum GenericSystemEvent {
     // Aggregate of various "user wants the program to go away" interactions. Close button (the X)
     // pressed in the window's bar or task bar, Win+F4 pressed, File+Quit, etc.

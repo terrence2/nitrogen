@@ -25,7 +25,7 @@ use nitrous::Interpreter;
 use std::{fmt::Debug, time::Instant};
 use window::{
     size::{AbsSize, Size},
-    WindowHandle,
+    Window,
 };
 
 // Note: need intersection testing before this is useful.
@@ -64,18 +64,14 @@ pub trait Labeled: Debug + Sized + Send + Sync + 'static {
 
 pub trait Widget: Debug + Send + Sync + 'static {
     /// Return the minimum required size for displaying this widget.
-    fn measure(
-        &mut self,
-        win: &WindowHandle,
-        font_context: &mut FontContext,
-    ) -> Result<Extent<Size>>;
+    fn measure(&mut self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>>;
 
     /// Apply the layout algorithm to size everything for the current displayed set.
     fn layout(
         &mut self,
         now: Instant,
         region: Region<Size>,
-        win: &WindowHandle,
+        win: &Window,
         font_context: &mut FontContext,
     ) -> Result<()>;
 

@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::WindowHandle;
+use crate::Window;
 use std::cmp::Ordering;
 use std::fmt::Formatter;
 use std::{
@@ -30,9 +30,9 @@ pub trait LeftBound {
 }
 
 pub trait AspectMath {
-    fn add(&self, other: &Self, win: &WindowHandle, dir: ScreenDir) -> Self;
-    fn sub(&self, other: &Self, win: &WindowHandle, dir: ScreenDir) -> Self;
-    fn max(&self, other: &Self, win: &WindowHandle, dir: ScreenDir) -> Self;
+    fn add(&self, other: &Self, win: &Window, dir: ScreenDir) -> Self;
+    fn sub(&self, other: &Self, win: &Window, dir: ScreenDir) -> Self;
+    fn max(&self, other: &Self, win: &Window, dir: ScreenDir) -> Self;
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -87,7 +87,7 @@ impl RelSize {
         }
     }
 
-    pub fn as_abs(self, win: &WindowHandle, screen_dir: ScreenDir) -> AbsSize {
+    pub fn as_abs(self, win: &Window, screen_dir: ScreenDir) -> AbsSize {
         let rng = match screen_dir {
             ScreenDir::Vertical => win.aspect_ratio_f32(),
             ScreenDir::Horizontal => 1.,
@@ -149,15 +149,15 @@ impl AddAssign for RelSize {
 }
 
 impl AspectMath for RelSize {
-    fn add(&self, other: &Self, _win: &WindowHandle, _dir: ScreenDir) -> Self {
+    fn add(&self, other: &Self, _win: &Window, _dir: ScreenDir) -> Self {
         *self + *other
     }
 
-    fn sub(&self, other: &Self, _win: &WindowHandle, _dir: ScreenDir) -> Self {
+    fn sub(&self, other: &Self, _win: &Window, _dir: ScreenDir) -> Self {
         *self - *other
     }
 
-    fn max(&self, other: &Self, _win: &WindowHandle, _dir: ScreenDir) -> Self {
+    fn max(&self, other: &Self, _win: &Window, _dir: ScreenDir) -> Self {
         Self::Percent(self.as_percent().max(other.as_percent()))
     }
 }
@@ -206,7 +206,7 @@ impl AbsSize {
     /// This function takes pixel size as a percent of *WIDTH*. This may not be what is desired
     /// for all use cases. It will, for example preserve text size _in pixels_ rather than in
     /// screen extent, among other potential flaws.
-    pub fn as_rel(self, win: &WindowHandle, screen_dir: ScreenDir) -> RelSize {
+    pub fn as_rel(self, win: &Window, screen_dir: ScreenDir) -> RelSize {
         let rng = match screen_dir {
             ScreenDir::Vertical => win.aspect_ratio_f32(),
             _ => 1.,
@@ -333,15 +333,15 @@ impl AddAssign for AbsSize {
 }
 
 impl AspectMath for AbsSize {
-    fn add(&self, other: &Self, _win: &WindowHandle, _dir: ScreenDir) -> Self {
+    fn add(&self, other: &Self, _win: &Window, _dir: ScreenDir) -> Self {
         *self + *other
     }
 
-    fn sub(&self, other: &Self, _win: &WindowHandle, _dir: ScreenDir) -> Self {
+    fn sub(&self, other: &Self, _win: &Window, _dir: ScreenDir) -> Self {
         *self - *other
     }
 
-    fn max(&self, other: &Self, _win: &WindowHandle, _dir: ScreenDir) -> Self {
+    fn max(&self, other: &Self, _win: &Window, _dir: ScreenDir) -> Self {
         self.max(other)
     }
 }
@@ -397,42 +397,42 @@ impl Size {
         Self::Abs(AbsSize::Px(px))
     }
 
-    pub fn as_rel(self, win: &WindowHandle, screen_dir: ScreenDir) -> RelSize {
+    pub fn as_rel(self, win: &Window, screen_dir: ScreenDir) -> RelSize {
         match self {
             Self::Rel(v) => v,
             Self::Abs(v) => v.as_rel(win, screen_dir),
         }
     }
 
-    pub fn as_abs(self, win: &WindowHandle, screen_dir: ScreenDir) -> AbsSize {
+    pub fn as_abs(self, win: &Window, screen_dir: ScreenDir) -> AbsSize {
         match self {
             Self::Rel(v) => v.as_abs(win, screen_dir),
             Self::Abs(v) => v,
         }
     }
 
-    pub fn as_gpu(self, win: &WindowHandle, screen_dir: ScreenDir) -> f32 {
+    pub fn as_gpu(self, win: &Window, screen_dir: ScreenDir) -> f32 {
         match self {
             Self::Rel(v) => v.as_gpu(),
             Self::Abs(v) => v.as_rel(win, screen_dir).as_gpu(),
         }
     }
 
-    pub fn as_percent(self, win: &WindowHandle, screen_dir: ScreenDir) -> f32 {
+    pub fn as_percent(self, win: &Window, screen_dir: ScreenDir) -> f32 {
         match self {
             Self::Rel(v) => v.as_percent(),
             Self::Abs(v) => v.as_rel(win, screen_dir).as_percent(),
         }
     }
 
-    pub fn as_px(self, win: &WindowHandle, screen_dir: ScreenDir) -> f32 {
+    pub fn as_px(self, win: &Window, screen_dir: ScreenDir) -> f32 {
         match self {
             Self::Rel(v) => v.as_abs(win, screen_dir).as_px(),
             Self::Abs(v) => v.as_px(),
         }
     }
 
-    pub fn as_pts(self, win: &WindowHandle, screen_dir: ScreenDir) -> f32 {
+    pub fn as_pts(self, win: &Window, screen_dir: ScreenDir) -> f32 {
         match self {
             Self::Rel(v) => v.as_abs(win, screen_dir).as_pts(),
             Self::Abs(v) => v.as_pts(),
@@ -441,7 +441,7 @@ impl Size {
 }
 
 impl AspectMath for Size {
-    fn add(&self, other: &Self, win: &WindowHandle, screen_dir: ScreenDir) -> Self {
+    fn add(&self, other: &Self, win: &Window, screen_dir: ScreenDir) -> Self {
         match self {
             Self::Rel(v) => {
                 Self::from_percent(v.as_percent() + other.as_rel(win, screen_dir).as_percent())
@@ -450,7 +450,7 @@ impl AspectMath for Size {
         }
     }
 
-    fn sub(&self, other: &Self, win: &WindowHandle, screen_dir: ScreenDir) -> Self {
+    fn sub(&self, other: &Self, win: &Window, screen_dir: ScreenDir) -> Self {
         match self {
             Self::Rel(v) => {
                 Self::from_percent(v.as_percent() - other.as_rel(win, screen_dir).as_percent())
@@ -459,7 +459,7 @@ impl AspectMath for Size {
         }
     }
 
-    fn max(&self, other: &Self, win: &WindowHandle, screen_dir: ScreenDir) -> Self {
+    fn max(&self, other: &Self, win: &Window, screen_dir: ScreenDir) -> Self {
         match self {
             Self::Rel(v) => Self::from_percent(
                 v.as_percent()

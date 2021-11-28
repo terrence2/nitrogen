@@ -58,7 +58,7 @@ use std::{borrow::Borrow, mem, num::NonZeroU64, ops::Range, sync::Arc, time::Ins
 use tokio::runtime::Runtime;
 use window::{
     size::{AbsSize, Size},
-    WindowHandle,
+    Window,
 };
 
 // Drawing UI efficiently:
@@ -326,7 +326,7 @@ impl WidgetBuffer {
         now: Instant,
         events: &[GenericEvent],
         interpreter: Interpreter,
-        win: &WindowHandle,
+        win: &Window,
         // scale_factor: f64,
         // logical_size: Extent<AbsSize>,
     ) -> Result<()> {

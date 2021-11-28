@@ -15,7 +15,7 @@
 use std::{fmt::Debug, ops::Add};
 use window::{
     size::{AbsSize, AspectMath, LeftBound, RelSize, ScreenDir, Size},
-    LogicalSize, WindowHandle,
+    LogicalSize, Window,
 };
 
 #[derive(Copy, Clone, Debug)]
@@ -76,19 +76,19 @@ impl<T: Copy + Clone + LeftBound + AspectMath> Extent<T> {
         }
     }
 
-    pub fn with_border(mut self, border: &Border<T>, win: &WindowHandle) -> Self {
+    pub fn with_border(mut self, border: &Border<T>, win: &Window) -> Self {
         self.expand_with_border(border, win);
         self
     }
 
-    pub fn expand_with_border(&mut self, border: &Border<T>, win: &WindowHandle) {
+    pub fn expand_with_border(&mut self, border: &Border<T>, win: &Window) {
         self.width = self.width.add(&border.left, win, ScreenDir::Horizontal);
         self.width = self.width.add(&border.right, win, ScreenDir::Horizontal);
         self.height = self.height.add(&border.top, win, ScreenDir::Vertical);
         self.height = self.height.add(&border.bottom, win, ScreenDir::Vertical);
     }
 
-    pub fn remove_border(&mut self, border: &Border<T>, win: &WindowHandle) {
+    pub fn remove_border(&mut self, border: &Border<T>, win: &Window) {
         self.width = self.width.sub(&border.left, win, ScreenDir::Horizontal);
         self.width = self.width.sub(&border.right, win, ScreenDir::Horizontal);
         self.height = self.height.sub(&border.top, win, ScreenDir::Vertical);
@@ -112,14 +112,14 @@ impl From<LogicalSize<f64>> for Extent<AbsSize> {
 }
 
 impl Extent<Size> {
-    pub fn as_rel(self, win: &WindowHandle) -> Extent<RelSize> {
+    pub fn as_rel(self, win: &Window) -> Extent<RelSize> {
         Extent::<RelSize>::new(
             self.width.as_rel(win, ScreenDir::Horizontal),
             self.height.as_rel(win, ScreenDir::Vertical),
         )
     }
 
-    pub fn as_abs(self, win: &WindowHandle) -> Extent<AbsSize> {
+    pub fn as_abs(self, win: &Window) -> Extent<AbsSize> {
         Extent::<AbsSize>::new(
             self.width.as_abs(win, ScreenDir::Horizontal),
             self.height.as_abs(win, ScreenDir::Vertical),
@@ -201,19 +201,19 @@ impl<T: Copy + Clone + LeftBound + AspectMath> Position<T> {
         self
     }
 
-    pub fn offset_by_border(&mut self, border: &Border<T>, win: &WindowHandle) {
+    pub fn offset_by_border(&mut self, border: &Border<T>, win: &Window) {
         self.bottom = self.bottom.add(&border.bottom, win, ScreenDir::Vertical);
         self.left = self.left.add(&border.left, win, ScreenDir::Horizontal);
     }
 
-    pub fn with_border(mut self, border: &Border<T>, win: &WindowHandle) -> Self {
+    pub fn with_border(mut self, border: &Border<T>, win: &Window) -> Self {
         self.offset_by_border(border, win);
         self
     }
 }
 
 impl Position<Size> {
-    pub fn as_rel(&self, win: &WindowHandle) -> Position<RelSize> {
+    pub fn as_rel(&self, win: &Window) -> Position<RelSize> {
         Position::<RelSize>::new_with_depth(
             self.left.as_rel(win, ScreenDir::Horizontal),
             self.bottom.as_rel(win, ScreenDir::Vertical),
@@ -221,7 +221,7 @@ impl Position<Size> {
         )
     }
 
-    pub fn as_abs(&self, win: &WindowHandle) -> Position<AbsSize> {
+    pub fn as_abs(&self, win: &Window) -> Position<AbsSize> {
         Position::<AbsSize>::new_with_depth(
             self.left.as_abs(win, ScreenDir::Horizontal),
             self.bottom.as_abs(win, ScreenDir::Vertical),
@@ -294,7 +294,7 @@ impl<T: Copy + Clone + LeftBound> Border<T> {
 }
 
 impl Border<Size> {
-    pub fn as_rel(&self, win: &WindowHandle) -> Border<RelSize> {
+    pub fn as_rel(&self, win: &Window) -> Border<RelSize> {
         Border::<RelSize>::new(
             self.top.as_rel(win, ScreenDir::Vertical),
             self.bottom.as_rel(win, ScreenDir::Vertical),
@@ -303,7 +303,7 @@ impl Border<Size> {
         )
     }
 
-    pub fn as_abs(&self, win: &WindowHandle) -> Border<AbsSize> {
+    pub fn as_abs(&self, win: &Window) -> Border<AbsSize> {
         Border::<AbsSize>::new(
             self.top.as_abs(win, ScreenDir::Vertical),
             self.bottom.as_abs(win, ScreenDir::Vertical),
@@ -373,7 +373,7 @@ where
 }
 
 impl Region<Size> {
-    pub fn as_abs(&self, win: &WindowHandle) -> Region<AbsSize> {
+    pub fn as_abs(&self, win: &Window) -> Region<AbsSize> {
         Region::new(self.position.as_abs(win), self.extent.as_abs(win))
     }
 }

@@ -31,7 +31,7 @@ use std::{borrow::Borrow, collections::HashMap, env, sync::Arc};
 use tokio::runtime::Runtime;
 use window::{
     size::{AbsSize, LeftBound, RelSize, ScreenDir},
-    WindowHandle,
+    Window,
 };
 
 #[derive(Debug)]
@@ -197,7 +197,7 @@ impl FontContext {
         *x_pos = AbsSize::from_px((x_pos.as_px() * phys_w).floor() / phys_w);
     }
 
-    pub fn measure_text(&mut self, span: &TextSpan, win: &WindowHandle) -> Result<TextSpanMetrics> {
+    pub fn measure_text(&mut self, span: &TextSpan, win: &Window) -> Result<TextSpanMetrics> {
         let phys_w = win.physical_size().width as f32;
         let scale_px = (span.size() * win.scale_factor() as f32)
             .as_abs(win, ScreenDir::Horizontal)
@@ -255,14 +255,14 @@ impl FontContext {
     ) -> Result<TextSpanMetrics> {
         let gs_width = self.glyph_sheet_width();
         let gs_height = self.glyph_sheet_height();
-        let win = gpu.window();
+        let win = gpu.window().read();
 
         // Use the physical width to re-align all pixel boxes to pixel boundaries.
         let phys_w = win.physical_size().width as f32;
 
         // The font system expects scales in pixels.
         let scale_px = (span.size() * win.scale_factor() as f32)
-            .as_abs(win, ScreenDir::Horizontal)
+            .as_abs(&win, ScreenDir::Horizontal)
             .ceil();
 
         // Font rendering is based around the baseline. We want it based around the top-left

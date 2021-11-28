@@ -24,7 +24,7 @@ use anyhow::Result;
 use gpu::Gpu;
 use parking_lot::RwLock;
 use std::{sync::Arc, time::Instant};
-use window::{size::Size, WindowHandle};
+use window::{size::Size, Window};
 
 #[derive(Debug)]
 pub struct Button {
@@ -69,11 +69,7 @@ impl Labeled for Button {
 }
 
 impl Widget for Button {
-    fn measure(
-        &mut self,
-        win: &WindowHandle,
-        font_context: &mut FontContext,
-    ) -> Result<Extent<Size>> {
+    fn measure(&mut self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>> {
         self.label.write().measure(win, font_context)
     }
 
@@ -81,7 +77,7 @@ impl Widget for Button {
         &mut self,
         now: Instant,
         region: Region<Size>,
-        win: &WindowHandle,
+        win: &Window,
         font_context: &mut FontContext,
     ) -> Result<()> {
         self.label.write().layout(now, region, win, font_context)

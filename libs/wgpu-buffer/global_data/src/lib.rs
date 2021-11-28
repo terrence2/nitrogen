@@ -23,7 +23,7 @@ use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use orrery::Orrery;
 use parking_lot::RwLock;
 use std::{mem, sync::Arc};
-use window::WindowHandle;
+use window::Window;
 use zerocopy::{AsBytes, FromBytes};
 
 pub fn m2v(m: &Matrix4<f32>) -> [[f32; 4]; 4] {
@@ -102,7 +102,7 @@ impl Globals {
     // cutouts or left-right cutouts, depending on the aspect. This lets our screen drawing
     // routines (e.g. for text) assume that everything is undistorted, even if coordinates at
     // the edges go outside the +/- 1 range.
-    pub fn set_screen_overlay_projection(&mut self, win: &WindowHandle) {
+    pub fn set_screen_overlay_projection(&mut self, win: &Window) {
         let physical = win.physical_size();
         let aspect = win.aspect_ratio_f32() * 4f32 / 3f32;
         let (w, h) = if physical.width > physical.height {
@@ -256,7 +256,7 @@ impl GlobalParametersBuffer {
         &self.bind_group
     }
 
-    pub fn track_state_changes(&mut self, camera: &Camera, orrery: &Orrery, win: &WindowHandle) {
+    pub fn track_state_changes(&mut self, camera: &Camera, orrery: &Orrery, win: &Window) {
         self.globals.set_camera(camera);
         self.globals.set_orrery(orrery);
         self.globals.set_tone(self.tone_gamma);
