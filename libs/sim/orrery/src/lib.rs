@@ -306,12 +306,15 @@ pub struct Orrery {
 
 #[inject_nitrous_module]
 impl Orrery {
-    pub fn now(interpreter: &mut Interpreter) -> Arc<RwLock<Self>> {
+    pub fn now(interpreter: &mut Interpreter) -> Result<Arc<RwLock<Self>>> {
         Self::new(Utc::now(), interpreter)
     }
 
     #[allow(clippy::unreadable_literal)]
-    pub fn new(initial_time: DateTime<Utc>, interpreter: &mut Interpreter) -> Arc<RwLock<Self>> {
+    pub fn new(
+        initial_time: DateTime<Utc>,
+        interpreter: &mut Interpreter,
+    ) -> Result<Arc<RwLock<Self>>> {
         let orrery = Arc::new(RwLock::new(Self {
             //EM Bary   1.00000018      0.01673163     -0.00054346      100.46691572    102.93005885     -5.11260389
             //         -0.00000003     -0.00003661     -0.01337178    35999.37306329      0.31795260     -0.24123856
@@ -339,11 +342,6 @@ impl Orrery {
         }));
 
         interpreter.put_global("orrery", Value::Module(orrery.clone()));
-
-        orrery
-    }
-
-    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
         interpreter.interpret_once(
             r#"
                 let bindings := mapper.create_bindings("orrery");
@@ -351,7 +349,8 @@ impl Orrery {
                 bindings.bind("mouseMotion", "orrery.handle_mousemove(dx)");
             "#,
         )?;
-        Ok(())
+
+        Ok(orrery)
     }
 
     pub fn get_time(&self) -> DateTime<Utc> {

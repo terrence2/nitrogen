@@ -117,7 +117,11 @@ impl WidgetBuffer {
     const MAX_BACKGROUND_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6; // note: rounded corners
     const MAX_IMAGE_VERTICES: usize = Self::MAX_WIDGETS * 4 * 6;
 
-    pub fn new(gpu: &mut Gpu, interpreter: &mut Interpreter) -> Result<Arc<RwLock<Self>>> {
+    pub fn new(
+        mapper: Arc<RwLock<EventMapper>>,
+        gpu: &mut Gpu,
+        interpreter: &mut Interpreter,
+    ) -> Result<Arc<RwLock<Self>>> {
         trace!("WidgetBuffer::new");
 
         let mut paint_context = PaintContext::new(gpu)?;
@@ -201,7 +205,6 @@ impl WidgetBuffer {
                 });
 
         let root = FloatBox::new();
-        let mapper = EventMapper::new(interpreter);
         let terminal = Terminal::new(&paint_context.font_context)
             .with_visible(false)
             .wrapped();

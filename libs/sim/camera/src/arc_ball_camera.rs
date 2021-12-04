@@ -43,31 +43,10 @@ impl ArcBallCamera {
         z_near: Length<Meters>,
         win: &mut Window,
         interpreter: &mut Interpreter,
-    ) -> Arc<RwLock<Self>> {
+    ) -> Result<Arc<RwLock<Self>>> {
         let arcball = Arc::new(RwLock::new(Self::detached(win.aspect_ratio(), z_near)));
         win.register_display_config_change_receiver(arcball.clone());
         interpreter.put_global("camera", Value::Module(arcball.clone()));
-        arcball
-    }
-
-    pub fn detached(aspect_ratio: f64, z_near: Length<Meters>) -> Self {
-        let fov_y = radians!(PI / 2f64);
-        Self {
-            camera: Camera::from_parameters(fov_y, aspect_ratio, z_near),
-            target: Graticule::<GeoSurface>::new(radians!(0), radians!(0), meters!(10.)),
-            target_height_delta: meters!(0),
-            eye: Graticule::<Target>::new(
-                radians!(degrees!(10.)),
-                radians!(degrees!(25.)),
-                meters!(10.),
-            ),
-            fov_delta: degrees!(0),
-            in_rotate: false,
-            in_move: false,
-        }
-    }
-
-    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
         interpreter.interpret_once(
             r#"
                 let bindings := mapper.create_bindings("arc_ball_camera");
@@ -85,7 +64,24 @@ impl ArcBallCamera {
                 bindings.bind("Shift+RBracket", "camera.increase_exposure(pressed)");
             "#,
         )?;
-        Ok(())
+        Ok(arcball)
+    }
+
+    pub fn detached(aspect_ratio: f64, z_near: Length<Meters>) -> Self {
+        let fov_y = radians!(PI / 2f64);
+        Self {
+            camera: Camera::from_parameters(fov_y, aspect_ratio, z_near),
+            target: Graticule::<GeoSurface>::new(radians!(0), radians!(0), meters!(10.)),
+            target_height_delta: meters!(0),
+            eye: Graticule::<Target>::new(
+                radians!(degrees!(10.)),
+                radians!(degrees!(25.)),
+                meters!(10.),
+            ),
+            fov_delta: degrees!(0),
+            in_rotate: false,
+            in_move: false,
+        }
     }
 
     pub fn camera(&self) -> &Camera {

@@ -40,7 +40,8 @@ use terrain::{CpuDetailLevel, GpuDetailLevel, TerrainBuffer};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use ui::UiRenderPass;
 use widget::{
-    Border, Color, Expander, Label, Labeled, PositionH, PositionV, VerticalBox, WidgetBuffer,
+    Border, Color, EventMapper, Expander, Label, Labeled, PositionH, PositionV, VerticalBox,
+    WidgetBuffer,
 };
 use window::{
     size::{LeftBound, Size},
@@ -76,17 +77,13 @@ struct System {
 
 #[inject_nitrous_module]
 impl System {
-    pub fn new(interpreter: &mut Interpreter) -> Arc<RwLock<Self>> {
+    pub fn new(interpreter: &mut Interpreter) -> Result<Arc<RwLock<Self>>> {
         let system = Arc::new(RwLock::new(Self {
             exit: false,
             pin_camera: false,
             camera: Default::default(),
         }));
         interpreter.put_global("system", Value::Module(system.clone()));
-        system
-    }
-
-    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
         interpreter.interpret_once(
             r#"
                 let bindings := mapper.create_bindings("system");
@@ -97,7 +94,7 @@ impl System {
                 bindings.bind("l", "widget.dump_glyphs(pressed)");
             "#,
         )?;
-        Ok(())
+        Ok(system)
     }
 
     #[method]
@@ -195,6 +192,7 @@ fn window_main(os_window: OsWindow, input_controller: &mut InputController) -> R
     }
 
     let mut interpreter = Interpreter::default();
+    let mapper = EventMapper::new(&mut interpreter);
     let timeline = Timeline::new(&mut interpreter);
 
     let display_config = DisplayConfig::discover(&opt.display, &os_window);
@@ -206,8 +204,8 @@ fn window_main(os_window: OsWindow, input_controller: &mut InputController) -> R
     )?;
     let gpu = Gpu::new(&mut window.write(), Default::default(), &mut interpreter)?;
 
-    let orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0), &mut interpreter);
-    let arcball = ArcBallCamera::new(meters!(0.5), &mut window.write(), &mut interpreter);
+    let orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0), &mut interpreter)?;
+    let arcball = ArcBallCamera::new(meters!(0.5), &mut window.write(), &mut interpreter)?;
 
     ///////////////////////////////////////////////////////////
     let atmosphere_buffer = AtmosphereBuffer::new(&mut gpu.write())?;
@@ -231,7 +229,7 @@ fn window_main(os_window: OsWindow, input_controller: &mut InputController) -> R
         &stars_buffer.read(),
         &terrain_buffer.read(),
     )?;
-    let widgets = WidgetBuffer::new(&mut gpu.write(), &mut interpreter)?;
+    let widgets = WidgetBuffer::new(mapper, &mut gpu.write(), &mut interpreter)?;
     let ui = UiRenderPass::new(
         &mut gpu.write(),
         &globals.read(),
@@ -257,7 +255,7 @@ fn window_main(os_window: OsWindow, input_controller: &mut InputController) -> R
         composite,
     )?;
 
-    let system = System::new(&mut interpreter);
+    let system = System::new(&mut interpreter)?;
 
     ///////////////////////////////////////////////////////////
     // UI Setup
@@ -321,13 +319,10 @@ fn window_main(os_window: OsWindow, input_controller: &mut InputController) -> R
         .set_float(PositionH::Start, PositionV::Bottom);
 
     {
+        // TODO: figure out a better way to handle this, e.g. configuration
         let interp = &mut interpreter;
-        // gpu.write().add_default_bindings(interp)?;
-        orrery.write().add_default_bindings(interp)?;
-        arcball.write().add_default_bindings(interp)?;
         frame_graph.globals_mut().add_debug_bindings(interp)?;
         frame_graph.world_mut().add_debug_bindings(interp)?;
-        system.write().add_default_bindings(interp)?;
     }
 
     if let Some(command) = opt.command.as_ref() {
