@@ -130,11 +130,22 @@ impl Widget for Label {
         Ok(())
     }
 
-    fn upload(&self, _now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
+    fn upload(
+        &self,
+        _now: Instant,
+        win: &Window,
+        gpu: &Gpu,
+        context: &mut PaintContext,
+    ) -> Result<()> {
         let widget_info_index = context.push_widget(&WidgetInfo::default());
 
-        self.line
-            .upload(self.allocated_position, widget_info_index, gpu, context)?;
+        self.line.upload(
+            self.allocated_position,
+            widget_info_index,
+            win,
+            gpu,
+            context,
+        )?;
 
         Ok(())
     }

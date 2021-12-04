@@ -136,18 +136,22 @@ impl Widget for TextEdit {
         Ok(())
     }
 
-    fn upload(&self, _now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
+    fn upload(
+        &self,
+        _now: Instant,
+        win: &Window,
+        gpu: &Gpu,
+        context: &mut PaintContext,
+    ) -> Result<()> {
         let info = WidgetInfo::default();
         let widget_info_index = context.push_widget(&info);
-        let win = gpu.window().read();
 
-        let mut pos = self.layout_position.as_abs(&win);
+        let mut pos = self.layout_position.as_abs(win);
         *pos.bottom_mut() += self.measured_extent.height();
         for (i, line) in self.lines.iter().enumerate() {
-            let span_metrics = line.measure(&win, &mut context.font_context)?;
+            let span_metrics = line.measure(win, &mut context.font_context)?;
             *pos.bottom_mut() -= span_metrics.height;
-            //println!("{}: {}", line.flatten(), pos.top().as_px());
-            let span_metrics = line.upload(pos.into(), widget_info_index, gpu, context)?;
+            let span_metrics = line.upload(pos.into(), widget_info_index, win, gpu, context)?;
             if i != self.lines.len() - 1 {
                 *pos.bottom_mut() -= span_metrics.line_gap;
             }

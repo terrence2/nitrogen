@@ -16,7 +16,7 @@ use anyhow::Result;
 use atmosphere::AtmosphereBuffer;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::GlobalParametersBuffer;
-use gpu::{Gpu, ResizeHint};
+use gpu::{Gpu, RenderExtentChangeReceiver};
 use log::trace;
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -283,7 +283,7 @@ impl WorldRenderPass {
             debug_mode: DebugMode::None,
         }));
 
-        gpu.add_resize_observer(world.clone());
+        gpu.register_render_extent_change_receiver(world.clone());
 
         interpreter.put_global("world", Value::Module(world.clone()));
 
@@ -291,7 +291,7 @@ impl WorldRenderPass {
     }
 
     fn _make_deferred_texture_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let size = gpu.render_extent();
+        let size = gpu.logical_render_extent();
         let target = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("world-offscreen-texture-target"),
             size,
@@ -317,7 +317,7 @@ impl WorldRenderPass {
     }
 
     fn _make_deferred_depth_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let size = gpu.render_extent();
+        let size = gpu.logical_render_extent();
         let depth_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("world-offscreen-depth-texture"),
             size,
@@ -565,8 +565,8 @@ impl WorldRenderPass {
     }
 }
 
-impl ResizeHint for WorldRenderPass {
-    fn note_resize(&mut self, gpu: &Gpu) -> Result<()> {
+impl RenderExtentChangeReceiver for WorldRenderPass {
+    fn on_render_extent_changed(&mut self, gpu: &Gpu) -> Result<()> {
         self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
         self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
         self.deferred_bind_group = Self::_make_deferred_bind_group(

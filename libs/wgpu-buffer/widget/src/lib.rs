@@ -327,8 +327,6 @@ impl WidgetBuffer {
         events: &[GenericEvent],
         interpreter: Interpreter,
         win: &Window,
-        // scale_factor: f64,
-        // logical_size: Extent<AbsSize>,
     ) -> Result<()> {
         for event in events {
             if let GenericEvent::KeyboardKey {
@@ -383,12 +381,15 @@ impl WidgetBuffer {
         &mut self,
         now: Instant,
         async_rt: &Runtime,
+        win: &Window,
         gpu: &mut Gpu,
         tracker: &mut UploadTracker,
     ) -> Result<()> {
         // Draw into the paint context.
         self.paint_context.reset_for_frame();
-        self.root.read().upload(now, gpu, &mut self.paint_context)?;
+        self.root
+            .read()
+            .upload(now, win, gpu, &mut self.paint_context)?;
 
         // Upload: copy all of the CPU paint context to the GPU buffers we maintain.
         self.paint_context

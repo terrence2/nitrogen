@@ -29,7 +29,7 @@ use camera::Camera;
 use catalog::Catalog;
 use geodesy::{GeoCenter, Graticule};
 use global_data::GlobalParametersBuffer;
-use gpu::{Gpu, ResizeHint, UploadTracker};
+use gpu::{Gpu, RenderExtentChangeReceiver, UploadTracker};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
@@ -497,7 +497,7 @@ impl TerrainBuffer {
             accumulate_clear_pipeline,
         }));
 
-        gpu.add_resize_observer(terrain.clone());
+        gpu.register_render_extent_change_receiver(terrain.clone());
 
         interpreter.put_global("terrain", Value::Module(terrain.clone()));
 
@@ -510,7 +510,7 @@ impl TerrainBuffer {
     }
 
     fn _make_deferred_texture_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let size = gpu.render_extent();
+        let size = gpu.logical_render_extent();
         let target = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("deferred-texture-target"),
             size,
@@ -536,7 +536,7 @@ impl TerrainBuffer {
     }
 
     fn _make_deferred_depth_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let size = gpu.render_extent();
+        let size = gpu.logical_render_extent();
         let depth_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("deferred-depth-texture"),
             size,
@@ -562,7 +562,7 @@ impl TerrainBuffer {
     }
 
     fn _make_color_accumulator_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let size = gpu.render_extent();
+        let size = gpu.logical_render_extent();
         let color_acc = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("terrain-color-acc-texture"),
             size,
@@ -588,7 +588,7 @@ impl TerrainBuffer {
     }
 
     fn _make_normal_accumulator_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let size = gpu.render_extent();
+        let size = gpu.logical_render_extent();
         let normal_acc = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("terrain-normal-acc-texture"),
             size,
@@ -899,8 +899,8 @@ impl TerrainBuffer {
     }
 }
 
-impl ResizeHint for TerrainBuffer {
-    fn note_resize(&mut self, gpu: &Gpu) -> Result<()> {
+impl RenderExtentChangeReceiver for TerrainBuffer {
+    fn on_render_extent_changed(&mut self, gpu: &Gpu) -> Result<()> {
         self.acc_extent = gpu.attachment_extent();
         self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
         self.deferred_depth = Self::_make_deferred_depth_targets(gpu);

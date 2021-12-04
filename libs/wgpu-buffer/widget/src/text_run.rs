@@ -491,7 +491,7 @@ impl TextRun {
         let mut min_descent = AbsSize::zero();
         let mut max_line_gap = AbsSize::zero();
         for span in self.spans.iter() {
-            let span_metrics = font_context.measure_text(span, &win)?;
+            let span_metrics = font_context.measure_text(span, win)?;
             total_width += span_metrics.width;
             max_height = max_height.max(&span_metrics.height);
             max_line_gap = max_line_gap.max(&span_metrics.line_gap);
@@ -511,13 +511,14 @@ impl TextRun {
         &self,
         initial_position: Position<Size>,
         widget_info_index: u32,
+        win: &Window,
         gpu: &Gpu,
         context: &mut PaintContext,
     ) -> Result<TextSpanMetrics> {
         context
             .widget_mut(widget_info_index)
             .set_pre_blend_text(self.pre_blend_text);
-        let init_pos = initial_position.as_abs(&gpu.window().read());
+        let init_pos = initial_position.as_abs(win);
         let mut position = 0;
         let mut total_width = AbsSize::zero();
         let mut max_height = AbsSize::zero();
@@ -538,6 +539,7 @@ impl TextRun {
                 Position::new(init_pos.left() + total_width, init_pos.bottom()),
                 widget_info_index,
                 selection_area,
+                win,
                 gpu,
             )?;
             total_width += span_metrics.width;

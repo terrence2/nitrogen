@@ -83,7 +83,13 @@ impl Widget for Button {
         self.label.write().layout(now, region, win, font_context)
     }
 
-    fn upload(&self, now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
-        self.label.read().upload(now, gpu, context)
+    fn upload(
+        &self,
+        now: Instant,
+        win: &Window,
+        gpu: &Gpu,
+        context: &mut PaintContext,
+    ) -> Result<()> {
+        self.label.read().upload(now, win, gpu, context)
     }
 }

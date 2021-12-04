@@ -47,7 +47,7 @@ pub struct InputState {
     window_focused: bool,
 }
 
-pub trait WindowEventReceiver {
+pub trait WindowEventReceiver: Send + Sync + 'static {
     fn on_window_event(&mut self, event: GenericWindowEvent);
 }
 
@@ -55,7 +55,7 @@ pub struct InputController {
     proxy: EventLoopProxy<MetaEvent>,
     event_source: Receiver<GenericEvent>,
 
-    window_event_callbacks: Vec<Arc<RwLock<dyn WindowEventReceiver + Send + Sync + 'static>>>,
+    window_event_receivers: Vec<Arc<RwLock<dyn WindowEventReceiver>>>,
 }
 
 impl InputController {
@@ -63,7 +63,7 @@ impl InputController {
         Self {
             proxy,
             event_source,
-            window_event_callbacks: Vec::new(),
+            window_event_receivers: Vec::new(),
         }
     }
 
@@ -77,11 +77,11 @@ impl InputController {
         Ok(())
     }
 
-    pub fn register_window_event_handler<T: WindowEventReceiver + Send + Sync + 'static>(
+    pub fn register_window_event_receiver<T: WindowEventReceiver>(
         &mut self,
         callback: Arc<RwLock<T>>,
     ) {
-        self.window_event_callbacks.push(callback);
+        self.window_event_receivers.push(callback);
     }
 
     pub fn poll_events(&self) -> Result<SmallVec<[GenericEvent; 8]>> {
@@ -89,14 +89,11 @@ impl InputController {
         let mut maybe_event_input = self.event_source.try_recv();
         while maybe_event_input.is_ok() {
             let event_input = maybe_event_input?;
-            match event_input {
-                GenericEvent::Window(gwe) => {
-                    for receiver in self.window_event_callbacks.iter() {
-                        receiver.write().on_window_event(gwe);
-                    }
+            if let GenericEvent::Window(gwe) = event_input {
+                for receiver in self.window_event_receivers.iter() {
+                    receiver.write().on_window_event(gwe);
                 }
-                _ => {}
-            };
+            }
             out.push(event_input);
             maybe_event_input = self.event_source.try_recv();
         }

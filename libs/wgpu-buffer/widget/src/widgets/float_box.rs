@@ -228,11 +228,17 @@ impl Widget for FloatBox {
 
     // Webgpu: (-1, -1) maps to the bottom-left of the screen.
     // Widget: (0, 0) maps to the top-left of the widget.
-    fn upload(&self, now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
+    fn upload(
+        &self,
+        now: Instant,
+        win: &Window,
+        gpu: &Gpu,
+        context: &mut PaintContext,
+    ) -> Result<()> {
         // Upload all children
         for pack in self.children.values() {
             let widget = pack.widget.read();
-            let _ = widget.upload(now, gpu, context)?;
+            let _ = widget.upload(now, win, gpu, context)?;
         }
 
         Ok(())

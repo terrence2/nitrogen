@@ -159,12 +159,18 @@ impl Widget for VerticalBox {
         Ok(())
     }
 
-    fn upload(&self, now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
+    fn upload(
+        &self,
+        now: Instant,
+        win: &Window,
+        gpu: &Gpu,
+        context: &mut PaintContext,
+    ) -> Result<()> {
         let widget_info_index = context.push_widget(&self.info);
 
         context.current_depth += PaintContext::BOX_DEPTH_SIZE;
         for packing in &self.children {
-            packing.widget_mut().upload(now, gpu, context)?;
+            packing.widget_mut().upload(now, win, gpu, context)?;
         }
         context.current_depth -= PaintContext::BOX_DEPTH_SIZE;
 
@@ -176,26 +182,25 @@ impl Widget for VerticalBox {
                 *self.allocated_region.extent(),
                 &border_color,
                 widget_info_index,
-                gpu,
+                win,
                 &mut context.background_pool,
             );
         }
 
         if let Some(background_color) = self.background_color {
-            let win = gpu.window().read();
             let mut pos = self
                 .allocated_region
                 .position()
                 .with_depth(context.current_depth + PaintContext::BACKGROUND_DEPTH);
-            pos.offset_by_border(&self.border, &win);
+            pos.offset_by_border(&self.border, win);
             let mut ext = *self.allocated_region.extent();
-            ext.remove_border(&self.border, &win);
+            ext.remove_border(&self.border, win);
             WidgetVertex::push_quad_ext(
                 pos,
                 ext,
                 &background_color,
                 widget_info_index,
-                gpu,
+                win,
                 &mut context.background_pool,
             );
         }

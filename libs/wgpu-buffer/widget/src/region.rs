@@ -376,6 +376,10 @@ impl Region<Size> {
     pub fn as_abs(&self, win: &Window) -> Region<AbsSize> {
         Region::new(self.position.as_abs(win), self.extent.as_abs(win))
     }
+
+    pub fn as_rel(&self, win: &Window) -> Region<RelSize> {
+        Region::new(self.position.as_rel(win), self.extent.as_rel(win))
+    }
 }
 
 impl From<Region<AbsSize>> for Region<Size> {

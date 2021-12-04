@@ -44,7 +44,7 @@ use widget::{
 };
 use window::{
     size::{LeftBound, Size},
-    DisplayConfig, OsWindow, Window,
+    DisplayConfig, DisplayConfigChangeReceiver, DisplayOpts, OsWindow, Window,
 };
 use world::WorldRenderPass;
 
@@ -62,6 +62,9 @@ struct Opt {
     /// Run given file after startup
     #[structopt(short, long)]
     execute: Option<PathBuf>,
+
+    #[structopt(flatten)]
+    display: DisplayOpts,
 }
 
 #[derive(Debug, NitrousModule)]
@@ -193,21 +196,18 @@ fn window_main(os_window: OsWindow, input_controller: &mut InputController) -> R
 
     let mut interpreter = Interpreter::default();
     let timeline = Timeline::new(&mut interpreter);
-    let window = Window::new(os_window, DisplayConfig::default(), &mut interpreter)?;
-    let gpu = Gpu::new(
-        window.clone(),
+
+    let display_config = DisplayConfig::discover(&opt.display, &os_window);
+    let window = Window::new(
+        os_window,
         input_controller,
-        Default::default(),
+        display_config,
         &mut interpreter,
     )?;
+    let gpu = Gpu::new(&mut window.write(), Default::default(), &mut interpreter)?;
 
     let orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0), &mut interpreter);
-    let arcball = ArcBallCamera::new(
-        meters!(0.5),
-        &mut gpu.write(),
-        &window.read(),
-        &mut interpreter,
-    );
+    let arcball = ArcBallCamera::new(meters!(0.5), &mut window.write(), &mut interpreter);
 
     ///////////////////////////////////////////////////////////
     let atmosphere_buffer = AtmosphereBuffer::new(&mut gpu.write())?;
@@ -396,12 +396,13 @@ fn window_main(os_window: OsWindow, input_controller: &mut InputController) -> R
         frame_graph.widgets.write().ensure_uploaded(
             now,
             &async_rt,
+            &window.read(),
             &mut gpu.write(),
             &mut tracker,
         )?;
         if !frame_graph.run(&mut gpu.write(), tracker)? {
-            let sz = window.read().physical_size();
-            gpu.write().on_resize(sz.width as i64, sz.height as i64)?;
+            gpu.write()
+                .on_display_config_changed(window.read().config())?;
         }
 
         sim_time

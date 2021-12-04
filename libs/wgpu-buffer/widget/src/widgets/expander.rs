@@ -171,12 +171,18 @@ impl Widget for Expander {
         Ok(())
     }
 
-    fn upload(&self, now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
+    fn upload(
+        &self,
+        now: Instant,
+        win: &Window,
+        gpu: &Gpu,
+        context: &mut PaintContext,
+    ) -> Result<()> {
         let widget_info_index = context.push_widget(&self.info);
 
-        self.header.read().upload(now, gpu, context)?;
+        self.header.read().upload(now, win, gpu, context)?;
         if self.expanded {
-            self.child.read().upload(now, gpu, context)?;
+            self.child.read().upload(now, win, gpu, context)?;
         }
 
         if let Some(border_color) = self.border_color {
@@ -188,25 +194,24 @@ impl Widget for Expander {
                 (*self.allocated_region.extent()).into(),
                 &border_color,
                 widget_info_index,
-                gpu,
+                win,
                 &mut context.background_pool,
             );
         }
         if let Some(background_color) = self.background_color {
-            let win = gpu.window().read();
             let mut pos = self
                 .allocated_region
                 .position()
                 .with_depth(context.current_depth + PaintContext::BACKGROUND_DEPTH);
-            pos.offset_by_border(&self.border.as_abs(&win), &win);
+            pos.offset_by_border(&self.border.as_abs(win), win);
             let mut ext = *self.allocated_region.extent();
-            ext.remove_border(&self.border.as_abs(&win), &win);
+            ext.remove_border(&self.border.as_abs(win), win);
             WidgetVertex::push_quad_ext(
                 pos.into(),
                 ext.into(),
                 &background_color,
                 widget_info_index,
-                gpu,
+                win,
                 &mut context.background_pool,
             );
         }

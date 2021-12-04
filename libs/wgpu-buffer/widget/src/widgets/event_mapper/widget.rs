@@ -90,7 +90,13 @@ impl Widget for EventMapper {
         Ok(())
     }
 
-    fn upload(&self, _now: Instant, _gpu: &Gpu, _context: &mut PaintContext) -> Result<()> {
+    fn upload(
+        &self,
+        _now: Instant,
+        _win: &Window,
+        _gpu: &Gpu,
+        _context: &mut PaintContext,
+    ) -> Result<()> {
         Ok(())
     }
 

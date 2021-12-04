@@ -18,13 +18,12 @@ use absolute_unit::{
 };
 use anyhow::{bail, ensure, Result};
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
-use gpu::{Gpu, ResizeHint};
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use std::{f64::consts::PI, sync::Arc};
-use window::Window;
+use window::{DisplayConfig, DisplayConfigChangeReceiver, Window};
 
 #[derive(Debug, NitrousModule)]
 pub struct ArcBallCamera {
@@ -42,12 +41,11 @@ pub struct ArcBallCamera {
 impl ArcBallCamera {
     pub fn new(
         z_near: Length<Meters>,
-        _gpu: &mut Gpu,
-        win: &Window,
+        win: &mut Window,
         interpreter: &mut Interpreter,
     ) -> Arc<RwLock<Self>> {
         let arcball = Arc::new(RwLock::new(Self::detached(win.aspect_ratio(), z_near)));
-        //gpu.add_resize_observer(arcball.clone());
+        win.register_display_config_change_receiver(arcball.clone());
         interpreter.put_global("camera", Value::Module(arcball.clone()));
         arcball
     }
@@ -435,13 +433,12 @@ impl ArcBallCamera {
     }
 }
 
-// impl ResizeHint for ArcBallCamera {
-//     fn note_resize(&mut self, gpu: &Gpu) -> Result<()> {
-//         self.camera
-//             .set_aspect_ratio(gpu.window().lock().aspect_ratio());
-//         Ok(())
-//     }
-// }
+impl DisplayConfigChangeReceiver for ArcBallCamera {
+    fn on_display_config_changed(&mut self, config: &DisplayConfig) -> Result<()> {
+        self.camera.set_aspect_ratio(config.aspect_ratio());
+        Ok(())
+    }
+}
 
 #[cfg(test)]
 mod tests {

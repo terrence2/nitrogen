@@ -249,20 +249,20 @@ impl FontContext {
         widget_info_index: u32,
         offset: Position<AbsSize>,
         selection_area: SpanSelection,
+        win: &Window,
         gpu: &Gpu,
         text_pool: &mut Vec<WidgetVertex>,
         background_pool: &mut Vec<WidgetVertex>,
     ) -> Result<TextSpanMetrics> {
         let gs_width = self.glyph_sheet_width();
         let gs_height = self.glyph_sheet_height();
-        let win = gpu.window().read();
 
         // Use the physical width to re-align all pixel boxes to pixel boundaries.
         let phys_w = win.physical_size().width as f32;
 
         // The font system expects scales in pixels.
         let scale_px = (span.size() * win.scale_factor() as f32)
-            .as_abs(&win, ScreenDir::Horizontal)
+            .as_abs(win, ScreenDir::Horizontal)
             .ceil();
 
         // Font rendering is based around the baseline. We want it based around the top-left
@@ -305,7 +305,7 @@ impl FontContext {
                 [frame.s1(gs_width), frame.t1(gs_height)],
                 span.color(),
                 widget_info_index,
-                gpu,
+                win,
                 text_pool,
             );
 
@@ -326,7 +326,7 @@ impl FontContext {
                         bz.as_depth(),
                         &Color::White,
                         widget_info_index,
-                        gpu,
+                        win,
                         background_pool,
                     );
                 }
@@ -345,7 +345,7 @@ impl FontContext {
                         bz.as_depth(),
                         &Color::Blue,
                         widget_info_index,
-                        gpu,
+                        win,
                         background_pool,
                     );
                 }
@@ -373,7 +373,7 @@ impl FontContext {
                     bz.as_depth(),
                     &Color::White,
                     widget_info_index,
-                    gpu,
+                    win,
                     background_pool,
                 );
             }

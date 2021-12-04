@@ -154,11 +154,17 @@ impl Widget for Terminal {
             .layout(now, region, win, font_context)
     }
 
-    fn upload(&self, now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
+    fn upload(
+        &self,
+        now: Instant,
+        win: &Window,
+        gpu: &Gpu,
+        context: &mut PaintContext,
+    ) -> Result<()> {
         if !self.visible {
             return Ok(());
         }
-        self.container.read().upload(now, gpu, context)
+        self.container.read().upload(now, win, gpu, context)
     }
 
     fn handle_event(

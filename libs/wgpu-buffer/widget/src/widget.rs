@@ -76,7 +76,13 @@ pub trait Widget: Debug + Send + Sync + 'static {
     ) -> Result<()>;
 
     /// Mutate paint context to reflect the presence of this widget.
-    fn upload(&self, now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()>;
+    fn upload(
+        &self,
+        now: Instant,
+        win: &Window,
+        gpu: &Gpu,
+        context: &mut PaintContext,
+    ) -> Result<()>;
 
     /// Low level event handler. The default implementation is generally suitable
     /// such that leaf nodes can implement one of the fine-grained handle_ methods

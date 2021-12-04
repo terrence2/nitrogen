@@ -26,7 +26,6 @@ pub use winit::dpi::{LogicalSize, PhysicalSize};
 
 use anyhow::{anyhow, bail, Result};
 use futures::executor::block_on;
-use input::{GenericWindowEvent, InputController, WindowEventReceiver};
 use log::{info, trace};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -34,7 +33,7 @@ use parking_lot::RwLock;
 use std::{fmt::Debug, fs, mem, path::PathBuf, sync::Arc};
 use tokio::runtime::Runtime;
 use wgpu::util::DeviceExt;
-use window::{DisplayMode, OsWindow, Window};
+use window::{DisplayConfig, DisplayConfigChangeReceiver, DisplayMode, Window};
 use zerocopy::AsBytes;
 
 #[derive(Debug)]
@@ -53,14 +52,12 @@ impl Default for RenderConfig {
 }
 
 /// Implement this and register with the gpu instance to get resize notifications.
-pub trait ResizeHint: Debug + Send + Sync + 'static {
-    fn note_resize(&mut self, gpu: &Gpu) -> Result<()>;
+pub trait RenderExtentChangeReceiver: Debug + Send + Sync + 'static {
+    fn on_render_extent_changed(&mut self, gpu: &Gpu) -> Result<()>;
 }
 
 #[derive(Debug, NitrousModule)]
 pub struct Gpu {
-    window: Arc<RwLock<Window>>,
-
     instance: wgpu::Instance,
     surface: wgpu::Surface,
     _adapter: wgpu::Adapter,
@@ -71,28 +68,17 @@ pub struct Gpu {
     // actually need to get re-created in most window size change cases. However, the
     // backing screen resources that we eventually project into each frame do need
     // to follow the window size exactly.
-    render_extent: wgpu::Extent3d,
+
+    // The swap chain and depth buffer need to follow window size changes exactly.
     swap_chain: wgpu::SwapChain,
     depth_texture: wgpu::TextureView,
 
-    resize_observers: Vec<Arc<RwLock<dyn ResizeHint>>>,
+    // Render extent is usually decoupled from
+    logical_render_extent: wgpu::Extent3d,
+    render_extent_change_receivers: Vec<Arc<RwLock<dyn RenderExtentChangeReceiver>>>,
 
     config: RenderConfig,
     frame_count: usize,
-}
-
-impl WindowEventReceiver for Gpu {
-    fn on_window_event(&mut self, event: GenericWindowEvent) {
-        match event {
-            GenericWindowEvent::ScaleFactorChanged { .. } => {
-                // Note: we don't actually care about scaling changing, since we're still putting
-                // the same number of pixels on screen, but the text display system might.
-            }
-            GenericWindowEvent::Resized { width, height } => {
-                self.on_resize(width as i64, height as i64).ok();
-            }
-        }
-    }
 }
 
 #[inject_nitrous_module]
@@ -100,30 +86,16 @@ impl Gpu {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
     pub const SCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 
-    pub fn add_resize_observer<T: ResizeHint>(&mut self, observer: Arc<RwLock<T>>) {
-        self.resize_observers.push(observer);
-    }
-
-    pub fn window(&self) -> &Arc<RwLock<Window>> {
-        &self.window
-    }
-
-    pub fn frame_count(&self) -> usize {
-        self.frame_count
-    }
-
     pub fn new(
-        win: Arc<RwLock<Window>>,
-        input: &mut InputController,
+        win: &mut Window,
         config: RenderConfig,
         interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
-        block_on(Self::new_async(win, input, config, interpreter))
+        block_on(Self::new_async(win, config, interpreter))
     }
 
     pub async fn new_async(
-        window: Arc<RwLock<Window>>,
-        input: &mut InputController,
+        win: &mut Window,
         config: RenderConfig,
         interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
@@ -136,11 +108,7 @@ impl Gpu {
             .await
             .ok_or_else(|| anyhow!("no suitable graphics adapter"))?;
 
-        let surface = {
-            // Note: RawWindowHandle is not implemented on MutexGuard, so we need to dig a bit.
-            let win_guard = window.read();
-            unsafe { instance.create_surface(win_guard.os_window()) }
-        };
+        let surface = { unsafe { instance.create_surface(win.os_window()) } };
 
         let trace_path = PathBuf::from("api_tracing.txt");
         let (device, queue) = adapter
@@ -154,7 +122,7 @@ impl Gpu {
             )
             .await?;
 
-        let physical_size = window.read().physical_size();
+        let physical_size = win.physical_size();
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
             format: Self::SCREEN_FORMAT,
@@ -165,7 +133,7 @@ impl Gpu {
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
         let depth_texture = Self::create_depth_texture(&device, &sc_desc);
 
-        let render_extent = match window.read().display_mode() {
+        let logical_render_extent = match win.display_mode() {
             DisplayMode::ResizableWindowed => wgpu::Extent3d {
                 width: physical_size.width,
                 height: physical_size.height,
@@ -175,7 +143,6 @@ impl Gpu {
         };
 
         let gpu = Arc::new(RwLock::new(Self {
-            window,
             instance,
             surface,
             _adapter: adapter,
@@ -183,100 +150,15 @@ impl Gpu {
             queue,
             swap_chain,
             depth_texture,
-            render_extent,
-            resize_observers: Vec::new(),
+            logical_render_extent,
+            render_extent_change_receivers: Vec::new(),
             config,
             frame_count: 0,
         }));
-        input.register_window_event_handler(gpu.clone());
-
-        // Resize is a non-optional bindings.
-        // FIXME: we don't care about DPI here, move to UI
         interpreter.put_global("gpu", Value::Module(gpu.clone()));
-        // interpreter.interpret_once(
-        //     r#"
-        //         let bindings := mapper.create_bindings("gpu");
-        //         bindings.bind("windowResized", "gpu.on_resize(width, height)");
-        //         bindings.bind("windowDpiChanged", "gpu.on_dpi_change(scale)");
-        //     "#,
-        // )?;
-
+        win.register_display_config_change_receiver(gpu.clone());
         Ok(gpu)
     }
-
-    // pub fn add_system_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
-    //     interpreter.interpret_once(
-    //         r#"
-    //             let bindings := mapper.create_bindings("gpu");
-    //             bindings.bind("windowResized", "gpu.on_resize(width, height)");
-    //             bindings.bind("windowDpiChanged", "gpu.on_dpi_change(scale)");
-    //         "#,
-    //     )?;
-    //     Ok(())
-    // }
-
-    pub fn on_resize(&mut self, width: i64, height: i64) -> Result<()> {
-        let win = self.window.read();
-        let os_window = win.os_window();
-        info!(
-            "received resize event: {}x{}; cached: {}x{}",
-            width,
-            height,
-            os_window.inner_size().width,
-            os_window.inner_size().height,
-        );
-
-        // On X11 (maybe others?), the w/h pair we get in the change event maybe has not
-        // made it to / been fully processed by, the window, so try to make sure the window
-        // knows what size the window is. :facepalm:
-        let new_size = PhysicalSize {
-            width: width as u32,
-            height: height as u32,
-        };
-        os_window.set_inner_size(new_size);
-
-        // note: the OS doesn't always give us the option to set the exact window size,
-        // so use whatever is real, regardless of what happened above. It is possible
-        // (AwesomeWM, X11) that the size change event reflects the full usable area
-        // and not the ultimate client size, in which case using the new numbers passed
-        // in the change event will cause us to resize every frame.
-        let new_size = os_window.inner_size();
-        info!(
-            "after resize, size is: {}x{}",
-            new_size.width, new_size.height
-        );
-
-        // Recreate the screen resources for the new window size.
-        let sc_desc = wgpu::SwapChainDescriptor {
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
-            format: Self::SCREEN_FORMAT,
-            width: new_size.width,
-            height: new_size.height,
-            present_mode: self.config.present_mode,
-        };
-        self.swap_chain = self.device.create_swap_chain(&self.surface, &sc_desc);
-        self.depth_texture = Self::create_depth_texture(&self.device, &sc_desc);
-
-        // Compute our new render extent, given the screen size change, if needed.
-        match self.window.read().display_mode() {
-            DisplayMode::ResizableWindowed => {}
-            v => panic!("unsupported display mode: {:?}", v),
-        }
-
-        for module in &self.resize_observers {
-            module.write().note_resize(self)?;
-        }
-
-        Ok(())
-    }
-
-    // #[method]
-    // pub fn on_dpi_change(&mut self, scale: f64) -> Result<()> {
-    //     // FIXME: font's may need to resize and relayout, but it shouldn't have impacts on us?
-    //     // self.scale_factor = scale;
-    //     // self.logical_size = self.physical_size.to_logical(self.scale_factor);
-    //     Ok(())
-    // }
 
     fn create_depth_texture(
         device: &wgpu::Device,
@@ -307,12 +189,34 @@ impl Gpu {
         })
     }
 
-    pub fn attachment_extent(&self) -> wgpu::Extent3d {
-        self.render_extent
+    pub fn register_render_extent_change_receiver<T: RenderExtentChangeReceiver>(
+        &mut self,
+        observer: Arc<RwLock<T>>,
+    ) {
+        self.render_extent_change_receivers.push(observer);
     }
 
-    pub fn render_extent(&self) -> wgpu::Extent3d {
-        self.render_extent
+    pub fn attachment_extent(&self) -> wgpu::Extent3d {
+        self.logical_render_extent
+    }
+
+    pub fn logical_render_extent(&self) -> wgpu::Extent3d {
+        self.logical_render_extent
+    }
+
+    #[method]
+    pub fn frame_count(&self) -> i64 {
+        self.frame_count as i64
+    }
+
+    #[method]
+    pub fn logical_width(&self) -> i64 {
+        self.logical_render_extent.width as i64
+    }
+
+    #[method]
+    pub fn logical_height(&self) -> i64 {
+        self.logical_render_extent.height as i64
     }
 
     pub fn get_next_framebuffer(&mut self) -> Result<Option<wgpu::SwapChainFrame>> {
@@ -554,6 +458,44 @@ impl Gpu {
 
     pub fn device_and_queue_mut(&mut self) -> (&mut wgpu::Device, &mut wgpu::Queue) {
         (&mut self.device, &mut self.queue)
+    }
+}
+
+impl DisplayConfigChangeReceiver for Gpu {
+    fn on_display_config_changed(&mut self, config: &DisplayConfig) -> Result<()> {
+        info!(
+            "window config changed {}x{}",
+            config.window_size().width,
+            config.window_size().height
+        );
+
+        // Recreate the screen resources for the new window size.
+        let sc_desc = wgpu::SwapChainDescriptor {
+            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+            format: Self::SCREEN_FORMAT,
+            width: config.window_size().width,
+            height: config.window_size().height,
+            present_mode: self.config.present_mode,
+        };
+        self.swap_chain = self.device.create_swap_chain(&self.surface, &sc_desc);
+        self.depth_texture = Self::create_depth_texture(&self.device, &sc_desc);
+
+        // Check if our render extent has changed and re-broadcast
+        let extent = config.logical_render_extent();
+        if self.logical_render_extent.width != extent.width
+            || self.logical_render_extent.height != extent.height
+        {
+            self.logical_render_extent = wgpu::Extent3d {
+                width: extent.width,
+                height: extent.height,
+                depth: 1,
+            };
+            for module in &self.render_extent_change_receivers {
+                module.write().on_render_extent_changed(self)?;
+            }
+        }
+
+        Ok(())
     }
 }
 

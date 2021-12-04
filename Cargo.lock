@@ -332,7 +332,6 @@ dependencies = [
  "approx",
  "geodesy",
  "geometry",
- "gpu",
  "log",
  "nalgebra",
  "nitrous",
@@ -3549,10 +3548,12 @@ name = "window"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "input",
  "log",
  "nitrous",
  "nitrous_injector",
  "parking_lot",
+ "structopt",
  "winit",
 ]
 

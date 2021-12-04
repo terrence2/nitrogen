@@ -137,12 +137,18 @@ impl Widget for LineEdit {
         Ok(())
     }
 
-    fn upload(&self, _now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
+    fn upload(
+        &self,
+        _now: Instant,
+        win: &Window,
+        gpu: &Gpu,
+        context: &mut PaintContext,
+    ) -> Result<()> {
         let info = WidgetInfo::default();
         let widget_info_index = context.push_widget(&info);
 
         self.line
-            .upload(self.position, widget_info_index, gpu, context)?;
+            .upload(self.position, widget_info_index, win, gpu, context)?;
 
         Ok(())
     }
