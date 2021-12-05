@@ -29,7 +29,7 @@ pub use winit::{
 };
 
 /// Include this with #[structopt(flatten)] to provide cli arguments to Window for common setup
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Default, StructOpt)]
 pub struct DisplayOpts {
     /// Set the render width
     #[structopt(short, long)]
@@ -151,6 +151,17 @@ impl DisplayConfig {
             render_scale: opt.scale.unwrap_or(1.0),
             dpi_scale_factor: os_window.scale_factor(),
             aspect_ratio: render_extent.height as f64 / render_extent.width as f64,
+        }
+    }
+
+    pub fn for_test() -> Self {
+        Self {
+            display_mode: DisplayMode::ResizableWindowed,
+            window_size: PhysicalSize::new(1920, 1080),
+            render_extent: PhysicalSize::new(1920, 1080),
+            render_scale: 1.0,
+            dpi_scale_factor: 1.2,
+            aspect_ratio: 1080. / 1920.,
         }
     }
 
@@ -346,12 +357,14 @@ mod tests {
 
     #[test]
     fn it_works() -> Result<()> {
-        use winit::platform::unix::EventLoopExtUnix;
-        let event_loop = winit::event_loop::EventLoop::<()>::new_any_thread();
-        let window = winit::window::WindowBuilder::new()
-            .with_title("Nitrogen Engine")
-            .build(&event_loop)?;
-        let _win_handle = Window::new(window);
+        let (os_window, mut input) = input::InputController::for_test_unix()?;
+        let mut interpreter = Interpreter::default();
+        let _win_handle = Window::new(
+            os_window,
+            &mut input,
+            DisplayConfig::for_test(),
+            &mut interpreter,
+        )?;
         Ok(())
     }
 }

@@ -480,19 +480,20 @@ impl WidgetBuffer {
 #[cfg(test)]
 mod test {
     use super::*;
-    use tokio::runtime::Runtime;
-    use winit::{event_loop::EventLoop, window::Window};
+    use gpu::TestResources;
 
     #[test]
     fn test_label_widget() -> Result<()> {
-        use winit::platform::unix::EventLoopExtUnix;
-        let event_loop = EventLoop::<()>::new_any_thread();
-        let window = Window::new(&event_loop)?;
-        let async_rt = Runtime::new()?;
-        let mut interpreter = Interpreter::default();
-        let gpu = Gpu::new(window, Default::default(), &mut interpreter)?;
+        let TestResources {
+            async_rt,
+            window,
+            gpu,
+            mut interpreter,
+            ..
+        } = Gpu::for_test_unix()?;
+        let mapper = EventMapper::new(&mut interpreter);
 
-        let widgets = WidgetBuffer::new(&mut gpu.write(), &mut interpreter)?;
+        let widgets = WidgetBuffer::new(mapper, &mut gpu.write(), &mut interpreter)?;
         let label = Label::new(
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\
             สิบสองกษัตริย์ก่อนหน้าแลถัดไป       สององค์ไซร้โง่เขลาเบาปัญญา\
@@ -510,11 +511,16 @@ mod test {
             .write()
             .add_child("label", label);
 
+        widgets
+            .write()
+            .track_state_changes(Instant::now(), &[], interpreter, &window.read())?;
+
         let mut tracker = Default::default();
-        widgets.write().make_upload_buffer(
+        widgets.write().ensure_uploaded(
             Instant::now(),
-            &mut gpu.write(),
             &async_rt,
+            &window.read(),
+            &mut gpu.write(),
             &mut tracker,
         )?;
 

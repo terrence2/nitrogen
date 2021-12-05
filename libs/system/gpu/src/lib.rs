@@ -26,6 +26,7 @@ pub use winit::dpi::{LogicalSize, PhysicalSize};
 
 use anyhow::{anyhow, bail, Result};
 use futures::executor::block_on;
+use input::InputController;
 use log::{info, trace};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -49,6 +50,14 @@ impl Default for RenderConfig {
             present_mode: wgpu::PresentMode::Mailbox,
         }
     }
+}
+
+pub struct TestResources {
+    pub window: Arc<RwLock<Window>>,
+    pub gpu: Arc<RwLock<Gpu>>,
+    pub async_rt: Runtime,
+    pub interpreter: Interpreter,
+    pub input: InputController,
 }
 
 /// Implement this and register with the gpu instance to get resize notifications.
@@ -158,6 +167,27 @@ impl Gpu {
         interpreter.put_global("gpu", Value::Module(gpu.clone()));
         win.register_display_config_change_receiver(gpu.clone());
         Ok(gpu)
+    }
+
+    #[cfg(unix)]
+    pub fn for_test_unix() -> Result<TestResources> {
+        let (os_window, mut input) = input::InputController::for_test_unix()?;
+        let mut interpreter = Interpreter::default();
+        let window = Window::new(
+            os_window,
+            &mut input,
+            DisplayConfig::for_test(),
+            &mut interpreter,
+        )?;
+        let gpu = Self::new(&mut window.write(), Default::default(), &mut interpreter)?;
+        let async_rt = Runtime::new()?;
+        Ok(TestResources {
+            gpu,
+            window,
+            async_rt,
+            interpreter,
+            input,
+        })
     }
 
     fn create_depth_texture(
@@ -502,20 +532,11 @@ impl DisplayConfigChangeReceiver for Gpu {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use input::MetaEvent;
-    use window::{DisplayConfig, OsWindow, Window};
-    use winit::event_loop::EventLoop;
 
     #[cfg(unix)]
     #[test]
     fn test_create() -> Result<()> {
-        let mut interpreter = Interpreter::default();
-        use winit::platform::unix::EventLoopExtUnix;
-        let event_loop = EventLoop::<MetaEvent>::new_any_thread();
-        let os_window = OsWindow::new(&event_loop)?;
-        let mut input = InputController::for_test(&event_loop);
-        let window = Window::new(os_window, DisplayConfig::default(), &mut interpreter)?;
-        let _gpu = Gpu::new(window, &mut input, Default::default(), &mut interpreter)?;
+        let _ = Gpu::for_test_unix()?;
         Ok(())
     }
 }

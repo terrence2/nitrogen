@@ -26,6 +26,7 @@ camera = { path = "../../libs/sim/camera" }
 geodesy = { path = "../../libs/util/geodesy" }
 global_data = { path = "../../libs/wgpu-buffer/global_data" }
 gpu = { path = "../../libs/system/gpu" }
+window = { path = "../../libs/system/window" }
 input = { path = "../../libs/system/input" }
 nitrous = { path = "../../libs/util/nitrous" }
 orrery = { path = "../../libs/sim/orrery" }

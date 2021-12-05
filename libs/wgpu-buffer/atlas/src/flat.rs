@@ -891,22 +891,15 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
+    use gpu::TestResources;
     use image::{GrayImage, Luma, Rgba, RgbaImage};
-    use nitrous::Interpreter;
     use rand::prelude::*;
     use std::{env, time::Duration};
-    use tokio::runtime::Runtime;
-    use winit::{event_loop::EventLoop, window::Window};
 
     #[cfg(unix)]
     #[test]
     fn test_random_packing() -> Result<()> {
-        use winit::platform::unix::EventLoopExtUnix;
-        let event_loop = EventLoop::<()>::new_any_thread();
-        let window = Window::new(&event_loop).unwrap();
-        let mut interpreter = Interpreter::default();
-        let async_rt = Runtime::new()?;
-        let gpu = Gpu::new(window, Default::default(), &mut interpreter)?;
+        let TestResources { async_rt, gpu, .. } = Gpu::for_test_unix()?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "random_packing",
@@ -977,12 +970,7 @@ mod test {
     #[cfg(unix)]
     #[test]
     fn test_finish() -> Result<()> {
-        use winit::platform::unix::EventLoopExtUnix;
-        let event_loop = EventLoop::<()>::new_any_thread();
-        let window = Window::new(&event_loop).unwrap();
-        let async_rt = Runtime::new()?;
-        let mut interpreter = Interpreter::default();
-        let gpu = Gpu::new(window, Default::default(), &mut interpreter)?;
+        let TestResources { async_rt, gpu, .. } = Gpu::for_test_unix()?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "test_finish",
@@ -1005,12 +993,7 @@ mod test {
     #[cfg(unix)]
     #[test]
     fn test_grayscale() -> Result<()> {
-        use winit::platform::unix::EventLoopExtUnix;
-        let event_loop = EventLoop::<()>::new_any_thread();
-        let window = Window::new(&event_loop).unwrap();
-        let async_rt = Runtime::new()?;
-        let mut interpreter = Interpreter::default();
-        let gpu = Gpu::new(window, Default::default(), &mut interpreter)?;
+        let TestResources { async_rt, gpu, .. } = Gpu::for_test_unix()?;
 
         let mut packer = AtlasPacker::<Luma<u8>>::new(
             "test_grayscale",
@@ -1033,12 +1016,7 @@ mod test {
     #[cfg(unix)]
     #[test]
     fn test_incremental_upload() -> Result<()> {
-        use winit::platform::unix::EventLoopExtUnix;
-        let async_rt = Runtime::new()?;
-        let event_loop = EventLoop::<()>::new_any_thread();
-        let window = Window::new(&event_loop).unwrap();
-        let mut interpreter = Interpreter::default();
-        let gpu = Gpu::new(window, Default::default(), &mut interpreter)?;
+        let TestResources { async_rt, gpu, .. } = Gpu::for_test_unix()?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "test_incremental",

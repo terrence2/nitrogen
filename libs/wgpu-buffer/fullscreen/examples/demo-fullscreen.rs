@@ -20,22 +20,29 @@ use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
 use gpu::Gpu;
-use input::{
-    GenericEvent, GenericSystemEvent, GenericWindowEvent, InputController, InputSystem,
-    VirtualKeyCode,
-};
+use input::{GenericEvent, GenericSystemEvent, InputController, InputSystem, VirtualKeyCode};
 use nitrous::Interpreter;
 use orrery::Orrery;
-use winit::window::Window;
+use widget::EventMapper;
+use window::{DisplayConfig, DisplayOpts, Window};
+use winit::window::Window as OsWindow;
 
 fn main() -> Result<()> {
     InputSystem::run_forever(window_main)
 }
 
-fn window_main(window: Window, input_controller: &InputController) -> Result<()> {
+fn window_main(os_window: OsWindow, input_controller: &mut InputController) -> Result<()> {
     let mut interpreter = Interpreter::default();
-    let gpu = Gpu::new(window, Default::default(), &mut interpreter)?;
-    let orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0), &mut interpreter);
+    let _mapper = EventMapper::new(&mut interpreter);
+    let display_config = DisplayConfig::discover(&DisplayOpts::default(), &os_window);
+    let window = Window::new(
+        os_window,
+        input_controller,
+        display_config,
+        &mut interpreter,
+    )?;
+    let gpu = Gpu::new(&mut window.write(), Default::default(), &mut interpreter)?;
+    let orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0), &mut interpreter)?;
 
     let globals_buffer = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter);
     let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
@@ -109,7 +116,7 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
             },
         });
 
-    let arcball = ArcBallCamera::new(meters!(0.1), &mut gpu.write(), &mut interpreter);
+    let arcball = ArcBallCamera::new(meters!(0.1), &mut window.write(), &mut interpreter)?;
     arcball.write().pan_view(true);
     arcball.write().set_eye(Graticule::<Target>::new(
         degrees!(0),
@@ -135,12 +142,6 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
                         return Ok(());
                     }
                 }
-                GenericEvent::Window(GenericWindowEvent::Resized { width, height }) => {
-                    gpu.write().on_resize(width as i64, height as i64)?;
-                }
-                GenericEvent::Window(GenericWindowEvent::ScaleFactorChanged { scale }) => {
-                    gpu.write().on_dpi_change(scale)?;
-                }
                 GenericEvent::System(GenericSystemEvent::Quit) => {
                     return Ok(());
                 }
@@ -152,12 +153,14 @@ fn window_main(window: Window, input_controller: &InputController) -> Result<()>
 
         // Prepare new camera parameters.
         let mut tracker = Default::default();
-        globals_buffer.read().make_upload_buffer(
+        globals_buffer.write().track_state_changes(
             arcball.read().camera(),
             &orrery.read(),
-            &gpu.read(),
-            &mut tracker,
-        )?;
+            &window.read(),
+        );
+        globals_buffer
+            .write()
+            .ensure_uploaded(&gpu.read(), &mut tracker)?;
 
         let gpu = &mut gpu.write();
         let gb_borrow = &globals_buffer.read();

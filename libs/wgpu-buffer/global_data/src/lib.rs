@@ -277,17 +277,16 @@ impl GlobalParametersBuffer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpu::Gpu;
-    use winit::{event_loop::EventLoop, window::Window};
+    use gpu::{Gpu, TestResources};
 
     #[cfg(unix)]
     #[test]
     fn it_can_create_a_buffer() -> Result<()> {
-        use winit::platform::unix::EventLoopExtUnix;
-        let event_loop = EventLoop::<()>::new_any_thread();
-        let window = Window::new(&event_loop)?;
-        let mut interpreter = Interpreter::default();
-        let gpu = Gpu::new(window, Default::default(), &mut interpreter)?;
+        let TestResources {
+            mut interpreter,
+            gpu,
+            ..
+        } = Gpu::for_test_unix()?;
         let _globals_buffer = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter);
         Ok(())
     }

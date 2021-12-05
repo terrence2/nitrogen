@@ -1609,18 +1609,13 @@ impl Precompute {
 #[cfg(test)]
 mod test {
     use super::*;
-    use nitrous::Interpreter;
+    use gpu::TestResources;
     use std::time::Instant;
-    use winit::{event_loop::EventLoop, window::Window};
 
     #[cfg(unix)]
     #[test]
     fn test_create() -> Result<()> {
-        use winit::platform::unix::EventLoopExtUnix;
-        let event_loop = EventLoop::<()>::new_any_thread();
-        let window = Window::new(&event_loop)?;
-        let mut interpreter = Interpreter::default();
-        let gpu = gpu::Gpu::new(window, Default::default(), &mut interpreter)?;
+        let TestResources { gpu, .. } = Gpu::for_test_unix()?;
         let precompute_start = Instant::now();
         let pcp = Precompute::new(&gpu.read())?;
         let _atmosphere_params_buf = pcp.build_textures(&mut gpu.write());

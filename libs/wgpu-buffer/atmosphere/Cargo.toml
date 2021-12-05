@@ -22,7 +22,6 @@ gpu = { path = "../../system/gpu" }
 
 [dev-dependencies]
 spirv-reflect = "^ 0.2"
-winit = { version = "^ 0.24", features = ["web-sys"] }
 nitrous = { path = "../../util/nitrous" }
 
 [build-dependencies]

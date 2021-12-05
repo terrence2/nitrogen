@@ -82,18 +82,12 @@ impl FullscreenBuffer {
 mod tests {
     use super::*;
     use anyhow::Result;
-    use gpu::Gpu;
-    use nitrous::Interpreter;
-    use winit::{event_loop::EventLoop, window::Window};
+    use gpu::TestResources;
 
     #[cfg(unix)]
     #[test]
     fn it_can_create_a_buffer() -> Result<()> {
-        use winit::platform::unix::EventLoopExtUnix;
-        let event_loop = EventLoop::<()>::new_any_thread();
-        let window = Window::new(&event_loop)?;
-        let mut interpreter = Interpreter::default();
-        let gpu = Gpu::new(window, Default::default(), &mut interpreter)?;
+        let TestResources { gpu, .. } = Gpu::for_test_unix()?;
         let _fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
         Ok(())
     }

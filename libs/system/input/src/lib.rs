@@ -72,6 +72,19 @@ impl InputController {
         InputController::new(event_loop.create_proxy(), rx_event)
     }
 
+    pub fn for_web(event_loop: &EventLoop<MetaEvent>) -> Self {
+        let (_, rx_event) = channel();
+        InputController::new(event_loop.create_proxy(), rx_event)
+    }
+
+    #[cfg(unix)]
+    pub fn for_test_unix() -> Result<(Window, Self)> {
+        use winit::platform::unix::EventLoopExtUnix;
+        let event_loop = EventLoop::<MetaEvent>::new_any_thread();
+        let os_window = Window::new(&event_loop).unwrap();
+        Ok((os_window, Self::for_test(&event_loop)))
+    }
+
     pub fn quit(&self) -> Result<()> {
         self.proxy.send_event(MetaEvent::Stop)?;
         Ok(())

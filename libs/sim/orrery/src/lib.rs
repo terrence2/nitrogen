@@ -468,32 +468,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_works() {
+    fn it_works() -> Result<()> {
         let mut interpreter = Interpreter::default();
-        let orrery = Orrery::new(Utc::now(), &mut interpreter);
+        let orrery = Orrery::new(Utc::now(), &mut interpreter)?;
         orrery.read().sun_direction();
+        Ok(())
     }
 
     #[test]
-    fn test_leap_seconds() {
+    fn test_leap_seconds() -> Result<()> {
         let mut interpreter = Interpreter::default();
         assert_eq!(
-            Orrery::new(Utc.ymd(2020, 1, 1).and_hms(12, 0, 0), &mut interpreter)
+            Orrery::new(Utc.ymd(2020, 1, 1).and_hms(12, 0, 0), &mut interpreter)?
                 .read()
                 .num_leap_seconds(),
             Duration::seconds(27)
         );
         assert_eq!(
-            Orrery::new(Utc.ymd(2010, 1, 1).and_hms(12, 0, 0), &mut interpreter)
+            Orrery::new(Utc.ymd(2010, 1, 1).and_hms(12, 0, 0), &mut interpreter)?
                 .read()
                 .num_leap_seconds(),
             Duration::seconds(24)
         );
         assert_eq!(
-            Orrery::new(Utc.ymd(1969, 1, 1).and_hms(12, 0, 0), &mut interpreter)
+            Orrery::new(Utc.ymd(1969, 1, 1).and_hms(12, 0, 0), &mut interpreter)?
                 .read()
                 .num_leap_seconds(),
             Duration::seconds(0)
         );
+        Ok(())
     }
 }

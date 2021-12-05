@@ -161,11 +161,9 @@ dependencies = [
  "gpu",
  "image",
  "log",
- "nitrous",
  "rand",
  "tokio",
  "wgpu",
- "winit",
  "zerocopy",
 ]
 
@@ -189,7 +187,6 @@ dependencies = [
  "spirv-reflect",
  "static_assertions",
  "wgpu",
- "winit",
  "zerocopy",
 ]
 
@@ -823,6 +820,7 @@ dependencies = [
  "input",
  "nitrous",
  "structopt",
+ "window",
  "winit",
 ]
 
@@ -1001,6 +999,8 @@ dependencies = [
  "orrery",
  "parking_lot",
  "wgpu",
+ "widget",
+ "window",
  "winit",
  "zerocopy",
 ]
@@ -1327,7 +1327,6 @@ dependencies = [
  "parking_lot",
  "wgpu",
  "window",
- "winit",
  "zerocopy",
 ]
 
@@ -2832,6 +2831,8 @@ dependencies = [
  "star_catalog",
  "static_assertions",
  "wgpu",
+ "widget",
+ "window",
  "winit",
  "zerocopy",
 ]
@@ -3384,6 +3385,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "wgpu",
+ "window",
  "winit",
 ]
 
@@ -3496,7 +3498,6 @@ dependencies = [
  "unicase",
  "wgpu",
  "window",
- "winit",
  "zerocopy",
 ]
 

@@ -155,14 +155,10 @@ macro_rules! make_frame_graph {
 
 #[cfg(test)]
 mod test {
-    use crate::{Gpu, UploadTracker};
+    use crate::{Gpu, TestResources, UploadTracker};
     use anyhow::Result;
-    use input::InputController;
-    use nitrous::Interpreter;
     use parking_lot::RwLock;
     use std::{cell::RefCell, sync::Arc};
-    use window::{DisplayConfig, OsWindow, Window};
-    use winit::event_loop::EventLoop;
 
     pub struct TestBuffer {
         render_target: wgpu::TextureView,
@@ -298,13 +294,8 @@ mod test {
 
     #[test]
     fn test_basic() -> Result<()> {
-        let mut interpreter = Interpreter::default();
-        use winit::platform::unix::EventLoopExtUnix;
-        let event_loop = EventLoop::<input::MetaEvent>::new_any_thread();
-        let os_window = OsWindow::new(&event_loop)?;
-        let window = Window::new(os_window, DisplayConfig::default(), &mut interpreter)?;
-        let mut input = InputController::for_test(&event_loop);
-        let gpu = Gpu::new(window, &mut input, Default::default(), &mut interpreter)?;
+        let TestResources { gpu, .. } = Gpu::for_test_unix()?;
+
         let test_buffer = Arc::new(RwLock::new(TestBuffer::new(&gpu.read())));
         let test_renderer = Arc::new(RwLock::new(TestRenderer::new(
             &gpu.read(),

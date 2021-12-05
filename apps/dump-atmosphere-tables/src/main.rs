@@ -29,7 +29,8 @@ use input::{InputController, InputSystem};
 use nitrous::Interpreter;
 use std::{fs, path::PathBuf, time::Instant};
 use structopt::StructOpt;
-use winit::window::Window;
+use window::{DisplayConfig, DisplayOpts, Window};
+use winit::window::Window as OsWindow;
 
 /// Demonstrate the capabilities of the Nitrogen engine
 #[derive(Debug, StructOpt)]
@@ -44,10 +45,18 @@ fn main() -> Result<()> {
     InputSystem::run_forever(window_main)
 }
 
-fn window_main(window: Window, _input_controller: &InputController) -> Result<()> {
+fn window_main(os_window: OsWindow, input_controller: &mut InputController) -> Result<()> {
     let opt = Opt::from_args();
     let mut interpreter = Interpreter::default();
-    let gpu = Gpu::new(window, Default::default(), &mut interpreter)?;
+
+    let display_config = DisplayConfig::discover(&DisplayOpts::default(), &os_window);
+    let window = Window::new(
+        os_window,
+        input_controller,
+        display_config,
+        &mut interpreter,
+    )?;
+    let gpu = Gpu::new(&mut window.write(), Default::default(), &mut interpreter)?;
 
     let precompute_start = Instant::now();
     let pcp = Precompute::new(&gpu.read())?;
