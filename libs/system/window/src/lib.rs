@@ -28,7 +28,6 @@ pub use winit::{
     window::Window as OsWindow,
 };
 
-/// Include this with #[structopt(flatten)] to provide cli arguments to Window for common setup
 #[derive(Debug, Default, StructOpt)]
 pub struct DisplayOpts {
     /// Set the render width

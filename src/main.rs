@@ -22,7 +22,7 @@ use chrono::{Duration as ChronoDuration, TimeZone, Utc};
 use composite::CompositeRenderPass;
 use fullscreen::FullscreenBuffer;
 use global_data::GlobalParametersBuffer;
-use gpu::{make_frame_graph, Gpu};
+use gpu::{make_frame_graph, DetailLevelOpts, Gpu};
 use input::{InputController, InputSystem};
 use legion::world::World;
 use nitrous::{Interpreter, Value};
@@ -36,7 +36,8 @@ use std::{
     time::{Duration, Instant},
 };
 use structopt::StructOpt;
-use terrain::{CpuDetailLevel, GpuDetailLevel, TerrainBuffer};
+use terminal_size::{terminal_size, Width};
+use terrain::TerrainBuffer;
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use ui::UiRenderPass;
 use widget::{
@@ -51,6 +52,7 @@ use world::WorldRenderPass;
 
 /// Demonstrate the capabilities of the Nitrogen engine
 #[derive(Debug, StructOpt)]
+#[structopt(set_term_width = if let Some((Width(w), _)) = terminal_size() { w as usize } else { 80 })]
 struct Opt {
     /// Extra directories to treat as libraries
     #[structopt(short, long)]
@@ -63,6 +65,9 @@ struct Opt {
     /// Run given file after startup
     #[structopt(short, long)]
     execute: Option<PathBuf>,
+
+    #[structopt(flatten)]
+    detail: DetailLevelOpts,
 
     #[structopt(flatten)]
     display: DisplayOpts,
@@ -177,11 +182,8 @@ fn main() -> Result<()> {
 
 fn window_main(os_window: OsWindow, input_controller: &mut InputController) -> Result<()> {
     let opt = Opt::from_args();
-    let (cpu_detail, gpu_detail) = if cfg!(debug_assertions) {
-        (CpuDetailLevel::Low, GpuDetailLevel::Low)
-    } else {
-        (CpuDetailLevel::Medium, GpuDetailLevel::High)
-    };
+    let cpu_detail = opt.detail.cpu_detail();
+    let gpu_detail = opt.detail.gpu_detail();
 
     let mut async_rt = Runtime::new()?;
     let mut _legion = World::default();

@@ -12,12 +12,16 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+mod detail;
 mod frame_graph;
 mod upload_tracker;
 
-pub use crate::upload_tracker::{
-    texture_format_sample_type, texture_format_size, ArcTextureCopyView, OwnedBufferCopyView,
-    UploadTracker,
+pub use crate::{
+    detail::{CpuDetailLevel, DetailLevelOpts, GpuDetailLevel},
+    upload_tracker::{
+        texture_format_sample_type, texture_format_size, ArcTextureCopyView, OwnedBufferCopyView,
+        UploadTracker,
+    },
 };
 
 // Note: re-export for use by FrameGraph when it is instantiated in other crates.

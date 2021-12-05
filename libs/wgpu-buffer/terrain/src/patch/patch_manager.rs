@@ -15,7 +15,7 @@
 use crate::{
     patch::{PatchIndex, PatchTree, PatchWinding, TerrainUploadVertex, TerrainVertex},
     tables::{get_index_dependency_lut, get_tri_strip_index_buffer, get_wireframe_index_buffer},
-    GpuDetailLevel, VisiblePatch,
+    GpuDetail, VisiblePatch,
 };
 use absolute_unit::{degrees, meters, radians, Angle, Kilometers, Radians};
 use anyhow::Result;
@@ -124,7 +124,7 @@ impl PatchManager {
 
         // Create the context buffer for uploading uniform data to our subdivision process.
         let subdivide_context = SubdivisionContext {
-            target_stride: GpuDetailLevel::vertices_per_subdivision(max_subdivisions) as u32,
+            target_stride: GpuDetail::vertices_per_subdivision(max_subdivisions) as u32,
             target_subdivision_level: max_subdivisions as u32,
         };
         let subdivide_context_buffer = Arc::new(gpu.push_data(
@@ -331,9 +331,9 @@ impl PatchManager {
         for i in 1..max_subdivisions + 1 {
             let expand_context = SubdivisionExpandContext {
                 current_target_subdivision_level: i as u32,
-                skip_vertices_in_patch: GpuDetailLevel::vertices_per_subdivision(i - 1) as u32,
-                compute_vertices_in_patch: (GpuDetailLevel::vertices_per_subdivision(i)
-                    - GpuDetailLevel::vertices_per_subdivision(i - 1))
+                skip_vertices_in_patch: GpuDetail::vertices_per_subdivision(i - 1) as u32,
+                compute_vertices_in_patch: (GpuDetail::vertices_per_subdivision(i)
+                    - GpuDetail::vertices_per_subdivision(i - 1))
                     as u32,
             };
             let expand_context_buffer = gpu.push_data(
