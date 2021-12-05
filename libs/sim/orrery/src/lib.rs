@@ -466,10 +466,12 @@ impl Orrery {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use widget::EventMapper;
 
     #[test]
     fn it_works() -> Result<()> {
         let mut interpreter = Interpreter::default();
+        let _mapper = EventMapper::new(&mut interpreter);
         let orrery = Orrery::new(Utc::now(), &mut interpreter)?;
         orrery.read().sun_direction();
         Ok(())
@@ -478,18 +480,23 @@ mod tests {
     #[test]
     fn test_leap_seconds() -> Result<()> {
         let mut interpreter = Interpreter::default();
+        let _mapper = EventMapper::new(&mut interpreter);
         assert_eq!(
             Orrery::new(Utc.ymd(2020, 1, 1).and_hms(12, 0, 0), &mut interpreter)?
                 .read()
                 .num_leap_seconds(),
             Duration::seconds(27)
         );
+        let mut interpreter = Interpreter::default();
+        let _mapper = EventMapper::new(&mut interpreter);
         assert_eq!(
             Orrery::new(Utc.ymd(2010, 1, 1).and_hms(12, 0, 0), &mut interpreter)?
                 .read()
                 .num_leap_seconds(),
             Duration::seconds(24)
         );
+        let mut interpreter = Interpreter::default();
+        let _mapper = EventMapper::new(&mut interpreter);
         assert_eq!(
             Orrery::new(Utc.ymd(1969, 1, 1).and_hms(12, 0, 0), &mut interpreter)?
                 .read()

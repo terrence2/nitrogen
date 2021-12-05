@@ -2280,6 +2280,7 @@ dependencies = [
  "nitrous_injector",
  "ordered-float",
  "parking_lot",
+ "widget",
 ]
 
 [[package]]
