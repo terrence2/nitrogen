@@ -111,10 +111,10 @@ pub struct DetailLevelOpts {
 
 impl DetailLevelOpts {
     pub fn cpu_detail(&self) -> CpuDetailLevel {
-        self.cpu_detail.unwrap_or_else(|| CpuDetailLevel::detect())
+        self.cpu_detail.unwrap_or_else(CpuDetailLevel::detect)
     }
 
     pub fn gpu_detail(&self) -> GpuDetailLevel {
-        self.gpu_detail.unwrap_or_else(|| GpuDetailLevel::detect())
+        self.gpu_detail.unwrap_or_else(GpuDetailLevel::detect)
     }
 }
