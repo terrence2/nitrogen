@@ -32,7 +32,8 @@ const SIDEDNESS_OFFSET: f64 = -1f64;
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct Patch {
     // Normal at center of patch.
-    normal: Vector3<f64>,
+    // TODO: think about why we don't need a normal for this and see if it generalizes.
+    //normal: Vector3<f64>,
 
     // In geocentric, cartesian kilometers
     pts: [Point3<f64>; 3],
@@ -51,7 +52,7 @@ pub(crate) struct Patch {
 impl Patch {
     pub(crate) fn empty() -> Self {
         Self {
-            normal: Vector3::new(1f64, 0f64, 0f64),
+            // normal: Vector3::new(1f64, 0f64, 0f64),
             planes: [Plane::from_normal_and_distance(Vector3::new(1f64, 0f64, 0f64), 0f64); 3],
             pts: [Point3::new(0f64, 0f64, 0f64); 3],
             owner: TreeIndex(usize::MAX),
@@ -63,7 +64,7 @@ impl Patch {
     pub(crate) fn new(owner: TreeIndex, pts: [Point3<f64>; 3]) -> Self {
         let origin = Point3::new(0f64, 0f64, 0f64);
         let patch = Self {
-            normal: compute_normal(&pts[0], &pts[1], &pts[2]),
+            // normal: compute_normal(&pts[0], &pts[1], &pts[2]),
             planes: [
                 Plane::from_point_and_normal(&pts[0], &compute_normal(&pts[1], &origin, &pts[0])),
                 Plane::from_point_and_normal(&pts[1], &compute_normal(&pts[2], &origin, &pts[1])),

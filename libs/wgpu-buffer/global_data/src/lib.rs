@@ -57,14 +57,11 @@ pub fn v3_to_v(v: &Vector3<f64>) -> [f32; 4] {
 #[repr(C)]
 #[derive(AsBytes, FromBytes, Copy, Clone, Debug, Default)]
 struct Globals {
-    // Overlay screen info
-    screen_letterbox_projection: [[f32; 4]; 4],
-
     // Screen info
     screen_physical_width: f32,
     screen_physical_height: f32,
-    screen_logical_width: f32,
-    screen_logical_height: f32,
+    screen_render_width: f32,
+    screen_render_height: f32,
 
     // Orrery
     orrery_sun_direction: [f32; 4],
@@ -102,23 +99,13 @@ impl Globals {
     // cutouts or left-right cutouts, depending on the aspect. This lets our screen drawing
     // routines (e.g. for text) assume that everything is undistorted, even if coordinates at
     // the edges go outside the +/- 1 range.
-    pub fn set_screen_overlay_projection(&mut self, win: &Window) {
+    pub fn set_window_info(&mut self, win: &Window) {
         let physical = win.physical_size();
-        let aspect = win.aspect_ratio_f32() * 4f32 / 3f32;
-        let (w, h) = if physical.width > physical.height {
-            (aspect, -1f32)
-        } else {
-            (1f32, -1f32 / aspect)
-        };
-        self.screen_letterbox_projection =
-            m2v(&Matrix4::new_nonuniform_scaling(&Vector3::new(w, h, 1f32)));
-
-        let physical = win.physical_size();
-        let logical = win.logical_size();
+        let render = win.render_extent();
         self.screen_physical_width = physical.width as f32;
         self.screen_physical_height = physical.width as f32;
-        self.screen_logical_width = logical.width as f32;
-        self.screen_logical_height = logical.width as f32;
+        self.screen_render_width = render.width as f32;
+        self.screen_render_height = render.width as f32;
     }
 
     pub fn set_camera(&mut self, camera: &Camera) {
@@ -260,7 +247,7 @@ impl GlobalParametersBuffer {
         self.globals.set_camera(camera);
         self.globals.set_orrery(orrery);
         self.globals.set_tone(self.tone_gamma);
-        self.globals.set_screen_overlay_projection(win);
+        self.globals.set_window_info(win);
     }
 
     pub fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) -> Result<()> {

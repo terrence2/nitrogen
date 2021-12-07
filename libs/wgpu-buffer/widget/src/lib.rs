@@ -96,7 +96,6 @@ pub struct WidgetBuffer {
 
     // Auto-inserted widgets.
     terminal: Arc<RwLock<Terminal>>,
-    mapper: Arc<RwLock<EventMapper>>,
     show_terminal: bool,
 
     // The four key buffers.
@@ -208,7 +207,7 @@ impl WidgetBuffer {
         let terminal = Terminal::new(&paint_context.font_context)
             .with_visible(false)
             .wrapped();
-        root.write().add_child("mapper", mapper.clone());
+        root.write().add_child("mapper", mapper);
         root.write().add_child("terminal", terminal.clone());
 
         let widget = Arc::new(RwLock::new(Self {
@@ -218,7 +217,6 @@ impl WidgetBuffer {
             cursor_position: Position::origin(),
 
             terminal,
-            mapper,
             show_terminal: false,
 
             widget_info_buffer,
@@ -350,11 +348,9 @@ impl WidgetBuffer {
             }
             if let GenericEvent::CursorMove { pixel_position, .. } = event {
                 let (x, y) = *pixel_position;
-                let s = win.scale_factor();
-                let sz: Extent<AbsSize> = win.logical_size().into();
                 self.cursor_position = Position::new(
-                    AbsSize::from_px((x / s) as f32),
-                    sz.height() - AbsSize::from_px((y / s) as f32),
+                    AbsSize::from_px(x as f32),
+                    AbsSize::from_px(win.height() as f32 - y as f32),
                 );
             }
             self.root_container().write().handle_event(

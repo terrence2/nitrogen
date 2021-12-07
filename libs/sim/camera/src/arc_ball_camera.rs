@@ -44,7 +44,10 @@ impl ArcBallCamera {
         win: &mut Window,
         interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
-        let arcball = Arc::new(RwLock::new(Self::detached(win.aspect_ratio(), z_near)));
+        let arcball = Arc::new(RwLock::new(Self::detached(
+            win.render_aspect_ratio(),
+            z_near,
+        )));
         win.register_display_config_change_receiver(arcball.clone());
         interpreter.put_global("camera", Value::Module(arcball.clone()));
         interpreter.interpret_once(
@@ -431,7 +434,7 @@ impl ArcBallCamera {
 
 impl DisplayConfigChangeReceiver for ArcBallCamera {
     fn on_display_config_changed(&mut self, config: &DisplayConfig) -> Result<()> {
-        self.camera.set_aspect_ratio(config.aspect_ratio());
+        self.camera.set_aspect_ratio(config.render_aspect_ratio());
         Ok(())
     }
 }

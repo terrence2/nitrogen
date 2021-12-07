@@ -114,7 +114,7 @@ pub struct DisplayConfig {
     // The requested "render" dimensions. This is scaled by render_scale to produce the actual
     // buffers that we render to, but the base values are important as those are the requested
     // apparent size on the monitor.
-    render_extent: PhysicalSize<u32>,
+    base_render_extent: PhysicalSize<u32>,
 
     // Decouples the resolution from the window and monitor.
     render_scale: f64,
@@ -123,12 +123,12 @@ pub struct DisplayConfig {
     dpi_scale_factor: f64,
 
     // Relevant for projections.
-    aspect_ratio: f64,
+    render_aspect_ratio: f64,
 }
 
 impl DisplayConfig {
     pub fn discover(opt: &DisplayOpts, os_window: &OsWindow) -> Self {
-        let render_extent = if let Some(width) = opt.width {
+        let base_render_extent = if let Some(width) = opt.width {
             if let Some(height) = opt.height {
                 PhysicalSize::new(width, height)
             } else {
@@ -146,10 +146,10 @@ impl DisplayConfig {
             // FIXME: use a better display mode
             display_mode: opt.mode.unwrap_or(DisplayMode::ResizableWindowed),
             window_size: os_window.inner_size(),
-            render_extent,
+            base_render_extent,
             render_scale: opt.scale.unwrap_or(1.0),
             dpi_scale_factor: os_window.scale_factor(),
-            aspect_ratio: render_extent.height as f64 / render_extent.width as f64,
+            render_aspect_ratio: base_render_extent.height as f64 / base_render_extent.width as f64,
         }
     }
 
@@ -157,27 +157,27 @@ impl DisplayConfig {
         Self {
             display_mode: DisplayMode::ResizableWindowed,
             window_size: PhysicalSize::new(1920, 1080),
-            render_extent: PhysicalSize::new(1920, 1080),
+            base_render_extent: PhysicalSize::new(1920, 1080),
             render_scale: 1.0,
             dpi_scale_factor: 1.2,
-            aspect_ratio: 1080. / 1920.,
+            render_aspect_ratio: 1080. / 1920.,
         }
     }
 
     /// The aspect ratio of the render extent as height / width.
-    pub fn aspect_ratio(&self) -> f64 {
-        self.aspect_ratio
+    pub fn render_aspect_ratio(&self) -> f64 {
+        self.render_aspect_ratio
     }
 
     pub fn window_size(&self) -> PhysicalSize<u32> {
         self.window_size
     }
 
-    pub fn render_extent(&self) -> PhysicalSize<u32> {
-        self.render_extent
+    pub fn base_render_extent(&self) -> PhysicalSize<u32> {
+        self.base_render_extent
     }
 
-    pub fn logical_render_extent(&self) -> PhysicalSize<u32> {
+    pub fn render_extent(&self) -> PhysicalSize<u32> {
         if matches!(self.display_mode, DisplayMode::ResizableWindowed) {
             PhysicalSize::new(
                 (self.window_size.width as f64 * self.render_scale).floor() as u32,
@@ -191,8 +191,9 @@ impl DisplayConfig {
     fn on_window_resized(&mut self, new_size: PhysicalSize<u32>) {
         self.window_size = new_size;
         if matches!(self.display_mode, DisplayMode::ResizableWindowed) {
-            self.render_extent = new_size;
-            self.aspect_ratio = self.render_extent.height as f64 / self.render_extent.width as f64;
+            self.base_render_extent = new_size;
+            self.render_aspect_ratio =
+                self.base_render_extent.height as f64 / self.base_render_extent.width as f64;
         }
     }
 }
@@ -281,6 +282,10 @@ impl Window {
         Ok(())
     }
 
+    pub fn os_window(&self) -> &OsWindow {
+        &self.os_window
+    }
+
     pub fn config(&self) -> &DisplayConfig {
         &self.config
     }
@@ -289,8 +294,10 @@ impl Window {
         self.config.display_mode
     }
 
-    pub fn set_display_mode(&mut self, mode: DisplayMode) {
+    pub fn set_display_mode(&mut self, mode: DisplayMode) -> Result<()> {
         self.config.display_mode = mode;
+        self.send_display_config_change()?;
+        Ok(())
     }
 
     #[method]
@@ -300,39 +307,32 @@ impl Window {
 
     #[method]
     pub fn width(&self) -> i64 {
-        self.os_window.inner_size().width as i64
+        self.config.window_size.width as i64
     }
 
     #[method]
     pub fn height(&self) -> i64 {
-        self.os_window.inner_size().height as i64
+        self.config.window_size.height as i64
     }
 
-    // Grab the raw window for sync reads.
-    pub fn os_window(&self) -> &OsWindow {
-        &self.os_window
+    pub fn render_aspect_ratio(&self) -> f64 {
+        self.config.render_aspect_ratio()
     }
 
-    pub fn aspect_ratio(&self) -> f64 {
-        self.config.aspect_ratio()
+    pub fn render_aspect_ratio_f32(&self) -> f32 {
+        self.config.render_aspect_ratio() as f32
     }
 
-    pub fn aspect_ratio_f32(&self) -> f32 {
-        self.config.aspect_ratio() as f32
-    }
-
-    pub fn scale_factor(&self) -> f64 {
-        self.os_window.scale_factor()
-    }
-
-    pub fn logical_size(&self) -> LogicalSize<f64> {
-        self.os_window
-            .inner_size()
-            .to_logical(self.os_window.scale_factor())
+    pub fn dpi_scale_factor(&self) -> f64 {
+        self.config.dpi_scale_factor
     }
 
     pub fn physical_size(&self) -> PhysicalSize<u32> {
-        self.os_window.inner_size()
+        self.config.window_size
+    }
+
+    pub fn render_extent(&self) -> PhysicalSize<u32> {
+        self.config.render_extent()
     }
 }
 

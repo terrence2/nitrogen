@@ -14,11 +14,10 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 
 layout(set = 0, binding = 0) buffer CameraParameters {
-    mat4 globals_screen_letterbox_projection;
     float screen_physical_width;
     float screen_physical_height;
-    float screen_logical_width;
-    float screen_logical_height;
+    float screen_render_width;
+    float screen_render_height;
 
     // Orrery
     vec4 orrery_sun_direction;
@@ -50,8 +49,6 @@ layout(set = 0, binding = 0) buffer CameraParameters {
     // Padding
     float pad1[2];
 };
-
-mat4 screen_letterbox_projection() { return globals_screen_letterbox_projection; }
 
 vec3
 raymarching_view_ray(vec2 position)

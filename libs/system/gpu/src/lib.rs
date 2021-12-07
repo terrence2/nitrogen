@@ -38,7 +38,7 @@ use parking_lot::RwLock;
 use std::{fmt::Debug, fs, mem, path::PathBuf, sync::Arc};
 use tokio::runtime::Runtime;
 use wgpu::util::DeviceExt;
-use window::{DisplayConfig, DisplayConfigChangeReceiver, DisplayMode, Window};
+use window::{DisplayConfig, DisplayConfigChangeReceiver, Window};
 use zerocopy::AsBytes;
 
 #[derive(Debug)]
@@ -85,7 +85,7 @@ pub struct Gpu {
     depth_texture: wgpu::TextureView,
 
     // Render extent is usually decoupled from
-    logical_render_extent: wgpu::Extent3d,
+    render_extent: wgpu::Extent3d,
     render_extent_change_receivers: Vec<Arc<RwLock<dyn RenderExtentChangeReceiver>>>,
 
     config: RenderConfig,
@@ -133,7 +133,7 @@ impl Gpu {
             )
             .await?;
 
-        let physical_size = win.window_physical_size();
+        let physical_size = win.physical_size();
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
             format: Self::SCREEN_FORMAT,
@@ -144,13 +144,11 @@ impl Gpu {
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
         let depth_texture = Self::create_depth_texture(&device, &sc_desc);
 
-        let logical_render_extent = match win.display_mode() {
-            DisplayMode::ResizableWindowed => wgpu::Extent3d {
-                width: physical_size.width,
-                height: physical_size.height,
-                depth: 1,
-            },
-            v => panic!("unsupported display mode: {:?}", v),
+        let render_size = win.render_extent();
+        let render_extent = wgpu::Extent3d {
+            width: render_size.width,
+            height: render_size.height,
+            depth: 1,
         };
 
         let gpu = Arc::new(RwLock::new(Self {
@@ -161,7 +159,7 @@ impl Gpu {
             queue,
             swap_chain,
             depth_texture,
-            logical_render_extent,
+            render_extent,
             render_extent_change_receivers: Vec::new(),
             config,
             frame_count: 0,
@@ -331,26 +329,16 @@ impl Gpu {
     }
 
     pub fn attachment_extent(&self) -> wgpu::Extent3d {
-        self.logical_render_extent
+        self.render_extent
     }
 
-    pub fn logical_render_extent(&self) -> wgpu::Extent3d {
-        self.logical_render_extent
+    pub fn render_extent(&self) -> wgpu::Extent3d {
+        self.render_extent
     }
 
     #[method]
     pub fn frame_count(&self) -> i64 {
         self.frame_count as i64
-    }
-
-    #[method]
-    pub fn logical_width(&self) -> i64 {
-        self.logical_render_extent.width as i64
-    }
-
-    #[method]
-    pub fn logical_height(&self) -> i64 {
-        self.logical_render_extent.height as i64
     }
 
     pub fn get_next_framebuffer(&mut self) -> Result<Option<wgpu::SwapChainFrame>> {
@@ -615,11 +603,9 @@ impl DisplayConfigChangeReceiver for Gpu {
         self.depth_texture = Self::create_depth_texture(&self.device, &sc_desc);
 
         // Check if our render extent has changed and re-broadcast
-        let extent = config.logical_render_extent();
-        if self.logical_render_extent.width != extent.width
-            || self.logical_render_extent.height != extent.height
-        {
-            self.logical_render_extent = wgpu::Extent3d {
+        let extent = config.render_extent();
+        if self.render_extent.width != extent.width || self.render_extent.height != extent.height {
+            self.render_extent = wgpu::Extent3d {
                 width: extent.width,
                 height: extent.height,
                 depth: 1,

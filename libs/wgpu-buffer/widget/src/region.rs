@@ -15,7 +15,7 @@
 use std::{fmt::Debug, ops::Add};
 use window::{
     size::{AbsSize, AspectMath, LeftBound, RelSize, ScreenDir, Size},
-    LogicalSize, Window,
+    PhysicalSize, Window,
 };
 
 #[derive(Copy, Clone, Debug)]
@@ -102,8 +102,8 @@ impl From<Extent<AbsSize>> for Extent<Size> {
     }
 }
 
-impl From<LogicalSize<f64>> for Extent<AbsSize> {
-    fn from(sz: LogicalSize<f64>) -> Self {
+impl From<PhysicalSize<u32>> for Extent<AbsSize> {
+    fn from(sz: PhysicalSize<u32>) -> Self {
         Extent::new(
             AbsSize::from_px(sz.width as f32),
             AbsSize::from_px(sz.height as f32),

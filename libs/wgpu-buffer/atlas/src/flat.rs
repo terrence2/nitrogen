@@ -177,7 +177,6 @@ impl BlitItem {
 pub struct AtlasPacker<P: Pixel + 'static> {
     // Constant storage info
     name: String,
-    fill_color_bytes: [u8; 4],
     initial_width: u32,
     initial_height: u32,
     padding: u32,
@@ -228,7 +227,6 @@ where
         gpu: &Gpu,
         initial_width: u32,
         initial_height: u32,
-        fill_color: [u8; 4],
         format: wgpu::TextureFormat,
         filter: wgpu::FilterMode,
     ) -> Result<Self> {
@@ -375,7 +373,6 @@ where
 
         Ok(Self {
             name: name.into(),
-            fill_color_bytes: fill_color,
             initial_width,
             initial_height,
             format,
@@ -906,7 +903,6 @@ mod test {
             &gpu.read(),
             Gpu::stride_for_row_size((1024 + 8) * 4) / 4,
             2048,
-            [random(), random(), random(), 255],
             wgpu::TextureFormat::Rgba8Unorm,
             wgpu::FilterMode::Linear,
         )?;
@@ -977,7 +973,6 @@ mod test {
             &gpu.read(),
             256,
             256,
-            [0, 0, 0, 0],
             wgpu::TextureFormat::Rgba8Unorm,
             wgpu::FilterMode::Linear,
         )?;
@@ -1000,7 +995,6 @@ mod test {
             &gpu.read(),
             256,
             256,
-            [0, 0, 0, 0],
             wgpu::TextureFormat::R8Unorm,
             wgpu::FilterMode::Linear,
         )?;
@@ -1023,7 +1017,6 @@ mod test {
             &gpu.read(),
             256,
             256,
-            [0, 0, 0, 0],
             wgpu::TextureFormat::Rgba8Unorm,
             wgpu::FilterMode::Linear,
         )?;

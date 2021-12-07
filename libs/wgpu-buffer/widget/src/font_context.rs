@@ -84,7 +84,6 @@ impl FontContext {
                 gpu,
                 256 * 4,
                 256,
-                [0, 0, 0, 0],
                 wgpu::TextureFormat::R8Unorm,
                 wgpu::FilterMode::Linear,
             )?,
@@ -198,8 +197,8 @@ impl FontContext {
     }
 
     pub fn measure_text(&mut self, span: &TextSpan, win: &Window) -> Result<TextSpanMetrics> {
-        let phys_w = win.physical_size().width as f32;
-        let scale_px = (span.size() * win.scale_factor() as f32)
+        let phys_w = win.width() as f32;
+        let scale_px = (span.size() * win.dpi_scale_factor() as f32)
             .as_abs(win, ScreenDir::Horizontal)
             .ceil();
 
@@ -258,10 +257,10 @@ impl FontContext {
         let gs_height = self.glyph_sheet_height();
 
         // Use the physical width to re-align all pixel boxes to pixel boundaries.
-        let phys_w = win.physical_size().width as f32;
+        let phys_w = win.width() as f32;
 
         // The font system expects scales in pixels.
-        let scale_px = (span.size() * win.scale_factor() as f32)
+        let scale_px = (span.size() * win.dpi_scale_factor() as f32)
             .as_abs(win, ScreenDir::Horizontal)
             .ceil();
 

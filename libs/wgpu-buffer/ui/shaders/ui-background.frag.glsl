@@ -28,8 +28,8 @@ void main() {
 
     vec3 world_clr = vec3(0);
     if (widget_has_glass_background(info)) {
-        float x_step = 1.0 / screen_logical_width * 4.0;
-        float y_step = 1.0 / screen_logical_height * 4.0;
+        float x_step = 1.0 / screen_physical_width * 4.0;
+        float y_step = 1.0 / screen_physical_height * 4.0;
         float weights[7 * 7] = {
             0.000, 0.000, 0.001, 0.001, 0.001, 0.000, 0.000,
             0.000, 0.002, 0.012, 0.020, 0.012, 0.002, 0.000,

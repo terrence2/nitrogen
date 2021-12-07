@@ -89,12 +89,12 @@ impl RelSize {
 
     pub fn as_abs(self, win: &Window, screen_dir: ScreenDir) -> AbsSize {
         let rng = match screen_dir {
-            ScreenDir::Vertical => win.aspect_ratio_f32(),
+            ScreenDir::Vertical => win.render_aspect_ratio_f32(),
             ScreenDir::Horizontal => 1.,
             _ => panic!("can only convert H/V to abs"),
         };
         let f = map_range(Self::PCT_RANGE, (0., rng), self.as_percent());
-        AbsSize::Px(f * win.logical_size().cast::<f32>().width)
+        AbsSize::Px(f * win.physical_size().cast::<f32>().width)
     }
 }
 
@@ -208,13 +208,13 @@ impl AbsSize {
     /// screen extent, among other potential flaws.
     pub fn as_rel(self, win: &Window, screen_dir: ScreenDir) -> RelSize {
         let rng = match screen_dir {
-            ScreenDir::Vertical => win.aspect_ratio_f32(),
+            ScreenDir::Vertical => win.render_aspect_ratio_f32(),
             _ => 1.,
         };
         RelSize::Percent(map_range(
             (0., rng),
             RelSize::PCT_RANGE,
-            (self.as_px() as f64 / win.logical_size().width) as f32,
+            (self.as_px() as f64 / win.physical_size().width as f64) as f32,
         ))
     }
 
