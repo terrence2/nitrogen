@@ -43,14 +43,12 @@ use zerocopy::AsBytes;
 
 #[derive(Debug)]
 pub struct RenderConfig {
-    render_scale: f32,
     present_mode: wgpu::PresentMode,
 }
 
 impl Default for RenderConfig {
     fn default() -> Self {
         Self {
-            render_scale: 0f32,
             present_mode: wgpu::PresentMode::Mailbox,
         }
     }
@@ -71,9 +69,9 @@ pub trait RenderExtentChangeReceiver: Debug + Send + Sync + 'static {
 
 #[derive(Debug, NitrousModule)]
 pub struct Gpu {
-    instance: wgpu::Instance,
+    _instance: wgpu::Instance,
     surface: wgpu::Surface,
-    _adapter: wgpu::Adapter,
+    adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
 
@@ -135,7 +133,7 @@ impl Gpu {
             )
             .await?;
 
-        let physical_size = win.physical_size();
+        let physical_size = win.window_physical_size();
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
             format: Self::SCREEN_FORMAT,
@@ -156,9 +154,9 @@ impl Gpu {
         };
 
         let gpu = Arc::new(RwLock::new(Self {
-            instance,
+            _instance: instance,
             surface,
-            _adapter: adapter,
+            adapter,
             device,
             queue,
             swap_chain,
@@ -192,6 +190,108 @@ impl Gpu {
             interpreter,
             input,
         })
+    }
+
+    #[method]
+    pub fn info(&self) -> String {
+        let info = self.adapter.get_info();
+        format!(
+            "Name: {}\nVendor: {}\nDevice: {:?} {}\nBackend: {:?}",
+            info.name, info.vendor, info.device_type, info.device, info.backend
+        )
+    }
+
+    #[method]
+    pub fn name(&self) -> String {
+        self.adapter.get_info().name
+    }
+
+    #[method]
+    pub fn vendor_id(&self) -> String {
+        self.adapter.get_info().vendor.to_string()
+    }
+
+    #[method]
+    pub fn device_id(&self) -> String {
+        self.adapter.get_info().device.to_string()
+    }
+
+    #[method]
+    pub fn device_type(&self) -> String {
+        format!("{:?}", self.adapter.get_info().device_type)
+    }
+
+    #[method]
+    pub fn backend(&self) -> String {
+        format!("{:?}", self.adapter.get_info().backend)
+    }
+
+    #[method]
+    pub fn limits(&self) -> String {
+        format!("{:#?}", self.adapter.limits())
+    }
+
+    #[method]
+    pub fn features(&self) -> String {
+        let f = self.adapter.features();
+        format!(
+            "{:^6} - DEPTH_CLAMPING\n",
+            f.contains(wgpu::Features::DEPTH_CLAMPING)
+        ) + &format!(
+            "{:^6} - TEXTURE_COMPRESSION_BC\n",
+            f.contains(wgpu::Features::TEXTURE_COMPRESSION_BC)
+        ) + &format!(
+            "{:^6} - TIMESTAMP_QUERY\n",
+            f.contains(wgpu::Features::TIMESTAMP_QUERY)
+        ) + &format!(
+            "{:^6} - PIPELINE_STATISTICS_QUERY\n",
+            f.contains(wgpu::Features::PIPELINE_STATISTICS_QUERY)
+        ) + &format!(
+            "{:^6} - MAPPABLE_PRIMARY_BUFFERS\n",
+            f.contains(wgpu::Features::MAPPABLE_PRIMARY_BUFFERS)
+        ) + &format!(
+            "{:^6} - SAMPLED_TEXTURE_BINDING_ARRAY\n",
+            f.contains(wgpu::Features::SAMPLED_TEXTURE_BINDING_ARRAY)
+        ) + &format!(
+            "{:^6} - SAMPLED_TEXTURE_ARRAY_DYNAMIC_INDEXING\n",
+            f.contains(wgpu::Features::SAMPLED_TEXTURE_ARRAY_DYNAMIC_INDEXING)
+        ) + &format!(
+            "{:^6} - SAMPLED_TEXTURE_ARRAY_NON_UNIFORM_INDEXING\n",
+            f.contains(wgpu::Features::SAMPLED_TEXTURE_ARRAY_NON_UNIFORM_INDEXING)
+        ) + &format!(
+            "{:^6} - UNSIZED_BINDING_ARRAY\n",
+            f.contains(wgpu::Features::UNSIZED_BINDING_ARRAY)
+        ) + &format!(
+            "{:^6} - MULTI_DRAW_INDIRECT\n",
+            f.contains(wgpu::Features::MULTI_DRAW_INDIRECT)
+        ) + &format!(
+            "{:^6} - MULTI_DRAW_INDIRECT_COUNT\n",
+            f.contains(wgpu::Features::MULTI_DRAW_INDIRECT_COUNT)
+        ) + &format!(
+            "{:^6} - PUSH_CONSTANTS\n",
+            f.contains(wgpu::Features::PUSH_CONSTANTS)
+        ) + &format!(
+            "{:^6} - ADDRESS_MODE_CLAMP_TO_BORDER\n",
+            f.contains(wgpu::Features::ADDRESS_MODE_CLAMP_TO_BORDER)
+        ) + &format!(
+            "{:^6} - NON_FILL_POLYGON_MODE\n",
+            f.contains(wgpu::Features::NON_FILL_POLYGON_MODE)
+        ) + &format!(
+            "{:^6} - TEXTURE_COMPRESSION_ETC2\n",
+            f.contains(wgpu::Features::TEXTURE_COMPRESSION_ETC2)
+        ) + &format!(
+            "{:^6} - TEXTURE_COMPRESSION_ASTC_LDR\n",
+            f.contains(wgpu::Features::TEXTURE_COMPRESSION_ASTC_LDR)
+        ) + &format!(
+            "{:^6} - TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES\n",
+            f.contains(wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES)
+        ) + &format!(
+            "{:^6} - SHADER_FLOAT64\n",
+            f.contains(wgpu::Features::SHADER_FLOAT64)
+        ) + &format!(
+            "{:^6} - VERTEX_ATTRIBUTE_64BIT\n",
+            f.contains(wgpu::Features::VERTEX_ATTRIBUTE_64BIT)
+        )
     }
 
     fn create_depth_texture(

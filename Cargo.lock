@@ -3566,6 +3566,7 @@ dependencies = [
  "log",
  "nitrous",
  "nitrous_injector",
+ "ordered-float",
  "parking_lot",
  "structopt",
  "winit",
