@@ -159,6 +159,7 @@ mod test {
     use anyhow::Result;
     use parking_lot::RwLock;
     use std::{cell::RefCell, sync::Arc};
+    use window::DisplayConfigChangeReceiver;
 
     pub struct TestBuffer {
         render_target: wgpu::TextureView,
@@ -246,6 +247,7 @@ mod test {
         }
     }
 
+    #[derive(Debug)]
     pub struct TestRenderer {
         render_count: RefCell<usize>,
     }
@@ -294,7 +296,7 @@ mod test {
 
     #[test]
     fn test_basic() -> Result<()> {
-        let TestResources { gpu, .. } = Gpu::for_test_unix()?;
+        let TestResources { gpu, window, .. } = Gpu::for_test_unix()?;
 
         let test_buffer = Arc::new(RwLock::new(TestBuffer::new(&gpu.read())));
         let test_renderer = Arc::new(RwLock::new(TestRenderer::new(
@@ -306,7 +308,11 @@ mod test {
         for _ in 0..3 {
             let mut upload_tracker = Default::default();
             frame_graph.test_buffer_mut().update(&mut upload_tracker);
-            frame_graph.run(&mut gpu.write(), upload_tracker)?;
+            let need_rebuild = frame_graph.run(&mut gpu.write(), upload_tracker)?;
+            if need_rebuild {
+                gpu.write()
+                    .on_display_config_changed(window.read().config())?;
+            }
         }
 
         assert_eq!(frame_graph.test_buffer().update_count, 3);
