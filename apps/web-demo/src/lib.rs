@@ -152,7 +152,7 @@ fn window_loop(
             _ => {}
         }
     }
-    app.arcball.write().think();
+    app.arcball.write().track_state_changes();
 
     // Sim
     app.globals_buffer.write().track_state_changes(

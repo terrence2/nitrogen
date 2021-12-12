@@ -258,7 +258,7 @@ mod test {
             meters!(4_000_000),
             // meters!(1_400_000),
         ))?;
-        arcball.think();
+        arcball.track_state_changes();
 
         let _camera_position_km = arcball.camera().position::<Kilometers>().vec64();
         let camera_inverse_perspective_km: Matrix4<f64> =

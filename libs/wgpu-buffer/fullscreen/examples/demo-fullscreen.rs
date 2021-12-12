@@ -149,7 +149,7 @@ fn window_main(os_window: OsWindow, input_controller: &mut InputController) -> R
             }
         }
         arcball.write().handle_mousemotion(-0.5f64, 0f64);
-        arcball.write().think();
+        arcball.write().track_state_changes();
 
         // Prepare new camera parameters.
         let mut tracker = Default::default();

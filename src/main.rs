@@ -336,7 +336,7 @@ fn build_frame_graph(
         globals,
         stars_buffer,
         terrain_buffer,
-        widgets.clone(),
+        widgets,
         world,
         ui,
         composite,

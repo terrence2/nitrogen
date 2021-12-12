@@ -171,7 +171,7 @@ fn window_main(os_window: OsWindow, input_controller: &mut InputController) -> R
             }
         }
         arcball.write().handle_mousemotion(-0.5f64, 0f64);
-        arcball.write().think();
+        arcball.write().track_state_changes();
 
         globals_buffer.write().track_state_changes(
             arcball.read().camera(),

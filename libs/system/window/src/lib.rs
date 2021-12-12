@@ -134,24 +134,22 @@ impl DisplayConfig {
         // if the resiable window mode is selected, use it as extent
         let base_render_extent = if display_mode == DisplayMode::ResizableWindowed {
             os_window.inner_size()
-        } else {
-            if let Some(width) = opt.width {
-                if let Some(height) = opt.height {
-                    PhysicalSize::new(width, height)
-                } else {
-                    PhysicalSize::new(width, width * 9 / 16)
-                }
-            } else if let Some(height) = opt.height {
-                PhysicalSize::new(height * 16 / 9, height)
-            } else if let Some(monitor) = os_window.current_monitor() {
-                if display_mode != DisplayMode::Windowed {
-                    monitor.size()
-                } else {
-                    PhysicalSize::new(1280, 720)
-                }
+        } else if let Some(width) = opt.width {
+            if let Some(height) = opt.height {
+                PhysicalSize::new(width, height)
+            } else {
+                PhysicalSize::new(width, width * 9 / 16)
+            }
+        } else if let Some(height) = opt.height {
+            PhysicalSize::new(height * 16 / 9, height)
+        } else if let Some(monitor) = os_window.current_monitor() {
+            if display_mode != DisplayMode::Windowed {
+                monitor.size()
             } else {
                 PhysicalSize::new(1280, 720)
             }
+        } else {
+            PhysicalSize::new(1280, 720)
         };
 
         Self {
