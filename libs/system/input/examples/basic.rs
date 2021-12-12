@@ -20,7 +20,7 @@ fn main() -> Result<()> {
     InputSystem::run_forever(window_main)
 }
 
-fn window_main(window: Window, input_controller: &InputController) -> Result<()> {
+fn window_main(window: Window, input_controller: &mut InputController) -> Result<()> {
     loop {
         for event in input_controller.poll_events()? {
             println!("EVENT: {:?} <- {:?}", window, event);

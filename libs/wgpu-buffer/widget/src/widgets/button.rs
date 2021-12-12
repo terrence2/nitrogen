@@ -21,9 +21,10 @@ use crate::{
     widgets::label::Label,
 };
 use anyhow::Result;
-use gpu::{size::Size, Gpu};
+use gpu::Gpu;
 use parking_lot::RwLock;
 use std::{sync::Arc, time::Instant};
+use window::{size::Size, Window};
 
 #[derive(Debug)]
 pub struct Button {
@@ -68,21 +69,27 @@ impl Labeled for Button {
 }
 
 impl Widget for Button {
-    fn measure(&mut self, gpu: &Gpu, font_context: &mut FontContext) -> Result<Extent<Size>> {
-        self.label.write().measure(gpu, font_context)
+    fn measure(&mut self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>> {
+        self.label.write().measure(win, font_context)
     }
 
     fn layout(
         &mut self,
         now: Instant,
         region: Region<Size>,
-        gpu: &Gpu,
+        win: &Window,
         font_context: &mut FontContext,
     ) -> Result<()> {
-        self.label.write().layout(now, region, gpu, font_context)
+        self.label.write().layout(now, region, win, font_context)
     }
 
-    fn upload(&self, now: Instant, gpu: &Gpu, context: &mut PaintContext) -> Result<()> {
-        self.label.read().upload(now, gpu, context)
+    fn upload(
+        &self,
+        now: Instant,
+        win: &Window,
+        gpu: &Gpu,
+        context: &mut PaintContext,
+    ) -> Result<()> {
+        self.label.read().upload(now, win, gpu, context)
     }
 }

@@ -23,10 +23,7 @@ use crate::{
     PaintContext,
 };
 use anyhow::{ensure, Result};
-use gpu::{
-    size::{AbsSize, Size},
-    Gpu,
-};
+use gpu::Gpu;
 use input::{ElementState, GenericEvent, GenericSystemEvent, GenericWindowEvent, ModifiersState};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -36,6 +33,10 @@ use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
     time::Instant,
+};
+use window::{
+    size::{AbsSize, Size},
+    Window,
 };
 
 #[derive(Debug, Default)]
@@ -75,7 +76,7 @@ impl EventMapper {
 }
 
 impl Widget for EventMapper {
-    fn measure(&mut self, _gpu: &Gpu, _font_context: &mut FontContext) -> Result<Extent<Size>> {
+    fn measure(&mut self, _win: &Window, _font_context: &mut FontContext) -> Result<Extent<Size>> {
         Ok(Extent::zero())
     }
 
@@ -83,13 +84,19 @@ impl Widget for EventMapper {
         &mut self,
         _now: Instant,
         _region: Region<Size>,
-        _gpu: &Gpu,
+        _win: &Window,
         _font_context: &mut FontContext,
     ) -> Result<()> {
         Ok(())
     }
 
-    fn upload(&self, _now: Instant, _gpu: &Gpu, _context: &mut PaintContext) -> Result<()> {
+    fn upload(
+        &self,
+        _now: Instant,
+        _win: &Window,
+        _gpu: &Gpu,
+        _context: &mut PaintContext,
+    ) -> Result<()> {
         Ok(())
     }
 

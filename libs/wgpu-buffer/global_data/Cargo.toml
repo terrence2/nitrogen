@@ -17,9 +17,8 @@ camera = { path = "../../sim/camera" }
 gpu = { path = "../../system/gpu" }
 nitrous = { path = "../../util/nitrous" }
 nitrous_injector = { path = "../../util/nitrous_injector" }
-
-[dev-dependencies]
-winit = { version = "^ 0.24", features = ["web-sys"] }
+orrery = { path = "../../sim/orrery" }
+window = { path = "../../system/window" }
 
 [build-dependencies]
 build_shaders = { path = "../../util/build_shaders" }

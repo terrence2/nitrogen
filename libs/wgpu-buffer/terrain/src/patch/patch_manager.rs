@@ -15,7 +15,7 @@
 use crate::{
     patch::{PatchIndex, PatchTree, PatchWinding, TerrainUploadVertex, TerrainVertex},
     tables::{get_index_dependency_lut, get_tri_strip_index_buffer, get_wireframe_index_buffer},
-    GpuDetailLevel, VisiblePatch,
+    GpuDetail, VisiblePatch,
 };
 use absolute_unit::{degrees, meters, radians, Angle, Kilometers, Radians};
 use anyhow::Result;
@@ -124,7 +124,7 @@ impl PatchManager {
 
         // Create the context buffer for uploading uniform data to our subdivision process.
         let subdivide_context = SubdivisionContext {
-            target_stride: GpuDetailLevel::vertices_per_subdivision(max_subdivisions) as u32,
+            target_stride: GpuDetail::vertices_per_subdivision(max_subdivisions) as u32,
             target_subdivision_level: max_subdivisions as u32,
         };
         let subdivide_context_buffer = Arc::new(gpu.push_data(
@@ -331,9 +331,9 @@ impl PatchManager {
         for i in 1..max_subdivisions + 1 {
             let expand_context = SubdivisionExpandContext {
                 current_target_subdivision_level: i as u32,
-                skip_vertices_in_patch: GpuDetailLevel::vertices_per_subdivision(i - 1) as u32,
-                compute_vertices_in_patch: (GpuDetailLevel::vertices_per_subdivision(i)
-                    - GpuDetailLevel::vertices_per_subdivision(i - 1))
+                skip_vertices_in_patch: GpuDetail::vertices_per_subdivision(i - 1) as u32,
+                compute_vertices_in_patch: (GpuDetail::vertices_per_subdivision(i)
+                    - GpuDetail::vertices_per_subdivision(i - 1))
                     as u32,
             };
             let expand_context_buffer = gpu.push_data(
@@ -501,12 +501,10 @@ impl PatchManager {
         }
     }
 
-    pub fn make_upload_buffer(
+    pub fn track_state_changes(
         &mut self,
         camera: &Camera,
         optimize_camera: &Camera,
-        gpu: &mut Gpu,
-        tracker: &mut UploadTracker,
         visible_regions: &mut Vec<VisiblePatch>,
     ) -> Result<()> {
         // Select optimal live patches from our coherent patch tree.
@@ -575,15 +573,18 @@ impl PatchManager {
         while self.live_vertices.len() < 3 * self.desired_patch_count {
             self.live_vertices.push(TerrainUploadVertex::empty());
         }
+
+        //println!("dt: {:?}", Instant::now() - loop_start);
+        Ok(())
+    }
+
+    pub fn ensure_uploaded(&self, gpu: &Gpu, tracker: &mut UploadTracker) {
         gpu.upload_slice_to(
             "terrain-geo-patch-vertex-upload-buffer",
             &self.live_vertices,
             self.patch_upload_buffer.clone(),
             tracker,
         );
-
-        //println!("dt: {:?}", Instant::now() - loop_start);
-        Ok(())
     }
 
     pub fn tessellate<'a>(

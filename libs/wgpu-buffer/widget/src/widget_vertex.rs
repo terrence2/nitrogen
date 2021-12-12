@@ -16,12 +16,12 @@ use crate::{
     color::Color,
     region::{Extent, Position},
 };
-use gpu::{
-    size::{AspectMath, ScreenDir, Size},
-    Gpu,
-};
 use memoffset::offset_of;
 use std::mem;
+use window::{
+    size::{AspectMath, ScreenDir, Size},
+    Window,
+};
 use zerocopy::{AsBytes, FromBytes};
 
 #[repr(C)]
@@ -95,13 +95,13 @@ impl WidgetVertex {
         [s1, t1]: [f32; 2],
         color: &Color,
         widget_info_index: u32,
-        gpu: &Gpu,
+        win: &Window,
         pool: &mut Vec<WidgetVertex>,
     ) {
-        let x0 = x0.as_rel(gpu, ScreenDir::Horizontal).as_gpu();
-        let y0 = y0.as_rel(gpu, ScreenDir::Vertical).as_gpu();
-        let x1 = x1.as_rel(gpu, ScreenDir::Horizontal).as_gpu();
-        let y1 = y1.as_rel(gpu, ScreenDir::Vertical).as_gpu();
+        let x0 = x0.as_gpu(win, ScreenDir::Horizontal);
+        let y0 = y0.as_gpu(win, ScreenDir::Vertical);
+        let x1 = x1.as_gpu(win, ScreenDir::Horizontal);
+        let y1 = y1.as_gpu(win, ScreenDir::Vertical);
 
         // Build 4 corner vertices.
         let v00 = WidgetVertex {
@@ -144,7 +144,7 @@ impl WidgetVertex {
         z: f32,
         color: &Color,
         widget_info_index: u32,
-        gpu: &Gpu,
+        win: &Window,
         pool: &mut Vec<WidgetVertex>,
     ) {
         Self::push_textured_quad(
@@ -155,7 +155,7 @@ impl WidgetVertex {
             [0f32, 0f32],
             color,
             widget_info_index,
-            gpu,
+            win,
             pool,
         )
     }
@@ -165,7 +165,7 @@ impl WidgetVertex {
         extent: Extent<Size>,
         color: &Color,
         widget_info_index: u32,
-        gpu: &Gpu,
+        win: &Window,
         pool: &mut Vec<WidgetVertex>,
     ) {
         Self::push_textured_quad(
@@ -173,17 +173,17 @@ impl WidgetVertex {
             [
                 position
                     .left()
-                    .add(&extent.width(), gpu, ScreenDir::Horizontal),
+                    .add(&extent.width(), win, ScreenDir::Horizontal),
                 position
                     .bottom()
-                    .add(&extent.height(), gpu, ScreenDir::Vertical),
+                    .add(&extent.height(), win, ScreenDir::Vertical),
             ],
             position.depth().as_depth(),
             [0f32, 0f32],
             [0f32, 0f32],
             color,
             widget_info_index,
-            gpu,
+            win,
             pool,
         )
     }

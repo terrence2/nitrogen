@@ -29,7 +29,7 @@ use camera::Camera;
 use catalog::Catalog;
 use geodesy::{GeoCenter, Graticule};
 use global_data::GlobalParametersBuffer;
-use gpu::{Gpu, ResizeHint, UploadTracker};
+use gpu::{CpuDetailLevel, Gpu, GpuDetailLevel, RenderExtentChangeReceiver, UploadTracker};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
@@ -74,23 +74,13 @@ impl CpuDetail {
             desired_patch_count,
         }
     }
-}
 
-pub enum CpuDetailLevel {
-    Low,
-    Medium,
-    High,
-    Ultra,
-}
-
-impl CpuDetailLevel {
-    // max-level, target-refinement, buffer-size
-    fn parameters(&self) -> CpuDetail {
-        match self {
-            Self::Low => CpuDetail::new(8, 150.0, 200),
-            Self::Medium => CpuDetail::new(15, 150.0, 300),
-            Self::High => CpuDetail::new(16, 150.0, 400),
-            Self::Ultra => CpuDetail::new(17, 150.0, 500),
+    fn for_level(level: CpuDetailLevel) -> Self {
+        match level {
+            CpuDetailLevel::Low => Self::new(8, 150.0, 200),
+            CpuDetailLevel::Medium => Self::new(15, 150.0, 300),
+            CpuDetailLevel::High => Self::new(16, 150.0, 400),
+            CpuDetailLevel::Ultra => Self::new(17, 150.0, 500),
         }
     }
 }
@@ -110,23 +100,13 @@ impl GpuDetail {
             tile_cache_size,
         }
     }
-}
 
-pub enum GpuDetailLevel {
-    Low,
-    Medium,
-    High,
-    Ultra,
-}
-
-impl GpuDetailLevel {
-    // subdivisions
-    fn parameters(&self) -> GpuDetail {
-        match self {
-            Self::Low => GpuDetail::new(3, 32), // 64MiB
-            Self::Medium => GpuDetail::new(4, 64),
-            Self::High => GpuDetail::new(6, 128),
-            Self::Ultra => GpuDetail::new(7, 256),
+    fn for_level(level: GpuDetailLevel) -> Self {
+        match level {
+            GpuDetailLevel::Low => Self::new(3, 32), // 64MiB
+            GpuDetailLevel::Medium => Self::new(4, 64),
+            GpuDetailLevel::High => Self::new(6, 128),
+            GpuDetailLevel::Ultra => Self::new(7, 256),
         }
     }
 
@@ -183,8 +163,8 @@ impl TerrainBuffer {
         gpu: &mut Gpu,
         interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
-        let cpu_detail = cpu_detail_level.parameters();
-        let gpu_detail = gpu_detail_level.parameters();
+        let cpu_detail = CpuDetail::for_level(cpu_detail_level);
+        let gpu_detail = GpuDetail::for_level(gpu_detail_level);
 
         let patch_manager = PatchManager::new(
             cpu_detail.max_level,
@@ -497,7 +477,7 @@ impl TerrainBuffer {
             accumulate_clear_pipeline,
         }));
 
-        gpu.add_resize_observer(terrain.clone());
+        gpu.register_render_extent_change_receiver(terrain.clone());
 
         interpreter.put_global("terrain", Value::Module(terrain.clone()));
 
@@ -510,14 +490,10 @@ impl TerrainBuffer {
     }
 
     fn _make_deferred_texture_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let sz = gpu.physical_size();
+        let size = gpu.render_extent();
         let target = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("deferred-texture-target"),
-            size: wgpu::Extent3d {
-                width: sz.width as u32,
-                height: sz.height as u32,
-                depth: 1,
-            },
+            size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -540,14 +516,10 @@ impl TerrainBuffer {
     }
 
     fn _make_deferred_depth_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let sz = gpu.physical_size();
+        let size = gpu.render_extent();
         let depth_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("deferred-depth-texture"),
-            size: wgpu::Extent3d {
-                width: sz.width as u32,
-                height: sz.height as u32,
-                depth: 1,
-            },
+            size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -570,14 +542,10 @@ impl TerrainBuffer {
     }
 
     fn _make_color_accumulator_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let sz = gpu.physical_size();
+        let size = gpu.render_extent();
         let color_acc = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("terrain-color-acc-texture"),
-            size: wgpu::Extent3d {
-                width: sz.width as u32,
-                height: sz.height as u32,
-                depth: 1,
-            },
+            size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -600,14 +568,10 @@ impl TerrainBuffer {
     }
 
     fn _make_normal_accumulator_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let sz = gpu.physical_size();
+        let size = gpu.render_extent();
         let normal_acc = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("terrain-normal-acc-texture"),
-            size: wgpu::Extent3d {
-                width: sz.width as u32,
-                height: sz.height as u32,
-                depth: 1,
-            },
+            size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -715,33 +679,42 @@ impl TerrainBuffer {
         })
     }
 
-    pub fn make_upload_buffer(
+    // Given the new camera position, update our internal CPU tracking.
+    pub fn track_state_changes(
         &mut self,
         camera: &Camera,
         optimize_camera: &Camera,
         catalog: Arc<AsyncRwLock<Catalog>>,
-        async_rt: &mut Runtime,
-        gpu: &mut Gpu,
-        tracker: &mut UploadTracker,
+        async_rt: &Runtime,
     ) -> Result<()> {
         // Upload patches and capture visibility regions.
         self.visible_regions.clear();
-        self.patch_manager.make_upload_buffer(
+        self.patch_manager.track_state_changes(
             camera,
             optimize_camera,
-            gpu,
-            tracker,
             &mut self.visible_regions,
         )?;
 
         // Dispatch visibility to tiles so that they can manage the actively loaded set.
-        self.tile_manager.begin_update();
+        self.tile_manager.begin_visibility_update();
         for visible_patch in &self.visible_regions {
             self.tile_manager.note_required(visible_patch);
         }
         self.tile_manager
-            .finish_update(camera, catalog, async_rt, gpu, tracker);
+            .finish_visibility_update(camera, catalog, async_rt);
 
+        Ok(())
+    }
+
+    // Push CPU state to GPU
+    pub fn ensure_uploaded(
+        &mut self,
+        async_rt: &Runtime,
+        gpu: &mut Gpu,
+        tracker: &mut UploadTracker,
+    ) -> Result<()> {
+        self.patch_manager.ensure_uploaded(gpu, tracker);
+        self.tile_manager.ensure_uploaded(async_rt, gpu, tracker);
         Ok(())
     }
 
@@ -906,8 +879,8 @@ impl TerrainBuffer {
     }
 }
 
-impl ResizeHint for TerrainBuffer {
-    fn note_resize(&mut self, gpu: &Gpu) -> Result<()> {
+impl RenderExtentChangeReceiver for TerrainBuffer {
+    fn on_render_extent_changed(&mut self, gpu: &Gpu) -> Result<()> {
         self.acc_extent = gpu.attachment_extent();
         self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
         self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
@@ -944,7 +917,7 @@ mod test {
     fn test_subdivision_vertex_counts() {
         let expect = vec![3, 6, 15, 45, 153, 561, 2145, 8385];
         for (i, &value) in expect.iter().enumerate() {
-            assert_eq!(value, GpuDetailLevel::vertices_per_subdivision(i));
+            assert_eq!(value, GpuDetail::vertices_per_subdivision(i));
         }
     }
 

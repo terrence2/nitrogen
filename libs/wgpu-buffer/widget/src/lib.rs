@@ -48,10 +48,7 @@ use crate::font_context::FontContext;
 use anyhow::{ensure, Result};
 use font_common::{FontAdvance, FontInterface};
 use font_ttf::TtfFont;
-use gpu::{
-    size::{AbsSize, Size},
-    Gpu, UploadTracker,
-};
+use gpu::{Gpu, UploadTracker};
 use input::{ElementState, GenericEvent, ModifiersState, VirtualKeyCode};
 use log::trace;
 use nitrous::{Interpreter, Value};
@@ -59,6 +56,10 @@ use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use std::{borrow::Borrow, mem, num::NonZeroU64, ops::Range, sync::Arc, time::Instant};
 use tokio::runtime::Runtime;
+use window::{
+    size::{AbsSize, Size},
+    Window,
+};
 
 // Drawing UI efficiently:
 //
@@ -95,7 +96,6 @@ pub struct WidgetBuffer {
 
     // Auto-inserted widgets.
     terminal: Arc<RwLock<Terminal>>,
-    mapper: Arc<RwLock<EventMapper>>,
     show_terminal: bool,
 
     // The four key buffers.
@@ -116,7 +116,11 @@ impl WidgetBuffer {
     const MAX_BACKGROUND_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6; // note: rounded corners
     const MAX_IMAGE_VERTICES: usize = Self::MAX_WIDGETS * 4 * 6;
 
-    pub fn new(gpu: &mut Gpu, interpreter: &mut Interpreter) -> Result<Arc<RwLock<Self>>> {
+    pub fn new(
+        mapper: Arc<RwLock<EventMapper>>,
+        gpu: &mut Gpu,
+        interpreter: &mut Interpreter,
+    ) -> Result<Arc<RwLock<Self>>> {
         trace!("WidgetBuffer::new");
 
         let mut paint_context = PaintContext::new(gpu)?;
@@ -200,11 +204,10 @@ impl WidgetBuffer {
                 });
 
         let root = FloatBox::new();
-        let mapper = EventMapper::new(interpreter);
         let terminal = Terminal::new(&paint_context.font_context)
             .with_visible(false)
             .wrapped();
-        root.write().add_child("mapper", mapper.clone());
+        root.write().add_child("mapper", mapper);
         root.write().add_child("terminal", terminal.clone());
 
         let widget = Arc::new(RwLock::new(Self {
@@ -214,7 +217,6 @@ impl WidgetBuffer {
             cursor_position: Position::origin(),
 
             terminal,
-            mapper,
             show_terminal: false,
 
             widget_info_buffer,
@@ -299,19 +301,6 @@ impl WidgetBuffer {
         0u32..self.paint_context.text_pool.len() as u32
     }
 
-    pub fn layout_for_frame(&mut self, now: Instant, gpu: &mut Gpu) -> Result<()> {
-        self.root.write().layout(
-            now,
-            Region::new(
-                Position::origin(),
-                Extent::new(Size::from_percent(100.), Size::from_percent(100.)),
-            ),
-            gpu,
-            &mut self.paint_context.font_context,
-        )?;
-        Ok(())
-    }
-
     pub fn toggle_terminal(&mut self) {
         match self.show_terminal {
             true => self.hide_terminal(true),
@@ -333,13 +322,12 @@ impl WidgetBuffer {
         self.terminal.write().set_visible(false);
     }
 
-    pub fn handle_events(
+    pub fn track_state_changes(
         &mut self,
         now: Instant,
         events: &[GenericEvent],
         interpreter: Interpreter,
-        scale_factor: f64,
-        logical_size: Extent<AbsSize>,
+        win: &Window,
     ) -> Result<()> {
         for event in events {
             if let GenericEvent::KeyboardKey {
@@ -361,8 +349,8 @@ impl WidgetBuffer {
             if let GenericEvent::CursorMove { pixel_position, .. } = event {
                 let (x, y) = *pixel_position;
                 self.cursor_position = Position::new(
-                    AbsSize::from_px((x / scale_factor) as f32),
-                    logical_size.height() - AbsSize::from_px((y / scale_factor) as f32),
+                    AbsSize::from_px(x as f32),
+                    AbsSize::from_px(win.height() as f32 - y as f32),
                 );
             }
             self.root_container().write().handle_event(
@@ -373,19 +361,36 @@ impl WidgetBuffer {
                 interpreter.clone(),
             )?;
         }
+
+        // Perform recursive layout algorithm against retained state.
+        self.root.write().layout(
+            now,
+            Region::new(
+                Position::origin(),
+                Extent::new(Size::from_percent(100.), Size::from_percent(100.)),
+            ),
+            win,
+            &mut self.paint_context.font_context,
+        )?;
+
         Ok(())
     }
 
-    pub fn make_upload_buffer(
+    pub fn ensure_uploaded(
         &mut self,
         now: Instant,
-        gpu: &mut Gpu,
         async_rt: &Runtime,
+        win: &Window,
+        gpu: &mut Gpu,
         tracker: &mut UploadTracker,
     ) -> Result<()> {
+        // Draw into the paint context.
         self.paint_context.reset_for_frame();
-        self.root.read().upload(now, gpu, &mut self.paint_context)?;
+        self.root
+            .read()
+            .upload(now, win, gpu, &mut self.paint_context)?;
 
+        // Upload: copy all of the CPU paint context to the GPU buffers we maintain.
         self.paint_context
             .make_upload_buffer(gpu, async_rt, tracker)?;
 
@@ -429,6 +434,8 @@ impl WidgetBuffer {
             );
         }
 
+        // FIXME: We should only need a new bind group if the underlying texture
+        // FIXME: atlas grew and we have a new texture reference, not every frame.
         self.bind_group = Some(
             gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("widget-bind-group"),
@@ -469,19 +476,20 @@ impl WidgetBuffer {
 #[cfg(test)]
 mod test {
     use super::*;
-    use tokio::runtime::Runtime;
-    use winit::{event_loop::EventLoop, window::Window};
+    use gpu::TestResources;
 
     #[test]
     fn test_label_widget() -> Result<()> {
-        use winit::platform::unix::EventLoopExtUnix;
-        let event_loop = EventLoop::<()>::new_any_thread();
-        let window = Window::new(&event_loop)?;
-        let async_rt = Runtime::new()?;
-        let mut interpreter = Interpreter::default();
-        let gpu = Gpu::new(window, Default::default(), &mut interpreter)?;
+        let TestResources {
+            async_rt,
+            window,
+            gpu,
+            mut interpreter,
+            ..
+        } = Gpu::for_test_unix()?;
+        let mapper = EventMapper::new(&mut interpreter);
 
-        let widgets = WidgetBuffer::new(&mut gpu.write(), &mut interpreter)?;
+        let widgets = WidgetBuffer::new(mapper, &mut gpu.write(), &mut interpreter)?;
         let label = Label::new(
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\
             สิบสองกษัตริย์ก่อนหน้าแลถัดไป       สององค์ไซร้โง่เขลาเบาปัญญา\
@@ -499,11 +507,16 @@ mod test {
             .write()
             .add_child("label", label);
 
+        widgets
+            .write()
+            .track_state_changes(Instant::now(), &[], interpreter, &window.read())?;
+
         let mut tracker = Default::default();
-        widgets.write().make_upload_buffer(
+        widgets.write().ensure_uploaded(
             Instant::now(),
-            &mut gpu.write(),
             &async_rt,
+            &window.read(),
+            &mut gpu.write(),
             &mut tracker,
         )?;
 

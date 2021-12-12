@@ -31,9 +31,8 @@ pub use crate::{
 };
 
 use anyhow::Result;
-use gpu::{Gpu, UploadTracker};
+use gpu::Gpu;
 use log::trace;
-use nalgebra::Vector3;
 use parking_lot::RwLock;
 use std::{mem, num::NonZeroU64, sync::Arc};
 
@@ -41,8 +40,6 @@ use std::{mem, num::NonZeroU64, sync::Arc};
 pub struct AtmosphereBuffer {
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
-
-    sun_direction_buffer: Arc<wgpu::Buffer>,
 }
 
 impl AtmosphereBuffer {
@@ -57,33 +54,14 @@ impl AtmosphereBuffer {
             single_mie_scattering_texture,
         ) = TableHelpers::initial_textures(gpu)?;
 
-        let camera_and_sun_buffer_size = mem::size_of::<[[f32; 4]; 1]>() as u64;
-        let camera_and_sun_buffer = Arc::new(gpu.device().create_buffer(&wgpu::BufferDescriptor {
-            label: Some("atmosphere-sun-buffer"),
-            size: camera_and_sun_buffer_size,
-            usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
-            mapped_at_creation: false,
-        }));
-
         let bind_group_layout =
             gpu.device()
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("atmosphere-bind-group-layout"),
                     entries: &[
-                        // camera and sun
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
                         // atmosphere params
                         wgpu::BindGroupLayoutEntry {
-                            binding: 1,
+                            binding: 0,
                             visibility: wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Buffer {
                                 ty: wgpu::BufferBindingType::Uniform,
@@ -96,7 +74,7 @@ impl AtmosphereBuffer {
                         },
                         // transmittance texture
                         wgpu::BindGroupLayoutEntry {
-                            binding: 2,
+                            binding: 1,
                             visibility: wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 multisampled: false,
@@ -106,7 +84,7 @@ impl AtmosphereBuffer {
                             count: None,
                         },
                         wgpu::BindGroupLayoutEntry {
-                            binding: 3,
+                            binding: 2,
                             visibility: wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Sampler {
                                 filtering: true,
@@ -116,7 +94,7 @@ impl AtmosphereBuffer {
                         },
                         // irradiance texture
                         wgpu::BindGroupLayoutEntry {
-                            binding: 4,
+                            binding: 3,
                             visibility: wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 multisampled: false,
@@ -126,7 +104,7 @@ impl AtmosphereBuffer {
                             count: None,
                         },
                         wgpu::BindGroupLayoutEntry {
-                            binding: 5,
+                            binding: 4,
                             visibility: wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Sampler {
                                 filtering: true,
@@ -136,7 +114,7 @@ impl AtmosphereBuffer {
                         },
                         // scattering texture
                         wgpu::BindGroupLayoutEntry {
-                            binding: 6,
+                            binding: 5,
                             visibility: wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 multisampled: false,
@@ -146,7 +124,7 @@ impl AtmosphereBuffer {
                             count: None,
                         },
                         wgpu::BindGroupLayoutEntry {
-                            binding: 7,
+                            binding: 6,
                             visibility: wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Sampler {
                                 filtering: true,
@@ -156,7 +134,7 @@ impl AtmosphereBuffer {
                         },
                         // single mie scattering texture
                         wgpu::BindGroupLayoutEntry {
-                            binding: 8,
+                            binding: 7,
                             visibility: wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 multisampled: false,
@@ -166,7 +144,7 @@ impl AtmosphereBuffer {
                             count: None,
                         },
                         wgpu::BindGroupLayoutEntry {
-                            binding: 9,
+                            binding: 8,
                             visibility: wgpu::ShaderStage::FRAGMENT,
                             ty: wgpu::BindingType::Sampler {
                                 filtering: true,
@@ -207,18 +185,9 @@ impl AtmosphereBuffer {
             label: Some("atmosphere-bind-group"),
             layout: &bind_group_layout,
             entries: &[
-                // camera and sun
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer {
-                        buffer: &camera_and_sun_buffer,
-                        offset: 0,
-                        size: None,
-                    },
-                },
                 // atmosphere
                 wgpu::BindGroupEntry {
-                    binding: 1,
+                    binding: 0,
                     resource: wgpu::BindingResource::Buffer {
                         buffer: &atmosphere_params_buffer,
                         offset: 0,
@@ -227,46 +196,46 @@ impl AtmosphereBuffer {
                 },
                 // transmittance texture
                 wgpu::BindGroupEntry {
-                    binding: 2,
+                    binding: 1,
                     resource: wgpu::BindingResource::TextureView(
                         &transmittance_texture.create_view(&view_descriptor),
                     ),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 3,
+                    binding: 2,
                     resource: wgpu::BindingResource::Sampler(&sampler),
                 },
                 // irradiance texture
                 wgpu::BindGroupEntry {
-                    binding: 4,
+                    binding: 3,
                     resource: wgpu::BindingResource::TextureView(
                         &irradiance_texture.create_view(&view_descriptor),
                     ),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 5,
+                    binding: 4,
                     resource: wgpu::BindingResource::Sampler(&sampler),
                 },
                 // scattering texture
                 wgpu::BindGroupEntry {
-                    binding: 6,
+                    binding: 5,
                     resource: wgpu::BindingResource::TextureView(
                         &scattering_texture.create_view(&view_descriptor),
                     ),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 7,
+                    binding: 6,
                     resource: wgpu::BindingResource::Sampler(&sampler),
                 },
                 // single mie scattering texture
                 wgpu::BindGroupEntry {
-                    binding: 8,
+                    binding: 7,
                     resource: wgpu::BindingResource::TextureView(
                         &single_mie_scattering_texture.create_view(&view_descriptor),
                     ),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 9,
+                    binding: 8,
                     resource: wgpu::BindingResource::Sampler(&sampler),
                 },
             ],
@@ -275,7 +244,6 @@ impl AtmosphereBuffer {
         Ok(Arc::new(RwLock::new(Self {
             bind_group_layout,
             bind_group,
-            sun_direction_buffer: camera_and_sun_buffer,
         })))
     }
 
@@ -285,26 +253,5 @@ impl AtmosphereBuffer {
 
     pub fn bind_group(&self) -> &wgpu::BindGroup {
         &self.bind_group
-    }
-
-    pub fn make_upload_buffer(
-        &self,
-        sun_direction: Vector3<f32>,
-        gpu: &Gpu,
-        tracker: &mut UploadTracker,
-    ) -> Result<()> {
-        let buffer = [[
-            sun_direction.x as f32,
-            sun_direction.y as f32,
-            sun_direction.z as f32,
-            0.0f32,
-        ]];
-        gpu.upload_slice_to(
-            "atmosphere-sun-upload-buffer",
-            &buffer,
-            self.sun_direction_buffer.clone(),
-            tracker,
-        );
-        Ok(())
     }
 }

@@ -12,14 +12,16 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-pub mod size;
-
+mod detail;
 mod frame_graph;
 mod upload_tracker;
 
-pub use crate::upload_tracker::{
-    texture_format_sample_type, texture_format_size, ArcTextureCopyView, OwnedBufferCopyView,
-    UploadTracker,
+pub use crate::{
+    detail::{CpuDetailLevel, DetailLevelOpts, GpuDetailLevel},
+    upload_tracker::{
+        texture_format_sample_type, texture_format_size, ArcTextureCopyView, OwnedBufferCopyView,
+        UploadTracker,
+    },
 };
 
 // Note: re-export for use by FrameGraph when it is instantiated in other crates.
@@ -28,6 +30,7 @@ pub use winit::dpi::{LogicalSize, PhysicalSize};
 
 use anyhow::{anyhow, bail, Result};
 use futures::executor::block_on;
+use input::InputController;
 use log::{info, trace};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -35,14 +38,15 @@ use parking_lot::RwLock;
 use std::{fmt::Debug, fs, mem, path::PathBuf, sync::Arc};
 use tokio::runtime::Runtime;
 use wgpu::util::DeviceExt;
-use winit::window::Window;
+use window::{DisplayConfig, DisplayConfigChangeReceiver, Window};
 use zerocopy::AsBytes;
 
 #[derive(Debug)]
-pub struct GpuConfig {
+pub struct RenderConfig {
     present_mode: wgpu::PresentMode,
 }
-impl Default for GpuConfig {
+
+impl Default for RenderConfig {
     fn default() -> Self {
         Self {
             present_mode: wgpu::PresentMode::Mailbox,
@@ -50,28 +54,41 @@ impl Default for GpuConfig {
     }
 }
 
+pub struct TestResources {
+    pub window: Arc<RwLock<Window>>,
+    pub gpu: Arc<RwLock<Gpu>>,
+    pub async_rt: Runtime,
+    pub interpreter: Interpreter,
+    pub input: InputController,
+}
+
 /// Implement this and register with the gpu instance to get resize notifications.
-pub trait ResizeHint: Debug + Send + Sync + 'static {
-    fn note_resize(&mut self, gpu: &Gpu) -> Result<()>;
+pub trait RenderExtentChangeReceiver: Debug + Send + Sync + 'static {
+    fn on_render_extent_changed(&mut self, gpu: &Gpu) -> Result<()>;
 }
 
 #[derive(Debug, NitrousModule)]
 pub struct Gpu {
-    window: Window,
-    instance: wgpu::Instance,
+    _instance: wgpu::Instance,
     surface: wgpu::Surface,
-    _adapter: wgpu::Adapter,
+    adapter: wgpu::Adapter,
     device: wgpu::Device,
     queue: wgpu::Queue,
+
+    // Render extent doesn't necessarily match window size, so most resources don't
+    // actually need to get re-created in most window size change cases. However, the
+    // backing screen resources that we eventually project into each frame do need
+    // to follow the window size exactly.
+
+    // The swap chain and depth buffer need to follow window size changes exactly.
     swap_chain: wgpu::SwapChain,
     depth_texture: wgpu::TextureView,
 
-    resize_observers: Vec<Arc<RwLock<dyn ResizeHint>>>,
+    // Render extent is usually decoupled from
+    render_extent: wgpu::Extent3d,
+    render_extent_change_receivers: Vec<Arc<RwLock<dyn RenderExtentChangeReceiver>>>,
 
-    config: GpuConfig,
-    scale_factor: f64,
-    physical_size: PhysicalSize<u32>,
-    logical_size: LogicalSize<f64>,
+    config: RenderConfig,
     frame_count: usize,
 }
 
@@ -80,52 +97,20 @@ impl Gpu {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
     pub const SCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 
-    pub fn add_resize_observer<T: ResizeHint>(&mut self, observer: Arc<RwLock<T>>) {
-        self.resize_observers.push(observer);
-    }
-
-    #[method]
-    pub fn aspect_ratio(&self) -> f64 {
-        self.logical_size.height.floor() / self.logical_size.width.floor()
-    }
-
-    pub fn aspect_ratio_f32(&self) -> f32 {
-        (self.logical_size.height.floor() / self.logical_size.width.floor()) as f32
-    }
-
-    #[method]
-    pub fn scale_factor(&self) -> f64 {
-        self.scale_factor
-    }
-
-    pub fn logical_size(&self) -> LogicalSize<f64> {
-        self.logical_size
-    }
-
-    pub fn physical_size(&self) -> PhysicalSize<u32> {
-        self.physical_size
-    }
-
-    pub fn frame_count(&self) -> usize {
-        self.frame_count
-    }
-
     pub fn new(
-        window: Window,
-        config: GpuConfig,
+        win: &mut Window,
+        config: RenderConfig,
         interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
-        block_on(Self::new_async(window, config, interpreter))
+        block_on(Self::new_async(win, config, interpreter))
     }
 
     pub async fn new_async(
-        window: Window,
-        config: GpuConfig,
+        win: &mut Window,
+        config: RenderConfig,
         interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
-        window.set_title("Nitrogen");
         let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
-
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
@@ -134,7 +119,7 @@ impl Gpu {
             .await
             .ok_or_else(|| anyhow!("no suitable graphics adapter"))?;
 
-        let surface = unsafe { instance.create_surface(&window) };
+        let surface = { unsafe { instance.create_surface(win.os_window()) } };
 
         let trace_path = PathBuf::from("api_tracing.txt");
         let (device, queue) = adapter
@@ -148,9 +133,7 @@ impl Gpu {
             )
             .await?;
 
-        let scale_factor = window.scale_factor();
-        let physical_size = window.inner_size();
-        let logical_size = physical_size.to_logical::<f64>(scale_factor);
+        let physical_size = win.physical_size();
         let sc_desc = wgpu::SwapChainDescriptor {
             usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
             format: Self::SCREEN_FORMAT,
@@ -161,82 +144,152 @@ impl Gpu {
         let swap_chain = device.create_swap_chain(&surface, &sc_desc);
         let depth_texture = Self::create_depth_texture(&device, &sc_desc);
 
+        let render_size = win.render_extent();
+        let render_extent = wgpu::Extent3d {
+            width: render_size.width,
+            height: render_size.height,
+            depth: 1,
+        };
+
         let gpu = Arc::new(RwLock::new(Self {
-            window,
-            instance,
+            _instance: instance,
             surface,
-            _adapter: adapter,
+            adapter,
             device,
             queue,
             swap_chain,
             depth_texture,
-            resize_observers: Vec::new(),
+            render_extent,
+            render_extent_change_receivers: Vec::new(),
             config,
-            scale_factor,
-            physical_size,
-            logical_size,
             frame_count: 0,
         }));
-
         interpreter.put_global("gpu", Value::Module(gpu.clone()));
-
+        win.register_display_config_change_receiver(gpu.clone());
         Ok(gpu)
     }
 
-    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
-        interpreter.interpret_once(
-            r#"
-                let bindings := mapper.create_bindings("gpu");
-                bindings.bind("windowResized", "gpu.on_resize(width, height)");
-                bindings.bind("windowDpiChanged", "gpu.on_dpi_change(scale)");
-            "#,
+    #[cfg(unix)]
+    pub fn for_test_unix() -> Result<TestResources> {
+        let (os_window, mut input) = input::InputController::for_test_unix()?;
+        let mut interpreter = Interpreter::default();
+        let window = Window::new(
+            os_window,
+            &mut input,
+            DisplayConfig::for_test(),
+            &mut interpreter,
         )?;
-        Ok(())
+        let gpu = Self::new(&mut window.write(), Default::default(), &mut interpreter)?;
+        let async_rt = Runtime::new()?;
+        Ok(TestResources {
+            gpu,
+            window,
+            async_rt,
+            interpreter,
+            input,
+        })
     }
 
     #[method]
-    pub fn on_resize(&mut self, width: i64, height: i64) -> Result<()> {
-        info!(
-            "received resize event: {}x{}; cached: {}x{}",
-            width,
-            height,
-            self.window.inner_size().width,
-            self.window.inner_size().height,
-        );
-        self.physical_size = PhysicalSize {
-            width: width as u32,
-            height: height as u32,
-        };
-        self.window.set_inner_size(self.physical_size);
-        let new_size = self.window.inner_size();
-        info!(
-            "after resize, size is: {}x{}",
-            new_size.width, new_size.height
-        );
-        self.physical_size = new_size;
-        self.logical_size = self.physical_size.to_logical(self.scale_factor);
-        let sc_desc = wgpu::SwapChainDescriptor {
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
-            format: Self::SCREEN_FORMAT,
-            width: self.physical_size.width,
-            height: self.physical_size.height,
-            present_mode: self.config.present_mode,
-        };
-        self.swap_chain = self.device.create_swap_chain(&self.surface, &sc_desc);
-        self.depth_texture = Self::create_depth_texture(&self.device, &sc_desc);
-
-        for module in &self.resize_observers {
-            module.write().note_resize(self)?;
-        }
-
-        Ok(())
+    pub fn info(&self) -> String {
+        let info = self.adapter.get_info();
+        format!(
+            "Name: {}\nVendor: {}\nDevice: {:?} {}\nBackend: {:?}",
+            info.name, info.vendor, info.device_type, info.device, info.backend
+        )
     }
 
     #[method]
-    pub fn on_dpi_change(&mut self, scale: f64) -> Result<()> {
-        self.scale_factor = scale;
-        self.logical_size = self.physical_size.to_logical(self.scale_factor);
-        Ok(())
+    pub fn name(&self) -> String {
+        self.adapter.get_info().name
+    }
+
+    #[method]
+    pub fn vendor_id(&self) -> String {
+        self.adapter.get_info().vendor.to_string()
+    }
+
+    #[method]
+    pub fn device_id(&self) -> String {
+        self.adapter.get_info().device.to_string()
+    }
+
+    #[method]
+    pub fn device_type(&self) -> String {
+        format!("{:?}", self.adapter.get_info().device_type)
+    }
+
+    #[method]
+    pub fn backend(&self) -> String {
+        format!("{:?}", self.adapter.get_info().backend)
+    }
+
+    #[method]
+    pub fn limits(&self) -> String {
+        format!("{:#?}", self.adapter.limits())
+    }
+
+    #[method]
+    pub fn features(&self) -> String {
+        let f = self.adapter.features();
+        format!(
+            "{:^6} - DEPTH_CLAMPING\n",
+            f.contains(wgpu::Features::DEPTH_CLAMPING)
+        ) + &format!(
+            "{:^6} - TEXTURE_COMPRESSION_BC\n",
+            f.contains(wgpu::Features::TEXTURE_COMPRESSION_BC)
+        ) + &format!(
+            "{:^6} - TIMESTAMP_QUERY\n",
+            f.contains(wgpu::Features::TIMESTAMP_QUERY)
+        ) + &format!(
+            "{:^6} - PIPELINE_STATISTICS_QUERY\n",
+            f.contains(wgpu::Features::PIPELINE_STATISTICS_QUERY)
+        ) + &format!(
+            "{:^6} - MAPPABLE_PRIMARY_BUFFERS\n",
+            f.contains(wgpu::Features::MAPPABLE_PRIMARY_BUFFERS)
+        ) + &format!(
+            "{:^6} - SAMPLED_TEXTURE_BINDING_ARRAY\n",
+            f.contains(wgpu::Features::SAMPLED_TEXTURE_BINDING_ARRAY)
+        ) + &format!(
+            "{:^6} - SAMPLED_TEXTURE_ARRAY_DYNAMIC_INDEXING\n",
+            f.contains(wgpu::Features::SAMPLED_TEXTURE_ARRAY_DYNAMIC_INDEXING)
+        ) + &format!(
+            "{:^6} - SAMPLED_TEXTURE_ARRAY_NON_UNIFORM_INDEXING\n",
+            f.contains(wgpu::Features::SAMPLED_TEXTURE_ARRAY_NON_UNIFORM_INDEXING)
+        ) + &format!(
+            "{:^6} - UNSIZED_BINDING_ARRAY\n",
+            f.contains(wgpu::Features::UNSIZED_BINDING_ARRAY)
+        ) + &format!(
+            "{:^6} - MULTI_DRAW_INDIRECT\n",
+            f.contains(wgpu::Features::MULTI_DRAW_INDIRECT)
+        ) + &format!(
+            "{:^6} - MULTI_DRAW_INDIRECT_COUNT\n",
+            f.contains(wgpu::Features::MULTI_DRAW_INDIRECT_COUNT)
+        ) + &format!(
+            "{:^6} - PUSH_CONSTANTS\n",
+            f.contains(wgpu::Features::PUSH_CONSTANTS)
+        ) + &format!(
+            "{:^6} - ADDRESS_MODE_CLAMP_TO_BORDER\n",
+            f.contains(wgpu::Features::ADDRESS_MODE_CLAMP_TO_BORDER)
+        ) + &format!(
+            "{:^6} - NON_FILL_POLYGON_MODE\n",
+            f.contains(wgpu::Features::NON_FILL_POLYGON_MODE)
+        ) + &format!(
+            "{:^6} - TEXTURE_COMPRESSION_ETC2\n",
+            f.contains(wgpu::Features::TEXTURE_COMPRESSION_ETC2)
+        ) + &format!(
+            "{:^6} - TEXTURE_COMPRESSION_ASTC_LDR\n",
+            f.contains(wgpu::Features::TEXTURE_COMPRESSION_ASTC_LDR)
+        ) + &format!(
+            "{:^6} - TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES\n",
+            f.contains(wgpu::Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES)
+        ) + &format!(
+            "{:^6} - SHADER_FLOAT64\n",
+            f.contains(wgpu::Features::SHADER_FLOAT64)
+        ) + &format!(
+            "{:^6} - VERTEX_ATTRIBUTE_64BIT\n",
+            f.contains(wgpu::Features::VERTEX_ATTRIBUTE_64BIT)
+        )
     }
 
     fn create_depth_texture(
@@ -268,12 +321,24 @@ impl Gpu {
         })
     }
 
+    pub fn register_render_extent_change_receiver<T: RenderExtentChangeReceiver>(
+        &mut self,
+        observer: Arc<RwLock<T>>,
+    ) {
+        self.render_extent_change_receivers.push(observer);
+    }
+
     pub fn attachment_extent(&self) -> wgpu::Extent3d {
-        wgpu::Extent3d {
-            width: self.physical_size.width,
-            height: self.physical_size.height,
-            depth: 1,
-        }
+        self.render_extent
+    }
+
+    pub fn render_extent(&self) -> wgpu::Extent3d {
+        self.render_extent
+    }
+
+    #[method]
+    pub fn frame_count(&self) -> i64 {
+        self.frame_count as i64
     }
 
     pub fn get_next_framebuffer(&mut self) -> Result<Option<wgpu::SwapChainFrame>> {
@@ -323,6 +388,8 @@ impl Gpu {
         }
     }
 
+    /// Push `data` to the GPU and return a new buffer. Returns None if data is empty
+    /// instead of crashing.
     pub fn maybe_push_buffer(
         &self,
         label: &'static str,
@@ -344,6 +411,8 @@ impl Gpu {
         )
     }
 
+    /// Push `data` to the GPU and return a new buffer. Returns None if data is empty
+    /// instead of crashing.
     pub fn maybe_push_slice<T: AsBytes>(
         &self,
         label: &'static str,
@@ -365,6 +434,7 @@ impl Gpu {
         )
     }
 
+    /// Push `data` to the GPU and return a new buffer. Panics if data is empty.
     pub fn push_buffer(
         &self,
         label: &'static str,
@@ -375,6 +445,7 @@ impl Gpu {
             .expect("push non-empty buffer")
     }
 
+    /// Push `data` to the GPU and return a new buffer. Panics if data is empty.
     pub fn push_slice<T: AsBytes>(
         &self,
         label: &'static str,
@@ -385,6 +456,7 @@ impl Gpu {
             .expect("push non-empty slice")
     }
 
+    /// Push `data` to the GPU and return a new buffer. Panics if data is empty.
     pub fn push_data<T: AsBytes>(
         &self,
         label: &'static str,
@@ -401,6 +473,10 @@ impl Gpu {
             })
     }
 
+    /// Push `data` to the GPU and copy it to `target`. Does nothing if data is empty.
+    /// The copy appears to currently be fenced with respect to usages of the target,
+    /// but this is not specified as of the time of writing. This is optimized under
+    /// the hood and is supposed to be, I think, faster than creating a new bind group.
     pub fn upload_slice_to<T: AsBytes>(
         &self,
         label: &'static str,
@@ -507,21 +583,50 @@ impl Gpu {
     }
 }
 
+impl DisplayConfigChangeReceiver for Gpu {
+    fn on_display_config_changed(&mut self, config: &DisplayConfig) -> Result<()> {
+        info!(
+            "window config changed {}x{}",
+            config.window_size().width,
+            config.window_size().height
+        );
+
+        // Recreate the screen resources for the new window size.
+        let sc_desc = wgpu::SwapChainDescriptor {
+            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+            format: Self::SCREEN_FORMAT,
+            width: config.window_size().width,
+            height: config.window_size().height,
+            present_mode: self.config.present_mode,
+        };
+        self.swap_chain = self.device.create_swap_chain(&self.surface, &sc_desc);
+        self.depth_texture = Self::create_depth_texture(&self.device, &sc_desc);
+
+        // Check if our render extent has changed and re-broadcast
+        let extent = config.render_extent();
+        if self.render_extent.width != extent.width || self.render_extent.height != extent.height {
+            self.render_extent = wgpu::Extent3d {
+                width: extent.width,
+                height: extent.height,
+                depth: 1,
+            };
+            for module in &self.render_extent_change_receivers {
+                module.write().on_render_extent_changed(self)?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use winit::event_loop::EventLoop;
 
     #[cfg(unix)]
     #[test]
     fn test_create() -> Result<()> {
-        use winit::platform::unix::EventLoopExtUnix;
-        let mut interpreter = Interpreter::default();
-        let _gpu = Gpu::new(
-            Window::new(&EventLoop::<()>::new_any_thread())?,
-            Default::default(),
-            &mut interpreter,
-        )?;
+        let _ = Gpu::for_test_unix()?;
         Ok(())
     }
 }

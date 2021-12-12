@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
 use global_data::GlobalParametersBuffer;
-use gpu::{Gpu, ResizeHint};
+use gpu::{Gpu, RenderExtentChangeReceiver};
 use log::trace;
 use parking_lot::RwLock;
 use shader_shared::Group;
@@ -247,20 +247,16 @@ impl UiRenderPass {
             text_pipeline,
         }));
 
-        gpu.add_resize_observer(ui.clone());
+        gpu.register_render_extent_change_receiver(ui.clone());
 
         Ok(ui)
     }
 
     fn _make_deferred_texture_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let sz = gpu.physical_size();
+        let size = gpu.render_extent();
         let target = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("world-offscreen-texture-target"),
-            size: wgpu::Extent3d {
-                width: sz.width as u32,
-                height: sz.height as u32,
-                depth: 1,
-            },
+            size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -283,14 +279,10 @@ impl UiRenderPass {
     }
 
     fn _make_deferred_depth_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
-        let sz = gpu.physical_size();
+        let size = gpu.render_extent();
         let depth_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("world-offscreen-depth-texture"),
-            size: wgpu::Extent3d {
-                width: sz.width as u32,
-                height: sz.height as u32,
-                depth: 1,
-            },
+            size,
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
@@ -394,8 +386,8 @@ impl UiRenderPass {
     }
 }
 
-impl ResizeHint for UiRenderPass {
-    fn note_resize(&mut self, gpu: &Gpu) -> Result<()> {
+impl RenderExtentChangeReceiver for UiRenderPass {
+    fn on_render_extent_changed(&mut self, gpu: &Gpu) -> Result<()> {
         self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
         self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
         self.deferred_bind_group = Self::_make_deferred_bind_group(

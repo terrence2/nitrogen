@@ -18,12 +18,12 @@ use crate::{
     widget::Widget,
 };
 use anyhow::Result;
-use gpu::{
-    size::{AspectMath, LeftBound, ScreenDir, Size},
-    Gpu,
-};
 use parking_lot::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::{sync::Arc, time::Instant};
+use window::{
+    size::{AspectMath, LeftBound, ScreenDir, Size},
+    Window,
+};
 
 #[derive(Copy, Clone, Debug)]
 pub enum PositionH {
@@ -99,7 +99,7 @@ impl BoxPacking {
     pub fn measure(
         children: &mut [BoxPacking],
         screen_dir: ScreenDir,
-        gpu: &Gpu,
+        win: &Window,
         font_context: &mut FontContext,
     ) -> Result<Extent<Size>> {
         let off_dir = screen_dir.other();
@@ -107,16 +107,16 @@ impl BoxPacking {
         // Note: we're getting the native shrunken size, so don't apply box filling in this loop.
         let mut size = Extent::<Size>::zero();
         for packing in children {
-            let child_extent = packing.widget_mut().measure(gpu, font_context)?;
+            let child_extent = packing.widget_mut().measure(win, font_context)?;
             size.set_axis(
                 screen_dir,
                 size.axis(screen_dir)
-                    .add(&child_extent.axis(screen_dir), gpu, screen_dir),
+                    .add(&child_extent.axis(screen_dir), win, screen_dir),
             );
             size.set_axis(
                 off_dir,
                 size.axis(off_dir)
-                    .max(&child_extent.axis(off_dir), gpu, off_dir),
+                    .max(&child_extent.axis(off_dir), win, off_dir),
             );
             packing.set_extent(child_extent);
         }
@@ -128,7 +128,7 @@ impl BoxPacking {
         dir: ScreenDir,
         now: Instant,
         region: Region<Size>,
-        gpu: &Gpu,
+        win: &Window,
         font_context: &mut FontContext,
     ) -> Result<()> {
         // Figure out how much size we need to actually allocate to our widgets.
@@ -137,27 +137,27 @@ impl BoxPacking {
         for packing in children.iter() {
             match packing.expand() {
                 Expand::Shrink => {
-                    total_shrink_size = total_shrink_size.add(&packing.extent().axis(dir), gpu, dir)
+                    total_shrink_size = total_shrink_size.add(&packing.extent().axis(dir), win, dir)
                 }
                 Expand::Fill => fill_count += 1,
             }
         }
         let fill_allocation =
-            region.extent().axis(dir).sub(&total_shrink_size, gpu, dir) / fill_count as f32;
+            region.extent().axis(dir).sub(&total_shrink_size, win, dir) / fill_count as f32;
 
         let mut tmp_extent = *region.extent();
         let mut pos = *region.position();
-        *pos.axis_mut(dir) = pos.axis(dir).add(&region.extent().axis(dir), gpu, dir);
+        *pos.axis_mut(dir) = pos.axis(dir).add(&region.extent().axis(dir), win, dir);
         for packing in children {
             let child_alloc = match packing.expand() {
                 Expand::Shrink => packing.extent().axis(dir),
                 Expand::Fill => fill_allocation,
             };
-            *pos.axis_mut(dir) = pos.axis(dir).sub(&child_alloc, gpu, dir);
+            *pos.axis_mut(dir) = pos.axis(dir).sub(&child_alloc, win, dir);
             tmp_extent.set_axis(dir, child_alloc);
             packing
                 .widget_mut()
-                .layout(now, Region::new(pos, tmp_extent), gpu, font_context)?;
+                .layout(now, Region::new(pos, tmp_extent), win, font_context)?;
         }
 
         Ok(())

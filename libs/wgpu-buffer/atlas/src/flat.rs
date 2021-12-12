@@ -177,7 +177,6 @@ impl BlitItem {
 pub struct AtlasPacker<P: Pixel + 'static> {
     // Constant storage info
     name: String,
-    fill_color_bytes: [u8; 4],
     initial_width: u32,
     initial_height: u32,
     padding: u32,
@@ -228,7 +227,6 @@ where
         gpu: &Gpu,
         initial_width: u32,
         initial_height: u32,
-        fill_color: [u8; 4],
         format: wgpu::TextureFormat,
         filter: wgpu::FilterMode,
     ) -> Result<Self> {
@@ -375,7 +373,6 @@ where
 
         Ok(Self {
             name: name.into(),
-            fill_color_bytes: fill_color,
             initial_width,
             initial_height,
             format,
@@ -891,29 +888,21 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
+    use gpu::TestResources;
     use image::{GrayImage, Luma, Rgba, RgbaImage};
-    use nitrous::Interpreter;
     use rand::prelude::*;
     use std::{env, time::Duration};
-    use tokio::runtime::Runtime;
-    use winit::{event_loop::EventLoop, window::Window};
 
     #[cfg(unix)]
     #[test]
     fn test_random_packing() -> Result<()> {
-        use winit::platform::unix::EventLoopExtUnix;
-        let event_loop = EventLoop::<()>::new_any_thread();
-        let window = Window::new(&event_loop).unwrap();
-        let mut interpreter = Interpreter::default();
-        let async_rt = Runtime::new()?;
-        let gpu = Gpu::new(window, Default::default(), &mut interpreter)?;
+        let TestResources { async_rt, gpu, .. } = Gpu::for_test_unix()?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "random_packing",
             &gpu.read(),
             Gpu::stride_for_row_size((1024 + 8) * 4) / 4,
             2048,
-            [random(), random(), random(), 255],
             wgpu::TextureFormat::Rgba8Unorm,
             wgpu::FilterMode::Linear,
         )?;
@@ -977,19 +966,13 @@ mod test {
     #[cfg(unix)]
     #[test]
     fn test_finish() -> Result<()> {
-        use winit::platform::unix::EventLoopExtUnix;
-        let event_loop = EventLoop::<()>::new_any_thread();
-        let window = Window::new(&event_loop).unwrap();
-        let async_rt = Runtime::new()?;
-        let mut interpreter = Interpreter::default();
-        let gpu = Gpu::new(window, Default::default(), &mut interpreter)?;
+        let TestResources { async_rt, gpu, .. } = Gpu::for_test_unix()?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "test_finish",
             &gpu.read(),
             256,
             256,
-            [0, 0, 0, 0],
             wgpu::TextureFormat::Rgba8Unorm,
             wgpu::FilterMode::Linear,
         )?;
@@ -1005,19 +988,13 @@ mod test {
     #[cfg(unix)]
     #[test]
     fn test_grayscale() -> Result<()> {
-        use winit::platform::unix::EventLoopExtUnix;
-        let event_loop = EventLoop::<()>::new_any_thread();
-        let window = Window::new(&event_loop).unwrap();
-        let async_rt = Runtime::new()?;
-        let mut interpreter = Interpreter::default();
-        let gpu = Gpu::new(window, Default::default(), &mut interpreter)?;
+        let TestResources { async_rt, gpu, .. } = Gpu::for_test_unix()?;
 
         let mut packer = AtlasPacker::<Luma<u8>>::new(
             "test_grayscale",
             &gpu.read(),
             256,
             256,
-            [0, 0, 0, 0],
             wgpu::TextureFormat::R8Unorm,
             wgpu::FilterMode::Linear,
         )?;
@@ -1033,19 +1010,13 @@ mod test {
     #[cfg(unix)]
     #[test]
     fn test_incremental_upload() -> Result<()> {
-        use winit::platform::unix::EventLoopExtUnix;
-        let async_rt = Runtime::new()?;
-        let event_loop = EventLoop::<()>::new_any_thread();
-        let window = Window::new(&event_loop).unwrap();
-        let mut interpreter = Interpreter::default();
-        let gpu = Gpu::new(window, Default::default(), &mut interpreter)?;
+        let TestResources { async_rt, gpu, .. } = Gpu::for_test_unix()?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "test_incremental",
             &gpu.read(),
             256,
             256,
-            [0, 0, 0, 0],
             wgpu::TextureFormat::Rgba8Unorm,
             wgpu::FilterMode::Linear,
         )?;

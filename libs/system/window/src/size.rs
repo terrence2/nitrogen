@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::Gpu;
+use crate::Window;
 use std::cmp::Ordering;
 use std::fmt::Formatter;
 use std::{
@@ -30,9 +30,9 @@ pub trait LeftBound {
 }
 
 pub trait AspectMath {
-    fn add(&self, other: &Self, gpu: &Gpu, dir: ScreenDir) -> Self;
-    fn sub(&self, other: &Self, gpu: &Gpu, dir: ScreenDir) -> Self;
-    fn max(&self, other: &Self, gpu: &Gpu, dir: ScreenDir) -> Self;
+    fn add(&self, other: &Self, win: &Window, dir: ScreenDir) -> Self;
+    fn sub(&self, other: &Self, win: &Window, dir: ScreenDir) -> Self;
+    fn max(&self, other: &Self, win: &Window, dir: ScreenDir) -> Self;
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -87,14 +87,14 @@ impl RelSize {
         }
     }
 
-    pub fn as_abs(self, gpu: &Gpu, screen_dir: ScreenDir) -> AbsSize {
+    pub fn as_abs(self, win: &Window, screen_dir: ScreenDir) -> AbsSize {
         let rng = match screen_dir {
-            ScreenDir::Vertical => gpu.aspect_ratio_f32(),
+            ScreenDir::Vertical => win.render_aspect_ratio_f32(),
             ScreenDir::Horizontal => 1.,
             _ => panic!("can only convert H/V to abs"),
         };
         let f = map_range(Self::PCT_RANGE, (0., rng), self.as_percent());
-        AbsSize::Px(f * gpu.logical_size().width as f32)
+        AbsSize::Px(f * win.physical_size().cast::<f32>().width)
     }
 }
 
@@ -149,15 +149,15 @@ impl AddAssign for RelSize {
 }
 
 impl AspectMath for RelSize {
-    fn add(&self, other: &Self, _gpu: &Gpu, _dir: ScreenDir) -> Self {
+    fn add(&self, other: &Self, _win: &Window, _dir: ScreenDir) -> Self {
         *self + *other
     }
 
-    fn sub(&self, other: &Self, _gpu: &Gpu, _dir: ScreenDir) -> Self {
+    fn sub(&self, other: &Self, _win: &Window, _dir: ScreenDir) -> Self {
         *self - *other
     }
 
-    fn max(&self, other: &Self, _gpu: &Gpu, _dir: ScreenDir) -> Self {
+    fn max(&self, other: &Self, _win: &Window, _dir: ScreenDir) -> Self {
         Self::Percent(self.as_percent().max(other.as_percent()))
     }
 }
@@ -206,15 +206,15 @@ impl AbsSize {
     /// This function takes pixel size as a percent of *WIDTH*. This may not be what is desired
     /// for all use cases. It will, for example preserve text size _in pixels_ rather than in
     /// screen extent, among other potential flaws.
-    pub fn as_rel(self, gpu: &Gpu, screen_dir: ScreenDir) -> RelSize {
+    pub fn as_rel(self, win: &Window, screen_dir: ScreenDir) -> RelSize {
         let rng = match screen_dir {
-            ScreenDir::Vertical => gpu.aspect_ratio_f32(),
+            ScreenDir::Vertical => win.render_aspect_ratio_f32(),
             _ => 1.,
         };
         RelSize::Percent(map_range(
             (0., rng),
             RelSize::PCT_RANGE,
-            (self.as_px() as f64 / gpu.logical_size().width) as f32,
+            (self.as_px() as f64 / win.physical_size().width as f64) as f32,
         ))
     }
 
@@ -333,15 +333,15 @@ impl AddAssign for AbsSize {
 }
 
 impl AspectMath for AbsSize {
-    fn add(&self, other: &Self, _gpu: &Gpu, _dir: ScreenDir) -> Self {
+    fn add(&self, other: &Self, _win: &Window, _dir: ScreenDir) -> Self {
         *self + *other
     }
 
-    fn sub(&self, other: &Self, _gpu: &Gpu, _dir: ScreenDir) -> Self {
+    fn sub(&self, other: &Self, _win: &Window, _dir: ScreenDir) -> Self {
         *self - *other
     }
 
-    fn max(&self, other: &Self, _gpu: &Gpu, _dir: ScreenDir) -> Self {
+    fn max(&self, other: &Self, _win: &Window, _dir: ScreenDir) -> Self {
         self.max(other)
     }
 }
@@ -397,75 +397,75 @@ impl Size {
         Self::Abs(AbsSize::Px(px))
     }
 
-    pub fn as_rel(self, gpu: &Gpu, screen_dir: ScreenDir) -> RelSize {
+    pub fn as_rel(self, win: &Window, screen_dir: ScreenDir) -> RelSize {
         match self {
             Self::Rel(v) => v,
-            Self::Abs(v) => v.as_rel(gpu, screen_dir),
+            Self::Abs(v) => v.as_rel(win, screen_dir),
         }
     }
 
-    pub fn as_abs(self, gpu: &Gpu, screen_dir: ScreenDir) -> AbsSize {
+    pub fn as_abs(self, win: &Window, screen_dir: ScreenDir) -> AbsSize {
         match self {
-            Self::Rel(v) => v.as_abs(gpu, screen_dir),
+            Self::Rel(v) => v.as_abs(win, screen_dir),
             Self::Abs(v) => v,
         }
     }
 
-    pub fn as_gpu(self, gpu: &Gpu, screen_dir: ScreenDir) -> f32 {
+    pub fn as_gpu(self, win: &Window, screen_dir: ScreenDir) -> f32 {
         match self {
             Self::Rel(v) => v.as_gpu(),
-            Self::Abs(v) => v.as_rel(gpu, screen_dir).as_gpu(),
+            Self::Abs(v) => v.as_rel(win, screen_dir).as_gpu(),
         }
     }
 
-    pub fn as_percent(self, gpu: &Gpu, screen_dir: ScreenDir) -> f32 {
+    pub fn as_percent(self, win: &Window, screen_dir: ScreenDir) -> f32 {
         match self {
             Self::Rel(v) => v.as_percent(),
-            Self::Abs(v) => v.as_rel(gpu, screen_dir).as_percent(),
+            Self::Abs(v) => v.as_rel(win, screen_dir).as_percent(),
         }
     }
 
-    pub fn as_px(self, gpu: &Gpu, screen_dir: ScreenDir) -> f32 {
+    pub fn as_px(self, win: &Window, screen_dir: ScreenDir) -> f32 {
         match self {
-            Self::Rel(v) => v.as_abs(gpu, screen_dir).as_px(),
+            Self::Rel(v) => v.as_abs(win, screen_dir).as_px(),
             Self::Abs(v) => v.as_px(),
         }
     }
 
-    pub fn as_pts(self, gpu: &Gpu, screen_dir: ScreenDir) -> f32 {
+    pub fn as_pts(self, win: &Window, screen_dir: ScreenDir) -> f32 {
         match self {
-            Self::Rel(v) => v.as_abs(gpu, screen_dir).as_pts(),
+            Self::Rel(v) => v.as_abs(win, screen_dir).as_pts(),
             Self::Abs(v) => v.as_pts(),
         }
     }
 }
 
 impl AspectMath for Size {
-    fn add(&self, other: &Self, gpu: &Gpu, screen_dir: ScreenDir) -> Self {
+    fn add(&self, other: &Self, win: &Window, screen_dir: ScreenDir) -> Self {
         match self {
             Self::Rel(v) => {
-                Self::from_percent(v.as_percent() + other.as_rel(gpu, screen_dir).as_percent())
+                Self::from_percent(v.as_percent() + other.as_rel(win, screen_dir).as_percent())
             }
-            Self::Abs(v) => Self::from_px(v.as_px() + other.as_abs(gpu, screen_dir).as_px()),
+            Self::Abs(v) => Self::from_px(v.as_px() + other.as_abs(win, screen_dir).as_px()),
         }
     }
 
-    fn sub(&self, other: &Self, gpu: &Gpu, screen_dir: ScreenDir) -> Self {
+    fn sub(&self, other: &Self, win: &Window, screen_dir: ScreenDir) -> Self {
         match self {
             Self::Rel(v) => {
-                Self::from_percent(v.as_percent() - other.as_rel(gpu, screen_dir).as_percent())
+                Self::from_percent(v.as_percent() - other.as_rel(win, screen_dir).as_percent())
             }
-            Self::Abs(v) => Self::from_px(v.as_px() - other.as_abs(gpu, screen_dir).as_px()),
+            Self::Abs(v) => Self::from_px(v.as_px() - other.as_abs(win, screen_dir).as_px()),
         }
     }
 
-    fn max(&self, other: &Self, gpu: &Gpu, screen_dir: ScreenDir) -> Self {
+    fn max(&self, other: &Self, win: &Window, screen_dir: ScreenDir) -> Self {
         match self {
             Self::Rel(v) => Self::from_percent(
                 v.as_percent()
-                    .max(other.as_rel(gpu, screen_dir).as_percent()),
+                    .max(other.as_rel(win, screen_dir).as_percent()),
             ),
-            Self::Abs(v) => Self::from_px(v.as_px().max(other.as_abs(gpu, screen_dir).as_px())),
+            Self::Abs(v) => Self::from_px(v.as_px().max(other.as_abs(win, screen_dir).as_px())),
         }
     }
 }

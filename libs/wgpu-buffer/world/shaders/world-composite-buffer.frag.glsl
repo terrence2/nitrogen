@@ -97,7 +97,7 @@ main()
 {
     vec3 camera_direction_w = normalize(v_ray_world);
     vec3 camera_position_w_km = camera_position_km.xyz;
-    vec3 sun_direction_w = sun_direction.xyz;
+    vec3 sun_direction_w = orrery_sun_direction.xyz;
 
     // Sky and stars
     vec3 sky_radiance = vec3(0);

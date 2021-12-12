@@ -161,11 +161,9 @@ dependencies = [
  "gpu",
  "image",
  "log",
- "nitrous",
  "rand",
  "tokio",
  "wgpu",
- "winit",
  "zerocopy",
 ]
 
@@ -189,7 +187,6 @@ dependencies = [
  "spirv-reflect",
  "static_assertions",
  "wgpu",
- "winit",
  "zerocopy",
 ]
 
@@ -332,7 +329,6 @@ dependencies = [
  "approx",
  "geodesy",
  "geometry",
- "gpu",
  "log",
  "nalgebra",
  "nitrous",
@@ -341,6 +337,7 @@ dependencies = [
  "ordered-float",
  "parking_lot",
  "physical_constants",
+ "window",
 ]
 
 [[package]]
@@ -823,6 +820,7 @@ dependencies = [
  "input",
  "nitrous",
  "structopt",
+ "window",
  "winit",
 ]
 
@@ -934,9 +932,9 @@ name = "font_common"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "gpu",
  "image",
  "wgpu",
+ "window",
 ]
 
 [[package]]
@@ -945,11 +943,11 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "font_common",
- "gpu",
  "image",
  "parking_lot",
  "rusttype",
  "wgpu",
+ "window",
 ]
 
 [[package]]
@@ -991,14 +989,18 @@ dependencies = [
  "anyhow",
  "build_shaders",
  "camera",
+ "chrono",
  "geodesy",
  "global_data",
  "gpu",
  "input",
  "log",
  "nitrous",
+ "orrery",
  "parking_lot",
  "wgpu",
+ "widget",
+ "window",
  "winit",
  "zerocopy",
 ]
@@ -1321,9 +1323,10 @@ dependencies = [
  "nalgebra",
  "nitrous",
  "nitrous_injector",
+ "orrery",
  "parking_lot",
  "wgpu",
- "winit",
+ "window",
  "zerocopy",
 ]
 
@@ -1345,6 +1348,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "futures",
+ "input",
  "log",
  "nitrous",
  "nitrous_injector",
@@ -1352,8 +1356,10 @@ dependencies = [
  "parking_lot",
  "paste",
  "raw-window-handle",
+ "structopt",
  "tokio",
  "wgpu",
+ "window",
  "winit",
  "zerocopy",
 ]
@@ -1486,6 +1492,7 @@ dependencies = [
  "anyhow",
  "futures",
  "log",
+ "parking_lot",
  "smallvec",
  "wasm-bindgen",
  "web-sys",
@@ -2000,6 +2007,7 @@ dependencies = [
  "composite",
  "env_logger",
  "fullscreen",
+ "futures",
  "geodesy",
  "global_data",
  "gpu",
@@ -2016,11 +2024,12 @@ dependencies = [
  "rayon",
  "stars",
  "structopt",
+ "terminal_size",
  "terrain",
  "tokio",
  "ui",
  "widget",
- "winit",
+ "window",
  "world",
 ]
 
@@ -2272,6 +2281,7 @@ dependencies = [
  "nitrous_injector",
  "ordered-float",
  "parking_lot",
+ "widget",
 ]
 
 [[package]]
@@ -2811,6 +2821,7 @@ dependencies = [
  "bitflags",
  "build_shaders",
  "camera",
+ "chrono",
  "fullscreen",
  "geodesy",
  "global_data",
@@ -2820,9 +2831,12 @@ dependencies = [
  "log",
  "nalgebra",
  "nitrous",
+ "orrery",
  "star_catalog",
  "static_assertions",
  "wgpu",
+ "widget",
+ "window",
  "winit",
  "zerocopy",
 ]
@@ -2932,6 +2946,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dfed899f0eb03f32ee8c6a0aabdb8a7949659e3466561fc0adf54e26d88c5f4"
 dependencies = [
  "winapi-util",
+]
+
+[[package]]
+name = "terminal_size"
+version = "0.1.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "633c1a546cee861a1a6d0dc69ebeca693bf4296661ba7852b9d21d159e0506df"
+dependencies = [
+ "libc",
+ "winapi 0.3.9",
 ]
 
 [[package]]
@@ -3359,6 +3383,7 @@ dependencies = [
  "absolute_unit",
  "anyhow",
  "camera",
+ "chrono",
  "console_error_panic_hook",
  "geodesy",
  "global_data",
@@ -3366,6 +3391,7 @@ dependencies = [
  "input",
  "log",
  "nitrous",
+ "orrery",
  "parking_lot",
  "smallvec",
  "tokio",
@@ -3373,6 +3399,7 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-sys",
  "wgpu",
+ "window",
  "winit",
 ]
 
@@ -3484,7 +3511,7 @@ dependencies = [
  "tokio",
  "unicase",
  "wgpu",
- "winit",
+ "window",
  "zerocopy",
 ]
 
@@ -3530,6 +3557,21 @@ name = "winapi-x86_64-pc-windows-gnu"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
+
+[[package]]
+name = "window"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "input",
+ "log",
+ "nitrous",
+ "nitrous_injector",
+ "ordered-float",
+ "parking_lot",
+ "structopt",
+ "winit",
+]
 
 [[package]]
 name = "winit"

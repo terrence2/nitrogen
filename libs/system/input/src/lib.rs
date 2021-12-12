@@ -18,10 +18,16 @@ pub use generic::{GenericEvent, GenericSystemEvent, GenericWindowEvent, MouseAxi
 pub use winit::event::{ButtonId, ElementState, ModifiersState, VirtualKeyCode};
 
 use anyhow::{bail, Result};
+use log::warn;
+use parking_lot::RwLock;
 use smallvec::SmallVec;
 use std::{
     collections::HashMap,
-    sync::mpsc::{channel, Receiver, TryRecvError},
+    sync::{
+        mpsc::{channel, Receiver, TryRecvError},
+        Arc,
+    },
+    time::Instant,
 };
 use winit::{
     event::{
@@ -43,9 +49,15 @@ pub struct InputState {
     window_focused: bool,
 }
 
+pub trait WindowEventReceiver: Send + Sync + 'static {
+    fn on_window_event(&mut self, event: GenericWindowEvent);
+}
+
 pub struct InputController {
     proxy: EventLoopProxy<MetaEvent>,
     event_source: Receiver<GenericEvent>,
+
+    window_event_receivers: Vec<Arc<RwLock<dyn WindowEventReceiver>>>,
 }
 
 impl InputController {
@@ -53,7 +65,26 @@ impl InputController {
         Self {
             proxy,
             event_source,
+            window_event_receivers: Vec::new(),
         }
+    }
+
+    pub fn for_test(event_loop: &EventLoop<MetaEvent>) -> Self {
+        let (_, rx_event) = channel();
+        InputController::new(event_loop.create_proxy(), rx_event)
+    }
+
+    pub fn for_web(event_loop: &EventLoop<MetaEvent>) -> Self {
+        let (_, rx_event) = channel();
+        InputController::new(event_loop.create_proxy(), rx_event)
+    }
+
+    #[cfg(unix)]
+    pub fn for_test_unix() -> Result<(Window, Self)> {
+        use winit::platform::unix::EventLoopExtUnix;
+        let event_loop = EventLoop::<MetaEvent>::new_any_thread();
+        let os_window = Window::new(&event_loop).unwrap();
+        Ok((os_window, Self::for_test(&event_loop)))
     }
 
     pub fn quit(&self) -> Result<()> {
@@ -61,14 +92,44 @@ impl InputController {
         Ok(())
     }
 
+    /// This is deeply cursed. Winit doesn't know our window size until X tells us.
+    /// FIXME: do we need this on all platforms?
+    pub fn wait_for_window_configuration(&mut self) -> Result<()> {
+        let start = Instant::now();
+        loop {
+            for evt in self.poll_events()? {
+                if matches!(
+                    evt,
+                    GenericEvent::Window(GenericWindowEvent::Resized { .. })
+                ) {
+                    warn!("Waited {:?} for size event", start.elapsed());
+                    return Ok(());
+                }
+            }
+        }
+    }
+
+    pub fn register_window_event_receiver<T: WindowEventReceiver>(
+        &mut self,
+        callback: Arc<RwLock<T>>,
+    ) {
+        self.window_event_receivers.push(callback);
+    }
+
     pub fn poll_events(&self) -> Result<SmallVec<[GenericEvent; 8]>> {
         let mut out = SmallVec::new();
-        let mut event_input = self.event_source.try_recv();
-        while event_input.is_ok() {
-            out.push(event_input?);
-            event_input = self.event_source.try_recv();
+        let mut maybe_event_input = self.event_source.try_recv();
+        while maybe_event_input.is_ok() {
+            let event_input = maybe_event_input?;
+            if let GenericEvent::Window(gwe) = event_input {
+                for receiver in self.window_event_receivers.iter() {
+                    receiver.write().on_window_event(gwe);
+                }
+            }
+            out.push(event_input);
+            maybe_event_input = self.event_source.try_recv();
         }
-        match event_input.err().unwrap() {
+        match maybe_event_input.err().unwrap() {
             TryRecvError::Empty => Ok(out),
             TryRecvError::Disconnected => bail!("input system stopped"),
         }
@@ -158,18 +219,18 @@ impl InputSystem {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn run_forever<M>(mut window_main: M) -> Result<()>
     where
-        M: 'static + Send + FnMut(Window, &InputController) -> Result<()>,
+        M: 'static + Send + FnMut(Window, &mut InputController) -> Result<()>,
     {
         let event_loop = EventLoop::<MetaEvent>::with_user_event();
         let window = winit::window::WindowBuilder::new()
-            .with_title("Nitrogen")
+            .with_title("Nitrogen Engine")
             .build(&event_loop)?;
         let (tx_event, rx_event) = channel();
-        let input_controller = InputController::new(event_loop.create_proxy(), rx_event);
+        let mut input_controller = InputController::new(event_loop.create_proxy(), rx_event);
 
         // Spawn the game thread.
         std::thread::spawn(move || {
-            if let Err(e) = window_main(window, &input_controller) {
+            if let Err(e) = window_main(window, &mut input_controller) {
                 println!("Error: {:?}", e);
             }
             input_controller.quit().ok();

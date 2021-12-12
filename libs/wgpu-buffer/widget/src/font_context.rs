@@ -22,16 +22,17 @@ use crate::{
 use anyhow::Result;
 use atlas::{AtlasPacker, Frame};
 use font_common::{FontAdvance, FontInterface};
-use gpu::{
-    size::{AbsSize, LeftBound, RelSize, ScreenDir},
-    Gpu, UploadTracker,
-};
+use gpu::{Gpu, UploadTracker};
 use image::Luma;
 use nitrous::Value;
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
 use std::{borrow::Borrow, collections::HashMap, env, sync::Arc};
 use tokio::runtime::Runtime;
+use window::{
+    size::{AbsSize, LeftBound, RelSize, ScreenDir},
+    Window,
+};
 
 #[derive(Debug)]
 pub struct GlyphTracker {
@@ -83,7 +84,6 @@ impl FontContext {
                 gpu,
                 256 * 4,
                 256,
-                [0, 0, 0, 0],
                 wgpu::TextureFormat::R8Unorm,
                 wgpu::FilterMode::Linear,
             )?,
@@ -196,10 +196,10 @@ impl FontContext {
         *x_pos = AbsSize::from_px((x_pos.as_px() * phys_w).floor() / phys_w);
     }
 
-    pub fn measure_text(&mut self, span: &TextSpan, gpu: &Gpu) -> Result<TextSpanMetrics> {
-        let phys_w = gpu.physical_size().width as f32;
-        let scale_px = (span.size() * gpu.scale_factor() as f32)
-            .as_abs(gpu, ScreenDir::Horizontal)
+    pub fn measure_text(&mut self, span: &TextSpan, win: &Window) -> Result<TextSpanMetrics> {
+        let phys_w = win.width() as f32;
+        let scale_px = (span.size() * win.dpi_scale_factor() as f32)
+            .as_abs(win, ScreenDir::Horizontal)
             .ceil();
 
         // Font rendering is based around the baseline. We want it based around the top-left
@@ -248,6 +248,7 @@ impl FontContext {
         widget_info_index: u32,
         offset: Position<AbsSize>,
         selection_area: SpanSelection,
+        win: &Window,
         gpu: &Gpu,
         text_pool: &mut Vec<WidgetVertex>,
         background_pool: &mut Vec<WidgetVertex>,
@@ -256,11 +257,11 @@ impl FontContext {
         let gs_height = self.glyph_sheet_height();
 
         // Use the physical width to re-align all pixel boxes to pixel boundaries.
-        let phys_w = gpu.physical_size().width as f32;
+        let phys_w = win.width() as f32;
 
         // The font system expects scales in pixels.
-        let scale_px = (span.size() * gpu.scale_factor() as f32)
-            .as_abs(gpu, ScreenDir::Horizontal)
+        let scale_px = (span.size() * win.dpi_scale_factor() as f32)
+            .as_abs(win, ScreenDir::Horizontal)
             .ceil();
 
         // Font rendering is based around the baseline. We want it based around the top-left
@@ -303,7 +304,7 @@ impl FontContext {
                 [frame.s1(gs_width), frame.t1(gs_height)],
                 span.color(),
                 widget_info_index,
-                gpu,
+                win,
                 text_pool,
             );
 
@@ -324,7 +325,7 @@ impl FontContext {
                         bz.as_depth(),
                         &Color::White,
                         widget_info_index,
-                        gpu,
+                        win,
                         background_pool,
                     );
                 }
@@ -343,7 +344,7 @@ impl FontContext {
                         bz.as_depth(),
                         &Color::Blue,
                         widget_info_index,
-                        gpu,
+                        win,
                         background_pool,
                     );
                 }
@@ -371,7 +372,7 @@ impl FontContext {
                     bz.as_depth(),
                     &Color::White,
                     widget_info_index,
-                    gpu,
+                    win,
                     background_pool,
                 );
             }

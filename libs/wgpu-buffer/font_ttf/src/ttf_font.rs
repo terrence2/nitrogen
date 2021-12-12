@@ -14,11 +14,11 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::{anyhow, Result};
 use font_common::{FontAdvance, FontInterface};
-use gpu::size::AbsSize;
 use image::{GrayImage, Luma};
 use parking_lot::RwLock;
 use rusttype::{Font, Point, Scale};
 use std::sync::Arc;
+use window::size::AbsSize;
 
 #[derive(Debug)]
 pub struct TtfFont {

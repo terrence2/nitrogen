@@ -18,12 +18,12 @@ use absolute_unit::{
 };
 use anyhow::{bail, ensure, Result};
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
-use gpu::{Gpu, ResizeHint};
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use std::{f64::consts::PI, sync::Arc};
+use window::{DisplayConfig, DisplayConfigChangeReceiver, Window};
 
 #[derive(Debug, NitrousModule)]
 pub struct ArcBallCamera {
@@ -41,33 +41,15 @@ pub struct ArcBallCamera {
 impl ArcBallCamera {
     pub fn new(
         z_near: Length<Meters>,
-        gpu: &mut Gpu,
+        win: &mut Window,
         interpreter: &mut Interpreter,
-    ) -> Arc<RwLock<Self>> {
-        let arcball = Arc::new(RwLock::new(Self::detached(gpu.aspect_ratio(), z_near)));
-        gpu.add_resize_observer(arcball.clone());
+    ) -> Result<Arc<RwLock<Self>>> {
+        let arcball = Arc::new(RwLock::new(Self::detached(
+            win.render_aspect_ratio(),
+            z_near,
+        )));
+        win.register_display_config_change_receiver(arcball.clone());
         interpreter.put_global("camera", Value::Module(arcball.clone()));
-        arcball
-    }
-
-    pub fn detached(aspect_ratio: f64, z_near: Length<Meters>) -> Self {
-        let fov_y = radians!(PI / 2f64);
-        Self {
-            camera: Camera::from_parameters(fov_y, aspect_ratio, z_near),
-            target: Graticule::<GeoSurface>::new(radians!(0), radians!(0), meters!(10.)),
-            target_height_delta: meters!(0),
-            eye: Graticule::<Target>::new(
-                radians!(degrees!(10.)),
-                radians!(degrees!(25.)),
-                meters!(10.),
-            ),
-            fov_delta: degrees!(0),
-            in_rotate: false,
-            in_move: false,
-        }
-    }
-
-    pub fn add_default_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
         interpreter.interpret_once(
             r#"
                 let bindings := mapper.create_bindings("arc_ball_camera");
@@ -85,7 +67,24 @@ impl ArcBallCamera {
                 bindings.bind("Shift+RBracket", "camera.increase_exposure(pressed)");
             "#,
         )?;
-        Ok(())
+        Ok(arcball)
+    }
+
+    pub fn detached(aspect_ratio: f64, z_near: Length<Meters>) -> Self {
+        let fov_y = radians!(PI / 2f64);
+        Self {
+            camera: Camera::from_parameters(fov_y, aspect_ratio, z_near),
+            target: Graticule::<GeoSurface>::new(radians!(0), radians!(0), meters!(10.)),
+            target_height_delta: meters!(0),
+            eye: Graticule::<Target>::new(
+                radians!(degrees!(10.)),
+                radians!(degrees!(25.)),
+                meters!(10.),
+            ),
+            fov_delta: degrees!(0),
+            in_rotate: false,
+            in_move: false,
+        }
     }
 
     pub fn camera(&self) -> &Camera {
@@ -404,7 +403,7 @@ impl ArcBallCamera {
         }
     }
 
-    pub fn think(&mut self) {
+    pub fn track_state_changes(&mut self) {
         let mut fov = degrees!(self.camera.fov_y());
         fov += self.fov_delta;
         fov = fov.min(degrees!(90)).max(degrees!(1));
@@ -433,9 +432,9 @@ impl ArcBallCamera {
     }
 }
 
-impl ResizeHint for ArcBallCamera {
-    fn note_resize(&mut self, gpu: &Gpu) -> Result<()> {
-        self.camera.set_aspect_ratio(gpu.aspect_ratio());
+impl DisplayConfigChangeReceiver for ArcBallCamera {
+    fn on_display_config_changed(&mut self, config: &DisplayConfig) -> Result<()> {
+        self.camera.set_aspect_ratio(config.render_aspect_ratio());
         Ok(())
     }
 }

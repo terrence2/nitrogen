@@ -93,6 +93,7 @@ macro_rules! make_frame_graph {
     ) => {
         ::paste::paste! {
 
+            #[derive(Clone, Debug)]
             pub struct $name {
                 $(
                     $buffer_name: ::std::sync::Arc<::parking_lot::RwLock<$buffer_type>>
@@ -155,13 +156,13 @@ macro_rules! make_frame_graph {
 
 #[cfg(test)]
 mod test {
-    use crate::{Gpu, UploadTracker};
+    use crate::{Gpu, TestResources, UploadTracker};
     use anyhow::Result;
-    use nitrous::Interpreter;
     use parking_lot::RwLock;
     use std::{cell::RefCell, sync::Arc};
-    use winit::{event_loop::EventLoop, window::Window};
+    use window::DisplayConfigChangeReceiver;
 
+    #[derive(Debug)]
     pub struct TestBuffer {
         render_target: wgpu::TextureView,
         update_count: usize,
@@ -248,6 +249,7 @@ mod test {
         }
     }
 
+    #[derive(Debug)]
     pub struct TestRenderer {
         render_count: RefCell<usize>,
     }
@@ -296,14 +298,8 @@ mod test {
 
     #[test]
     fn test_basic() -> Result<()> {
-        use winit::platform::unix::EventLoopExtUnix;
-        let event_loop = EventLoop::<()>::new_any_thread();
-        let mut interpreter = Interpreter::default();
-        let gpu = Gpu::new(
-            Window::new(&event_loop)?,
-            Default::default(),
-            &mut interpreter,
-        )?;
+        let TestResources { gpu, window, .. } = Gpu::for_test_unix()?;
+
         let test_buffer = Arc::new(RwLock::new(TestBuffer::new(&gpu.read())));
         let test_renderer = Arc::new(RwLock::new(TestRenderer::new(
             &gpu.read(),
@@ -314,7 +310,11 @@ mod test {
         for _ in 0..3 {
             let mut upload_tracker = Default::default();
             frame_graph.test_buffer_mut().update(&mut upload_tracker);
-            frame_graph.run(&mut gpu.write(), upload_tracker)?;
+            let need_rebuild = frame_graph.run(&mut gpu.write(), upload_tracker)?;
+            if need_rebuild {
+                gpu.write()
+                    .on_display_config_changed(window.read().config())?;
+            }
         }
 
         assert_eq!(frame_graph.test_buffer().update_count, 3);

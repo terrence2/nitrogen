@@ -65,16 +65,15 @@ use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 pub trait TileSet: Debug + Send + Sync + 'static {
     // Maintain runtime visibility tracking based on VisiblePatch notifications derived
     // from the global geometry calculations.
-    fn begin_update(&mut self);
+    fn begin_visibility_update(&mut self);
     fn note_required(&mut self, visible_patch: &VisiblePatch);
-    fn finish_update(
+    fn finish_visibility_update(
         &mut self,
         camera: &Camera,
         catalog: Arc<AsyncRwLock<Catalog>>,
         async_rt: &Runtime,
-        gpu: &Gpu,
-        tracker: &mut UploadTracker,
     );
+    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker);
 
     // Indicate that the current index should be written to the debug file.
     fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut Gpu);
@@ -207,9 +206,9 @@ impl TileManager {
         self.tile_sets.push(tile_set);
     }
 
-    pub fn begin_update(&mut self) {
+    pub fn begin_visibility_update(&mut self) {
         for ts in self.tile_sets.iter_mut() {
-            ts.begin_update();
+            ts.begin_visibility_update();
         }
     }
 
@@ -219,16 +218,25 @@ impl TileManager {
         }
     }
 
-    pub fn finish_update(
+    pub fn finish_visibility_update(
         &mut self,
         camera: &Camera,
         catalog: Arc<AsyncRwLock<Catalog>>,
+        async_rt: &Runtime,
+    ) {
+        for ts in self.tile_sets.iter_mut() {
+            ts.finish_visibility_update(camera, catalog.clone(), async_rt);
+        }
+    }
+
+    pub fn ensure_uploaded(
+        &mut self,
         async_rt: &Runtime,
         gpu: &mut Gpu,
         tracker: &mut UploadTracker,
     ) {
         for ts in self.tile_sets.iter_mut() {
-            ts.finish_update(camera, catalog.clone(), async_rt, gpu, tracker);
+            ts.ensure_uploaded(gpu, tracker);
         }
 
         if self.take_index_snapshot {

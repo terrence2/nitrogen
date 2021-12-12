@@ -16,8 +16,6 @@ zerocopy = "^ 0.5"
 
 [dev-dependencies]
 rand = "^ 0.8"
-winit = { version = "^ 0.24", features = ["web-sys"] }
-nitrous = { path = "../../util/nitrous" }
 
 [build-dependencies]
 build_shaders = { path = "../../util/build_shaders" }
