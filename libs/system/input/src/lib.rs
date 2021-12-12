@@ -18,6 +18,7 @@ pub use generic::{GenericEvent, GenericSystemEvent, GenericWindowEvent, MouseAxi
 pub use winit::event::{ButtonId, ElementState, ModifiersState, VirtualKeyCode};
 
 use anyhow::{bail, Result};
+use log::warn;
 use parking_lot::RwLock;
 use smallvec::SmallVec;
 use std::{
@@ -26,6 +27,7 @@ use std::{
         mpsc::{channel, Receiver, TryRecvError},
         Arc,
     },
+    time::Instant,
 };
 use winit::{
     event::{
@@ -88,6 +90,23 @@ impl InputController {
     pub fn quit(&self) -> Result<()> {
         self.proxy.send_event(MetaEvent::Stop)?;
         Ok(())
+    }
+
+    /// This is deeply cursed. Winit doesn't know our window size until X tells us.
+    /// FIXME: do we need this on all platforms?
+    pub fn wait_for_window_configuration(&mut self) -> Result<()> {
+        let start = Instant::now();
+        loop {
+            for evt in self.poll_events()? {
+                if matches!(
+                    evt,
+                    GenericEvent::Window(GenericWindowEvent::Resized { .. })
+                ) {
+                    warn!("Waited {:?} for size event", start.elapsed());
+                    return Ok(());
+                }
+            }
+        }
     }
 
     pub fn register_window_event_receiver<T: WindowEventReceiver>(

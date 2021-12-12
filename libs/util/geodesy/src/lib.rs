@@ -17,7 +17,7 @@ pub(crate) mod graticule;
 pub(crate) mod origin;
 
 pub use crate::{
-    cartesian::Cartesian,
-    graticule::Graticule,
+    cartesian::{Cartesian, CartesianOrigin},
+    graticule::{Graticule, GraticuleOrigin},
     origin::{geo_center::GeoCenter, geo_surface::GeoSurface, target::Target},
 };

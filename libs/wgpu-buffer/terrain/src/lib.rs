@@ -685,7 +685,7 @@ impl TerrainBuffer {
         camera: &Camera,
         optimize_camera: &Camera,
         catalog: Arc<AsyncRwLock<Catalog>>,
-        async_rt: &mut Runtime,
+        async_rt: &Runtime,
     ) -> Result<()> {
         // Upload patches and capture visibility regions.
         self.visible_regions.clear();

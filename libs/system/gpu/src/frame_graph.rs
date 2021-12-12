@@ -93,6 +93,7 @@ macro_rules! make_frame_graph {
     ) => {
         ::paste::paste! {
 
+            #[derive(Clone, Debug)]
             pub struct $name {
                 $(
                     $buffer_name: ::std::sync::Arc<::parking_lot::RwLock<$buffer_type>>
@@ -161,6 +162,7 @@ mod test {
     use std::{cell::RefCell, sync::Arc};
     use window::DisplayConfigChangeReceiver;
 
+    #[derive(Debug)]
     pub struct TestBuffer {
         render_target: wgpu::TextureView,
         update_count: usize,

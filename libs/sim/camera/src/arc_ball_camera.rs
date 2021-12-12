@@ -403,7 +403,7 @@ impl ArcBallCamera {
         }
     }
 
-    pub fn think(&mut self) {
+    pub fn track_state_changes(&mut self) {
         let mut fov = degrees!(self.camera.fov_y());
         fov += self.fov_delta;
         fov = fov.min(degrees!(90)).max(degrees!(1));

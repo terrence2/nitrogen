@@ -48,7 +48,7 @@ pub struct DisplayOpts {
 }
 
 /// Fullscreen or windowed and how to do that.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum DisplayMode {
     /// Render: whatever size the window is right now (scaled by render scaling)
     /// Window: don't change what the OS gives us
@@ -128,23 +128,34 @@ pub struct DisplayConfig {
 
 impl DisplayConfig {
     pub fn discover(opt: &DisplayOpts, os_window: &OsWindow) -> Self {
-        let base_render_extent = if let Some(width) = opt.width {
-            if let Some(height) = opt.height {
-                PhysicalSize::new(width, height)
-            } else {
-                PhysicalSize::new(width, width * 9 / 16)
-            }
-        } else if let Some(height) = opt.height {
-            PhysicalSize::new(height * 16 / 9, height)
-        } else if let Some(monitor) = os_window.current_monitor() {
-            monitor.size()
+        // FIXME: use a better default display mode
+        let display_mode = opt.mode.unwrap_or(DisplayMode::ResizableWindowed);
+
+        // if the resiable window mode is selected, use it as extent
+        let base_render_extent = if display_mode == DisplayMode::ResizableWindowed {
+            os_window.inner_size()
         } else {
-            PhysicalSize::new(1920, 1080)
+            if let Some(width) = opt.width {
+                if let Some(height) = opt.height {
+                    PhysicalSize::new(width, height)
+                } else {
+                    PhysicalSize::new(width, width * 9 / 16)
+                }
+            } else if let Some(height) = opt.height {
+                PhysicalSize::new(height * 16 / 9, height)
+            } else if let Some(monitor) = os_window.current_monitor() {
+                if display_mode != DisplayMode::Windowed {
+                    monitor.size()
+                } else {
+                    PhysicalSize::new(1280, 720)
+                }
+            } else {
+                PhysicalSize::new(1280, 720)
+            }
         };
 
         Self {
-            // FIXME: use a better display mode
-            display_mode: opt.mode.unwrap_or(DisplayMode::ResizableWindowed),
+            display_mode,
             window_size: os_window.inner_size(),
             base_render_extent,
             render_scale: opt.scale.unwrap_or(1.0),
@@ -207,6 +218,7 @@ pub struct Window {
     os_window: OsWindow,
     config: DisplayConfig,
     display_config_change_receivers: Vec<Arc<RwLock<dyn DisplayConfigChangeReceiver>>>,
+    pub closing: bool,
 }
 
 #[inject_nitrous_module]
@@ -221,6 +233,7 @@ impl Window {
             os_window,
             config,
             display_config_change_receivers: Vec::new(),
+            closing: false,
         }));
         interpreter.put_global("window", Value::Module(win.clone()));
         input.register_window_event_receiver(win.clone());
