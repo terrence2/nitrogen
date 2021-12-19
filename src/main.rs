@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{degrees, meters};
 use animate::Timeline;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use atmosphere::AtmosphereBuffer;
 use camera::{ArcBallCamera, Camera};
 use catalog::{Catalog, DirectoryDrawer};
@@ -30,8 +30,10 @@ use nitrous::{Interpreter, StartupOpts, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use orrery::Orrery;
 use parking_lot::RwLock;
+use platform_dirs::AppDirs;
 use stars::StarsBuffer;
 use std::{
+    fs::create_dir_all,
     path::PathBuf,
     sync::Arc,
     time::{Duration, Instant},
@@ -292,6 +294,7 @@ make_frame_graph!(
 fn build_frame_graph(
     cpu_detail: CpuDetailLevel,
     gpu_detail: GpuDetailLevel,
+    app_dirs: &AppDirs,
     catalog: &Catalog,
     mapper: Arc<RwLock<EventMapper>>,
     window: &mut Window,
@@ -318,7 +321,7 @@ fn build_frame_graph(
         &mut gpu.write(),
         interpreter,
     )?;
-    let widgets = WidgetBuffer::new(mapper, &mut gpu.write(), interpreter)?;
+    let widgets = WidgetBuffer::new(mapper, &mut gpu.write(), interpreter, &app_dirs.state_dir)?;
     let ui = UiRenderPass::new(
         &widgets.read(),
         &world.read(),
@@ -361,6 +364,11 @@ fn simulation_main(os_window: OsWindow, input_controller: &mut InputController) 
     let cpu_detail = opt.detail_opts.cpu_detail();
     let gpu_detail = opt.detail_opts.gpu_detail();
 
+    let app_dirs = AppDirs::new(Some("nitrogen"), true)
+        .ok_or_else(|| anyhow!("unable to find app directories"))?;
+    create_dir_all(&app_dirs.config_dir)?;
+    create_dir_all(&app_dirs.state_dir)?;
+
     let mut catalog = Catalog::empty("main");
     for (i, d) in opt.libdir.iter().enumerate() {
         catalog.add_drawer(DirectoryDrawer::from_directory(100 + i as i64, d)?)?;
@@ -385,6 +393,7 @@ fn simulation_main(os_window: OsWindow, input_controller: &mut InputController) 
     let (_gpu, mut frame_graph) = build_frame_graph(
         cpu_detail,
         gpu_detail,
+        &app_dirs,
         &block_on(catalog.read()),
         mapper,
         &mut window.write(),
