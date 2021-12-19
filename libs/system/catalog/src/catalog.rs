@@ -17,7 +17,8 @@ use anyhow::{ensure, Result};
 use glob::{MatchOptions, Pattern};
 use log::debug;
 use smallvec::SmallVec;
-use std::{borrow::Cow, collections::HashMap, ops::Range};
+use std::fmt::Formatter;
+use std::{borrow::Cow, collections::HashMap, fmt::Debug, ops::Range};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 struct DrawerId(u16);
@@ -50,6 +51,18 @@ pub struct Catalog {
     drawer_index: HashMap<(i64, String), DrawerId>,
     drawers: HashMap<DrawerId, Box<dyn DrawerInterface>>,
     index: HashMap<String, FileId>,
+}
+
+impl Debug for Catalog {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Catalog(name={},drawers={},files={})",
+            self.label,
+            self.drawers.len(),
+            self.index.len(),
+        )
+    }
 }
 
 impl Catalog {

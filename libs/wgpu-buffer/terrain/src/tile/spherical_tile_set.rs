@@ -23,7 +23,7 @@ use global_data::GlobalParametersBuffer;
 use gpu::wgpu::{BindGroup, CommandEncoder, ComputePass};
 use gpu::{Gpu, UploadTracker};
 use shader_shared::Group;
-use std::sync::Arc;
+use std::{any::Any, sync::Arc};
 use tokio::{runtime::Runtime, sync::RwLock};
 
 // TODO: tweak load depth of each type of tile... we don't need as much height data as normal data
@@ -75,6 +75,14 @@ impl SphericalHeightTileSet {
 }
 
 impl TileSet for SphericalHeightTileSet {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn begin_visibility_update(&mut self) {
         self.common.begin_visibility_update();
     }
@@ -190,6 +198,14 @@ impl SphericalColorTileSet {
 }
 
 impl TileSet for SphericalColorTileSet {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn begin_visibility_update(&mut self) {
         self.common.begin_visibility_update()
     }
@@ -310,6 +326,14 @@ impl SphericalNormalsTileSet {
 }
 
 impl TileSet for SphericalNormalsTileSet {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn begin_visibility_update(&mut self) {
         self.common.begin_visibility_update();
     }

@@ -2046,6 +2046,7 @@ dependencies = [
  "ordered-float",
  "parking_lot",
  "regex",
+ "structopt",
 ]
 
 [[package]]

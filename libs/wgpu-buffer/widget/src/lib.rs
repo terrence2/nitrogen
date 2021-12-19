@@ -326,8 +326,8 @@ impl WidgetBuffer {
         &mut self,
         now: Instant,
         events: &[GenericEvent],
-        interpreter: Interpreter,
         win: &Window,
+        interpreter: Interpreter,
     ) -> Result<()> {
         for event in events {
             if let GenericEvent::KeyboardKey {
@@ -380,8 +380,8 @@ impl WidgetBuffer {
         &mut self,
         now: Instant,
         async_rt: &Runtime,
-        win: &Window,
         gpu: &mut Gpu,
+        win: &Window,
         tracker: &mut UploadTracker,
     ) -> Result<()> {
         // Draw into the paint context.
@@ -509,14 +509,14 @@ mod test {
 
         widgets
             .write()
-            .track_state_changes(Instant::now(), &[], interpreter, &window.read())?;
+            .track_state_changes(Instant::now(), &[], &window.read(), interpreter)?;
 
         let mut tracker = Default::default();
         widgets.write().ensure_uploaded(
             Instant::now(),
             &async_rt,
-            &window.read(),
             &mut gpu.write(),
+            &window.read(),
             &mut tracker,
         )?;
 

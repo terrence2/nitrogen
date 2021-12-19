@@ -15,4 +15,5 @@ futures = "^ 0.3"
 ordered-float = "^ 2"
 parking_lot = "^ 0.11"
 regex = "1"
+structopt = "^ 0.3"
 geodesy = { path = "../../util/geodesy" }

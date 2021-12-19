@@ -26,7 +26,7 @@ use global_data::GlobalParametersBuffer;
 use gpu::{make_frame_graph, CpuDetailLevel, DetailLevelOpts, Gpu, GpuDetailLevel};
 use input::{InputController, InputSystem};
 use legion::world::World;
-use nitrous::{Interpreter, Value};
+use nitrous::{Interpreter, StartupOpts, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use orrery::Orrery;
 use parking_lot::RwLock;
@@ -59,19 +59,16 @@ struct Opt {
     #[structopt(short, long)]
     libdir: Vec<PathBuf>,
 
-    /// Run a command after startup
-    #[structopt(short, long)]
-    command: Option<String>,
-
-    /// Run given file after startup
-    #[structopt(short, long)]
-    execute: Option<PathBuf>,
+    // #[structopt(flatten)]
+    // catalog_opts: CatalogOpts,
+    #[structopt(flatten)]
+    detail_opts: DetailLevelOpts,
 
     #[structopt(flatten)]
-    detail: DetailLevelOpts,
+    display_opts: DisplayOpts,
 
     #[structopt(flatten)]
-    display: DisplayOpts,
+    startup_opts: StartupOpts,
 }
 
 #[derive(Debug)]
@@ -241,15 +238,21 @@ impl System {
 make_frame_graph!(
     FrameGraph {
         buffers: {
-            atmosphere: AtmosphereBuffer,
-            fullscreen: FullscreenBuffer,
-            globals: GlobalParametersBuffer,
-            stars: StarsBuffer,
-            terrain: TerrainBuffer,
+            // Note: order must be lock order
+            // system
+            composite: CompositeRenderPass,
+            ui: UiRenderPass,
             widgets: WidgetBuffer,
             world: WorldRenderPass,
-            ui: UiRenderPass,
-            composite: CompositeRenderPass
+            terrain: TerrainBuffer,
+            atmosphere: AtmosphereBuffer,
+            stars: StarsBuffer,
+            fullscreen: FullscreenBuffer,
+            globals: GlobalParametersBuffer
+            // gpu
+            // window
+            // arcball
+            // orrery
         };
         passes: [
             // widget
@@ -308,70 +311,42 @@ fn build_frame_graph(
         interpreter,
     )?;
     let world = WorldRenderPass::new(
-        &mut gpu.write(),
-        interpreter,
-        &globals.read(),
+        &terrain_buffer.read(),
         &atmosphere_buffer.read(),
         &stars_buffer.read(),
-        &terrain_buffer.read(),
+        &globals.read(),
+        &mut gpu.write(),
+        interpreter,
     )?;
     let widgets = WidgetBuffer::new(mapper, &mut gpu.write(), interpreter)?;
     let ui = UiRenderPass::new(
-        &mut gpu.write(),
-        &globals.read(),
         &widgets.read(),
         &world.read(),
+        &globals.read(),
+        &mut gpu.write(),
     )?;
     let composite = Arc::new(RwLock::new(CompositeRenderPass::new(
-        &mut gpu.write(),
-        &globals.read(),
-        &world.read(),
         &ui.read(),
+        &world.read(),
+        &globals.read(),
+        &mut gpu.write(),
     )?));
+
     globals.write().add_debug_bindings(interpreter)?;
     world.write().add_debug_bindings(interpreter)?;
     let frame_graph = FrameGraph::new(
-        atmosphere_buffer,
-        fullscreen_buffer,
-        globals,
-        stars_buffer,
-        terrain_buffer,
+        composite,
+        ui,
         widgets,
         world,
-        ui,
-        composite,
+        terrain_buffer,
+        atmosphere_buffer,
+        stars_buffer,
+        fullscreen_buffer,
+        globals,
     )?;
+
     Ok((gpu, frame_graph))
-}
-
-fn on_startup(
-    interpreter: &mut Interpreter,
-    command: Option<String>,
-    execute: Option<PathBuf>,
-) -> Result<()> {
-    if let Ok(code) = std::fs::read_to_string("autoexec.n2o") {
-        let rv = interpreter.interpret_once(&code);
-        println!("Execution Completed: {:?}", rv);
-    }
-
-    if let Some(command) = command.as_ref() {
-        let rv = interpreter.interpret_once(command)?;
-        println!("{}", rv);
-    }
-
-    if let Some(exec_file) = execute {
-        match std::fs::read_to_string(&exec_file) {
-            Ok(code) => {
-                let rv = interpreter.interpret_async(code);
-                println!("Execution Completed: {:?}", rv);
-            }
-            Err(e) => {
-                println!("Read file for {:?}: {}", exec_file, e);
-            }
-        }
-    }
-
-    Ok(())
 }
 
 fn main() -> Result<()> {
@@ -380,14 +355,11 @@ fn main() -> Result<()> {
 }
 
 fn simulation_main(os_window: OsWindow, input_controller: &mut InputController) -> Result<()> {
-    input_controller.wait_for_window_configuration()?;
+    os_window.set_title("Nitrogen Demo");
 
     let opt = Opt::from_args();
-    let cpu_detail = opt.detail.cpu_detail();
-    let gpu_detail = opt.detail.gpu_detail();
-
-    let async_rt = Arc::new(Runtime::new()?);
-    let _legion = World::default();
+    let cpu_detail = opt.detail_opts.cpu_detail();
+    let gpu_detail = opt.detail_opts.gpu_detail();
 
     let mut catalog = Catalog::empty("main");
     for (i, d) in opt.libdir.iter().enumerate() {
@@ -395,15 +367,19 @@ fn simulation_main(os_window: OsWindow, input_controller: &mut InputController) 
     }
     let catalog = Arc::new(AsyncRwLock::new(catalog));
 
+    input_controller.wait_for_window_configuration()?;
+
     let mut interpreter = Interpreter::default();
     let mapper = EventMapper::new(&mut interpreter);
-    let display_config = DisplayConfig::discover(&opt.display, &os_window);
+    let display_config = DisplayConfig::discover(&opt.display_opts, &os_window);
     let window = Window::new(
         os_window,
         input_controller,
         display_config,
         &mut interpreter,
     )?;
+    let async_rt = Arc::new(Runtime::new()?);
+    let _legion = World::default();
 
     ///////////////////////////////////////////////////////////
     let (_gpu, mut frame_graph) = build_frame_graph(
@@ -426,7 +402,7 @@ fn simulation_main(os_window: OsWindow, input_controller: &mut InputController) 
     let timeline = Timeline::new(&mut interpreter);
     let system = System::new(&frame_graph.widgets(), &mut interpreter)?;
 
-    on_startup(&mut interpreter, opt.command, opt.execute)?;
+    opt.startup_opts.on_startup(&mut interpreter)?;
 
     const STEP: Duration = Duration::from_micros(16_666);
     let mut now = Instant::now();
@@ -445,17 +421,19 @@ fn simulation_main(os_window: OsWindow, input_controller: &mut InputController) 
             frame_graph.widgets_mut().track_state_changes(
                 now,
                 &input_controller.poll_events()?,
-                interpreter.clone(),
                 &window.read(),
+                interpreter.clone(),
             )?;
             frame_graph.globals_mut().track_state_changes(
                 arcball.read().camera(),
                 &orrery.read(),
                 &window.read(),
             );
+            let mut sys_lock = system.write();
+            let vis_camera = sys_lock.current_camera(arcball.read_recursive().camera());
             frame_graph.terrain_mut().track_state_changes(
-                arcball.read().camera(),
-                system.write().current_camera(arcball.read().camera()),
+                arcball.read_recursive().camera(),
+                vis_camera,
                 catalog.clone(),
                 &async_rt,
             )?;
@@ -487,14 +465,14 @@ fn render_main(
         frame_graph
             .terrain_mut()
             .ensure_uploaded(&async_rt, &mut gpu.write(), &mut tracker)?;
-        frame_graph.widgets.write().ensure_uploaded(
+        frame_graph.widgets_mut().ensure_uploaded(
             now,
             &async_rt,
-            &window.read(),
             &mut gpu.write(),
+            &window.read(),
             &mut tracker,
         )?;
-        if !frame_graph.run(&mut gpu.write(), tracker)? {
+        if !frame_graph.run(gpu.clone(), tracker)? {
             gpu.write()
                 .on_display_config_changed(window.read().config())?;
         }

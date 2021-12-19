@@ -67,12 +67,12 @@ pub struct WorldRenderPass {
 #[inject_nitrous_module]
 impl WorldRenderPass {
     pub fn new(
-        gpu: &mut Gpu,
-        interpreter: &mut Interpreter,
-        globals_buffer: &GlobalParametersBuffer,
+        terrain_buffer: &TerrainBuffer,
         atmosphere_buffer: &AtmosphereBuffer,
         stars_buffer: &StarsBuffer,
-        terrain_buffer: &TerrainBuffer,
+        globals_buffer: &GlobalParametersBuffer,
+        gpu: &mut Gpu,
+        interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
         trace!("WorldRenderPass::new");
 

@@ -38,10 +38,10 @@ pub struct UiRenderPass {
 
 impl UiRenderPass {
     pub fn new(
-        gpu: &mut Gpu,
-        global_data: &GlobalParametersBuffer,
         widget_buffer: &WidgetBuffer,
         world_render_pass: &WorldRenderPass,
+        global_data: &GlobalParametersBuffer,
+        gpu: &mut Gpu,
     ) -> Result<Arc<RwLock<Self>>> {
         trace!("UiRenderPass::new");
 

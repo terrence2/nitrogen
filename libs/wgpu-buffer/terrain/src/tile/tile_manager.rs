@@ -59,10 +59,17 @@ use catalog::{from_utf8_string, Catalog};
 use global_data::GlobalParametersBuffer;
 use gpu::{Gpu, UploadTracker};
 use rayon::prelude::*;
-use std::{fmt::Debug, sync::Arc};
+use std::{any::Any, fmt::Debug, sync::Arc};
 use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 
+#[derive(Clone, Copy, Debug)]
+pub struct TileSetHandle(usize);
+
 pub trait TileSet: Debug + Send + Sync + 'static {
+    // Allow downcast back into concrete types so we can stream data.
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+
     // Maintain runtime visibility tracking based on VisiblePatch notifications derived
     // from the global geometry calculations.
     fn begin_visibility_update(&mut self);
@@ -202,8 +209,18 @@ impl TileManager {
         })
     }
 
-    pub fn add_tile_set(&mut self, tile_set: Box<dyn TileSet>) {
+    pub fn add_tile_set(&mut self, tile_set: Box<dyn TileSet>) -> TileSetHandle {
+        let index = self.tile_sets.len();
         self.tile_sets.push(tile_set);
+        TileSetHandle(index)
+    }
+
+    pub fn tile_set(&self, handle: TileSetHandle) -> &dyn TileSet {
+        self.tile_sets[handle.0].as_ref()
+    }
+
+    pub fn tile_set_mut(&mut self, handle: TileSetHandle) -> &mut dyn TileSet {
+        self.tile_sets[handle.0].as_mut()
     }
 
     pub fn begin_visibility_update(&mut self) {
