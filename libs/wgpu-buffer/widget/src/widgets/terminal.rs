@@ -213,14 +213,13 @@ impl Terminal {
     fn on_down_pressed(&mut self) {
         if self.history_cursor < self.history.len() {
             self.history_cursor += 1;
+            self.edit.write().line_mut().select_all();
             if self.history_cursor < self.history.len() {
-                self.edit.write().line_mut().select_all();
                 self.edit
                     .write()
                     .line_mut()
                     .insert(&self.history[self.history_cursor]);
             } else {
-                self.edit.write().line_mut().select_all();
                 self.edit.write().line_mut().insert("");
             }
         }
