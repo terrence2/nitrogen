@@ -38,7 +38,6 @@ members = [
     # with running the simulated environment.
     "libs/sim/camera",
     "libs/sim/orrery",
-    "libs/sim/universe",
 
     # GPU buffer management and drawing pass implementations.
     "libs/wgpu-buffer/atlas",
