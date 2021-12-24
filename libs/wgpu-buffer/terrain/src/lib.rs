@@ -35,7 +35,7 @@ use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use shader_shared::Group;
 use std::{ops::Range, sync::Arc};
-use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
+use tokio::runtime::Runtime;
 
 #[allow(unused)]
 const DBG_COLORS_BY_LEVEL: [[f32; 3]; 19] = [
@@ -684,8 +684,7 @@ impl TerrainBuffer {
         &mut self,
         camera: &Camera,
         optimize_camera: &Camera,
-        catalog: Arc<AsyncRwLock<Catalog>>,
-        async_rt: &Runtime,
+        catalog: Arc<RwLock<Catalog>>,
     ) -> Result<()> {
         // Upload patches and capture visibility regions.
         self.visible_regions.clear();
@@ -700,8 +699,7 @@ impl TerrainBuffer {
         for visible_patch in &self.visible_regions {
             self.tile_manager.note_required(visible_patch);
         }
-        self.tile_manager
-            .finish_visibility_update(camera, catalog, async_rt);
+        self.tile_manager.finish_visibility_update(camera, catalog);
 
         Ok(())
     }

@@ -21,7 +21,6 @@ use catalog::{Catalog, DirectoryDrawer};
 use chrono::{Duration as ChronoDuration, TimeZone, Utc};
 use composite::CompositeRenderPass;
 use fullscreen::FullscreenBuffer;
-use futures::executor::block_on;
 use global_data::GlobalParametersBuffer;
 use gpu::{make_frame_graph, CpuDetailLevel, DetailLevelOpts, Gpu, GpuDetailLevel};
 use input::{InputController, InputSystem};
@@ -41,7 +40,7 @@ use std::{
 use structopt::StructOpt;
 use terminal_size::{terminal_size, Width};
 use terrain::TerrainBuffer;
-use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
+use tokio::runtime::Runtime;
 use ui::UiRenderPass;
 use widget::{
     Border, Color, EventMapper, Expander, Label, Labeled, PositionH, PositionV, VerticalBox,
@@ -373,7 +372,7 @@ fn simulation_main(os_window: OsWindow, input_controller: &mut InputController) 
     for (i, d) in opt.libdir.iter().enumerate() {
         catalog.add_drawer(DirectoryDrawer::from_directory(100 + i as i64, d)?)?;
     }
-    let catalog = Arc::new(AsyncRwLock::new(catalog));
+    let catalog = Arc::new(RwLock::new(catalog));
 
     input_controller.wait_for_window_configuration()?;
 
@@ -394,7 +393,7 @@ fn simulation_main(os_window: OsWindow, input_controller: &mut InputController) 
         cpu_detail,
         gpu_detail,
         &app_dirs,
-        &block_on(catalog.read()),
+        &catalog.read(),
         mapper,
         &mut window.write(),
         &mut interpreter,
@@ -444,7 +443,6 @@ fn simulation_main(os_window: OsWindow, input_controller: &mut InputController) 
                 arcball.read_recursive().camera(),
                 vis_camera,
                 catalog.clone(),
-                &async_rt,
             )?;
         }
 

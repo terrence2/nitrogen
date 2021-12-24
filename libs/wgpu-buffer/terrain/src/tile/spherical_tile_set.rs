@@ -22,9 +22,10 @@ use catalog::Catalog;
 use global_data::GlobalParametersBuffer;
 use gpu::wgpu::{BindGroup, CommandEncoder, ComputePass};
 use gpu::{Gpu, UploadTracker};
+use parking_lot::RwLock;
 use shader_shared::Group;
 use std::{any::Any, sync::Arc};
-use tokio::{runtime::Runtime, sync::RwLock};
+use tokio::runtime::Runtime;
 
 // TODO: tweak load depth of each type of tile... we don't need as much height data as normal data
 
@@ -91,13 +92,8 @@ impl TileSet for SphericalHeightTileSet {
         self.common.note_required(visible_patch)
     }
 
-    fn finish_visibility_update(
-        &mut self,
-        _camera: &Camera,
-        catalog: Arc<RwLock<Catalog>>,
-        async_rt: &Runtime,
-    ) {
-        self.common.finish_visibility_update(catalog, async_rt);
+    fn finish_visibility_update(&mut self, _camera: &Camera, catalog: Arc<RwLock<Catalog>>) {
+        self.common.finish_visibility_update(catalog);
     }
 
     fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) {
@@ -214,13 +210,8 @@ impl TileSet for SphericalColorTileSet {
         self.common.note_required(visible_patch)
     }
 
-    fn finish_visibility_update(
-        &mut self,
-        _camera: &Camera,
-        catalog: Arc<RwLock<Catalog>>,
-        async_rt: &Runtime,
-    ) {
-        self.common.finish_visibility_update(catalog, async_rt)
+    fn finish_visibility_update(&mut self, _camera: &Camera, catalog: Arc<RwLock<Catalog>>) {
+        self.common.finish_visibility_update(catalog)
     }
 
     fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) {
@@ -342,13 +333,8 @@ impl TileSet for SphericalNormalsTileSet {
         self.common.note_required(visible_patch);
     }
 
-    fn finish_visibility_update(
-        &mut self,
-        _camera: &Camera,
-        catalog: Arc<RwLock<Catalog>>,
-        async_rt: &Runtime,
-    ) {
-        self.common.finish_visibility_update(catalog, async_rt);
+    fn finish_visibility_update(&mut self, _camera: &Camera, catalog: Arc<RwLock<Catalog>>) {
+        self.common.finish_visibility_update(catalog);
     }
 
     fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) {

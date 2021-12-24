@@ -58,9 +58,10 @@ use camera::Camera;
 use catalog::{from_utf8_string, Catalog};
 use global_data::GlobalParametersBuffer;
 use gpu::{Gpu, UploadTracker};
+use parking_lot::RwLock;
 use rayon::prelude::*;
 use std::{any::Any, fmt::Debug, sync::Arc};
-use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
+use tokio::runtime::Runtime;
 
 #[derive(Clone, Copy, Debug)]
 pub struct TileSetHandle(usize);
@@ -74,12 +75,7 @@ pub trait TileSet: Debug + Send + Sync + 'static {
     // from the global geometry calculations.
     fn begin_visibility_update(&mut self);
     fn note_required(&mut self, visible_patch: &VisiblePatch);
-    fn finish_visibility_update(
-        &mut self,
-        camera: &Camera,
-        catalog: Arc<AsyncRwLock<Catalog>>,
-        async_rt: &Runtime,
-    );
+    fn finish_visibility_update(&mut self, camera: &Camera, catalog: Arc<RwLock<Catalog>>);
     fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker);
 
     // Indicate that the current index should be written to the debug file.
@@ -235,14 +231,9 @@ impl TileManager {
         }
     }
 
-    pub fn finish_visibility_update(
-        &mut self,
-        camera: &Camera,
-        catalog: Arc<AsyncRwLock<Catalog>>,
-        async_rt: &Runtime,
-    ) {
+    pub fn finish_visibility_update(&mut self, camera: &Camera, catalog: Arc<RwLock<Catalog>>) {
         for ts in self.tile_sets.iter_mut() {
-            ts.finish_visibility_update(camera, catalog.clone(), async_rt);
+            ts.finish_visibility_update(camera, catalog.clone());
         }
     }
 
