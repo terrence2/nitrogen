@@ -3036,7 +3036,6 @@ dependencies = [
  "shader_shared",
  "smallvec",
  "static_assertions",
- "tokio",
  "wgpu",
  "zerocopy",
 ]

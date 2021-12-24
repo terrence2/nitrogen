@@ -35,7 +35,6 @@ use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use shader_shared::Group;
 use std::{ops::Range, sync::Arc};
-use tokio::runtime::Runtime;
 
 #[allow(unused)]
 const DBG_COLORS_BY_LEVEL: [[f32; 3]; 19] = [
@@ -705,14 +704,9 @@ impl TerrainBuffer {
     }
 
     // Push CPU state to GPU
-    pub fn ensure_uploaded(
-        &mut self,
-        async_rt: &Runtime,
-        gpu: &mut Gpu,
-        tracker: &mut UploadTracker,
-    ) -> Result<()> {
+    pub fn ensure_uploaded(&mut self, gpu: &mut Gpu, tracker: &mut UploadTracker) -> Result<()> {
         self.patch_manager.ensure_uploaded(gpu, tracker);
-        self.tile_manager.ensure_uploaded(async_rt, gpu, tracker);
+        self.tile_manager.ensure_uploaded(gpu, tracker);
         Ok(())
     }
 

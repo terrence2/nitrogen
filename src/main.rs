@@ -469,7 +469,7 @@ fn render_main(
             .ensure_uploaded(&gpu.read(), &mut tracker)?;
         frame_graph
             .terrain_mut()
-            .ensure_uploaded(&async_rt, &mut gpu.write(), &mut tracker)?;
+            .ensure_uploaded(&mut gpu.write(), &mut tracker)?;
         frame_graph.widgets_mut().ensure_uploaded(
             now,
             &async_rt,

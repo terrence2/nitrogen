@@ -46,7 +46,6 @@ use std::{
     sync::Arc,
     time::Instant,
 };
-use tokio::runtime::Runtime;
 use zerocopy::LayoutVerified;
 
 // FIXME: this should be system dependent and configurable
@@ -457,11 +456,7 @@ impl SphericalTileSetCommon {
         })
     }
 
-    pub(crate) fn capture_and_save_index_snapshot(
-        &mut self,
-        async_rt: &Runtime,
-        gpu: &mut Gpu,
-    ) -> Result<()> {
+    pub(crate) fn capture_and_save_index_snapshot(&mut self, gpu: &mut Gpu) -> Result<()> {
         fn write_image(extent: wgpu::Extent3d, _: wgpu::TextureFormat, data: Vec<u8>) {
             let pix_cnt = extent.width as usize * extent.height as usize;
             let img_len = pix_cnt * 3;
@@ -487,7 +482,6 @@ impl SphericalTileSetCommon {
             &self.index_texture,
             self.index_texture_extent,
             self.index_texture_format,
-            async_rt,
             gpu,
             Box::new(write_image),
         )
@@ -775,8 +769,8 @@ impl SphericalTileSetCommon {
         );
     }
 
-    pub(crate) fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut Gpu) {
-        self.capture_and_save_index_snapshot(async_rt, gpu).unwrap();
+    pub(crate) fn snapshot_index(&mut self, gpu: &mut Gpu) {
+        self.capture_and_save_index_snapshot(gpu).unwrap();
     }
 
     pub(crate) fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) {

@@ -25,7 +25,6 @@ use gpu::{Gpu, UploadTracker};
 use parking_lot::RwLock;
 use shader_shared::Group;
 use std::{any::Any, sync::Arc};
-use tokio::runtime::Runtime;
 
 // TODO: tweak load depth of each type of tile... we don't need as much height data as normal data
 
@@ -100,8 +99,8 @@ impl TileSet for SphericalHeightTileSet {
         self.common.ensure_uploaded(gpu, tracker);
     }
 
-    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut Gpu) {
-        self.common.snapshot_index(async_rt, gpu)
+    fn snapshot_index(&mut self, gpu: &mut Gpu) {
+        self.common.snapshot_index(gpu)
     }
 
     fn paint_atlas_index(&self, encoder: &mut CommandEncoder) {
@@ -218,8 +217,8 @@ impl TileSet for SphericalColorTileSet {
         self.common.ensure_uploaded(gpu, tracker);
     }
 
-    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut Gpu) {
-        self.common.snapshot_index(async_rt, gpu)
+    fn snapshot_index(&mut self, gpu: &mut Gpu) {
+        self.common.snapshot_index(gpu)
     }
 
     fn paint_atlas_index(&self, encoder: &mut CommandEncoder) {
@@ -341,8 +340,8 @@ impl TileSet for SphericalNormalsTileSet {
         self.common.ensure_uploaded(gpu, tracker);
     }
 
-    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut Gpu) {
-        self.common.snapshot_index(async_rt, gpu)
+    fn snapshot_index(&mut self, gpu: &mut Gpu) {
+        self.common.snapshot_index(gpu)
     }
 
     fn paint_atlas_index(&self, encoder: &mut CommandEncoder) {
