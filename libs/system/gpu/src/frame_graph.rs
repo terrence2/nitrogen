@@ -126,10 +126,11 @@ macro_rules! make_frame_graph {
                     }
                 )*
 
-                pub fn run(&mut self, gpu: &mut $crate::Gpu, tracker: $crate::UploadTracker) -> ::anyhow::Result<bool> {
+                pub fn run(&mut self, gpu: std::sync::Arc<::parking_lot::RwLock<$crate::Gpu>>, tracker: $crate::UploadTracker) -> ::anyhow::Result<bool> {
                     $(
                         let $buffer_name = &self.$buffer_name.read();
                     )*
+                    let mut gpu = gpu.write();
 
                     let mut encoder = gpu
                         .device()
@@ -310,7 +311,7 @@ mod test {
         for _ in 0..3 {
             let mut upload_tracker = Default::default();
             frame_graph.test_buffer_mut().update(&mut upload_tracker);
-            let need_rebuild = frame_graph.run(&mut gpu.write(), upload_tracker)?;
+            let need_rebuild = frame_graph.run(gpu.clone(), upload_tracker)?;
             if need_rebuild {
                 gpu.write()
                     .on_display_config_changed(window.read().config())?;

@@ -54,7 +54,7 @@ use log::trace;
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
-use std::{borrow::Borrow, mem, num::NonZeroU64, ops::Range, sync::Arc, time::Instant};
+use std::{borrow::Borrow, mem, num::NonZeroU64, ops::Range, path::Path, sync::Arc, time::Instant};
 use tokio::runtime::Runtime;
 use window::{
     size::{AbsSize, Size},
@@ -120,6 +120,7 @@ impl WidgetBuffer {
         mapper: Arc<RwLock<EventMapper>>,
         gpu: &mut Gpu,
         interpreter: &mut Interpreter,
+        state_dir: &Path,
     ) -> Result<Arc<RwLock<Self>>> {
         trace!("WidgetBuffer::new");
 
@@ -204,7 +205,7 @@ impl WidgetBuffer {
                 });
 
         let root = FloatBox::new();
-        let terminal = Terminal::new(&paint_context.font_context)
+        let terminal = Terminal::new(&paint_context.font_context, state_dir)?
             .with_visible(false)
             .wrapped();
         root.write().add_child("mapper", mapper);
@@ -326,8 +327,8 @@ impl WidgetBuffer {
         &mut self,
         now: Instant,
         events: &[GenericEvent],
-        interpreter: Interpreter,
         win: &Window,
+        interpreter: Interpreter,
     ) -> Result<()> {
         for event in events {
             if let GenericEvent::KeyboardKey {
@@ -380,8 +381,8 @@ impl WidgetBuffer {
         &mut self,
         now: Instant,
         async_rt: &Runtime,
-        win: &Window,
         gpu: &mut Gpu,
+        win: &Window,
         tracker: &mut UploadTracker,
     ) -> Result<()> {
         // Draw into the paint context.
@@ -477,6 +478,7 @@ impl WidgetBuffer {
 mod test {
     use super::*;
     use gpu::TestResources;
+    use std::env::current_dir;
 
     #[test]
     fn test_label_widget() -> Result<()> {
@@ -489,7 +491,12 @@ mod test {
         } = Gpu::for_test_unix()?;
         let mapper = EventMapper::new(&mut interpreter);
 
-        let widgets = WidgetBuffer::new(mapper, &mut gpu.write(), &mut interpreter)?;
+        let widgets = WidgetBuffer::new(
+            mapper,
+            &mut gpu.write(),
+            &mut interpreter,
+            &(current_dir()?.join("__dump__")),
+        )?;
         let label = Label::new(
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\
             สิบสองกษัตริย์ก่อนหน้าแลถัดไป       สององค์ไซร้โง่เขลาเบาปัญญา\
@@ -509,14 +516,14 @@ mod test {
 
         widgets
             .write()
-            .track_state_changes(Instant::now(), &[], interpreter, &window.read())?;
+            .track_state_changes(Instant::now(), &[], &window.read(), interpreter)?;
 
         let mut tracker = Default::default();
         widgets.write().ensure_uploaded(
             Instant::now(),
             &async_rt,
-            &window.read(),
             &mut gpu.write(),
+            &window.read(),
             &mut tracker,
         )?;
 

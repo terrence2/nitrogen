@@ -38,7 +38,6 @@ members = [
     # with running the simulated environment.
     "libs/sim/camera",
     "libs/sim/orrery",
-    "libs/sim/universe",
 
     # GPU buffer management and drawing pass implementations.
     "libs/wgpu-buffer/atlas",
@@ -67,6 +66,7 @@ log = "^ 0.4"
 nalgebra = "^ 0.29"
 parking_lot = "^ 0.11"
 paste = "^ 1"
+platform-dirs = "^ 0.3"
 rayon = "= 1.4.0"
 structopt = "^ 0.3"
 terminal_size = "^ 0.1"

@@ -20,7 +20,7 @@ pub mod tile;
 use crate::{patch::PatchManager, tile::TileManager};
 pub use crate::{
     patch::{PatchWinding, TerrainVertex},
-    tile::TileSet,
+    tile::{TileSet, TileSetHandle},
 };
 
 use absolute_unit::{Length, Meters};
@@ -829,8 +829,16 @@ impl TerrainBuffer {
         Ok(cpass)
     }
 
-    pub fn add_tile_set(&mut self, tile_set: Box<dyn TileSet>) {
-        self.tile_manager.add_tile_set(tile_set);
+    pub fn add_tile_set(&mut self, tile_set: Box<dyn TileSet>) -> TileSetHandle {
+        self.tile_manager.add_tile_set(tile_set)
+    }
+
+    pub fn tile_set(&self, handle: TileSetHandle) -> &dyn TileSet {
+        self.tile_manager.tile_set(handle)
+    }
+
+    pub fn tile_set_mut(&mut self, handle: TileSetHandle) -> &mut dyn TileSet {
+        self.tile_manager.tile_set_mut(handle)
     }
 
     pub fn accumulate_common_bind_group_layout(&self) -> &wgpu::BindGroupLayout {

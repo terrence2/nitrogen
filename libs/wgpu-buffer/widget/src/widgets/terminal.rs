@@ -20,7 +20,7 @@ use crate::{
     widget::Widget,
     LineEdit, TextEdit, VerticalBox,
 };
-use anyhow::Result;
+use anyhow::{Context, Result};
 use gpu::Gpu;
 use input::{ElementState, GenericEvent, VirtualKeyCode};
 use nitrous::{
@@ -28,7 +28,14 @@ use nitrous::{
     Interpreter, Module, Script, Value,
 };
 use parking_lot::RwLock;
-use std::{sync::Arc, time::Instant};
+use std::io::Read;
+use std::{
+    fs::{File, OpenOptions},
+    io::{Seek, SeekFrom, Write},
+    path::Path,
+    sync::Arc,
+    time::Instant,
+};
 use window::{
     size::{AbsSize, Size},
     Window,
@@ -41,13 +48,16 @@ pub struct Terminal {
     output: Arc<RwLock<TextEdit>>,
     container: Arc<RwLock<VerticalBox>>,
     visible: bool,
+    history: Vec<String>,
+    history_file: Option<File>,
+    history_cursor: usize,
 }
 
 impl Terminal {
     const WIDTH: Size = Size::from_percent(100.);
     const HEIGHT: Size = Size::from_percent(40.);
 
-    pub fn new(font_context: &FontContext) -> Self {
+    pub fn new(font_context: &FontContext, state_dir: &Path) -> Result<Self> {
         let output = TextEdit::new("")
             .with_default_font(font_context.font_id_for_name("dejavu-mono"))
             .with_default_color(Color::Green)
@@ -66,12 +76,63 @@ impl Terminal {
             .with_overridden_extent(Extent::new(Self::WIDTH, Self::HEIGHT))
             .with_fill(0)
             .wrapped();
-        Self {
+
+        // Load command history from state dir
+        let mut history_path = state_dir.to_owned();
+        history_path.push("command_history.txt");
+        let mut history_file = OpenOptions::new()
+            .read(true)
+            .append(true)
+            .truncate(false)
+            .create(true)
+            .open(&history_path)
+            .ok();
+
+        let history = if let Some(fp) = history_file.as_mut() {
+            fp.seek(SeekFrom::Start(0))?;
+            let mut content = String::new();
+            fp.read_to_string(&mut content)
+                .with_context(|| "corrupted history")?;
+            content.lines().map(|s| s.to_owned()).collect()
+        } else {
+            vec![]
+        };
+        let history_cursor = history.len();
+
+        Ok(Self {
             edit,
             output,
             container,
             visible: true,
+            history,
+            history_file,
+            history_cursor,
+        })
+    }
+
+    fn add_command_to_history(&mut self, command: &str) -> Result<()> {
+        // Echo the command into the output buffer as a literal.
+        self.output
+            .write()
+            .append_line(&("> ".to_owned() + command));
+
+        // And print to the console in case we need to copy the transaction.
+        println!("{}", command);
+
+        // And save it in our local history so we don't have to re-type it
+        self.history.push(command.to_owned());
+
+        // And stream it to our history file
+        if let Some(fp) = self.history_file.as_mut() {
+            fp.write(format!("{}\n", command).as_bytes())
+                .with_context(|| "recording history")?;
+            fp.sync_data()?;
         }
+
+        // Reset the history cursor
+        self.history_cursor = self.history.len();
+
+        Ok(())
     }
 
     pub fn with_visible(mut self, visible: bool) -> Self {
@@ -91,7 +152,7 @@ impl Terminal {
         self.output.write().append_line(line);
     }
 
-    pub fn try_completion(&self, mut partial: Script, interpreter: Interpreter) -> Option<String> {
+    fn try_completion(&self, mut partial: Script, interpreter: Interpreter) -> Option<String> {
         if partial.statements().len() != 1 {
             return None;
         }
@@ -126,6 +187,74 @@ impl Terminal {
             }
         }
         None
+    }
+
+    fn on_tab_pressed(&mut self, interpreter: Interpreter) {
+        let incomplete = self.edit.read().line().flatten();
+        if let Ok(partial) = Script::compile(&incomplete) {
+            if let Some(full) = self.try_completion(partial, interpreter) {
+                self.edit.write().line_mut().select_all();
+                self.edit.write().line_mut().insert(&full);
+            }
+        }
+    }
+
+    fn on_up_pressed(&mut self) {
+        if self.history_cursor > 0 {
+            self.history_cursor -= 1;
+            self.edit.write().line_mut().select_all();
+            self.edit
+                .write()
+                .line_mut()
+                .insert(&self.history[self.history_cursor]);
+        }
+    }
+
+    fn on_down_pressed(&mut self) {
+        if self.history_cursor < self.history.len() {
+            self.history_cursor += 1;
+            self.edit.write().line_mut().select_all();
+            if self.history_cursor < self.history.len() {
+                self.edit
+                    .write()
+                    .line_mut()
+                    .insert(&self.history[self.history_cursor]);
+            } else {
+                self.edit.write().line_mut().insert("");
+            }
+        }
+    }
+
+    fn on_enter_pressed(&mut self, mut interpreter: Interpreter) -> Result<()> {
+        let command = self.edit.read().line().flatten();
+        self.edit.write().line_mut().select_all();
+        self.edit.write().line_mut().delete();
+
+        self.add_command_to_history(&command)?;
+
+        let output = self.output.clone();
+        rayon::spawn(move || match interpreter.interpret_once(&command) {
+            Ok(value) => {
+                let s = match value {
+                    Value::String(s) => s,
+                    v => format!("{}", v),
+                };
+                for line in s.lines() {
+                    output.write().append_line(line);
+                    println!("{}", line);
+                }
+            }
+            Err(err) => {
+                println!("failed to execute '{}'", command);
+                println!("  Error: {:?}", err);
+                output
+                    .write()
+                    .append_line(&format!("failed to execute '{}'", command));
+                output.write().append_line(&format!("  Error: {:?}", err));
+            }
+        });
+
+        Ok(())
     }
 }
 
@@ -173,7 +302,7 @@ impl Widget for Terminal {
         event: &GenericEvent,
         focus: &str,
         cursor_position: Position<AbsSize>,
-        mut interpreter: Interpreter,
+        interpreter: Interpreter,
     ) -> Result<()> {
         // FIXME: don't hard-code the name
         if focus != "terminal" {
@@ -204,50 +333,18 @@ impl Widget for Terminal {
             }
 
             if *press_state == ElementState::Pressed {
-                match virtual_keycode {
-                    VirtualKeyCode::Tab => {
-                        let incomplete = self.edit.read().line().flatten();
-                        if let Ok(partial) = Script::compile(&incomplete) {
-                            if let Some(full) = self.try_completion(partial, interpreter) {
-                                self.edit.write().line_mut().select_all();
-                                self.edit.write().line_mut().insert(&full);
-                            }
-                        }
+                match (modifiers_state.ctrl(), virtual_keycode) {
+                    (false, VirtualKeyCode::Tab) => {
+                        self.on_tab_pressed(interpreter);
                     }
-                    VirtualKeyCode::Return | VirtualKeyCode::NumpadEnter => {
-                        let command = self.edit.read().line().flatten();
-                        self.edit.write().line_mut().select_all();
-                        self.edit.write().line_mut().delete();
-
-                        // Echo the command into the output buffer as a literal.
-                        self.output
-                            .write()
-                            .append_line(&("> ".to_owned() + &command));
-
-                        // And print to the console in case we need to copy the transaction.
-                        println!("{}", command);
-
-                        let output = self.output.clone();
-                        rayon::spawn(move || match interpreter.interpret_once(&command) {
-                            Ok(value) => {
-                                let s = match value {
-                                    Value::String(s) => s,
-                                    v => format!("{}", v),
-                                };
-                                for line in s.lines() {
-                                    output.write().append_line(line);
-                                    println!("{}", line);
-                                }
-                            }
-                            Err(err) => {
-                                println!("failed to execute '{}'", command);
-                                println!("  Error: {:?}", err);
-                                output
-                                    .write()
-                                    .append_line(&format!("failed to execute '{}'", command));
-                                output.write().append_line(&format!("  Error: {:?}", err));
-                            }
-                        });
+                    (false, VirtualKeyCode::Up) => {
+                        self.on_up_pressed();
+                    }
+                    (false, VirtualKeyCode::Down) => {
+                        self.on_down_pressed();
+                    }
+                    (false, VirtualKeyCode::Return | VirtualKeyCode::NumpadEnter) => {
+                        self.on_enter_pressed(interpreter)?;
                     }
                     _ => {}
                 }

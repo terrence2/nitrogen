@@ -1,6 +1,6 @@
 [package]
 name = "world"
-description = "Render all offscreen, using the various buffers."
+description = "Pull together all of the main planetary related buffers with a mega-shader."
 version = "0.0.0"
 authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 edition = "2021"

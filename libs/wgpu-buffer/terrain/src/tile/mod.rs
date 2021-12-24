@@ -23,7 +23,7 @@ mod tile_manager;
 pub(crate) use layer_pack::LayerPack;
 pub use layer_pack::{LayerPackBuilder, LayerPackHeader, LayerPackIndexItem};
 pub(crate) use tile_manager::TileManager;
-pub use tile_manager::TileSet;
+pub use tile_manager::{TileSet, TileSetHandle};
 
 use absolute_unit::{arcseconds, meters, Angle, ArcSeconds};
 use anyhow::{bail, Result};

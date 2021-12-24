@@ -71,12 +71,15 @@ impl Animation {
     }
 
     pub fn animate(&mut self, now: &Instant) {
-        assert!(*now >= self.start, "time moved backwards");
         if !self.is_active() {
             return;
         }
 
-        let elapsed = *now - self.start;
+        let elapsed = if *now >= self.start {
+            *now - self.start
+        } else {
+            Duration::from_micros(0)
+        };
         if elapsed > self.template.duration {
             self.value = if self.forward {
                 self.template.range.end

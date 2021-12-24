@@ -44,7 +44,7 @@ pub struct DisplayOpts {
 
     /// Select how we output
     #[structopt(short, long)]
-    mode: Option<DisplayMode>,
+    display_mode: Option<DisplayMode>,
 }
 
 /// Fullscreen or windowed and how to do that.
@@ -129,7 +129,7 @@ pub struct DisplayConfig {
 impl DisplayConfig {
     pub fn discover(opt: &DisplayOpts, os_window: &OsWindow) -> Self {
         // FIXME: use a better default display mode
-        let display_mode = opt.mode.unwrap_or(DisplayMode::ResizableWindowed);
+        let display_mode = opt.display_mode.unwrap_or(DisplayMode::ResizableWindowed);
 
         // if the resiable window mode is selected, use it as extent
         let base_render_extent = if display_mode == DisplayMode::ResizableWindowed {

@@ -23,7 +23,8 @@ use anyhow::{bail, ensure, Result};
 use futures::executor::block_on;
 use log::debug;
 use parking_lot::RwLock;
-use std::{borrow::Borrow, collections::HashMap, fmt::Debug, sync::Arc};
+use std::{borrow::Borrow, collections::HashMap, fmt::Debug, path::PathBuf, sync::Arc};
+use structopt::StructOpt;
 
 // Note: manually passing the module until we have arbitrary self.
 pub trait Module: Debug + Send + Sync + 'static {
@@ -34,6 +35,45 @@ pub trait Module: Debug + Send + Sync + 'static {
     fn names(&self) -> Vec<&str>;
 }
 
+#[derive(Debug, StructOpt)]
+pub struct StartupOpts {
+    /// Run a command after startup
+    #[structopt(short = "C", long)]
+    command: Option<String>,
+
+    /// Run given file after startup
+    #[structopt(short = "x", long)]
+    execute: Option<PathBuf>,
+}
+
+impl StartupOpts {
+    pub fn on_startup(&self, interpreter: &mut Interpreter) -> Result<()> {
+        if let Ok(code) = std::fs::read_to_string("autoexec.n2o") {
+            let rv = interpreter.interpret_once(&code);
+            println!("autoexec.n2o completed: {:?}", rv);
+        }
+
+        if let Some(command) = self.command.as_ref() {
+            let rv = interpreter.interpret_once(command)?;
+            println!("startup commmand completed: {}", rv);
+        }
+
+        if let Some(exec_file) = self.execute.as_ref() {
+            match std::fs::read_to_string(exec_file) {
+                Ok(code) => {
+                    interpreter.interpret_async(code)?;
+                }
+                Err(e) => {
+                    println!("Read file for {:?}: {}", exec_file, e);
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// Evaluate Nitrous (n2o) scripts.
 #[derive(Debug, Clone)]
 pub struct Interpreter {
     locals: Arc<RwLock<LocalNamespace>>,

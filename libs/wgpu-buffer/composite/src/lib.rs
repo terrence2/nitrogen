@@ -28,10 +28,10 @@ pub struct CompositeRenderPass {
 
 impl CompositeRenderPass {
     pub fn new(
-        gpu: &mut Gpu,
-        globals: &GlobalParametersBuffer,
-        world: &WorldRenderPass,
         ui: &UiRenderPass,
+        world: &WorldRenderPass,
+        globals: &GlobalParametersBuffer,
+        gpu: &mut Gpu,
     ) -> Result<Self> {
         trace!("CompositeRenderPass::new");
 
