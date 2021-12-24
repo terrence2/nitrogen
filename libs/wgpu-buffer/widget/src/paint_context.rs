@@ -24,7 +24,6 @@ use font_common::FontInterface;
 use gpu::{Gpu, UploadTracker};
 use parking_lot::RwLock;
 use std::{borrow::Borrow, sync::Arc};
-use tokio::runtime::Runtime;
 use window::{
     size::{AbsSize, LeftBound, RelSize},
     Window,
@@ -115,13 +114,8 @@ impl PaintContext {
         )
     }
 
-    pub fn make_upload_buffer(
-        &mut self,
-        gpu: &mut Gpu,
-        async_rt: &Runtime,
-        tracker: &mut UploadTracker,
-    ) -> Result<()> {
-        self.font_context.make_upload_buffer(gpu, async_rt, tracker)
+    pub fn make_upload_buffer(&mut self, gpu: &mut Gpu, tracker: &mut UploadTracker) -> Result<()> {
+        self.font_context.make_upload_buffer(gpu, tracker)
     }
 
     pub fn maintain_font_atlas(

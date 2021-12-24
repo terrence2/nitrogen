@@ -18,7 +18,6 @@ use gpu::{texture_format_size, ArcTextureCopyView, Gpu, OwnedBufferCopyView, Upl
 use image::{ImageBuffer, Luma, Pixel, Rgba};
 use log::debug;
 use std::{marker::PhantomData, mem, path::PathBuf, sync::Arc};
-use tokio::runtime::Runtime;
 use wgpu::Origin3d;
 use zerocopy::{AsBytes, FromBytes};
 
@@ -600,12 +599,7 @@ where
 
     /// Upload the current contents to the GPU. Note that this is non-destructive. If needed,
     /// the builder can accumulate more textures and upload again later.
-    pub fn make_upload_buffer(
-        &mut self,
-        gpu: &mut Gpu,
-        async_rt: &Runtime,
-        tracker: &mut UploadTracker,
-    ) -> Result<()> {
+    pub fn make_upload_buffer(&mut self, gpu: &mut Gpu, tracker: &mut UploadTracker) -> Result<()> {
         // If we started a texture upload last frame, replace the prior texture with the new.
         // Any glyphs in the new region will have an oob Frame for one frame, but that's better
         // than having the entire glyph texture be noise for one frame.
@@ -765,7 +759,6 @@ where
                     depth: 1,
                 },
                 self.format,
-                async_rt,
                 gpu,
                 Box::new(write_img),
             )?;
@@ -816,12 +809,11 @@ where
     pub fn finish(
         mut self,
         gpu: &mut Gpu,
-        async_rt: &Runtime,
         tracker: &mut UploadTracker,
     ) -> Result<(Arc<wgpu::Texture>, wgpu::TextureView, wgpu::Sampler)> {
         // Note: we need to crank make_upload_buffer twice because of the way
         // we defer moving to a new texture to ensure in-flight uploads happen.
-        self.make_upload_buffer(gpu, async_rt, tracker)?;
+        self.make_upload_buffer(gpu, tracker)?;
 
         let mut encoder = gpu
             .device()
@@ -832,7 +824,7 @@ where
         self.maintain_gpu_resources(&mut encoder)?;
         gpu.queue_mut().submit(vec![encoder.finish()]);
 
-        self.make_upload_buffer(gpu, async_rt, tracker)?;
+        self.make_upload_buffer(gpu, tracker)?;
 
         Ok((self.texture, self.texture_view, self.sampler))
     }
@@ -896,7 +888,7 @@ mod test {
     #[cfg(unix)]
     #[test]
     fn test_random_packing() -> Result<()> {
-        let TestResources { async_rt, gpu, .. } = Gpu::for_test_unix()?;
+        let TestResources { gpu, .. } = Gpu::for_test_unix()?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "random_packing",
@@ -937,13 +929,12 @@ mod test {
             depth: 1,
         };
         let (texture, _view, _sampler) =
-            packer.finish(&mut gpu.write(), &async_rt, &mut Default::default())?;
+            packer.finish(&mut gpu.write(), &mut Default::default())?;
         if env::var("DUMP") == Ok("1".to_owned()) {
             Gpu::dump_texture(
                 &texture,
                 extent,
                 wgpu::TextureFormat::Rgba8Unorm,
-                &async_rt,
                 &mut gpu.write(),
                 Box::new(move |extent, _fmt, data| {
                     let buffer = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_vec(
@@ -957,7 +948,7 @@ mod test {
                         .unwrap();
                 }),
             )?;
-            // Shutting down the async_rt kills all tasks, so give ourself a chance to run.
+            // Shutting down tokio kills all tasks, so give ourself a chance to run.
             std::thread::sleep(Duration::from_secs(1));
         }
         Ok(())
@@ -966,7 +957,7 @@ mod test {
     #[cfg(unix)]
     #[test]
     fn test_finish() -> Result<()> {
-        let TestResources { async_rt, gpu, .. } = Gpu::for_test_unix()?;
+        let TestResources { gpu, .. } = Gpu::for_test_unix()?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "test_finish",
@@ -981,14 +972,14 @@ mod test {
             &gpu.read(),
         )?;
 
-        let _ = packer.finish(&mut gpu.write(), &async_rt, &mut Default::default());
+        let _ = packer.finish(&mut gpu.write(), &mut Default::default());
         Ok(())
     }
 
     #[cfg(unix)]
     #[test]
     fn test_grayscale() -> Result<()> {
-        let TestResources { async_rt, gpu, .. } = Gpu::for_test_unix()?;
+        let TestResources { gpu, .. } = Gpu::for_test_unix()?;
 
         let mut packer = AtlasPacker::<Luma<u8>>::new(
             "test_grayscale",
@@ -1003,14 +994,14 @@ mod test {
             &gpu.read(),
         )?;
 
-        let _ = packer.finish(&mut gpu.write(), &async_rt, &mut Default::default());
+        let _ = packer.finish(&mut gpu.write(), &mut Default::default());
         Ok(())
     }
 
     #[cfg(unix)]
     #[test]
     fn test_incremental_upload() -> Result<()> {
-        let TestResources { async_rt, gpu, .. } = Gpu::for_test_unix()?;
+        let TestResources { gpu, .. } = Gpu::for_test_unix()?;
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "test_incremental",
@@ -1026,7 +1017,7 @@ mod test {
             &RgbaImage::from_pixel(254, 254, *Rgba::from_slice(&[255, 0, 0, 255])),
             &gpu.read(),
         )?;
-        packer.make_upload_buffer(&mut gpu.write(), &async_rt, &mut Default::default())?;
+        packer.make_upload_buffer(&mut gpu.write(), &mut Default::default())?;
         let _ = packer.texture();
 
         // Grow
@@ -1034,7 +1025,7 @@ mod test {
             &RgbaImage::from_pixel(24, 254, *Rgba::from_slice(&[255, 0, 0, 255])),
             &gpu.read(),
         )?;
-        packer.make_upload_buffer(&mut gpu.write(), &async_rt, &mut Default::default())?;
+        packer.make_upload_buffer(&mut gpu.write(), &mut Default::default())?;
         let _ = packer.texture();
 
         // Reuse
@@ -1042,7 +1033,7 @@ mod test {
             &RgbaImage::from_pixel(24, 254, *Rgba::from_slice(&[255, 0, 0, 255])),
             &gpu.read(),
         )?;
-        packer.make_upload_buffer(&mut gpu.write(), &async_rt, &mut Default::default())?;
+        packer.make_upload_buffer(&mut gpu.write(), &mut Default::default())?;
         let _ = packer.texture();
         Ok(())
     }

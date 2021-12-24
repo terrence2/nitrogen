@@ -55,7 +55,6 @@ use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use std::{borrow::Borrow, mem, num::NonZeroU64, ops::Range, path::Path, sync::Arc, time::Instant};
-use tokio::runtime::Runtime;
 use window::{
     size::{AbsSize, Size},
     Window,
@@ -380,7 +379,6 @@ impl WidgetBuffer {
     pub fn ensure_uploaded(
         &mut self,
         now: Instant,
-        async_rt: &Runtime,
         gpu: &mut Gpu,
         win: &Window,
         tracker: &mut UploadTracker,
@@ -392,8 +390,7 @@ impl WidgetBuffer {
             .upload(now, win, gpu, &mut self.paint_context)?;
 
         // Upload: copy all of the CPU paint context to the GPU buffers we maintain.
-        self.paint_context
-            .make_upload_buffer(gpu, async_rt, tracker)?;
+        self.paint_context.make_upload_buffer(gpu, tracker)?;
 
         if !self.paint_context.widget_info_pool.is_empty() {
             ensure!(self.paint_context.widget_info_pool.len() <= Self::MAX_WIDGETS);
@@ -483,7 +480,6 @@ mod test {
     #[test]
     fn test_label_widget() -> Result<()> {
         let TestResources {
-            async_rt,
             window,
             gpu,
             mut interpreter,
@@ -521,7 +517,6 @@ mod test {
         let mut tracker = Default::default();
         widgets.write().ensure_uploaded(
             Instant::now(),
-            &async_rt,
             &mut gpu.write(),
             &window.read(),
             &mut tracker,

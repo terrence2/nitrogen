@@ -162,7 +162,6 @@ dependencies = [
  "image",
  "log",
  "rand",
- "tokio",
  "wgpu",
  "zerocopy",
 ]
@@ -2060,7 +2059,6 @@ dependencies = [
  "structopt",
  "terminal_size",
  "terrain",
- "tokio",
  "ui",
  "widget",
  "window",
@@ -3542,7 +3540,6 @@ dependencies = [
  "rayon",
  "smallvec",
  "strsim 0.8.0",
- "tokio",
  "unicase",
  "wgpu",
  "window",

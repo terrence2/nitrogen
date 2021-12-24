@@ -69,7 +69,6 @@ platform-dirs = "^ 0.3"
 rayon = "= 1.4.0"
 structopt = "^ 0.3"
 terminal_size = "^ 0.1"
-tokio = { version = "^ 1.0", features = ["rt-multi-thread", "macros", "io-util", "fs", "sync"] }
 absolute_unit = { path = "libs/util/absolute_unit" }
 animate = { path = "libs/util/animate" }
 atmosphere = { path = "libs/wgpu-buffer/atmosphere" }

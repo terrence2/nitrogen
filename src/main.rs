@@ -40,7 +40,6 @@ use std::{
 use structopt::StructOpt;
 use terminal_size::{terminal_size, Width};
 use terrain::TerrainBuffer;
-use tokio::runtime::Runtime;
 use ui::UiRenderPass;
 use widget::{
     Border, Color, EventMapper, Expander, Label, Labeled, PositionH, PositionV, VerticalBox,
@@ -383,7 +382,6 @@ fn simulation_main(os_window: OsWindow, input_controller: &mut InputController) 
         display_config,
         &mut interpreter,
     )?;
-    let async_rt = Arc::new(Runtime::new()?);
     let _legion = World::default();
 
     ///////////////////////////////////////////////////////////
@@ -396,11 +394,10 @@ fn simulation_main(os_window: OsWindow, input_controller: &mut InputController) 
         &mut window.write(),
         &mut interpreter,
     )?;
-    let _async_rt = async_rt;
     let _window = window.clone();
     let _frame_graph = frame_graph.clone();
     let render_handle = std::thread::spawn(move || {
-        render_main(_async_rt, _window, _gpu, _frame_graph).unwrap();
+        render_main(_window, _gpu, _frame_graph).unwrap();
     });
 
     let orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0), &mut interpreter)?;
@@ -456,7 +453,6 @@ fn simulation_main(os_window: OsWindow, input_controller: &mut InputController) 
 }
 
 fn render_main(
-    async_rt: Arc<Runtime>,
     window: Arc<RwLock<Window>>,
     gpu: Arc<RwLock<Gpu>>,
     mut frame_graph: FrameGraph,
@@ -472,7 +468,6 @@ fn render_main(
             .ensure_uploaded(&mut gpu.write(), &mut tracker)?;
         frame_graph.widgets_mut().ensure_uploaded(
             now,
-            &async_rt,
             &mut gpu.write(),
             &window.read(),
             &mut tracker,
