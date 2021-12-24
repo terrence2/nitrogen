@@ -60,8 +60,6 @@ struct Opt {
     #[structopt(short, long)]
     libdir: Vec<PathBuf>,
 
-    // #[structopt(flatten)]
-    // catalog_opts: CatalogOpts,
     #[structopt(flatten)]
     detail_opts: DetailLevelOpts,
 
@@ -398,7 +396,7 @@ fn simulation_main(os_window: OsWindow, input_controller: &mut InputController) 
         &mut window.write(),
         &mut interpreter,
     )?;
-    let _async_rt = async_rt.clone();
+    let _async_rt = async_rt;
     let _window = window.clone();
     let _frame_graph = frame_graph.clone();
     let render_handle = std::thread::spawn(move || {
