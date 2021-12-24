@@ -32,10 +32,11 @@ use absolute_unit::arcseconds;
 use anyhow::Result;
 use bzip2::read::BzDecoder;
 use catalog::Catalog;
-use futures::task::noop_waker;
+use crossbeam::channel::{self, Receiver, Sender};
 use geometry::Aabb;
 use gpu::{texture_format_size, ArcTextureCopyView, Gpu, OwnedBufferCopyView, UploadTracker};
 use image::{ImageBuffer, Rgb};
+use parking_lot::RwLock;
 use std::{
     collections::{BTreeMap, BinaryHeap},
     io::Read,
@@ -43,15 +44,7 @@ use std::{
     num::{NonZeroU32, NonZeroU64},
     ops::Range,
     sync::Arc,
-    task::{Context, Poll},
     time::Instant,
-};
-use tokio::{
-    runtime::Runtime,
-    sync::{
-        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
-        RwLock,
-    },
 };
 use zerocopy::LayoutVerified;
 
@@ -151,8 +144,8 @@ pub(crate) struct SphericalTileSetCommon {
     tile_read_count: usize,
 
     // Tile transfer from the background read thread to the main thread.
-    tile_sender: UnboundedSender<(QuadTreeId, Vec<u8>)>,
-    tile_receiver: UnboundedReceiver<(QuadTreeId, Vec<u8>)>,
+    tile_sender: Sender<(QuadTreeId, Vec<u8>)>,
+    tile_receiver: Receiver<(QuadTreeId, Vec<u8>)>,
 }
 
 impl SphericalTileSetCommon {
@@ -426,7 +419,7 @@ impl SphericalTileSetCommon {
             ],
         });
 
-        let (tile_sender, tile_receiver) = unbounded_channel();
+        let (tile_sender, tile_receiver) = channel::unbounded();
 
         Ok(Self {
             index_texture_format,
@@ -463,11 +456,7 @@ impl SphericalTileSetCommon {
         })
     }
 
-    pub(crate) fn capture_and_save_index_snapshot(
-        &mut self,
-        async_rt: &Runtime,
-        gpu: &mut Gpu,
-    ) -> Result<()> {
+    pub(crate) fn capture_and_save_index_snapshot(&mut self, gpu: &mut Gpu) -> Result<()> {
         fn write_image(extent: wgpu::Extent3d, _: wgpu::TextureFormat, data: Vec<u8>) {
             let pix_cnt = extent.width as usize * extent.height as usize;
             let img_len = pix_cnt * 3;
@@ -493,7 +482,6 @@ impl SphericalTileSetCommon {
             &self.index_texture,
             self.index_texture_extent,
             self.index_texture_format,
-            async_rt,
             gpu,
             Box::new(write_image),
         )
@@ -561,11 +549,7 @@ impl SphericalTileSetCommon {
         self.tile_tree.note_required(&aabb, angular_resolution);
     }
 
-    pub(crate) fn finish_visibility_update(
-        &mut self,
-        catalog: Arc<RwLock<Catalog>>,
-        async_rt: &Runtime,
-    ) {
+    pub(crate) fn finish_visibility_update(&mut self, catalog: Arc<RwLock<Catalog>>) {
         let mut additions = Vec::new();
         let mut removals = Vec::new();
         self.tile_tree
@@ -610,11 +594,10 @@ impl SphericalTileSetCommon {
             let closure_kind = self.kind;
             let closure_catalog = catalog.clone();
             let closer_sender = self.tile_sender.clone();
-            async_rt.spawn(async move {
-                if let Ok(packed_data) = closure_catalog.read().await.read_slice(fid, extent).await
-                {
+            rayon::spawn(move || {
+                if let Ok(packed_data) = closure_catalog.read().read_slice_sync(fid, extent) {
                     let data = match compression {
-                        TileCompression::None => packed_data,
+                        TileCompression::None => packed_data.to_vec(),
                         TileCompression::Bz2 => {
                             let mut decompressed = Vec::with_capacity(raw_tile_size);
                             BzDecoder::new(&packed_data[..])
@@ -663,10 +646,7 @@ impl SphericalTileSetCommon {
 
         // Check for any completed reads.
         let mut reads_ended_count = 0;
-        while let Poll::Ready(Some((qtid, data))) = self
-            .tile_receiver
-            .poll_recv(&mut Context::from_waker(&noop_waker()))
-        {
+        while let Ok((qtid, data)) = self.tile_receiver.try_recv() {
             self.tile_read_count -= 1;
             reads_ended_count += 1;
 
@@ -789,8 +769,8 @@ impl SphericalTileSetCommon {
         );
     }
 
-    pub(crate) fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut Gpu) {
-        self.capture_and_save_index_snapshot(async_rt, gpu).unwrap();
+    pub(crate) fn snapshot_index(&mut self, gpu: &mut Gpu) {
+        self.capture_and_save_index_snapshot(gpu).unwrap();
     }
 
     pub(crate) fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) {

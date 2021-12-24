@@ -58,9 +58,9 @@ use camera::Camera;
 use catalog::{from_utf8_string, Catalog};
 use global_data::GlobalParametersBuffer;
 use gpu::{Gpu, UploadTracker};
+use parking_lot::RwLock;
 use rayon::prelude::*;
 use std::{any::Any, fmt::Debug, sync::Arc};
-use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 
 #[derive(Clone, Copy, Debug)]
 pub struct TileSetHandle(usize);
@@ -74,16 +74,11 @@ pub trait TileSet: Debug + Send + Sync + 'static {
     // from the global geometry calculations.
     fn begin_visibility_update(&mut self);
     fn note_required(&mut self, visible_patch: &VisiblePatch);
-    fn finish_visibility_update(
-        &mut self,
-        camera: &Camera,
-        catalog: Arc<AsyncRwLock<Catalog>>,
-        async_rt: &Runtime,
-    );
+    fn finish_visibility_update(&mut self, camera: &Camera, catalog: Arc<RwLock<Catalog>>);
     fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker);
 
     // Indicate that the current index should be written to the debug file.
-    fn snapshot_index(&mut self, async_rt: &Runtime, gpu: &mut Gpu);
+    fn snapshot_index(&mut self, gpu: &mut Gpu);
 
     // Per-frame opportunity to update the index based on any visibility updates pushed above.
     fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder);
@@ -235,30 +230,20 @@ impl TileManager {
         }
     }
 
-    pub fn finish_visibility_update(
-        &mut self,
-        camera: &Camera,
-        catalog: Arc<AsyncRwLock<Catalog>>,
-        async_rt: &Runtime,
-    ) {
+    pub fn finish_visibility_update(&mut self, camera: &Camera, catalog: Arc<RwLock<Catalog>>) {
         for ts in self.tile_sets.iter_mut() {
-            ts.finish_visibility_update(camera, catalog.clone(), async_rt);
+            ts.finish_visibility_update(camera, catalog.clone());
         }
     }
 
-    pub fn ensure_uploaded(
-        &mut self,
-        async_rt: &Runtime,
-        gpu: &mut Gpu,
-        tracker: &mut UploadTracker,
-    ) {
+    pub fn ensure_uploaded(&mut self, gpu: &mut Gpu, tracker: &mut UploadTracker) {
         for ts in self.tile_sets.iter_mut() {
             ts.ensure_uploaded(gpu, tracker);
         }
 
         if self.take_index_snapshot {
             for ts in self.tile_sets.iter_mut() {
-                ts.snapshot_index(async_rt, gpu);
+                ts.snapshot_index(gpu);
             }
             self.take_index_snapshot = false;
         }

@@ -21,7 +21,6 @@ use catalog::{Catalog, DirectoryDrawer};
 use chrono::{Duration as ChronoDuration, TimeZone, Utc};
 use composite::CompositeRenderPass;
 use fullscreen::FullscreenBuffer;
-use futures::executor::block_on;
 use global_data::GlobalParametersBuffer;
 use gpu::{make_frame_graph, CpuDetailLevel, DetailLevelOpts, Gpu, GpuDetailLevel};
 use input::{InputController, InputSystem};
@@ -41,7 +40,6 @@ use std::{
 use structopt::StructOpt;
 use terminal_size::{terminal_size, Width};
 use terrain::TerrainBuffer;
-use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use ui::UiRenderPass;
 use widget::{
     Border, Color, EventMapper, Expander, Label, Labeled, PositionH, PositionV, VerticalBox,
@@ -61,8 +59,6 @@ struct Opt {
     #[structopt(short, long)]
     libdir: Vec<PathBuf>,
 
-    // #[structopt(flatten)]
-    // catalog_opts: CatalogOpts,
     #[structopt(flatten)]
     detail_opts: DetailLevelOpts,
 
@@ -373,7 +369,7 @@ fn simulation_main(os_window: OsWindow, input_controller: &mut InputController) 
     for (i, d) in opt.libdir.iter().enumerate() {
         catalog.add_drawer(DirectoryDrawer::from_directory(100 + i as i64, d)?)?;
     }
-    let catalog = Arc::new(AsyncRwLock::new(catalog));
+    let catalog = Arc::new(RwLock::new(catalog));
 
     input_controller.wait_for_window_configuration()?;
 
@@ -386,7 +382,6 @@ fn simulation_main(os_window: OsWindow, input_controller: &mut InputController) 
         display_config,
         &mut interpreter,
     )?;
-    let async_rt = Arc::new(Runtime::new()?);
     let _legion = World::default();
 
     ///////////////////////////////////////////////////////////
@@ -394,16 +389,15 @@ fn simulation_main(os_window: OsWindow, input_controller: &mut InputController) 
         cpu_detail,
         gpu_detail,
         &app_dirs,
-        &block_on(catalog.read()),
+        &catalog.read(),
         mapper,
         &mut window.write(),
         &mut interpreter,
     )?;
-    let _async_rt = async_rt.clone();
     let _window = window.clone();
     let _frame_graph = frame_graph.clone();
     let render_handle = std::thread::spawn(move || {
-        render_main(_async_rt, _window, _gpu, _frame_graph).unwrap();
+        render_main(_window, _gpu, _frame_graph).unwrap();
     });
 
     let orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0), &mut interpreter)?;
@@ -444,7 +438,6 @@ fn simulation_main(os_window: OsWindow, input_controller: &mut InputController) 
                 arcball.read_recursive().camera(),
                 vis_camera,
                 catalog.clone(),
-                &async_rt,
             )?;
         }
 
@@ -460,7 +453,6 @@ fn simulation_main(os_window: OsWindow, input_controller: &mut InputController) 
 }
 
 fn render_main(
-    async_rt: Arc<Runtime>,
     window: Arc<RwLock<Window>>,
     gpu: Arc<RwLock<Gpu>>,
     mut frame_graph: FrameGraph,
@@ -473,10 +465,9 @@ fn render_main(
             .ensure_uploaded(&gpu.read(), &mut tracker)?;
         frame_graph
             .terrain_mut()
-            .ensure_uploaded(&async_rt, &mut gpu.write(), &mut tracker)?;
+            .ensure_uploaded(&mut gpu.write(), &mut tracker)?;
         frame_graph.widgets_mut().ensure_uploaded(
             now,
-            &async_rt,
             &mut gpu.write(),
             &window.read(),
             &mut tracker,

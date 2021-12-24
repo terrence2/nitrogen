@@ -511,7 +511,6 @@ impl Gpu {
         texture: &wgpu::Texture,
         extent: wgpu::Extent3d,
         format: wgpu::TextureFormat,
-        async_rt: &Runtime,
         gpu: &mut Gpu,
         callback: Box<
             dyn FnOnce(wgpu::Extent3d, wgpu::TextureFormat, Vec<u8>) + Send + Sync + 'static,
@@ -558,7 +557,7 @@ impl Gpu {
         gpu.device().poll(wgpu::Maintain::Wait);
         let reader = download_buffer.slice(..).map_async(wgpu::MapMode::Read);
         gpu.device().poll(wgpu::Maintain::Wait);
-        async_rt.spawn(async move {
+        tokio::spawn(async move {
             reader.await.unwrap();
             let raw = download_buffer.slice(..).get_mapped_range().to_owned();
             callback(extent, format, raw);

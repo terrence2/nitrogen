@@ -9,8 +9,8 @@ edition = "2021"
 approx = "^ 0.5"
 bzip2 = "^ 0.4"
 anyhow = { version = "^ 1", features = ["backtrace"] }
+crossbeam = "^ 0.8"
 float-ord = "^ 0.2"
-futures = "^ 0.3"
 fxhash = "^ 0.2"
 image = "^ 0.23"
 json = "^ 0.12"
@@ -23,7 +23,6 @@ parking_lot = "^ 0.11"
 rayon = "= 1.4.0"
 smallvec = "^ 1.4"
 static_assertions = "^ 1"
-tokio = { version = "^ 1.0", features = ["rt-multi-thread", "macros", "io-util", "fs", "sync"] }
 wgpu = "^ 0.7"
 zerocopy = "^ 0.5"
 absolute_unit = { path = "../../util/absolute_unit" }

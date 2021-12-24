@@ -28,7 +28,6 @@ use nitrous::Value;
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
 use std::{borrow::Borrow, collections::HashMap, env, sync::Arc};
-use tokio::runtime::Runtime;
 use window::{
     size::{AbsSize, LeftBound, RelSize, ScreenDir},
     Window,
@@ -92,13 +91,8 @@ impl FontContext {
         })
     }
 
-    pub fn make_upload_buffer(
-        &mut self,
-        gpu: &mut Gpu,
-        async_rt: &Runtime,
-        tracker: &mut UploadTracker,
-    ) -> Result<()> {
-        self.glyph_sheet.make_upload_buffer(gpu, async_rt, tracker)
+    pub fn make_upload_buffer(&mut self, gpu: &mut Gpu, tracker: &mut UploadTracker) -> Result<()> {
+        self.glyph_sheet.make_upload_buffer(gpu, tracker)
     }
 
     pub fn maintain_font_atlas(
