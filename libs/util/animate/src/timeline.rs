@@ -16,6 +16,7 @@ use absolute_unit::{meters, radians};
 use anyhow::{ensure, Result};
 use futures::future::{ready, FutureExt};
 use geodesy::Graticule;
+use log::error;
 use lyon_geom::{cubic_bezier::CubicBezierSegment, Point};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -181,12 +182,14 @@ impl Timeline {
         timeline
     }
 
-    pub fn step_time(&mut self, now: &Instant) -> Result<()> {
+    pub fn step_time(&mut self, now: &Instant) {
         for animation in &mut self.animations {
-            animation.step_time(now)?;
+            // One animation failing should not propagate to others.
+            if let Err(e) = animation.step_time(now) {
+                error!("step_time failed with: {}", e);
+            }
         }
         self.animations.retain(|animation| !animation.is_finished());
-        Ok(())
     }
 
     pub fn with_curve(
