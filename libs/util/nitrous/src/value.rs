@@ -16,10 +16,15 @@ use crate::Module;
 use anyhow::{bail, Result};
 use futures::Future;
 use geodesy::{GeoSurface, Graticule, Target};
+use log::error;
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
-use std::fmt::Formatter;
-use std::{fmt, fmt::Debug, pin::Pin, sync::Arc};
+use smallvec::SmallVec;
+use std::{
+    fmt::{self, Debug, Formatter},
+    pin::Pin,
+    sync::Arc,
+};
 
 pub type FutureValue = Pin<Box<dyn Future<Output = Value> + Send + Sync + Unpin + 'static>>;
 
@@ -125,6 +130,21 @@ impl Value {
             Self::Integer(i) => *i as f64,
             _ => bail!("not numeric"),
         })
+    }
+
+    pub fn spawn_method(&self, args: &[Value]) {
+        fn inner(callable: Value, args: SmallVec<[Value; 2]>) -> Result<()> {
+            let (module, name) = callable.to_method()?;
+            module.write().call_method(name, &args)?;
+            Ok(())
+        }
+        let callable = self.to_owned();
+        let args = SmallVec::from(args);
+        rayon::spawn(move || {
+            if let Err(e) = inner(callable, args) {
+                error!("spawn_method failed with: {}", e);
+            }
+        });
     }
 }
 

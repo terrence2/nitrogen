@@ -147,8 +147,7 @@ impl ScriptableAnimation {
             (self.start.clone(), false)
         };
         if let Some(callable) = &self.callable {
-            let (module, name) = callable.to_method()?;
-            module.write().call_method(name, &[current])?;
+            callable.spawn_method(&[current]);
         }
         if ended {
             self.state = AnimationState::Finished;
