@@ -306,38 +306,37 @@ pub struct Orrery {
 
 #[inject_nitrous_module]
 impl Orrery {
-    pub fn now(interpreter: &mut Interpreter) -> Result<Arc<RwLock<Self>>> {
+    pub fn new_current_time(interpreter: &mut Interpreter) -> Result<Arc<RwLock<Self>>> {
         Self::new(Utc::now(), interpreter)
     }
 
-    #[allow(clippy::unreadable_literal)]
     pub fn new(
-        initial_time: DateTime<Utc>,
+        initial_utc: DateTime<Utc>,
         interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
         let orrery = Arc::new(RwLock::new(Self {
             //EM Bary   1.00000018      0.01673163     -0.00054346      100.46691572    102.93005885     -5.11260389
             //         -0.00000003     -0.00003661     -0.01337178    35999.37306329      0.31795260     -0.24123856
             earth_moon_barycenter: KeplerianElements::new(
-                1.00000018,
-                0.01673163,
-                -0.00054346,
-                100.46691572,
-                102.93005885,
-                -5.11260389,
-                -0.00000003,
-                -0.00003661,
-                -0.01337178,
-                35999.37306329,
-                0.31795260,
-                -0.24123856,
+                1.000_000_18,
+                0.016_731_63,
+                -0.000_543_46,
+                100.466_915_72,
+                102.930_058_85,
+                -5.112_603_89,
+                -0.000_000_03,
+                -0.000_036_61,
+                -0.013_371_78,
+                35_999.373_063_29,
+                0.317_952_60,
+                -0.241_238_56,
                 0.0,
                 0.0,
                 0.0,
                 0.0,
             ),
 
-            now: initial_time,
+            now: initial_utc,
             in_debug_override: false,
         }));
 
