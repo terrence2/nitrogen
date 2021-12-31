@@ -1,5 +1,5 @@
 // autoexec.n2o: Runs after startup, before the main loop starts.
 let location := "Everest";
-camera.set_target(camera.notable_location(location));
-camera.set_eye(camera.eye_for(location));
+arcball.set_target(arcball.notable_location(location));
+arcball.set_eye(arcball.eye_for(location));
 

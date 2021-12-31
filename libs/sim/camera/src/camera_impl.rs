@@ -12,18 +12,56 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use absolute_unit::{radians, Angle, AngleUnit, Kilometers, Length, LengthUnit, Meters, Radians};
+use absolute_unit::{
+    degrees, radians, Angle, AngleUnit, Degrees, Kilometers, Length, LengthUnit, Meters, Radians,
+};
+use anyhow::Result;
 use geodesy::{Cartesian, GeoCenter};
 use geometry::Plane;
+use measure::WorldSpaceFrame;
 use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, UnitQuaternion, Vector3};
+use nitrous::{Interpreter, Value};
+use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use parking_lot::RwLock;
+use std::sync::Arc;
+use window::DisplayConfig;
 
-#[derive(Debug, Default, Clone)]
+pub struct CameraComponent {
+    inner: Arc<RwLock<Camera>>,
+}
+
+impl CameraComponent {
+    pub fn new(camera: Arc<RwLock<Camera>>) -> Self {
+        Self { inner: camera }
+    }
+
+    pub fn apply_input_state(&mut self) {
+        self.inner.write().apply_input_state();
+    }
+
+    pub fn update_frame(&mut self, frame: &WorldSpaceFrame) {
+        self.inner.write().update_frame(frame);
+    }
+
+    pub fn on_display_config_updated(&mut self, config: &DisplayConfig) {
+        self.inner.write().on_display_config_updated(config);
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct InputState {
+    fov_delta: Angle<Degrees>,
+}
+
+#[derive(Clone, Debug, Default, NitrousModule)]
 pub struct Camera {
     // Camera parameters
     fov_y: Angle<Radians>,
     aspect_ratio: f64,
     z_near: Length<Meters>,
-    exposure: f32,
+    exposure: f64,
+
+    input: InputState,
 
     // Camera view state.
     position: Cartesian<GeoCenter, Meters>,
@@ -32,12 +70,33 @@ pub struct Camera {
     right: Vector3<f64>,
 }
 
+#[inject_nitrous_module]
 impl Camera {
-    const INITIAL_EXPOSURE: f32 = 10e-5;
+    const INITIAL_EXPOSURE: f64 = 10e-5;
 
     // FIXME: aspect ratio is wrong. Should be 16:9 and not 9:16.
     // aspect ratio is rise over run: h / w
-    pub fn from_parameters<AngUnit: AngleUnit>(
+    pub fn install<AngUnit: AngleUnit>(
+        fov_y: Angle<AngUnit>,
+        aspect_ratio: f64,
+        z_near: Length<Meters>,
+        interpreter: &mut Interpreter,
+    ) -> Result<Arc<RwLock<Self>>> {
+        let camera = Arc::new(RwLock::new(Self::detached(fov_y, aspect_ratio, z_near)));
+        interpreter.put_global("camera", Value::Module(camera.clone()));
+        interpreter.interpret_once(
+            r#"
+                let bindings := mapper.create_bindings("camera");
+                bindings.bind("PageUp", "camera.increase_fov(pressed)");
+                bindings.bind("PageDown", "camera.decrease_fov(pressed)");
+                bindings.bind("Shift+LBracket", "camera.decrease_exposure(pressed)");
+                bindings.bind("Shift+RBracket", "camera.increase_exposure(pressed)");
+            "#,
+        )?;
+        Ok(camera)
+    }
+
+    pub fn detached<AngUnit: AngleUnit>(
         fov_y: Angle<AngUnit>,
         aspect_ratio: f64,
         z_near: Length<Meters>,
@@ -48,6 +107,10 @@ impl Camera {
             z_near,
             exposure: Self::INITIAL_EXPOSURE,
 
+            input: InputState {
+                fov_delta: degrees!(0),
+            },
+
             position: Vector3::new(0f64, 0f64, 0f64).into(),
             forward: Vector3::new(0f64, 0f64, -1f64),
             up: Vector3::new(0f64, 1f64, 0f64),
@@ -55,33 +118,42 @@ impl Camera {
         }
     }
 
-    pub(crate) fn push_frame_parameters(
-        &mut self,
-        position: Cartesian<GeoCenter, Meters>,
-        forward: Vector3<f64>,
-        up: Vector3<f64>,
-        right: Vector3<f64>,
-    ) {
-        self.position = position;
-        self.forward = forward;
-        self.up = up;
-        self.right = right;
+    pub fn on_display_config_updated(&mut self, config: &DisplayConfig) {
+        self.set_aspect_ratio(config.render_aspect_ratio());
     }
 
-    pub fn exposure(&self) -> f32 {
+    #[method]
+    pub fn increase_fov(&mut self, pressed: bool) {
+        self.input.fov_delta = degrees!(if pressed { 1 } else { 0 });
+    }
+
+    #[method]
+    pub fn decrease_fov(&mut self, pressed: bool) {
+        self.input.fov_delta = degrees!(if pressed { -1 } else { 0 });
+    }
+
+    #[method]
+    pub fn exposure(&self) -> f64 {
         self.exposure
     }
 
-    pub fn set_exposure(&mut self, exposure: f32) {
+    #[method]
+    pub fn set_exposure(&mut self, exposure: f64) {
         self.exposure = exposure;
     }
 
-    pub fn increase_exposure(&mut self) {
-        self.exposure *= 1.1;
+    #[method]
+    pub fn increase_exposure(&mut self, pressed: bool) {
+        if pressed {
+            self.exposure *= 1.1;
+        }
     }
 
-    pub fn decrease_exposure(&mut self) {
-        self.exposure /= 1.1;
+    #[method]
+    pub fn decrease_exposure(&mut self, pressed: bool) {
+        if pressed {
+            self.exposure /= 1.1;
+        }
     }
 
     pub fn fov_y(&self) -> Angle<Radians> {
@@ -209,6 +281,20 @@ impl Camera {
 
         [left, right, bottom, top, near]
     }
+
+    pub fn apply_input_state(&mut self) {
+        let mut fov = degrees!(self.fov_y);
+        fov += self.input.fov_delta;
+        fov = fov.min(degrees!(90)).max(degrees!(1));
+        self.fov_y = radians!(fov);
+    }
+
+    pub fn update_frame(&mut self, frame: &WorldSpaceFrame) {
+        self.position = *frame.position();
+        self.forward = *frame.forward();
+        self.right = *frame.right();
+        self.up = *frame.up();
+    }
 }
 
 #[cfg(test)]
@@ -223,7 +309,7 @@ mod test {
 
     #[test]
     fn test_perspective() {
-        let camera = Camera::from_parameters(degrees!(90), 9.0 / 11.0, meters!(0.3));
+        let camera = Camera::detached(degrees!(90), 9.0 / 11.0, meters!(0.3));
         let p = camera.perspective::<Meters>().to_homogeneous();
         let wrld = Vector4::new(0000.0, 0.0, -10000.0, 1.0);
         let eye = camera.view::<Meters>().to_homogeneous() * wrld;
@@ -246,7 +332,8 @@ mod test {
     #[test]
     fn test_depth_restore() -> Result<()> {
         let aspect_ratio = 0.9488875526157546;
-        let mut arcball = ArcBallCamera::detached(aspect_ratio, meters!(0.5));
+        let mut camera = Camera::detached(degrees!(90), aspect_ratio, meters!(0.5));
+        let mut arcball = ArcBallCamera::detached();
         arcball.set_target(Graticule::<GeoSurface>::new(
             degrees!(0),
             degrees!(0),
@@ -258,27 +345,24 @@ mod test {
             meters!(4_000_000),
             // meters!(1_400_000),
         ))?;
-        arcball.track_state_changes();
+        let frame = arcball.world_space_frame();
+        camera.update_frame(&frame);
 
-        let _camera_position_km = arcball.camera().position::<Kilometers>().vec64();
+        let camera_position_km = camera.position::<Kilometers>().vec64();
         let camera_inverse_perspective_km: Matrix4<f64> =
-            arcball.camera().perspective::<Kilometers>().inverse();
-        let camera_inverse_view_km = arcball
-            .camera()
-            .view::<Kilometers>()
-            .inverse()
-            .to_homogeneous();
+            camera.perspective::<Kilometers>().inverse();
+        let camera_inverse_view_km = camera.view::<Kilometers>().inverse().to_homogeneous();
 
         // Given corner positions in ndc of -1,-1 and 1,1... what does a mostly forward vector
         // in ndc map to, given the above camera?
         let corner = Vector4::new(0.1, 0.1, 0.0, 1.0);
 
         let eye = (camera_inverse_perspective_km * corner).normalize();
-        let _wrld = (camera_inverse_view_km * eye).normalize();
-        // println!("pos: {}", camera_position_km);
-        // println!("eye : {}", eye);
-        // println!("wrld: {}", wrld);
-        // println!("pos: {}", camera_position_km.xyz() + wrld.xyz() * 8000.0);
+        let wrld = (camera_inverse_view_km * eye).normalize();
+        println!("pos: {}", camera_position_km);
+        println!("eye : {}", eye);
+        println!("wrld: {}", wrld);
+        println!("pos: {}", camera_position_km.xyz() + wrld.xyz() * 8000.0);
 
         Ok(())
     }

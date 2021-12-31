@@ -161,7 +161,6 @@ mod test {
     use anyhow::Result;
     use parking_lot::RwLock;
     use std::{cell::RefCell, sync::Arc};
-    use window::DisplayConfigChangeReceiver;
 
     #[derive(Debug)]
     pub struct TestBuffer {

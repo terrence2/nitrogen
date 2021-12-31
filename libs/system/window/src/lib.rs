@@ -15,7 +15,7 @@
 pub mod size;
 
 use anyhow::{bail, Result};
-use input::{GenericWindowEvent, InputController, WindowEventReceiver};
+use input::SystemEvent;
 use log::info;
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -215,50 +215,56 @@ pub trait DisplayConfigChangeReceiver: Debug + Send + Sync + 'static {
 pub struct Window {
     os_window: OsWindow,
     config: DisplayConfig,
-    display_config_change_receivers: Vec<Arc<RwLock<dyn DisplayConfigChangeReceiver>>>,
-    pub closing: bool,
+    config_changed: bool,
 }
 
 #[inject_nitrous_module]
 impl Window {
     pub fn new(
         os_window: OsWindow,
-        input: &mut InputController,
         config: DisplayConfig,
         interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
         let win = Arc::new(RwLock::new(Self {
             os_window,
             config,
-            display_config_change_receivers: Vec::new(),
-            closing: false,
+            config_changed: false,
         }));
         interpreter.put_global("window", Value::Module(win.clone()));
-        input.register_window_event_receiver(win.clone());
         Ok(win)
     }
 
-    pub fn register_display_config_change_receiver(
-        &mut self,
-        receiver: Arc<RwLock<dyn DisplayConfigChangeReceiver>>,
-    ) {
-        self.display_config_change_receivers.push(receiver);
+    fn note_display_config_change(&mut self) {
+        self.config_changed = true;
     }
 
-    fn send_display_config_change(&self) -> Result<()> {
-        for module in &self.display_config_change_receivers {
-            module.write().on_display_config_changed(&self.config)?;
+    pub fn handle_system_events(&mut self, events: &[SystemEvent]) -> Option<DisplayConfig> {
+        for event in events {
+            match event {
+                SystemEvent::ScaleFactorChanged { scale } => {
+                    self.on_scale_factor_changed(*scale);
+                }
+                SystemEvent::WindowResized { width, height } => {
+                    self.on_window_resized(*width, *height);
+                }
+                SystemEvent::Quit => {}
+            }
         }
-        Ok(())
+        if self.config_changed {
+            self.config_changed = false;
+            Some(self.config.clone())
+        } else {
+            None
+        }
     }
 
-    fn on_scale_factor_changed(&mut self, scale: f64) -> Result<()> {
+    fn on_scale_factor_changed(&mut self, scale: f64) {
         self.config.dpi_scale_factor = scale;
-        self.send_display_config_change()?;
-        Ok(())
+        self.note_display_config_change();
     }
 
-    fn on_window_resized(&mut self, width: u32, height: u32) -> Result<()> {
+    fn on_window_resized(&mut self, width: u32, height: u32) /*-> Result<()>*/
+    {
         info!(
             "received resize event: {}x{}; cached: {}x{}",
             width,
@@ -288,9 +294,7 @@ impl Window {
         );
 
         self.config.on_window_resized(new_size);
-        self.send_display_config_change()?;
-
-        Ok(())
+        self.note_display_config_change();
     }
 
     pub fn os_window(&self) -> &OsWindow {
@@ -307,7 +311,7 @@ impl Window {
 
     pub fn set_display_mode(&mut self, mode: DisplayMode) -> Result<()> {
         self.config.display_mode = mode;
-        self.send_display_config_change()?;
+        self.note_display_config_change();
         Ok(())
     }
 
@@ -347,19 +351,6 @@ impl Window {
     }
 }
 
-impl WindowEventReceiver for Window {
-    fn on_window_event(&mut self, event: GenericWindowEvent) {
-        match event {
-            GenericWindowEvent::ScaleFactorChanged { scale } => {
-                self.on_scale_factor_changed(scale).ok();
-            }
-            GenericWindowEvent::Resized { width, height } => {
-                self.on_window_resized(width, height).ok();
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -367,14 +358,9 @@ mod tests {
 
     #[test]
     fn it_works() -> Result<()> {
-        let (os_window, mut input) = input::InputController::for_test_unix()?;
+        let (os_window, _) = input::InputController::for_test_unix()?;
         let mut interpreter = Interpreter::default();
-        let _win_handle = Window::new(
-            os_window,
-            &mut input,
-            DisplayConfig::for_test(),
-            &mut interpreter,
-        )?;
+        let _win_handle = Window::new(os_window, DisplayConfig::for_test(), &mut interpreter)?;
         Ok(())
     }
 }

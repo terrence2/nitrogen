@@ -23,7 +23,7 @@ use crate::{
 };
 use anyhow::Result;
 use gpu::Gpu;
-use input::{ElementState, GenericEvent, ModifiersState, VirtualKeyCode};
+use input::{ElementState, InputEvent, InputFocus, ModifiersState, VirtualKeyCode};
 use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::{ops::Range, sync::Arc, time::Instant};
@@ -155,14 +155,13 @@ impl Widget for LineEdit {
 
     fn handle_event(
         &mut self,
-        _now: Instant,
-        event: &GenericEvent,
-        _focus: &str,
+        event: &InputEvent,
+        _focus: InputFocus,
         _cursor_position: Position<AbsSize>,
-        _interpreter: Interpreter,
+        _interpreter: &mut Interpreter,
     ) -> Result<()> {
         // FIXME: add name to widget and obey focus
-        if let GenericEvent::KeyboardKey {
+        if let InputEvent::KeyboardKey {
             virtual_keycode,
             press_state,
             modifiers_state,

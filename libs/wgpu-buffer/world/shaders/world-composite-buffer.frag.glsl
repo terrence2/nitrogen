@@ -48,7 +48,7 @@ fullscreen_to_world_km(vec2 v_fullscreen, float z_ndc)
     // x{clip} = x{ndc} * w
     // z{clip} = z{ndc} * w
     vec4 clip = vec4(
-        v_fullscreen.x * w /* camera_aspect_ratio */,
+        v_fullscreen.x * w,
         v_fullscreen.y * w,
         camera_z_near_m,
         w

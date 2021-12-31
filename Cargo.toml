@@ -37,6 +37,8 @@ members = [
     # Only external, util, and system dependencies. Generally concerned
     # with running the simulated environment.
     "libs/sim/camera",
+    "libs/sim/event_mapper",
+    "libs/sim/measure",
     "libs/sim/orrery",
 
     # GPU buffer management and drawing pass implementations.
@@ -75,11 +77,13 @@ atmosphere = { path = "libs/wgpu-buffer/atmosphere" }
 camera = { path = "libs/sim/camera" }
 catalog = { path = "libs/system/catalog" }
 composite = { path = "libs/wgpu-buffer/composite" }
+event_mapper = { path = "libs/sim/event_mapper" }
 fullscreen = { path = "libs/wgpu-buffer/fullscreen" }
 geodesy = { path = "libs/util/geodesy" }
 global_data = { path = "libs/wgpu-buffer/global_data" }
 gpu = { path = "libs/system/gpu" }
 input = { path = "libs/system/input" }
+measure = { path = "libs/sim/measure" }
 nitrous = { path = "libs/util/nitrous" }
 nitrous_injector = { path = "libs/util/nitrous_injector" }
 orrery = { path = "libs/sim/orrery" }
@@ -88,4 +92,4 @@ terrain = { path = "libs/wgpu-buffer/terrain" }
 ui = { path = "libs/wgpu-buffer/ui" }
 widget = { path = "libs/wgpu-buffer/widget" }
 window = { path = "libs/system/window" }
-world = { path = "libs/wgpu-buffer/world" }
+world_render = { package = "world", path = "libs/wgpu-buffer/world" }

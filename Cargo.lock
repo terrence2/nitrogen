@@ -329,7 +329,9 @@ dependencies = [
  "approx",
  "geodesy",
  "geometry",
+ "legion",
  "log",
+ "measure",
  "nalgebra",
  "nitrous",
  "nitrous_injector",
@@ -853,6 +855,7 @@ dependencies = [
  "gpu",
  "input",
  "nitrous",
+ "parking_lot",
  "structopt",
  "window",
  "winit",
@@ -944,6 +947,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "event_mapper"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "input",
+ "log",
+ "nitrous",
+ "nitrous_injector",
+ "once_cell",
+ "ordered-float",
+ "parking_lot",
+ "smallvec",
+ "strsim 0.8.0",
+ "unicase",
+]
+
+[[package]]
 name = "fixedbitset"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1024,6 +1044,7 @@ dependencies = [
  "build_shaders",
  "camera",
  "chrono",
+ "event_mapper",
  "geodesy",
  "global_data",
  "gpu",
@@ -1033,7 +1054,6 @@ dependencies = [
  "orrery",
  "parking_lot",
  "wgpu",
- "widget",
  "window",
  "winit",
  "zerocopy",
@@ -1781,6 +1801,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60302e4db3a61da70c0cb7991976248362f30319e88850c487b9b95bbf059e00"
 
 [[package]]
+name = "measure"
+version = "0.1.0"
+dependencies = [
+ "absolute_unit",
+ "geodesy",
+ "nalgebra",
+]
+
+[[package]]
 name = "memchr"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2040,6 +2069,7 @@ dependencies = [
  "chrono",
  "composite",
  "env_logger",
+ "event_mapper",
  "fullscreen",
  "geodesy",
  "global_data",
@@ -2048,6 +2078,7 @@ dependencies = [
  "input",
  "legion",
  "log",
+ "measure",
  "nalgebra",
  "nitrous",
  "nitrous_injector",
@@ -2310,6 +2341,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "event_mapper",
  "lazy_static",
  "log",
  "nalgebra",
@@ -2317,7 +2349,6 @@ dependencies = [
  "nitrous_injector",
  "ordered-float",
  "parking_lot",
- "widget",
 ]
 
 [[package]]
@@ -2867,6 +2898,7 @@ dependencies = [
  "build_shaders",
  "camera",
  "chrono",
+ "event_mapper",
  "fullscreen",
  "geodesy",
  "global_data",
@@ -2877,10 +2909,10 @@ dependencies = [
  "nalgebra",
  "nitrous",
  "orrery",
+ "parking_lot",
  "star_catalog",
  "static_assertions",
  "wgpu",
- "widget",
  "window",
  "winit",
  "zerocopy",
@@ -3537,13 +3569,10 @@ dependencies = [
  "memoffset 0.6.4",
  "nitrous",
  "nitrous_injector",
- "once_cell",
  "ordered-float",
  "parking_lot",
  "rayon",
  "smallvec",
- "strsim 0.8.0",
- "unicase",
  "wgpu",
  "window",
  "zerocopy",

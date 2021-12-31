@@ -134,7 +134,7 @@ impl Globals {
                 .to_rotation_matrix()
                 .to_homogeneous(),
         );
-        self.camera_exposure = camera.exposure();
+        self.camera_exposure = camera.exposure() as f32;
     }
 
     pub fn set_orrery(&mut self, orrery: &Orrery) {

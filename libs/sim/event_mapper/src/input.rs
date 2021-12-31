@@ -12,12 +12,9 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::widgets::event_mapper::State;
+use crate::State;
 use anyhow::{bail, ensure, Result};
-use input::{
-    ButtonId, ElementState, GenericEvent, GenericSystemEvent, GenericWindowEvent, ModifiersState,
-    VirtualKeyCode,
-};
+use input::{ButtonId, ElementState, InputEvent, ModifiersState, VirtualKeyCode};
 use log::warn;
 use once_cell::sync::Lazy;
 use smallvec::SmallVec;
@@ -38,24 +35,24 @@ pub enum Input {
     MouseButton(ButtonId),
     JoystickButton(ButtonId),
     Axis(AxisInput),
-    Window(WindowInput),
-    System(SystemInput),
+    DeviceAdded,
+    DeviceRemoved,
 }
 
 impl Input {
-    pub fn from_event(event: &GenericEvent) -> Option<Self> {
+    pub fn from_event(event: &InputEvent) -> Option<Self> {
         Some(match event {
-            GenericEvent::KeyboardKey {
+            InputEvent::KeyboardKey {
                 virtual_keycode, ..
             } => Input::KeyboardKey(*virtual_keycode),
-            GenericEvent::MouseButton { button, .. } => Input::MouseButton(*button),
-            GenericEvent::MouseMotion { .. } => Input::Axis(AxisInput::MouseMotion),
-            GenericEvent::MouseWheel { .. } => Input::Axis(AxisInput::MouseWheel),
-            GenericEvent::JoystickButton { dummy, .. } => Input::JoystickButton(*dummy),
-            GenericEvent::JoystickAxis { id, .. } => Input::Axis(AxisInput::JoystickAxis(*id)),
-            GenericEvent::Window(event) => Input::Window(WindowInput::from_event(event)),
-            GenericEvent::System(event) => Input::System(SystemInput::from_event(event)),
-            GenericEvent::CursorMove { .. } => return None,
+            InputEvent::MouseButton { button, .. } => Input::MouseButton(*button),
+            InputEvent::MouseMotion { .. } => Input::Axis(AxisInput::MouseMotion),
+            InputEvent::MouseWheel { .. } => Input::Axis(AxisInput::MouseWheel),
+            InputEvent::JoystickButton { dummy, .. } => Input::JoystickButton(*dummy),
+            InputEvent::JoystickAxis { id, .. } => Input::Axis(AxisInput::JoystickAxis(*id)),
+            InputEvent::CursorMove { .. } => return None,
+            InputEvent::DeviceAdded { .. } => Self::DeviceAdded,
+            InputEvent::DeviceRemoved { .. } => Self::DeviceRemoved,
         })
     }
 }
@@ -65,37 +62,6 @@ pub enum AxisInput {
     MouseMotion,
     MouseWheel,
     JoystickAxis(u32),
-}
-
-#[derive(Debug, Copy, Clone, Hash, Eq, PartialEq)]
-pub enum WindowInput {
-    Resized,
-    DpiChanged,
-}
-
-impl WindowInput {
-    pub fn from_event(event: &GenericWindowEvent) -> Self {
-        match event {
-            GenericWindowEvent::Resized { .. } => Self::Resized,
-            GenericWindowEvent::ScaleFactorChanged { .. } => Self::DpiChanged,
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-pub enum SystemInput {
-    Quit,
-    DeviceAdded,
-    DeviceRemoved,
-}
-impl SystemInput {
-    pub fn from_event(event: &GenericSystemEvent) -> Self {
-        match event {
-            GenericSystemEvent::Quit => Self::Quit,
-            GenericSystemEvent::DeviceAdded { .. } => Self::DeviceAdded,
-            GenericSystemEvent::DeviceRemoved { .. } => Self::DeviceRemoved,
-        }
-    }
 }
 
 static MIRROR_MODIFIERS: Lazy<HashSet<Ascii<&'static str>>> = Lazy::new(|| {
@@ -115,13 +81,9 @@ fn ascii(s: &'static str) -> Ascii<Cow<'static, str>> {
 #[rustfmt::skip]
 static BIND_MAP: Lazy<HashMap<Ascii<Cow<'static, str>>, Input>> = Lazy::new(|| {
     let mut m = HashMap::new();
-    // System
-    m.insert(ascii("quit"), Input::System(SystemInput::Quit));
-    m.insert(ascii("deviceAdded"), Input::System(SystemInput::DeviceAdded));
-    m.insert(ascii("deviceRemoved"), Input::System(SystemInput::DeviceRemoved));
-    // Window
-    m.insert(ascii("windowResized"), Input::Window(WindowInput::Resized));
-    m.insert(ascii("windowDpiChanged"), Input::Window(WindowInput::DpiChanged));
+    // Device management
+    m.insert(ascii("deviceAdded"), Input::DeviceAdded);
+    m.insert(ascii("deviceRemoved"), Input::DeviceRemoved);
     // Mouse
     m.insert(ascii("mouseMotion"), Input::Axis(AxisInput::MouseMotion));
     m.insert(ascii("mouseWheel"), Input::Axis(AxisInput::MouseWheel));

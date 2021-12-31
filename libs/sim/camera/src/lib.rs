@@ -16,6 +16,6 @@ mod arc_ball_camera;
 mod camera_impl;
 mod ufo_camera;
 
-pub use arc_ball_camera::ArcBallCamera;
-pub use camera_impl::Camera;
+pub use arc_ball_camera::{ArcBallCamera, ArcBallController};
+pub use camera_impl::{Camera, CameraComponent};
 pub use ufo_camera::UfoCamera;

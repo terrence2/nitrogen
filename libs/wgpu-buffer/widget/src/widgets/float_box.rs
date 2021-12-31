@@ -21,7 +21,7 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use gpu::Gpu;
-use input::GenericEvent;
+use input::{InputEvent, InputFocus};
 use nitrous::Interpreter;
 use nitrous::Value;
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -246,20 +246,16 @@ impl Widget for FloatBox {
 
     fn handle_event(
         &mut self,
-        now: Instant,
-        event: &GenericEvent,
-        focus: &str,
+        event: &InputEvent,
+        focus: InputFocus,
         cursor_position: Position<AbsSize>,
-        interpreter: Interpreter,
+        interpreter: &mut Interpreter,
     ) -> Result<()> {
         for packing in self.children.values() {
-            packing.widget.write().handle_event(
-                now,
-                event,
-                focus,
-                cursor_position,
-                interpreter.clone(),
-            )?;
+            packing
+                .widget
+                .write()
+                .handle_event(event, focus, cursor_position, interpreter)?;
         }
         Ok(())
     }

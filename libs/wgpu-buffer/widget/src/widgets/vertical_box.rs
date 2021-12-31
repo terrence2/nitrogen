@@ -24,7 +24,7 @@ use crate::{
 };
 use anyhow::Result;
 use gpu::Gpu;
-use input::GenericEvent;
+use input::{InputEvent, InputFocus};
 use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::{sync::Arc, time::Instant};
@@ -210,20 +210,15 @@ impl Widget for VerticalBox {
 
     fn handle_event(
         &mut self,
-        now: Instant,
-        event: &GenericEvent,
-        focus: &str,
+        event: &InputEvent,
+        focus: InputFocus,
         cursor_position: Position<AbsSize>,
-        interpreter: Interpreter,
+        interpreter: &mut Interpreter,
     ) -> Result<()> {
         for child in &self.children {
-            child.widget_mut().handle_event(
-                now,
-                event,
-                focus,
-                cursor_position,
-                interpreter.clone(),
-            )?;
+            child
+                .widget_mut()
+                .handle_event(event, focus, cursor_position, interpreter)?;
         }
         Ok(())
     }

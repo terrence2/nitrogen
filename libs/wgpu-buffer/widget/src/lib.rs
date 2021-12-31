@@ -32,15 +32,8 @@ pub use crate::{
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
     widgets::{
-        button::Button,
-        event_mapper::{Bindings, EventMapper},
-        expander::Expander,
-        float_box::FloatBox,
-        label::Label,
-        line_edit::LineEdit,
-        terminal::Terminal,
-        text_edit::TextEdit,
-        vertical_box::VerticalBox,
+        button::Button, expander::Expander, float_box::FloatBox, label::Label, line_edit::LineEdit,
+        terminal::Terminal, text_edit::TextEdit, vertical_box::VerticalBox,
     },
 };
 
@@ -49,7 +42,7 @@ use anyhow::{ensure, Result};
 use font_common::{FontAdvance, FontInterface};
 use font_ttf::TtfFont;
 use gpu::{Gpu, UploadTracker};
-use input::{ElementState, GenericEvent, ModifiersState, VirtualKeyCode};
+use input::{ElementState, InputEvent, InputFocus, ModifiersState, VirtualKeyCode};
 use log::trace;
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -90,7 +83,6 @@ pub struct WidgetBuffer {
     // Widget state.
     root: Arc<RwLock<FloatBox>>,
     paint_context: PaintContext,
-    keyboard_focus: String,
     cursor_position: Position<AbsSize>,
 
     // Auto-inserted widgets.
@@ -116,7 +108,6 @@ impl WidgetBuffer {
     const MAX_IMAGE_VERTICES: usize = Self::MAX_WIDGETS * 4 * 6;
 
     pub fn new(
-        mapper: Arc<RwLock<EventMapper>>,
         gpu: &mut Gpu,
         interpreter: &mut Interpreter,
         state_dir: &Path,
@@ -207,13 +198,11 @@ impl WidgetBuffer {
         let terminal = Terminal::new(&paint_context.font_context, state_dir)?
             .with_visible(false)
             .wrapped();
-        root.write().add_child("mapper", mapper);
         root.write().add_child("terminal", terminal.clone());
 
         let widget = Arc::new(RwLock::new(Self {
             root,
             paint_context,
-            keyboard_focus: "mapper".to_owned(),
             cursor_position: Position::origin(),
 
             terminal,
@@ -240,10 +229,6 @@ impl WidgetBuffer {
     #[method]
     pub fn root(&self) -> Value {
         Value::Module(self.root.clone())
-    }
-
-    pub fn set_keyboard_focus(&mut self, name: &str) {
-        self.keyboard_focus = name.to_owned();
     }
 
     pub fn add_font<S: Borrow<str> + Into<String>>(
@@ -311,26 +296,24 @@ impl WidgetBuffer {
     #[method]
     pub fn show_terminal(&mut self, _pressed: bool) {
         self.show_terminal = true;
-        self.set_keyboard_focus("terminal");
         self.terminal.write().set_visible(true);
     }
 
     #[method]
     pub fn hide_terminal(&mut self, _pressed: bool) {
         self.show_terminal = false;
-        self.set_keyboard_focus("mapper");
         self.terminal.write().set_visible(false);
     }
 
-    pub fn track_state_changes(
+    pub fn handle_events(
         &mut self,
-        now: Instant,
-        events: &[GenericEvent],
+        events: &[InputEvent],
+        focus: InputFocus,
+        interpreter: &mut Interpreter,
         win: &Window,
-        interpreter: Interpreter,
     ) -> Result<()> {
         for event in events {
-            if let GenericEvent::KeyboardKey {
+            if let InputEvent::KeyboardKey {
                 virtual_keycode,
                 press_state,
                 modifiers_state,
@@ -346,7 +329,7 @@ impl WidgetBuffer {
                     continue;
                 }
             }
-            if let GenericEvent::CursorMove { pixel_position, .. } = event {
+            if let InputEvent::CursorMove { pixel_position, .. } = event {
                 let (x, y) = *pixel_position;
                 self.cursor_position = Position::new(
                     AbsSize::from_px(x as f32),
@@ -354,14 +337,16 @@ impl WidgetBuffer {
                 );
             }
             self.root_container().write().handle_event(
-                now,
                 event,
-                &self.keyboard_focus,
+                focus,
                 self.cursor_position,
-                interpreter.clone(),
+                interpreter,
             )?;
         }
+        Ok(())
+    }
 
+    pub fn track_state_changes(&mut self, now: Instant, win: &Window) -> Result<()> {
         // Perform recursive layout algorithm against retained state.
         self.root.write().layout(
             now,
@@ -485,10 +470,8 @@ mod test {
             mut interpreter,
             ..
         } = Gpu::for_test_unix()?;
-        let mapper = EventMapper::new(&mut interpreter);
 
         let widgets = WidgetBuffer::new(
-            mapper,
             &mut gpu.write(),
             &mut interpreter,
             &(current_dir()?.join("__dump__")),
@@ -512,7 +495,7 @@ mod test {
 
         widgets
             .write()
-            .track_state_changes(Instant::now(), &[], &window.read(), interpreter)?;
+            .track_state_changes(Instant::now(), &window.read())?;
 
         let mut tracker = Default::default();
         widgets.write().ensure_uploaded(

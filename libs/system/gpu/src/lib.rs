@@ -38,7 +38,7 @@ use parking_lot::RwLock;
 use std::{fmt::Debug, fs, mem, path::PathBuf, sync::Arc};
 use tokio::runtime::Runtime;
 use wgpu::util::DeviceExt;
-use window::{DisplayConfig, DisplayConfigChangeReceiver, Window};
+use window::{DisplayConfig, Window};
 use zerocopy::AsBytes;
 
 #[derive(Debug)]
@@ -165,20 +165,14 @@ impl Gpu {
             frame_count: 0,
         }));
         interpreter.put_global("gpu", Value::Module(gpu.clone()));
-        win.register_display_config_change_receiver(gpu.clone());
         Ok(gpu)
     }
 
     #[cfg(unix)]
     pub fn for_test_unix() -> Result<TestResources> {
-        let (os_window, mut input) = input::InputController::for_test_unix()?;
+        let (os_window, input) = input::InputController::for_test_unix()?;
         let mut interpreter = Interpreter::default();
-        let window = Window::new(
-            os_window,
-            &mut input,
-            DisplayConfig::for_test(),
-            &mut interpreter,
-        )?;
+        let window = Window::new(os_window, DisplayConfig::for_test(), &mut interpreter)?;
         let gpu = Self::new(&mut window.write(), Default::default(), &mut interpreter)?;
         let async_rt = Runtime::new()?;
         Ok(TestResources {
@@ -319,6 +313,40 @@ impl Gpu {
             base_array_layer: 0,
             array_layer_count: None,
         })
+    }
+
+    pub fn on_display_config_changed(&mut self, config: &DisplayConfig) -> Result<()> {
+        info!(
+            "window config changed {}x{}",
+            config.window_size().width,
+            config.window_size().height
+        );
+
+        // Recreate the screen resources for the new window size.
+        let sc_desc = wgpu::SwapChainDescriptor {
+            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+            format: Self::SCREEN_FORMAT,
+            width: config.window_size().width,
+            height: config.window_size().height,
+            present_mode: self.config.present_mode,
+        };
+        self.swap_chain = self.device.create_swap_chain(&self.surface, &sc_desc);
+        self.depth_texture = Self::create_depth_texture(&self.device, &sc_desc);
+
+        // Check if our render extent has changed and re-broadcast
+        let extent = config.render_extent();
+        if self.render_extent.width != extent.width || self.render_extent.height != extent.height {
+            self.render_extent = wgpu::Extent3d {
+                width: extent.width,
+                height: extent.height,
+                depth: 1,
+            };
+            for module in &self.render_extent_change_receivers {
+                module.write().on_render_extent_changed(self)?;
+            }
+        }
+
+        Ok(())
     }
 
     pub fn register_render_extent_change_receiver<T: RenderExtentChangeReceiver>(
@@ -579,42 +607,6 @@ impl Gpu {
 
     pub fn device_and_queue_mut(&mut self) -> (&mut wgpu::Device, &mut wgpu::Queue) {
         (&mut self.device, &mut self.queue)
-    }
-}
-
-impl DisplayConfigChangeReceiver for Gpu {
-    fn on_display_config_changed(&mut self, config: &DisplayConfig) -> Result<()> {
-        info!(
-            "window config changed {}x{}",
-            config.window_size().width,
-            config.window_size().height
-        );
-
-        // Recreate the screen resources for the new window size.
-        let sc_desc = wgpu::SwapChainDescriptor {
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
-            format: Self::SCREEN_FORMAT,
-            width: config.window_size().width,
-            height: config.window_size().height,
-            present_mode: self.config.present_mode,
-        };
-        self.swap_chain = self.device.create_swap_chain(&self.surface, &sc_desc);
-        self.depth_texture = Self::create_depth_texture(&self.device, &sc_desc);
-
-        // Check if our render extent has changed and re-broadcast
-        let extent = config.render_extent();
-        if self.render_extent.width != extent.width || self.render_extent.height != extent.height {
-            self.render_extent = wgpu::Extent3d {
-                width: extent.width,
-                height: extent.height,
-                depth: 1,
-            };
-            for module in &self.render_extent_change_receivers {
-                module.write().on_render_extent_changed(self)?;
-            }
-        }
-
-        Ok(())
     }
 }
 

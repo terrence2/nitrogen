@@ -14,17 +14,19 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{degrees, meters};
 use anyhow::Result;
-use camera::ArcBallCamera;
+use camera::{ArcBallCamera, Camera};
 use chrono::{TimeZone, Utc};
+use event_mapper::EventMapper;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
 use gpu::Gpu;
-use input::{GenericEvent, GenericSystemEvent, InputController, InputSystem, VirtualKeyCode};
+use input::{InputController, InputEvent, InputSystem, SystemEvent, VirtualKeyCode};
 use nitrous::Interpreter;
 use orrery::Orrery;
+use parking_lot::Mutex;
 use stars::StarsBuffer;
-use widget::EventMapper;
+use std::sync::Arc;
 use window::{DisplayConfig, DisplayOpts, Window};
 use winit::window::Window as OsWindow;
 
@@ -32,16 +34,11 @@ fn main() -> Result<()> {
     InputSystem::run_forever(window_main)
 }
 
-fn window_main(os_window: OsWindow, input_controller: &mut InputController) -> Result<()> {
+fn window_main(os_window: OsWindow, input_controller: Arc<Mutex<InputController>>) -> Result<()> {
     let mut interpreter = Interpreter::default();
     let _mapper = EventMapper::new(&mut interpreter);
     let display_config = DisplayConfig::discover(&DisplayOpts::default(), &os_window);
-    let window = Window::new(
-        os_window,
-        input_controller,
-        display_config,
-        &mut interpreter,
-    )?;
+    let window = Window::new(os_window, display_config, &mut interpreter)?;
     let gpu = Gpu::new(&mut window.write(), Default::default(), &mut interpreter)?;
     let orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0), &mut interpreter)?;
 
@@ -138,7 +135,13 @@ fn window_main(os_window: OsWindow, input_controller: &mut InputController) -> R
             },
         });
 
-    let arcball = ArcBallCamera::new(meters!(0.1), &mut window.write(), &mut interpreter)?;
+    let camera = Camera::install(
+        degrees!(90),
+        window.read().render_aspect_ratio(),
+        meters!(0.1),
+        &mut interpreter,
+    )?;
+    let arcball = ArcBallCamera::install(&mut interpreter)?;
     arcball.write().pan_view(true);
     arcball.write().set_eye(Graticule::<Target>::new(
         degrees!(0),
@@ -153,31 +156,38 @@ fn window_main(os_window: OsWindow, input_controller: &mut InputController) -> R
     arcball.write().set_distance(meters!(40.0));
 
     loop {
-        for event in input_controller.poll_events()? {
-            match event {
-                GenericEvent::KeyboardKey {
-                    virtual_keycode, ..
-                } => {
-                    if virtual_keycode == VirtualKeyCode::Q
-                        || virtual_keycode == VirtualKeyCode::Escape
-                    {
-                        return Ok(());
-                    }
-                }
-                GenericEvent::System(GenericSystemEvent::Quit) => {
+        for event in input_controller.lock().poll_input_events()? {
+            if let InputEvent::KeyboardKey {
+                virtual_keycode, ..
+            } = event
+            {
+                if virtual_keycode == VirtualKeyCode::Q || virtual_keycode == VirtualKeyCode::Escape
+                {
                     return Ok(());
                 }
-                _ => {}
             }
         }
-        arcball.write().handle_mousemotion(-0.5f64, 0f64);
-        arcball.write().track_state_changes();
+        let sys_events = input_controller.lock().poll_system_events()?;
+        for event in &sys_events {
+            if matches!(event, SystemEvent::Quit) {
+                return Ok(());
+            }
+        }
+        if let Some(config) = window.write().handle_system_events(&sys_events) {
+            camera.write().on_display_config_updated(&config);
+            gpu.write().on_display_config_changed(&config)?;
+        }
 
-        globals_buffer.write().track_state_changes(
-            arcball.read().camera(),
-            &orrery.read(),
-            &window.read(),
-        );
+        arcball.write().handle_mousemotion(-0.5f64, 0f64);
+        arcball.write().apply_input_state();
+        camera.write().apply_input_state();
+        camera
+            .write()
+            .update_frame(&arcball.read().world_space_frame());
+
+        globals_buffer
+            .write()
+            .track_state_changes(&camera.read(), &orrery.read(), &window.read());
 
         // Prepare new camera parameters.
         let mut tracker = Default::default();

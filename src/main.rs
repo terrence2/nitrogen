@@ -12,26 +12,29 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use absolute_unit::{degrees, meters};
+use absolute_unit::{degrees, meters, radians};
 use animate::Timeline;
 use anyhow::{anyhow, Result};
 use atmosphere::AtmosphereBuffer;
-use camera::{ArcBallCamera, Camera};
+use camera::{ArcBallCamera, ArcBallController, Camera, CameraComponent};
 use catalog::{Catalog, DirectoryDrawer};
 use chrono::{Duration as ChronoDuration, TimeZone, Utc};
 use composite::CompositeRenderPass;
+use event_mapper::EventMapper;
 use fullscreen::FullscreenBuffer;
 use global_data::GlobalParametersBuffer;
 use gpu::{make_frame_graph, CpuDetailLevel, DetailLevelOpts, Gpu, GpuDetailLevel};
-use input::{InputController, InputSystem};
-use legion::world::World;
+use input::{InputController, InputFocus, InputSystem};
+use legion::*;
+use measure::WorldSpaceFrame;
 use nitrous::{Interpreter, StartupOpts, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use orrery::Orrery;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use platform_dirs::AppDirs;
 use stars::StarsBuffer;
 use std::{
+    f32::consts::PI,
     fs::create_dir_all,
     path::PathBuf,
     sync::Arc,
@@ -42,14 +45,13 @@ use terminal_size::{terminal_size, Width};
 use terrain::TerrainBuffer;
 use ui::UiRenderPass;
 use widget::{
-    Border, Color, EventMapper, Expander, Label, Labeled, PositionH, PositionV, VerticalBox,
-    WidgetBuffer,
+    Border, Color, Expander, Label, Labeled, PositionH, PositionV, VerticalBox, WidgetBuffer,
 };
 use window::{
     size::{LeftBound, Size},
-    DisplayConfig, DisplayConfigChangeReceiver, DisplayOpts, OsWindow, Window,
+    DisplayConfig, DisplayOpts, OsWindow, Window,
 };
-use world::WorldRenderPass;
+use world_render::WorldRenderPass;
 
 /// Demonstrate the capabilities of the Nitrogen engine
 #[derive(Debug, StructOpt)]
@@ -104,7 +106,7 @@ impl System {
                 bindings.bind("Escape", "system.exit()");
                 bindings.bind("q", "system.exit()");
                 bindings.bind("p", "system.toggle_pin_camera(pressed)");
-                bindings.bind("l", "widget.dump_glyphs(pressed)");
+                // bindings.bind("l", "widget.dump_glyphs(pressed)");
             "#,
         )?;
         Ok(system)
@@ -181,6 +183,7 @@ impl System {
         now: Instant,
         orrery: &Orrery,
         arcball: &ArcBallCamera,
+        camera: &Camera,
     ) -> Result<()> {
         self.visible_widgets
             .sim_time
@@ -197,7 +200,7 @@ impl System {
         self.visible_widgets
             .camera_fov
             .write()
-            .set_text(format!("FoV: {}", degrees!(arcball.camera().fov_y()),));
+            .set_text(format!("FoV: {}", degrees!(camera.fov_y()),));
         let frame_time = now.elapsed();
         let ts = format!(
             "frame: {}.{}ms",
@@ -292,10 +295,9 @@ fn build_frame_graph(
     gpu_detail: GpuDetailLevel,
     app_dirs: &AppDirs,
     catalog: &Catalog,
-    mapper: Arc<RwLock<EventMapper>>,
     window: &mut Window,
     interpreter: &mut Interpreter,
-) -> Result<(Arc<RwLock<Gpu>>, FrameGraph)> {
+) -> Result<(Arc<RwLock<Gpu>>, FrameGraph, Resources)> {
     let gpu = Gpu::new(window, Default::default(), interpreter)?;
     let atmosphere_buffer = AtmosphereBuffer::new(&mut gpu.write())?;
     let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
@@ -317,7 +319,7 @@ fn build_frame_graph(
         &mut gpu.write(),
         interpreter,
     )?;
-    let widgets = WidgetBuffer::new(mapper, &mut gpu.write(), interpreter, &app_dirs.state_dir)?;
+    let widgets = WidgetBuffer::new(&mut gpu.write(), interpreter, &app_dirs.state_dir)?;
     let ui = UiRenderPass::new(
         &widgets.read(),
         &world.read(),
@@ -330,6 +332,18 @@ fn build_frame_graph(
         &globals.read(),
         &mut gpu.write(),
     )?));
+
+    let mut resources = Resources::default();
+    resources.insert(gpu.clone());
+    resources.insert(composite.clone());
+    resources.insert(ui.clone());
+    resources.insert(widgets.clone());
+    resources.insert(world.clone());
+    resources.insert(terrain_buffer.clone());
+    resources.insert(atmosphere_buffer.clone());
+    resources.insert(stars_buffer.clone());
+    resources.insert(fullscreen_buffer.clone());
+    resources.insert(globals.clone());
 
     globals.write().add_debug_bindings(interpreter)?;
     world.write().add_debug_bindings(interpreter)?;
@@ -345,7 +359,7 @@ fn build_frame_graph(
         globals,
     )?;
 
-    Ok((gpu, frame_graph))
+    Ok((gpu, frame_graph, resources))
 }
 
 fn main() -> Result<()> {
@@ -353,7 +367,12 @@ fn main() -> Result<()> {
     InputSystem::run_forever(simulation_main)
 }
 
-fn simulation_main(os_window: OsWindow, input_controller: &mut InputController) -> Result<()> {
+const STEP: Duration = Duration::from_micros(16_666);
+
+fn simulation_main(
+    os_window: OsWindow,
+    input_controller: Arc<Mutex<InputController>>,
+) -> Result<()> {
     os_window.set_title("Nitrogen Demo");
 
     let opt = Opt::from_args();
@@ -371,93 +390,239 @@ fn simulation_main(os_window: OsWindow, input_controller: &mut InputController) 
     }
     let catalog = Arc::new(RwLock::new(catalog));
 
-    input_controller.wait_for_window_configuration()?;
+    input_controller.lock().wait_for_window_configuration()?;
 
     let mut interpreter = Interpreter::default();
     let mapper = EventMapper::new(&mut interpreter);
     let display_config = DisplayConfig::discover(&opt.display_opts, &os_window);
-    let window = Window::new(
-        os_window,
-        input_controller,
-        display_config,
-        &mut interpreter,
-    )?;
-    let _legion = World::default();
+    let window = Window::new(os_window, display_config, &mut interpreter)?;
+    let mut world = World::default();
 
     ///////////////////////////////////////////////////////////
-    let (_gpu, mut frame_graph) = build_frame_graph(
+    let (gpu, mut frame_graph, mut resources) = build_frame_graph(
         cpu_detail,
         gpu_detail,
         &app_dirs,
         &catalog.read(),
-        mapper,
         &mut window.write(),
         &mut interpreter,
     )?;
-    let _window = window.clone();
-    let _frame_graph = frame_graph.clone();
-    let render_handle = std::thread::spawn(move || {
-        render_main(_window, _gpu, _frame_graph).unwrap();
-    });
 
     let orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0), &mut interpreter)?;
-    let arcball = ArcBallCamera::new(meters!(0.5), &mut window.write(), &mut interpreter)?;
     let timeline = Timeline::new(&mut interpreter);
-    let system = System::new(&frame_graph.widgets(), &mut interpreter)?;
+    let system = System::new(
+        /*&frame_graph.widgets(),*/
+        &resources.get::<Arc<RwLock<WidgetBuffer>>>().unwrap().read(),
+        &mut interpreter,
+    )?;
+
+    resources.insert(Instant::now());
+    resources.insert(InputFocus::Game);
+    resources.insert(mapper);
+    resources.insert(input_controller);
+    resources.insert(orrery.clone());
+    resources.insert(timeline);
+    resources.insert(window.clone());
+    resources.insert(interpreter.clone());
+    resources.insert(None as Option<DisplayConfig>);
+
+    fn sim_now(resources: &Resources) -> Instant {
+        *resources.get::<Instant>().unwrap()
+    }
+
+    let camera = Camera::install(
+        radians!(PI / 2.0),
+        window.read().render_aspect_ratio(),
+        meters!(0.5),
+        &mut interpreter,
+    )?;
+    let arcball = ArcBallCamera::install(&mut interpreter)?;
+    let _player_id = world.push((
+        WorldSpaceFrame::default(),
+        ArcBallController::new(arcball.clone()),
+        CameraComponent::new(camera.clone()),
+    ));
 
     opt.startup_opts.on_startup(&mut interpreter)?;
 
-    const STEP: Duration = Duration::from_micros(16_666);
-    let mut now = Instant::now();
-    while !system.read().exit {
-        // Catch up to system time.
-        let next_now = Instant::now();
-        while now + STEP < next_now {
-            orrery.write().step_time(ChronoDuration::from_std(STEP)?);
-            timeline.write().step_time(&now)?;
-            now += STEP;
+    //////////////////////////////////////////////////////////////////
+    // Sim Schedule
+    //
+    // The simulation schedule should be used for "pure" entity to entity work and update of
+    // a handful of game related resources, rather than communicating with the GPU. This generally
+    // splits into two phases: per-fixed-tick resource updates and entity updates from resources.
+    #[system]
+    fn sim_update_current_time(#[resource] now: &mut Instant) {
+        *now += STEP;
+    }
+
+    #[system]
+    fn sim_handle_input_events(
+        #[resource] input_controller: &Arc<Mutex<InputController>>,
+        #[resource] input_focus: &InputFocus,
+        #[resource] window: &Arc<RwLock<Window>>,
+        #[resource] interpreter: &mut Interpreter,
+        #[resource] widgets: &Arc<RwLock<WidgetBuffer>>,
+        #[resource] mapper: &Arc<RwLock<EventMapper>>,
+    ) {
+        // Note: if we are stopping, the queue might have shut down, in which case we don't
+        // really care about the output anymore.
+        let events = if let Ok(events) = input_controller.lock().poll_input_events() {
+            events
+        } else {
+            return;
+        };
+        mapper
+            .write()
+            .handle_events(&events, *input_focus, interpreter)
+            .expect("EventMapper::handle_events");
+        widgets
+            .write()
+            .handle_events(&events, *input_focus, interpreter, &window.read())
+            .expect("Widgets::handle_events");
+    }
+
+    #[system(for_each)]
+    fn sim_apply_arcball_updates(arcball: &mut ArcBallController, frame: &mut WorldSpaceFrame) {
+        arcball.apply_input_state();
+        *frame = arcball.world_space_frame();
+    }
+
+    #[system(for_each)]
+    fn sim_update_camera_frame(frame: &WorldSpaceFrame, camera: &mut CameraComponent) {
+        camera.apply_input_state();
+        camera.update_frame(frame);
+    }
+
+    #[system]
+    fn sim_orrery_step_time(#[resource] orrery: &Arc<RwLock<Orrery>>) {
+        orrery
+            .write()
+            .step_time(ChronoDuration::from_std(STEP).expect("in range"));
+    }
+
+    #[system]
+    fn sim_timeline_animate(
+        #[resource] now: &Instant,
+        #[resource] timeline: &Arc<RwLock<Timeline>>,
+    ) {
+        timeline.write().step_time(now);
+    }
+
+    let mut sim_fixed_schedule = Schedule::builder()
+        .add_thread_local(sim_update_current_time_system())
+        .add_thread_local(sim_handle_input_events_system())
+        .add_thread_local(sim_apply_arcball_updates_system())
+        .add_thread_local(sim_update_camera_frame_system())
+        .add_system(sim_orrery_step_time_system())
+        .add_system(sim_timeline_animate_system())
+        .build();
+
+    //////////////////////////////////////////////////////////////////
+    // Track State Changes (from entities and game resources [into graphics systems])
+    //
+    // Copy from entities into buffers more suitable for upload to the GPU. Also, do heavier
+    // CPU-side graphics work that can be parallelized efficiently, like updating the terrain
+    // from the current cameras. Not generally for writing to the GPU.
+    //
+    // TODO: how much can we parallelize for writing to the GPU? Anything at all?
+    //       UploadTracker is shared state. Can we do anything with frame graph?
+    //
+    // Note: We have to take resources as non-mutable references, so that we can run in parallel.
+    //       We can take as many of these in parallel as we want, iff there is no parallel write
+    //       to those same resource (e.g. window). Otherwise we might deadlock.
+    #[system]
+    fn update_handle_system_events(
+        #[resource] input_controller: &Arc<Mutex<InputController>>,
+        #[resource] window: &Arc<RwLock<Window>>,
+        #[resource] updated_config: &mut Option<DisplayConfig>,
+    ) {
+        let events = input_controller
+            .lock()
+            .poll_system_events()
+            .expect("poll_system_events");
+        *updated_config = window.write().handle_system_events(&events);
+    }
+
+    #[system(for_each)]
+    fn update_handle_camera_aspect_change(
+        camera: &mut CameraComponent,
+        #[resource] updated_config: &Option<DisplayConfig>,
+    ) {
+        if let Some(config) = updated_config {
+            camera.on_display_config_updated(config);
         }
-        now = next_now;
+    }
+
+    #[system]
+    fn update_handle_window_config_change(
+        #[resource] updated_config: &Option<DisplayConfig>,
+        #[resource] gpu: &Arc<RwLock<Gpu>>,
+    ) {
+        if let Some(config) = updated_config {
+            gpu.write()
+                .on_display_config_changed(config)
+                .expect("Gpu::on_display_config_changed");
+        }
+    }
+
+    #[system]
+    fn update_widget_track_state_changes(
+        #[resource] now: &Instant,
+        #[resource] window: &Arc<RwLock<Window>>,
+        #[resource] widgets: &Arc<RwLock<WidgetBuffer>>,
+    ) {
+        widgets
+            .write()
+            .track_state_changes(*now, &window.read())
+            .expect("Widgets::track_state_changes");
+    }
+
+    // #[system(for_each)]
+    // fn update_globals_track_state_changes(
+    //     camera: &mut CameraComponent,
+    //     #[resource] orrery: &Arc<RwLock<Orrery>>,
+    //     #[resource] window: &Arc<RwLock<Window>>,
+    //     #[resource] global_data: &Arc<RwLock<GlobalParametersBuffer>>,
+    // ) {
+    // }
+
+    let mut update_frame_schedule = Schedule::builder()
+        .add_thread_local(update_handle_system_events_system())
+        .add_thread_local(update_handle_camera_aspect_change_system())
+        .add_thread_local(update_handle_window_config_change_system())
+        .add_system(update_widget_track_state_changes_system())
+        .build();
+
+    //////////////////////////////////////////////////////////////////
+    // Ensure (Graphics) Updated
+    //
+    // Write current state to GPU
+
+    while !system.read().exit {
+        // Catch monotonic sim time up to system time.
+        let system_now = Instant::now();
+        while sim_now(&resources) + STEP < system_now {
+            sim_fixed_schedule.execute(&mut world, &mut resources);
+        }
+
+        update_frame_schedule.execute(&mut world, &mut resources);
 
         {
-            arcball.write().track_state_changes();
-            frame_graph.widgets_mut().track_state_changes(
-                now,
-                &input_controller.poll_events()?,
-                &window.read(),
-                interpreter.clone(),
-            )?;
             frame_graph.globals_mut().track_state_changes(
-                arcball.read().camera(),
+                &camera.read(),
                 &orrery.read(),
                 &window.read(),
             );
             let mut sys_lock = system.write();
-            let vis_camera = sys_lock.current_camera(arcball.read_recursive().camera());
+            let vis_camera = sys_lock.current_camera(&camera.read());
             frame_graph.terrain_mut().track_state_changes(
-                arcball.read_recursive().camera(),
+                &camera.read(),
                 vis_camera,
                 catalog.clone(),
             )?;
         }
 
-        system
-            .write()
-            .track_visible_state(now, &orrery.read(), &arcball.read())?;
-    }
-
-    window.write().closing = true;
-    render_handle.join().ok();
-
-    Ok(())
-}
-
-fn render_main(
-    window: Arc<RwLock<Window>>,
-    gpu: Arc<RwLock<Gpu>>,
-    mut frame_graph: FrameGraph,
-) -> Result<()> {
-    while !window.read().closing {
         let now = Instant::now();
         let mut tracker = Default::default();
         frame_graph
@@ -476,6 +641,13 @@ fn render_main(
             gpu.write()
                 .on_display_config_changed(window.read().config())?;
         }
+
+        system.write().track_visible_state(
+            system_now, // compute frame times from actual elapsed time
+            &orrery.read(),
+            &arcball.read(),
+            &camera.read(),
+        )?;
     }
 
     Ok(())

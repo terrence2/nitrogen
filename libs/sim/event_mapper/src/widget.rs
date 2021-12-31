@@ -13,18 +13,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    font_context::FontContext,
-    region::{Extent, Position, Region},
-    widget::Widget,
-    widgets::event_mapper::{
-        bindings::Bindings,
-        input::{Input, InputSet},
-    },
-    PaintContext,
+    bindings::Bindings,
+    input::{Input, InputSet},
 };
 use anyhow::{ensure, Result};
-use gpu::Gpu;
-use input::{ElementState, GenericEvent, GenericSystemEvent, GenericWindowEvent, ModifiersState};
+use input::{ElementState, InputEvent, InputFocus, ModifiersState};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use ordered_float::OrderedFloat;
@@ -32,11 +25,6 @@ use parking_lot::RwLock;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
-    time::Instant,
-};
-use window::{
-    size::{AbsSize, Size},
-    Window,
 };
 
 #[derive(Debug, Default)]
@@ -73,40 +61,24 @@ impl EventMapper {
         self.bindings.insert(name.to_owned(), bindings.clone());
         Ok(Value::Module(bindings))
     }
-}
 
-impl Widget for EventMapper {
-    fn measure(&mut self, _win: &Window, _font_context: &mut FontContext) -> Result<Extent<Size>> {
-        Ok(Extent::zero())
-    }
-
-    fn layout(
+    pub fn handle_events(
         &mut self,
-        _now: Instant,
-        _region: Region<Size>,
-        _win: &Window,
-        _font_context: &mut FontContext,
+        events: &[InputEvent],
+        focus: InputFocus,
+        interpreter: &mut Interpreter,
     ) -> Result<()> {
-        Ok(())
-    }
-
-    fn upload(
-        &self,
-        _now: Instant,
-        _win: &Window,
-        _gpu: &Gpu,
-        _context: &mut PaintContext,
-    ) -> Result<()> {
+        for event in events {
+            self.handle_event(event, focus, interpreter)?;
+        }
         Ok(())
     }
 
     fn handle_event(
         &mut self,
-        _now: Instant,
-        event: &GenericEvent,
-        focus: &str,
-        _cursor_position: Position<AbsSize>,
-        mut interpreter: Interpreter,
+        event: &InputEvent,
+        focus: InputFocus,
+        interpreter: &mut Interpreter,
     ) -> Result<()> {
         let input = Input::from_event(event);
         if input.is_none() {
@@ -131,20 +103,20 @@ impl Widget for EventMapper {
         }
 
         // Break *after* maintaining state.
-        if focus != "mapper" {
+        if focus != InputFocus::Game {
             return Ok(());
         }
 
         // Collect variables to inject.
         match event {
-            GenericEvent::MouseMotion {
+            InputEvent::MouseMotion {
                 dx, dy, in_window, ..
             } => {
                 variables.push(("dx", Value::Float(OrderedFloat(*dx))));
                 variables.push(("dy", Value::Float(OrderedFloat(*dy))));
                 variables.push(("in_window", Value::Boolean(*in_window)));
             }
-            GenericEvent::MouseWheel {
+            InputEvent::MouseWheel {
                 horizontal_delta,
                 vertical_delta,
                 in_window,
@@ -160,24 +132,13 @@ impl Widget for EventMapper {
                 ));
                 variables.push(("in_window", Value::Boolean(*in_window)));
             }
-            GenericEvent::Window(evt) => match evt {
-                GenericWindowEvent::Resized { width, height } => {
-                    variables.push(("width", Value::Integer(*width as i64)));
-                    variables.push(("height", Value::Integer(*height as i64)));
-                }
-                GenericWindowEvent::ScaleFactorChanged { scale } => {
-                    variables.push(("scale", Value::Float(OrderedFloat(*scale))));
-                }
-            },
-            GenericEvent::System(evt) => match evt {
-                GenericSystemEvent::Quit => {}
-                GenericSystemEvent::DeviceAdded { dummy } => {
-                    variables.push(("device_id", Value::Integer(*dummy as i64)));
-                }
-                GenericSystemEvent::DeviceRemoved { dummy } => {
-                    variables.push(("device_id", Value::Integer(*dummy as i64)));
-                }
-            },
+            InputEvent::DeviceAdded { dummy } => {
+                variables.push(("device_id", Value::Integer(*dummy as i64)));
+            }
+            InputEvent::DeviceRemoved { dummy } => {
+                variables.push(("device_id", Value::Integer(*dummy as i64)));
+            }
+            // FIXME: set variables for button state, key state, joy state, etc
             _ => {}
         }
 

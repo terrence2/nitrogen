@@ -16,5 +16,5 @@ mod bindings;
 mod input;
 mod widget;
 
-pub(crate) use crate::widgets::event_mapper::widget::State;
-pub use crate::widgets::event_mapper::{bindings::Bindings, widget::EventMapper};
+pub(crate) use crate::widget::State;
+pub use crate::{bindings::Bindings, widget::EventMapper};

@@ -12,87 +12,91 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::Camera;
-use absolute_unit::{
-    degrees, meters, radians, Angle, Degrees, Kilometers, Length, LengthUnit, Meters, Radians,
-};
+use absolute_unit::{degrees, meters, radians, Degrees, Length, LengthUnit, Meters, Radians};
 use anyhow::{bail, ensure, Result};
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
+use measure::WorldSpaceFrame;
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use std::{f64::consts::PI, sync::Arc};
-use window::{DisplayConfig, DisplayConfigChangeReceiver, Window};
+
+pub struct ArcBallController {
+    inner: Arc<RwLock<ArcBallCamera>>,
+}
+
+impl ArcBallController {
+    pub fn new(arcball: Arc<RwLock<ArcBallCamera>>) -> Self {
+        Self { inner: arcball }
+    }
+
+    pub fn apply_input_state(&mut self) {
+        self.inner.write().apply_input_state();
+    }
+
+    pub fn world_space_frame(&self) -> WorldSpaceFrame {
+        self.inner.read().world_space_frame()
+    }
+}
+
+#[derive(Debug)]
+struct InputState {
+    in_rotate: bool,
+    in_move: bool,
+    target_height_delta: Length<Meters>,
+}
 
 #[derive(Debug, NitrousModule)]
 pub struct ArcBallCamera {
-    camera: Camera,
+    input: InputState,
 
-    in_rotate: bool,
-    in_move: bool,
-    fov_delta: Angle<Degrees>,
-    target_height_delta: Length<Meters>,
     target: Graticule<GeoSurface>,
     eye: Graticule<Target>,
 }
 
 #[inject_nitrous_module]
 impl ArcBallCamera {
-    pub fn new(
-        z_near: Length<Meters>,
-        win: &mut Window,
-        interpreter: &mut Interpreter,
-    ) -> Result<Arc<RwLock<Self>>> {
-        let arcball = Arc::new(RwLock::new(Self::detached(
-            win.render_aspect_ratio(),
-            z_near,
-        )));
-        win.register_display_config_change_receiver(arcball.clone());
-        interpreter.put_global("camera", Value::Module(arcball.clone()));
+    pub fn install(interpreter: &mut Interpreter) -> Result<Arc<RwLock<Self>>> {
+        let arcball = Arc::new(RwLock::new(Self::detached()));
+        interpreter.put_global("arcball", Value::Module(arcball.clone()));
         interpreter.interpret_once(
             r#"
-                let bindings := mapper.create_bindings("arc_ball_camera");
-                bindings.bind("mouse1", "camera.pan_view(pressed)");
-                bindings.bind("mouse3", "camera.move_view(pressed)");
-                bindings.bind("mouseMotion", "camera.handle_mousemotion(dx, dy)");
-                bindings.bind("mouseWheel", "camera.handle_mousewheel(vertical_delta)");
-                bindings.bind("PageUp", "camera.increase_fov(pressed)");
-                bindings.bind("PageDown", "camera.decrease_fov(pressed)");
-                bindings.bind("Shift+Up", "camera.target_up_fast(pressed)");
-                bindings.bind("Shift+Down", "camera.target_down_fast(pressed)");
-                bindings.bind("Up", "camera.target_up(pressed)");
-                bindings.bind("Down", "camera.target_down(pressed)");
-                bindings.bind("Shift+LBracket", "camera.decrease_exposure(pressed)");
-                bindings.bind("Shift+RBracket", "camera.increase_exposure(pressed)");
+                let bindings := mapper.create_bindings("arc_ball_controller");
+                bindings.bind("mouse1", "arcball.pan_view(pressed)");
+                bindings.bind("mouse3", "arcball.move_view(pressed)");
+                bindings.bind("mouseMotion", "arcball.handle_mousemotion(dx, dy)");
+                bindings.bind("mouseWheel", "arcball.handle_mousewheel(vertical_delta)");
+                bindings.bind("Shift+Up", "arcball.target_up_fast(pressed)");
+                bindings.bind("Shift+Down", "arcball.target_down_fast(pressed)");
+                bindings.bind("Up", "arcball.target_up(pressed)");
+                bindings.bind("Down", "arcball.target_down(pressed)");
             "#,
         )?;
         Ok(arcball)
     }
 
-    pub fn detached(aspect_ratio: f64, z_near: Length<Meters>) -> Self {
-        let fov_y = radians!(PI / 2f64);
+    pub fn detached() -> Self {
         Self {
-            camera: Camera::from_parameters(fov_y, aspect_ratio, z_near),
+            input: InputState {
+                target_height_delta: meters!(0),
+                in_rotate: false,
+                in_move: false,
+            },
             target: Graticule::<GeoSurface>::new(radians!(0), radians!(0), meters!(10.)),
-            target_height_delta: meters!(0),
             eye: Graticule::<Target>::new(
                 radians!(degrees!(10.)),
                 radians!(degrees!(25.)),
                 meters!(10.),
             ),
-            fov_delta: degrees!(0),
-            in_rotate: false,
-            in_move: false,
         }
     }
 
-    pub fn camera(&self) -> &Camera {
-        &self.camera
-    }
-
-    pub fn camera_mut(&mut self) -> &mut Camera {
-        &mut self.camera
+    pub fn world_space_frame(&self) -> WorldSpaceFrame {
+        let target = self.cartesian_target_position::<Meters>();
+        let eye = self.cartesian_eye_position::<Meters>();
+        let forward = (target - eye).vec64();
+        WorldSpaceFrame::new(eye, forward)
     }
 
     #[method]
@@ -272,6 +276,9 @@ impl ArcBallCamera {
         Cartesian::<GeoCenter, Unit>::from(Graticule::<GeoCenter>::from(self.target))
     }
 
+    // fn graticule_eye_position<Unit: LengthUnit>(&self) -> Graticule<GeoSurface> {
+    // }
+
     fn cartesian_eye_position<Unit: LengthUnit>(&self) -> Cartesian<GeoCenter, Unit> {
         let r_lon = UnitQuaternion::from_axis_angle(
             &NUnit::new_unchecked(Vector3::new(0f64, 1f64, 0f64)),
@@ -290,46 +297,17 @@ impl ArcBallCamera {
 
     #[method]
     pub fn pan_view(&mut self, pressed: bool) {
-        self.in_rotate = pressed;
+        self.input.in_rotate = pressed;
     }
 
     #[method]
     pub fn move_view(&mut self, pressed: bool) {
-        self.in_move = pressed;
-    }
-
-    #[method]
-    pub fn increase_fov(&mut self, pressed: bool) {
-        self.fov_delta = degrees!(if pressed { 1 } else { 0 });
-    }
-
-    #[method]
-    pub fn decrease_fov(&mut self, pressed: bool) {
-        self.fov_delta = degrees!(if pressed { -1 } else { 0 });
-    }
-
-    #[method]
-    pub fn increase_exposure(&mut self, pressed: bool) {
-        if pressed {
-            self.camera.increase_exposure();
-        }
-    }
-
-    #[method]
-    pub fn decrease_exposure(&mut self, pressed: bool) {
-        if pressed {
-            self.camera.decrease_exposure();
-        }
-    }
-
-    #[method]
-    pub fn set_exposure(&mut self, value: f64) {
-        self.camera.set_exposure(value as f32);
+        self.input.in_move = pressed;
     }
 
     #[method]
     pub fn handle_mousemotion(&mut self, x: f64, y: f64) {
-        if self.in_rotate {
+        if self.input.in_rotate {
             self.eye.longitude -= degrees!(x * 0.5);
 
             self.eye.latitude += degrees!(y * 0.5f64);
@@ -340,7 +318,7 @@ impl ArcBallCamera {
                 .max(radians!(-PI / 2.0 + 0.001));
         }
 
-        if self.in_move {
+        if self.input.in_move {
             let sensitivity: f64 = f64::from(self.distance()) / 60_000_000.0;
 
             let dir = self.eye.longitude;
@@ -370,72 +348,44 @@ impl ArcBallCamera {
     #[method]
     pub fn target_up(&mut self, pressed: bool) {
         if pressed {
-            self.target_height_delta = meters!(1);
+            self.input.target_height_delta = meters!(1);
         } else {
-            self.target_height_delta = meters!(0);
+            self.input.target_height_delta = meters!(0);
         }
     }
 
     #[method]
     pub fn target_down(&mut self, pressed: bool) {
         if pressed {
-            self.target_height_delta = meters!(-1);
+            self.input.target_height_delta = meters!(-1);
         } else {
-            self.target_height_delta = meters!(0);
+            self.input.target_height_delta = meters!(0);
         }
     }
 
     #[method]
     pub fn target_up_fast(&mut self, pressed: bool) {
         if pressed {
-            self.target_height_delta = meters!(100);
+            self.input.target_height_delta = meters!(100);
         } else {
-            self.target_height_delta = meters!(0);
+            self.input.target_height_delta = meters!(0);
         }
     }
 
     #[method]
     pub fn target_down_fast(&mut self, pressed: bool) {
         if pressed {
-            self.target_height_delta = meters!(-100);
+            self.input.target_height_delta = meters!(-100);
         } else {
-            self.target_height_delta = meters!(0);
+            self.input.target_height_delta = meters!(0);
         }
     }
 
-    pub fn track_state_changes(&mut self) {
-        let mut fov = degrees!(self.camera.fov_y());
-        fov += self.fov_delta;
-        fov = fov.min(degrees!(90)).max(degrees!(1));
-        self.camera.set_fov_y(fov);
-
-        self.target.distance += self.target_height_delta;
+    pub fn apply_input_state(&mut self) {
+        self.target.distance += self.input.target_height_delta;
         if self.target.distance < meters!(0f64) {
             self.target.distance = meters!(0f64);
         }
-
-        let target = self.cartesian_target_position::<Kilometers>();
-        let eye = self.cartesian_eye_position::<Kilometers>();
-        let forward = (target - eye).vec64();
-        let right = eye.vec64().cross(&forward);
-        let up = right.cross(&forward);
-        self.camera.push_frame_parameters(
-            Cartesian::new(
-                meters!(eye.coords[0]),
-                meters!(eye.coords[1]),
-                meters!(eye.coords[2]),
-            ),
-            forward.normalize(),
-            up.normalize(),
-            right.normalize(),
-        );
-    }
-}
-
-impl DisplayConfigChangeReceiver for ArcBallCamera {
-    fn on_display_config_changed(&mut self, config: &DisplayConfig) -> Result<()> {
-        self.camera.set_aspect_ratio(config.render_aspect_ratio());
-        Ok(())
     }
 }
 
@@ -448,7 +398,7 @@ mod tests {
 
     #[test]
     fn it_can_compute_eye_positions_at_origin() -> Result<()> {
-        let mut c = ArcBallCamera::detached(1f64, meters!(0.1f64));
+        let mut c = ArcBallCamera::detached();
         c.set_eye(Graticule::new(radians!(0), radians!(0), meters!(0)))?;
         c.set_target(Graticule::new(radians!(0), radians!(0), meters!(0)));
 
@@ -508,7 +458,7 @@ mod tests {
 
     #[test]
     fn it_can_compute_eye_positions_with_offset_latitude() -> Result<()> {
-        let mut c = ArcBallCamera::detached(1f64, meters!(0.1f64));
+        let mut c = ArcBallCamera::detached();
         c.set_eye(Graticule::new(radians!(0), radians!(0), meters!(0)))?;
         c.set_target(Graticule::new(radians!(0), radians!(0), meters!(0)));
 
@@ -552,7 +502,7 @@ mod tests {
 
     #[test]
     fn it_can_compute_eye_positions_with_offset_longitude() -> Result<()> {
-        let mut c = ArcBallCamera::detached(1f64, meters!(0.1f64));
+        let mut c = ArcBallCamera::detached();
         c.set_eye(Graticule::new(radians!(0), radians!(0), meters!(0)))?;
         c.set_target(Graticule::new(radians!(0), radians!(0), meters!(0)));
 

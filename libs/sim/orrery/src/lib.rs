@@ -465,7 +465,7 @@ impl Orrery {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use widget::EventMapper;
+    use event_mapper::EventMapper;
 
     #[test]
     fn it_works() -> Result<()> {
