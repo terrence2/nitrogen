@@ -40,8 +40,17 @@ use winit::{
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum InputFocus {
     Game,
-    Interface,
     Terminal,
+}
+
+impl InputFocus {
+    pub fn toggle_terminal(&mut self) {
+        if *self == Self::Game {
+            *self = Self::Terminal;
+        } else {
+            *self = Self::Game;
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]

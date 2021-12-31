@@ -22,7 +22,7 @@ use measure::WorldSpaceFrame;
 use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, UnitQuaternion, Vector3};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
-use parking_lot::RwLock;
+use parking_lot::{RwLock, RwLockReadGuard};
 use std::sync::Arc;
 use window::DisplayConfig;
 
@@ -33,6 +33,10 @@ pub struct CameraComponent {
 impl CameraComponent {
     pub fn new(camera: Arc<RwLock<Camera>>) -> Self {
         Self { inner: camera }
+    }
+
+    pub fn camera(&self) -> RwLockReadGuard<Camera> {
+        self.inner.read()
     }
 
     pub fn apply_input_state(&mut self) {

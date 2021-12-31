@@ -305,6 +305,25 @@ impl WidgetBuffer {
         self.terminal.write().set_visible(false);
     }
 
+    pub fn is_toggle_terminal_event(&self, event: &InputEvent) -> bool {
+        if let InputEvent::KeyboardKey {
+            virtual_keycode,
+            press_state,
+            modifiers_state,
+            ..
+        } = event
+        {
+            if self.show_terminal && *virtual_keycode == VirtualKeyCode::Escape
+                || *virtual_keycode == VirtualKeyCode::Grave
+                    && *modifiers_state == ModifiersState::SHIFT
+                    && *press_state == ElementState::Pressed
+            {
+                return true;
+            }
+        }
+        false
+    }
+
     pub fn handle_events(
         &mut self,
         events: &[InputEvent],
@@ -313,21 +332,9 @@ impl WidgetBuffer {
         win: &Window,
     ) -> Result<()> {
         for event in events {
-            if let InputEvent::KeyboardKey {
-                virtual_keycode,
-                press_state,
-                modifiers_state,
-                ..
-            } = event
-            {
-                if self.show_terminal && *virtual_keycode == VirtualKeyCode::Escape
-                    || *virtual_keycode == VirtualKeyCode::Grave
-                        && *modifiers_state == ModifiersState::SHIFT
-                        && *press_state == ElementState::Pressed
-                {
-                    self.toggle_terminal();
-                    continue;
-                }
+            if self.is_toggle_terminal_event(event) {
+                self.toggle_terminal();
+                continue;
             }
             if let InputEvent::CursorMove { pixel_position, .. } = event {
                 let (x, y) = *pixel_position;

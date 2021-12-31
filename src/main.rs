@@ -25,7 +25,7 @@ use fullscreen::FullscreenBuffer;
 use global_data::GlobalParametersBuffer;
 use gpu::{make_frame_graph, CpuDetailLevel, DetailLevelOpts, Gpu, GpuDetailLevel};
 use input::{InputController, InputFocus, InputSystem};
-use legion::*;
+use legion::{world::SubWorld, *};
 use measure::WorldSpaceFrame;
 use nitrous::{Interpreter, StartupOpts, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -253,6 +253,7 @@ make_frame_graph!(
             // gpu
             // window
             // arcball
+            // camera
             // orrery
         };
         passes: [
@@ -422,6 +423,8 @@ fn simulation_main(
     resources.insert(input_controller);
     resources.insert(orrery.clone());
     resources.insert(timeline);
+    resources.insert(system.clone());
+    resources.insert(catalog.clone());
     resources.insert(window.clone());
     resources.insert(interpreter.clone());
     resources.insert(None as Option<DisplayConfig>);
@@ -459,7 +462,7 @@ fn simulation_main(
     #[system]
     fn sim_handle_input_events(
         #[resource] input_controller: &Arc<Mutex<InputController>>,
-        #[resource] input_focus: &InputFocus,
+        #[resource] input_focus: &mut InputFocus,
         #[resource] window: &Arc<RwLock<Window>>,
         #[resource] interpreter: &mut Interpreter,
         #[resource] widgets: &Arc<RwLock<WidgetBuffer>>,
@@ -467,19 +470,24 @@ fn simulation_main(
     ) {
         // Note: if we are stopping, the queue might have shut down, in which case we don't
         // really care about the output anymore.
-        let events = if let Ok(events) = input_controller.lock().poll_input_events() {
-            events
-        } else {
-            return;
-        };
-        mapper
-            .write()
-            .handle_events(&events, *input_focus, interpreter)
-            .expect("EventMapper::handle_events");
-        widgets
-            .write()
-            .handle_events(&events, *input_focus, interpreter, &window.read())
-            .expect("Widgets::handle_events");
+        if let Ok(events) = input_controller.lock().poll_input_events() {
+            mapper
+                .write()
+                .handle_events(&events, *input_focus, interpreter)
+                .expect("EventMapper::handle_events");
+            widgets
+                .write()
+                .handle_events(&events, *input_focus, interpreter, &window.read())
+                .expect("Widgets::handle_events");
+
+            let widgets = widgets.read();
+            if events
+                .iter()
+                .any(|event| widgets.is_toggle_terminal_event(event))
+            {
+                input_focus.toggle_terminal();
+            }
+        }
     }
 
     #[system(for_each)]
@@ -578,20 +586,51 @@ fn simulation_main(
             .expect("Widgets::track_state_changes");
     }
 
-    // #[system(for_each)]
-    // fn update_globals_track_state_changes(
-    //     camera: &mut CameraComponent,
-    //     #[resource] orrery: &Arc<RwLock<Orrery>>,
-    //     #[resource] window: &Arc<RwLock<Window>>,
-    //     #[resource] global_data: &Arc<RwLock<GlobalParametersBuffer>>,
-    // ) {
-    // }
+    #[system(for_each)]
+    fn update_globals_track_state_changes(
+        camera: &mut CameraComponent,
+        #[resource] orrery: &Arc<RwLock<Orrery>>,
+        #[resource] window: &Arc<RwLock<Window>>,
+        #[resource] global_data: &Arc<RwLock<GlobalParametersBuffer>>,
+    ) {
+        // FIXME: multiple camera support
+        let mut global_data = global_data.write();
+        let window = window.read();
+        let orrery = orrery.read();
+        global_data.track_state_changes(&camera.camera(), &orrery, &window);
+    }
+
+    #[system]
+    fn update_terrain_track_state_changes(
+        world: &mut SubWorld,
+        query: &mut Query<(&CameraComponent,)>,
+        #[resource] catalog: &Arc<RwLock<Catalog>>,
+        #[resource] system: &Arc<RwLock<System>>,
+        #[resource] terrain: &Arc<RwLock<TerrainBuffer>>,
+    ) {
+        // FIXME: multiple camera support
+        let cameras = query
+            .iter(world)
+            .map(|v| v.0)
+            .collect::<Vec<&CameraComponent>>();
+        assert!(cameras.len() == 1);
+        let mut system = system.write();
+        let mut terrain = terrain.write();
+        let camera = cameras[0].camera();
+        let vis_camera = system.current_camera(&camera);
+        terrain
+            .track_state_changes(&camera, vis_camera, catalog.clone())
+            .expect("Terrain::track_state_changes");
+    }
 
     let mut update_frame_schedule = Schedule::builder()
         .add_thread_local(update_handle_system_events_system())
-        .add_thread_local(update_handle_camera_aspect_change_system())
-        .add_thread_local(update_handle_window_config_change_system())
+        .add_system(update_handle_camera_aspect_change_system())
+        .add_system(update_handle_window_config_change_system())
+        .flush()
         .add_system(update_widget_track_state_changes_system())
+        .add_system(update_globals_track_state_changes_system())
+        .add_system(update_terrain_track_state_changes_system())
         .build();
 
     //////////////////////////////////////////////////////////////////
@@ -608,22 +647,7 @@ fn simulation_main(
 
         update_frame_schedule.execute(&mut world, &mut resources);
 
-        {
-            frame_graph.globals_mut().track_state_changes(
-                &camera.read(),
-                &orrery.read(),
-                &window.read(),
-            );
-            let mut sys_lock = system.write();
-            let vis_camera = sys_lock.current_camera(&camera.read());
-            frame_graph.terrain_mut().track_state_changes(
-                &camera.read(),
-                vis_camera,
-                catalog.clone(),
-            )?;
-        }
-
-        let now = Instant::now();
+        //let now = Instant::now();
         let mut tracker = Default::default();
         frame_graph
             .globals_mut()
@@ -632,7 +656,7 @@ fn simulation_main(
             .terrain_mut()
             .ensure_uploaded(&mut gpu.write(), &mut tracker)?;
         frame_graph.widgets_mut().ensure_uploaded(
-            now,
+            sim_now(&resources),
             &mut gpu.write(),
             &window.read(),
             &mut tracker,
