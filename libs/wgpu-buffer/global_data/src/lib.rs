@@ -250,7 +250,7 @@ impl GlobalParametersBuffer {
         self.globals.set_window_info(win);
     }
 
-    pub fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) -> Result<()> {
+    pub fn ensure_uploaded(&self, gpu: &Gpu, tracker: &mut UploadTracker) -> Result<()> {
         let buffer = gpu.push_data(
             "global-upload-buffer",
             &self.globals,

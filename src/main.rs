@@ -102,11 +102,10 @@ impl System {
         interpreter.interpret_once(
             r#"
                 let bindings := mapper.create_bindings("system");
-                bindings.bind("quit", "system.exit()");
                 bindings.bind("Escape", "system.exit()");
                 bindings.bind("q", "system.exit()");
                 bindings.bind("p", "system.toggle_pin_camera(pressed)");
-                // bindings.bind("l", "widget.dump_glyphs(pressed)");
+                bindings.bind("g", "widget.dump_glyphs(pressed)");
             "#,
         )?;
         Ok(system)
@@ -640,17 +639,16 @@ fn simulation_main(
 
     while !system.read().exit {
         // Catch monotonic sim time up to system time.
-        let system_now = Instant::now();
-        while sim_now(&resources) + STEP < system_now {
+        let frame_start = Instant::now();
+        while sim_now(&resources) + STEP < frame_start {
             sim_fixed_schedule.execute(&mut world, &mut resources);
         }
 
         update_frame_schedule.execute(&mut world, &mut resources);
 
-        //let now = Instant::now();
         let mut tracker = Default::default();
         frame_graph
-            .globals_mut()
+            .globals()
             .ensure_uploaded(&gpu.read(), &mut tracker)?;
         frame_graph
             .terrain_mut()
@@ -667,7 +665,7 @@ fn simulation_main(
         }
 
         system.write().track_visible_state(
-            system_now, // compute frame times from actual elapsed time
+            frame_start, // compute frame times from actual elapsed time
             &orrery.read(),
             &arcball.read(),
             &camera.read(),

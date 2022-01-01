@@ -585,11 +585,9 @@ impl Gpu {
         gpu.device().poll(wgpu::Maintain::Wait);
         let reader = download_buffer.slice(..).map_async(wgpu::MapMode::Read);
         gpu.device().poll(wgpu::Maintain::Wait);
-        tokio::spawn(async move {
-            reader.await.unwrap();
-            let raw = download_buffer.slice(..).get_mapped_range().to_owned();
-            callback(extent, format, raw);
-        });
+        block_on(reader)?;
+        let raw = download_buffer.slice(..).get_mapped_range().to_owned();
+        callback(extent, format, raw);
         Ok(())
     }
 

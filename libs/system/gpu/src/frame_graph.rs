@@ -15,6 +15,14 @@
 
 #[macro_export]
 macro_rules! make_frame_graph_pass {
+    (Any() {
+        $owner:ident, $gpu:ident, $encoder:ident, $need_rebuild:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
+     }
+    ) => {{
+        $(
+            $encoder = $pass_item_name.$pass_name($encoder)?;
+        )*
+    }};
     (Compute() {
         $owner:ident, $gpu:ident, $encoder:ident, $need_rebuild:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
      }
@@ -26,12 +34,24 @@ macro_rules! make_frame_graph_pass {
             let _cpass = $pass_item_name.$pass_name(_cpass, $($pass_item_input_name),*)?;
         )*
     }};
-    (Any() {
+    (Render($pass_target_buffer:ident, $pass_target_func:ident) {
         $owner:ident, $gpu:ident, $encoder:ident, $need_rebuild:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
      }
     ) => {{
+        let (color_attachments, depth_stencil_attachment) = $pass_target_buffer.$pass_target_func();
+        let render_pass_desc_ref = $crate::wgpu::RenderPassDescriptor {
+            label: Some(concat!("non-screen-render-pass-", stringify!($pass_target_buffer))),
+            color_attachments: &color_attachments,
+            depth_stencil_attachment,
+        };
+        let _rpass = $encoder.begin_render_pass(&render_pass_desc_ref);
         $(
-            $encoder = $pass_item_name.$pass_name($encoder)?;
+            let _rpass = $pass_item_name.$pass_name(
+                _rpass,
+                $(
+                    &$pass_item_input_name
+                ),*
+            )?;
         )*
     }};
     (Render(Screen) {
@@ -57,26 +77,6 @@ macro_rules! make_frame_graph_pass {
             $need_rebuild = true;
         }
     };
-    (Render($pass_target_buffer:ident, $pass_target_func:ident) {
-        $owner:ident, $gpu:ident, $encoder:ident, $need_rebuild:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
-     }
-    ) => {{
-        let (color_attachments, depth_stencil_attachment) = $pass_target_buffer.$pass_target_func();
-        let render_pass_desc_ref = $crate::wgpu::RenderPassDescriptor {
-            label: Some(concat!("non-screen-render-pass-", stringify!($pass_target_buffer))),
-            color_attachments: &color_attachments,
-            depth_stencil_attachment,
-        };
-        let _rpass = $encoder.begin_render_pass(&render_pass_desc_ref);
-        $(
-            let _rpass = $pass_item_name.$pass_name(
-                _rpass,
-                $(
-                    &$pass_item_input_name
-                ),*
-            )?;
-        )*
-    }};
 }
 
 #[macro_export]
