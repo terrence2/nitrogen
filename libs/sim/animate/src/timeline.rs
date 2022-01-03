@@ -12,8 +12,10 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use crate::TimeStep;
 use absolute_unit::{meters, radians};
 use anyhow::{ensure, Result};
+use bevy_ecs::prelude::*;
 use futures::future::{ready, FutureExt};
 use geodesy::Graticule;
 use log::error;
@@ -180,6 +182,10 @@ impl Timeline {
         let timeline = Arc::new(RwLock::new(Self { animations: vec![] }));
         interpreter.put_global("timeline", Value::Module(timeline.clone()));
         timeline
+    }
+
+    pub fn sys_animate(step: Res<TimeStep>, timeline: Res<Arc<RwLock<Timeline>>>) {
+        timeline.write().step_time(step.now());
     }
 
     pub fn step_time(&mut self, now: &Instant) {

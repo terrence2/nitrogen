@@ -39,10 +39,11 @@ pub use crate::{
 
 use crate::font_context::FontContext;
 use anyhow::{ensure, Result};
+use bevy_ecs::prelude::*;
 use font_common::{FontAdvance, FontInterface};
 use font_ttf::TtfFont;
 use gpu::{Gpu, UploadTracker};
-use input::{ElementState, InputEvent, InputFocus, ModifiersState, VirtualKeyCode};
+use input::{ElementState, InputEvent, InputEventVec, InputFocus, ModifiersState, VirtualKeyCode};
 use log::trace;
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -322,6 +323,27 @@ impl WidgetBuffer {
             }
         }
         false
+    }
+
+    pub fn sys_handle_input_events(
+        events: Res<InputEventVec>,
+        mut input_focus: ResMut<InputFocus>,
+        window: Res<Arc<RwLock<Window>>>,
+        mut interpreter: ResMut<Interpreter>,
+        widgets: Res<Arc<RwLock<WidgetBuffer>>>,
+    ) {
+        widgets
+            .write()
+            .handle_events(&events, *input_focus, &mut interpreter, &window.read())
+            .expect("Widgets::handle_events");
+
+        let widgets = widgets.read();
+        if events
+            .iter()
+            .any(|event| widgets.is_toggle_terminal_event(event))
+        {
+            input_focus.toggle_terminal();
+        }
     }
 
     pub fn handle_events(

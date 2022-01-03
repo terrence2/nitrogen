@@ -12,7 +12,9 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use animate::TimeStep;
 use anyhow::{anyhow, Result};
+use bevy_ecs::prelude::*;
 use chrono::{prelude::*, Duration};
 use lazy_static::lazy_static;
 use nalgebra::{Point3, Unit, UnitQuaternion, Vector3, Vector4};
@@ -377,6 +379,12 @@ impl Orrery {
             .and_then(|t| t.with_minute(minute as u32))
             .ok_or_else(|| anyhow!("invalid hour or minute"))?;
         Ok(t.timestamp_nanos() as f64 / 1_000_000.)
+    }
+
+    pub fn sys_step_time(step: Res<TimeStep>, orrery: Res<Arc<RwLock<Orrery>>>) {
+        orrery
+            .write()
+            .step_time(Duration::from_std(*step.step()).expect("in range"));
     }
 
     pub fn step_time(&mut self, dt: Duration) {

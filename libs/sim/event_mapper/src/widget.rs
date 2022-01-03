@@ -17,7 +17,8 @@ use crate::{
     input::{Input, InputSet},
 };
 use anyhow::{ensure, Result};
-use input::{ElementState, InputEvent, InputFocus, ModifiersState};
+use bevy_ecs::prelude::*;
+use input::{ElementState, InputEvent, InputEventVec, InputFocus, ModifiersState};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use ordered_float::OrderedFloat;
@@ -60,6 +61,18 @@ impl EventMapper {
         let bindings = Arc::new(RwLock::new(Bindings::new(name)));
         self.bindings.insert(name.to_owned(), bindings.clone());
         Ok(Value::Module(bindings))
+    }
+
+    pub fn sys_handle_input_events(
+        events: Res<InputEventVec>,
+        input_focus: Res<InputFocus>,
+        mut interpreter: ResMut<Interpreter>,
+        mapper: Res<Arc<RwLock<EventMapper>>>,
+    ) {
+        mapper
+            .write()
+            .handle_events(&events, *input_focus, &mut interpreter)
+            .expect("EventMapper::handle_events");
     }
 
     pub fn handle_events(

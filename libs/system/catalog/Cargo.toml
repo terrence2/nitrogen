@@ -5,9 +5,10 @@ authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 edition = "2021"
 
 [dependencies]
-async-trait = "^ 0.1"
 anyhow = { version = "^ 1", features = ["backtrace"] }
-log = "^ 0.4"
+async-trait = "^ 0.1"
+bevy_ecs = "^ 0.5"
 glob = "^ 0.3"
+log = "^ 0.4"
 smallvec = "^ 1.4"
 tokio = { version = "^ 1.0", features = ["rt-multi-thread", "macros", "io-util", "fs", "sync"] }

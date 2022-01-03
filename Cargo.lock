@@ -82,6 +82,7 @@ dependencies = [
  "absolute_unit",
  "anyhow",
  "approx",
+ "bevy_ecs",
  "futures",
  "geodesy",
  "log",
@@ -458,6 +459,7 @@ dependencies = [
  "absolute_unit",
  "anyhow",
  "approx",
+ "bevy_ecs",
  "geodesy",
  "geometry",
  "log",
@@ -478,6 +480,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "bevy_ecs",
  "glob",
  "log",
  "smallvec",
@@ -1096,6 +1099,7 @@ name = "event_mapper"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bevy_ecs",
  "input",
  "log",
  "nitrous",
@@ -1587,6 +1591,7 @@ name = "gpu"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "bevy_ecs",
  "futures",
  "input",
  "log",
@@ -1730,6 +1735,7 @@ name = "input"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "bevy_ecs",
  "futures",
  "log",
  "parking_lot",
@@ -2490,7 +2496,9 @@ dependencies = [
 name = "orrery"
 version = "0.0.0"
 dependencies = [
+ "animate",
  "anyhow",
+ "bevy_ecs",
  "chrono",
  "event_mapper",
  "lazy_static",
@@ -3714,6 +3722,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "atlas",
+ "bevy_ecs",
  "font_common",
  "font_ttf",
  "gpu",

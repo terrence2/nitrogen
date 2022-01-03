@@ -16,7 +16,6 @@ members = [
     # Only external dependencies, appropriate for splitting
     # out fully, once mature enough.
     "libs/util/absolute_unit",
-    "libs/util/animate",
     "libs/util/ansi",
     "libs/util/build_shaders",
     "libs/util/geodesy",
@@ -36,6 +35,7 @@ members = [
 
     # Only external, util, and system dependencies. Generally concerned
     # with running the simulated environment.
+    "libs/sim/animate",
     "libs/sim/camera",
     "libs/sim/event_mapper",
     "libs/sim/measure",
@@ -72,7 +72,7 @@ rayon = "= 1.4.0"
 structopt = "^ 0.3"
 terminal_size = "^ 0.1"
 absolute_unit = { path = "libs/util/absolute_unit" }
-animate = { path = "libs/util/animate" }
+animate = { path = "libs/sim/animate" }
 atmosphere = { path = "libs/wgpu-buffer/atmosphere" }
 camera = { path = "libs/sim/camera" }
 catalog = { path = "libs/system/catalog" }

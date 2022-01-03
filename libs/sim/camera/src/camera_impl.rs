@@ -16,6 +16,7 @@ use absolute_unit::{
     degrees, radians, Angle, AngleUnit, Degrees, Kilometers, Length, LengthUnit, Meters, Radians,
 };
 use anyhow::Result;
+use bevy_ecs::prelude::*;
 use geodesy::{Cartesian, GeoCenter};
 use geometry::Plane;
 use measure::WorldSpaceFrame;
@@ -284,6 +285,14 @@ impl Camera {
         let near = Plane::from_normal_and_distance(np.xyz() / nm, -np[3] / nm);
 
         [left, right, bottom, top, near]
+    }
+
+    // Apply interpreted inputs from prior stage; apply new world position.
+    pub fn sys_apply_input(mut query: Query<(&WorldSpaceFrame, &mut CameraComponent)>) {
+        for (frame, mut camera) in query.iter_mut() {
+            camera.apply_input_state();
+            camera.update_frame(frame);
+        }
     }
 
     pub fn apply_input_state(&mut self) {

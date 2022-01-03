@@ -13,33 +13,27 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{degrees, meters, radians};
-use animate::Timeline;
+use animate::{TimeStep, Timeline};
 use anyhow::{anyhow, Result};
 use atmosphere::AtmosphereBuffer;
 use bevy_ecs::prelude::*;
 use camera::{ArcBallCamera, ArcBallController, Camera, CameraComponent};
 use catalog::{Catalog, DirectoryDrawer};
-use chrono::{Duration as ChronoDuration, TimeZone, Utc};
+use chrono::{TimeZone, Utc};
 use composite::CompositeRenderPass;
 use event_mapper::EventMapper;
 use fullscreen::FullscreenBuffer;
 use global_data::GlobalParametersBuffer;
 use gpu::{make_frame_graph, CpuDetailLevel, DetailLevelOpts, Gpu, GpuDetailLevel};
-use input::{InputController, InputEventVec, InputFocus, InputSystem, SystemEventVec};
-use measure::{SimStep, WorldSpaceFrame};
+use input::{InputController, InputSystem};
+use measure::WorldSpaceFrame;
 use nitrous::{Interpreter, StartupOpts, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use orrery::Orrery;
 use parking_lot::{Mutex, RwLock};
 use platform_dirs::AppDirs;
 use stars::StarsBuffer;
-use std::{
-    f32::consts::PI,
-    fs::create_dir_all,
-    path::PathBuf,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{f32::consts::PI, fs::create_dir_all, path::PathBuf, sync::Arc, time::Instant};
 use structopt::StructOpt;
 use terminal_size::{terminal_size, Width};
 use terrain::TerrainBuffer;
@@ -378,25 +372,29 @@ fn main() -> Result<()> {
     InputSystem::run_forever(simulation_main)
 }
 
-const STEP: Duration = Duration::from_micros(16_666);
+// const STEP: Duration = Duration::from_micros(16_666);
 
 fn simulation_main(
     os_window: OsWindow,
     input_controller: Arc<Mutex<InputController>>,
 ) -> Result<()> {
+    // Get the window updated asap
     os_window.set_title("Nitrogen Demo");
 
-    // Create the game resource system and insert globals
+    // Create the world and add un-bound resources to it.
     let mut world = World::default();
-    world.insert_resource(InputEventVec::new());
-    world.insert_resource(SystemEventVec::new());
-    world.insert_resource(InputFocus::Game);
-    world.insert_resource(None as Option<DisplayConfig>);
-    //resources.insert(SimStep::new_60fps());
-    world.insert_resource(Instant::now());
-    fn sim_now(world: &World) -> &Instant {
-        world.get_resource::<Instant>().unwrap()
+    input_controller.lock().create_resources(&mut world);
+    world.insert_resource(TimeStep::new_60fps());
+    fn timestep(world: &World) -> &TimeStep {
+        world.get_resource::<TimeStep>().unwrap()
     }
+
+    // Create the game interpreter
+    let mut interpreter = Interpreter::default();
+    world.insert_resource(interpreter.clone());
+
+    // Create the game resource system and insert globals
+    world.insert_resource(None as Option<DisplayConfig>);
 
     // Parse arguments
     let opt = Opt::from_args();
@@ -416,10 +414,6 @@ fn simulation_main(
         .ok_or_else(|| anyhow!("unable to find app directories"))?;
     create_dir_all(&app_dirs.config_dir)?;
     create_dir_all(&app_dirs.state_dir)?;
-
-    // Create the game interpreter
-    let mut interpreter = Interpreter::default();
-    world.insert_resource(interpreter.clone());
 
     // We have to create the mapper immediately so that the namespace will be available to scripts.
     let mapper = EventMapper::new(&mut interpreter);
@@ -474,11 +468,6 @@ fn simulation_main(
         &mut interpreter,
     )?;
     let arcball = ArcBallCamera::install(&mut interpreter)?;
-    // let _player_id = world.push((
-    //     WorldSpaceFrame::default(),
-    //     ArcBallController::new(arcball.clone()),
-    //     CameraComponent::new(camera.clone()),
-    // ));
     let _player_ent = world
         .spawn()
         .insert(WorldSpaceFrame::default())
@@ -492,92 +481,29 @@ fn simulation_main(
     // The simulation schedule should be used for "pure" entity to entity work and update of
     // a handful of game related resources, rather than communicating with the GPU. This generally
     // splits into two phases: per-fixed-tick resource updates and entity updates from resources.
-    fn sim_update_current_time(mut now: ResMut<Instant>) {
-        *now += STEP;
-    }
-
-    fn sim_read_input_events(
-        input_controller: Res<Arc<Mutex<InputController>>>,
-        mut input_events: ResMut<InputEventVec>,
-    ) {
-        // Note: if we are stopping, the queue might have shut down, in which case we don't
-        // really care about the output anymore.
-        *input_events = if let Ok(events) = input_controller.lock().poll_input_events() {
-            events
-        } else {
-            InputEventVec::new()
-        };
-    }
-
-    fn sim_widgets_handle_input_events(
-        events: Res<InputEventVec>,
-        mut input_focus: ResMut<InputFocus>,
-        window: Res<Arc<RwLock<Window>>>,
-        mut interpreter: ResMut<Interpreter>,
-        widgets: Res<Arc<RwLock<WidgetBuffer>>>,
-    ) {
-        widgets
-            .write()
-            .handle_events(&events, *input_focus, &mut interpreter, &window.read())
-            .expect("Widgets::handle_events");
-
-        let widgets = widgets.read();
-        if events
-            .iter()
-            .any(|event| widgets.is_toggle_terminal_event(event))
-        {
-            input_focus.toggle_terminal();
-        }
-    }
-
-    fn sim_mapper_handle_input_events(
-        events: Res<InputEventVec>,
-        input_focus: Res<InputFocus>,
-        mut interpreter: ResMut<Interpreter>,
-        mapper: Res<Arc<RwLock<EventMapper>>>,
-    ) {
-        mapper
-            .write()
-            .handle_events(&events, *input_focus, &mut interpreter)
-            .expect("EventMapper::handle_events");
-    }
-
-    fn sim_apply_arcball_updates(mut query: Query<(&mut ArcBallController, &mut WorldSpaceFrame)>) {
-        for (mut arcball, mut frame) in query.iter_mut() {
-            arcball.apply_input_state();
-            *frame = arcball.world_space_frame();
-        }
-    }
-
-    fn sim_update_camera_frame(mut query: Query<(&WorldSpaceFrame, &mut CameraComponent)>) {
-        for (frame, mut camera) in query.iter_mut() {
-            camera.apply_input_state();
-            camera.update_frame(frame);
-        }
-    }
-
-    fn sim_orrery_step_time(orrery: Res<Arc<RwLock<Orrery>>>) {
-        orrery
-            .write()
-            .step_time(ChronoDuration::from_std(STEP).expect("in range"));
-    }
-
-    fn sim_timeline_animate(now: Res<Instant>, timeline: Res<Arc<RwLock<Timeline>>>) {
-        timeline.write().step_time(&now);
-    }
-
-    let mut sim_fixed_schedule = Schedule::default();
-    sim_fixed_schedule.add_stage(
-        "sim_serial",
+    let mut sim_schedule = Schedule::default();
+    sim_schedule.add_stage(
+        "time",
         SystemStage::single_threaded()
-            .with_system(sim_update_current_time.system())
-            .with_system(sim_read_input_events.system())
-            .with_system(sim_widgets_handle_input_events.system())
-            .with_system(sim_mapper_handle_input_events.system())
-            .with_system(sim_apply_arcball_updates.system())
-            .with_system(sim_update_camera_frame.system())
-            .with_system(sim_orrery_step_time.system())
-            .with_system(sim_timeline_animate.system()),
+            .with_system(TimeStep::sys_tick_time.system())
+            .with_system(Orrery::sys_step_time.system()),
+    );
+    sim_schedule.add_stage(
+        "read_input_events",
+        SystemStage::single_threaded().with_system(InputController::sys_read_input_events.system()),
+    );
+    sim_schedule.add_stage(
+        "interpret_input_events",
+        SystemStage::parallel()
+            .with_system(WidgetBuffer::sys_handle_input_events.system())
+            .with_system(EventMapper::sys_handle_input_events.system())
+            .with_system(Timeline::sys_animate.system()),
+    );
+    sim_schedule.add_stage(
+        "propagate_changes",
+        SystemStage::single_threaded()
+            .with_system(ArcBallCamera::sys_apply_input.system())
+            .with_system(Camera::sys_apply_input.system()),
     );
 
     //////////////////////////////////////////////////////////////////
@@ -628,13 +554,13 @@ fn simulation_main(
     }
 
     fn update_widget_track_state_changes(
-        now: Res<Instant>,
+        step: Res<TimeStep>,
         window: Res<Arc<RwLock<Window>>>,
         widgets: Res<Arc<RwLock<WidgetBuffer>>>,
     ) {
         widgets
             .write()
-            .track_state_changes(*now, &window.read())
+            .track_state_changes(*step.now(), &window.read())
             .expect("Widgets::track_state_changes");
     }
 
@@ -672,6 +598,12 @@ fn simulation_main(
         }
     }
 
+    let mut frame_schedule = Schedule::default();
+    frame_schedule.add_stage(
+        "input",
+        SystemStage::single_threaded()
+            .with_system(InputController::sys_read_system_events.system()),
+    );
     let mut update_frame_schedule = Schedule::default();
     update_frame_schedule.add_stage(
         "update_frame",
@@ -690,8 +622,8 @@ fn simulation_main(
     while !system.read().exit {
         // Catch monotonic sim time up to system time.
         let frame_start = Instant::now();
-        while *sim_now(&world) + STEP < frame_start {
-            sim_fixed_schedule.run_once(&mut world);
+        while timestep(&world).next_now() < frame_start {
+            sim_schedule.run_once(&mut world);
         }
 
         update_frame_schedule.run_once(&mut world);
@@ -704,7 +636,7 @@ fn simulation_main(
             .terrain_mut()
             .ensure_uploaded(&mut gpu.write(), &mut tracker)?;
         frame_graph.widgets_mut().ensure_uploaded(
-            *sim_now(&world),
+            *timestep(&world).now(),
             &mut gpu.write(),
             &window.read(),
             &mut tracker,

@@ -18,6 +18,7 @@ pub use generic::{InputEvent, MouseAxis, SystemEvent};
 pub use winit::event::{ButtonId, ElementState, ModifiersState, VirtualKeyCode};
 
 use anyhow::{bail, Result};
+use bevy_ecs::prelude::*;
 use log::warn;
 use parking_lot::Mutex;
 use smallvec::SmallVec;
@@ -89,6 +90,38 @@ impl InputController {
 
     fn wrapped(self) -> Arc<Mutex<Self>> {
         Arc::new(Mutex::new(self))
+    }
+
+    pub fn create_resources(&self, world: &mut World) {
+        world.insert_resource(InputEventVec::new());
+        world.insert_resource(SystemEventVec::new());
+        world.insert_resource(InputFocus::Game);
+    }
+
+    pub fn sys_read_input_events(
+        input_controller: Res<Arc<Mutex<InputController>>>,
+        mut input_events: ResMut<InputEventVec>,
+    ) {
+        // Note: if we are stopping, the queue might have shut down, in which case we don't
+        // really care about the output anymore.
+        *input_events = if let Ok(events) = input_controller.lock().poll_input_events() {
+            events
+        } else {
+            InputEventVec::new()
+        };
+    }
+
+    pub fn sys_read_system_events(
+        input_controller: Res<Arc<Mutex<InputController>>>,
+        mut system_events: ResMut<SystemEventVec>,
+    ) {
+        // Note: if we are stopping, the queue might have shut down, in which case we don't
+        // really care about the output anymore.
+        *system_events = if let Ok(events) = input_controller.lock().poll_system_events() {
+            events
+        } else {
+            SystemEventVec::new()
+        };
     }
 
     pub fn for_test(event_loop: &EventLoop<MetaEvent>) -> Self {

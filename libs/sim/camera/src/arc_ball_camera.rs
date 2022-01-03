@@ -14,6 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{degrees, meters, radians, Degrees, Length, LengthUnit, Meters, Radians};
 use anyhow::{bail, ensure, Result};
+use bevy_ecs::prelude::*;
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
 use measure::WorldSpaceFrame;
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
@@ -378,6 +379,14 @@ impl ArcBallCamera {
             self.input.target_height_delta = meters!(-100);
         } else {
             self.input.target_height_delta = meters!(0);
+        }
+    }
+
+    // Take the inputs applied via interpreting key presses in the prior stage and apply it.
+    pub fn sys_apply_input(mut query: Query<(&mut ArcBallController, &mut WorldSpaceFrame)>) {
+        for (mut arcball, mut frame) in query.iter_mut() {
+            arcball.apply_input_state();
+            *frame = arcball.world_space_frame();
         }
     }
 
