@@ -37,6 +37,9 @@ use winit::{
     window::Window,
 };
 
+pub type InputEventVec = SmallVec<[InputEvent; 8]>;
+pub type SystemEventVec = SmallVec<[SystemEvent; 8]>;
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum InputFocus {
     Game,
@@ -84,6 +87,10 @@ impl InputController {
         }
     }
 
+    fn wrapped(self) -> Arc<Mutex<Self>> {
+        Arc::new(Mutex::new(self))
+    }
+
     pub fn for_test(event_loop: &EventLoop<MetaEvent>) -> Self {
         let (_, rx_input_event) = channel();
         let (_, rx_system_event) = channel();
@@ -123,7 +130,7 @@ impl InputController {
         }
     }
 
-    pub fn poll_input_events(&self) -> Result<SmallVec<[InputEvent; 8]>> {
+    pub fn poll_input_events(&self) -> Result<InputEventVec> {
         let mut out = SmallVec::new();
         let mut maybe_event_input = self.input_event_source.try_recv();
         while maybe_event_input.is_ok() {
@@ -137,7 +144,7 @@ impl InputController {
         }
     }
 
-    pub fn poll_system_events(&self) -> Result<SmallVec<[SystemEvent; 8]>> {
+    pub fn poll_system_events(&self) -> Result<SystemEventVec> {
         let mut out = SmallVec::new();
         let mut maybe_system_event = self.system_event_source.try_recv();
         while maybe_system_event.is_ok() {
@@ -248,7 +255,7 @@ impl InputSystem {
 
         // Spawn the game thread.
         std::thread::spawn(move || {
-            let input_controller = Arc::new(Mutex::new(input_controller));
+            let input_controller = input_controller.wrapped();
             if let Err(e) = window_main(window, input_controller.clone()) {
                 println!("Error: {:?}", e);
             }

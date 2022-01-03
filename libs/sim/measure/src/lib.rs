@@ -15,6 +15,19 @@
 use absolute_unit::Meters;
 use geodesy::{Cartesian, GeoCenter};
 use nalgebra::Vector3;
+use std::time::Duration;
+
+pub struct SimStep(Duration);
+
+impl SimStep {
+    pub fn new_60fps() -> Self {
+        Self(Duration::from_micros(16_666))
+    }
+
+    pub fn duration(&self) -> &Duration {
+        &self.0
+    }
+}
 
 #[derive(Debug, Default)]
 pub struct WorldSpaceFrame {
