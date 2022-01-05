@@ -15,7 +15,8 @@
 pub mod size;
 
 use anyhow::{bail, Result};
-use input::SystemEvent;
+use bevy_ecs::prelude::*;
+use input::{SystemEvent, SystemEventVec};
 use log::info;
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -207,10 +208,6 @@ impl DisplayConfig {
     }
 }
 
-pub trait DisplayConfigChangeReceiver: Debug + Send + Sync + 'static {
-    fn on_display_config_changed(&mut self, config: &DisplayConfig) -> Result<()>;
-}
-
 #[derive(Debug, NitrousModule)]
 pub struct Window {
     os_window: OsWindow,
@@ -236,6 +233,14 @@ impl Window {
 
     fn note_display_config_change(&mut self) {
         self.config_changed = true;
+    }
+
+    pub fn sys_handle_system_events(
+        events: Res<SystemEventVec>,
+        window: Res<Arc<RwLock<Window>>>,
+        mut updated_config: ResMut<Option<DisplayConfig>>,
+    ) {
+        *updated_config = window.write().handle_system_events(&events);
     }
 
     pub fn handle_system_events(&mut self, events: &[SystemEvent]) -> Option<DisplayConfig> {

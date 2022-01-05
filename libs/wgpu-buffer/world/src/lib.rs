@@ -283,7 +283,7 @@ impl WorldRenderPass {
             debug_mode: DebugMode::None,
         }));
 
-        gpu.register_render_extent_change_receiver(world.clone());
+        // gpu.register_render_extent_change_receiver(world.clone());
 
         interpreter.put_global("world", Value::Module(world.clone()));
 

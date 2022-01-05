@@ -3198,6 +3198,7 @@ dependencies = [
  "absolute_unit",
  "anyhow",
  "approx",
+ "bevy_ecs",
  "build_shaders",
  "bzip2",
  "camera",
@@ -3789,6 +3790,7 @@ name = "window"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bevy_ecs",
  "input",
  "log",
  "nitrous",

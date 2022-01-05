@@ -23,12 +23,14 @@ pub use crate::{
         UploadTracker,
     },
 };
+pub use window::DisplayConfig;
 
 // Note: re-export for use by FrameGraph when it is instantiated in other crates.
 pub use wgpu;
 pub use winit::dpi::{LogicalSize, PhysicalSize};
 
 use anyhow::{anyhow, bail, Result};
+use bevy_ecs::prelude::*;
 use futures::executor::block_on;
 use input::InputController;
 use log::{info, trace};
@@ -38,7 +40,7 @@ use parking_lot::RwLock;
 use std::{fmt::Debug, fs, mem, path::PathBuf, sync::Arc};
 use tokio::runtime::Runtime;
 use wgpu::util::DeviceExt;
-use window::{DisplayConfig, Window};
+use window::Window;
 use zerocopy::AsBytes;
 
 #[derive(Debug)]
@@ -315,6 +317,17 @@ impl Gpu {
         })
     }
 
+    pub fn sys_handle_display_config_change(
+        updated_config: Res<Option<DisplayConfig>>,
+        gpu: Res<Arc<RwLock<Gpu>>>,
+    ) {
+        if let Some(config) = updated_config.as_ref() {
+            gpu.write()
+                .on_display_config_changed(config)
+                .expect("Gpu::on_display_config_changed");
+        }
+    }
+
     pub fn on_display_config_changed(&mut self, config: &DisplayConfig) -> Result<()> {
         info!(
             "window config changed {}x{}",
@@ -341,20 +354,17 @@ impl Gpu {
                 height: extent.height,
                 depth: 1,
             };
-            for module in &self.render_extent_change_receivers {
-                module.write().on_render_extent_changed(self)?;
-            }
         }
 
         Ok(())
     }
 
-    pub fn register_render_extent_change_receiver<T: RenderExtentChangeReceiver>(
-        &mut self,
-        observer: Arc<RwLock<T>>,
-    ) {
-        self.render_extent_change_receivers.push(observer);
-    }
+    // pub fn register_render_extent_change_receiver<T: RenderExtentChangeReceiver>(
+    //     &mut self,
+    //     observer: Arc<RwLock<T>>,
+    // ) {
+    //     self.render_extent_change_receivers.push(observer);
+    // }
 
     pub fn attachment_extent(&self) -> wgpu::Extent3d {
         self.render_extent

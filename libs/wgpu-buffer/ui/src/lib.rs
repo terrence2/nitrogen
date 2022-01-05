@@ -247,7 +247,7 @@ impl UiRenderPass {
             text_pipeline,
         }));
 
-        gpu.register_render_extent_change_receiver(ui.clone());
+        // gpu.register_render_extent_change_receiver(ui.clone());
 
         Ok(ui)
     }

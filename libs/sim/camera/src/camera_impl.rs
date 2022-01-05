@@ -51,6 +51,26 @@ impl CameraComponent {
     pub fn on_display_config_updated(&mut self, config: &DisplayConfig) {
         self.inner.write().on_display_config_updated(config);
     }
+
+    // Apply interpreted inputs from prior stage; apply new world position.
+    pub fn sys_apply_input(mut query: Query<(&WorldSpaceFrame, &mut CameraComponent)>) {
+        for (frame, mut camera) in query.iter_mut() {
+            camera.apply_input_state();
+            camera.update_frame(frame);
+        }
+    }
+
+    // Apply updated system config, e.g. aspect
+    pub fn sys_apply_display_changes(
+        mut query: Query<&mut CameraComponent>,
+        updated_config: Res<Option<DisplayConfig>>,
+    ) {
+        for mut camera in query.iter_mut() {
+            if let Some(config) = updated_config.as_ref() {
+                camera.on_display_config_updated(config);
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -285,14 +305,6 @@ impl Camera {
         let near = Plane::from_normal_and_distance(np.xyz() / nm, -np[3] / nm);
 
         [left, right, bottom, top, near]
-    }
-
-    // Apply interpreted inputs from prior stage; apply new world position.
-    pub fn sys_apply_input(mut query: Query<(&WorldSpaceFrame, &mut CameraComponent)>) {
-        for (frame, mut camera) in query.iter_mut() {
-            camera.apply_input_state();
-            camera.update_frame(frame);
-        }
     }
 
     pub fn apply_input_state(&mut self) {

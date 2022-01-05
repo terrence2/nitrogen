@@ -503,7 +503,7 @@ fn simulation_main(
         "propagate_changes",
         SystemStage::single_threaded()
             .with_system(ArcBallCamera::sys_apply_input.system())
-            .with_system(Camera::sys_apply_input.system()),
+            .with_system(CameraComponent::sys_apply_input.system()),
     );
 
     //////////////////////////////////////////////////////////////////
@@ -519,39 +519,6 @@ fn simulation_main(
     // Note: We have to take resources as non-mutable references, so that we can run in parallel.
     //       We can take as many of these in parallel as we want, iff there is no parallel write
     //       to those same resource (e.g. window). Otherwise we might deadlock.
-    fn update_handle_system_events(
-        input_controller: Res<Arc<Mutex<InputController>>>,
-        window: Res<Arc<RwLock<Window>>>,
-        mut updated_config: ResMut<Option<DisplayConfig>>,
-    ) {
-        let events = input_controller
-            .lock()
-            .poll_system_events()
-            .expect("poll_system_events");
-        *updated_config = window.write().handle_system_events(&events);
-    }
-
-    fn update_handle_camera_aspect_change(
-        mut query: Query<&mut CameraComponent>,
-        updated_config: Res<Option<DisplayConfig>>,
-    ) {
-        for mut camera in query.iter_mut() {
-            if let Some(config) = updated_config.as_ref() {
-                camera.on_display_config_updated(config);
-            }
-        }
-    }
-
-    fn update_handle_window_config_change(
-        updated_config: Res<Option<DisplayConfig>>,
-        gpu: Res<Arc<RwLock<Gpu>>>,
-    ) {
-        if let Some(config) = updated_config.as_ref() {
-            gpu.write()
-                .on_display_config_changed(config)
-                .expect("Gpu::on_display_config_changed");
-        }
-    }
 
     fn update_widget_track_state_changes(
         step: Res<TimeStep>,
@@ -608,9 +575,10 @@ fn simulation_main(
     update_frame_schedule.add_stage(
         "update_frame",
         SystemStage::single_threaded()
-            .with_system(update_handle_system_events.system())
-            .with_system(update_handle_camera_aspect_change.system())
-            .with_system(update_handle_window_config_change.system())
+            .with_system(InputController::sys_read_system_events.system())
+            .with_system(Window::sys_handle_system_events.system())
+            .with_system(CameraComponent::sys_apply_display_changes.system())
+            .with_system(Gpu::sys_handle_display_config_change.system())
             .with_system(update_widget_track_state_changes.system())
             .with_system(update_globals_track_state_changes.system())
             .with_system(update_terrain_track_state_changes.system()),
