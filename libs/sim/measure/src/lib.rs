@@ -13,10 +13,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::Meters;
+use bevy_ecs::prelude::*;
 use geodesy::{Cartesian, GeoCenter};
 use nalgebra::Vector3;
 
-#[derive(Debug, Default)]
+#[derive(Component, Debug, Default)]
 pub struct WorldSpaceFrame {
     position: Cartesian<GeoCenter, Meters>,
     forward: Vector3<f64>,

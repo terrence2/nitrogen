@@ -43,7 +43,7 @@ use widget::{
 };
 use window::{
     size::{LeftBound, Size},
-    DisplayConfig, DisplayOpts, OsWindow, Window,
+    DisplayConfig, DisplayOpts, OsWindow, Window, WindowBuilder,
 };
 use world_render::WorldRenderPass;
 
@@ -369,18 +369,16 @@ fn build_frame_graph(
 
 fn main() -> Result<()> {
     env_logger::init();
-    InputSystem::run_forever(simulation_main)
+    InputSystem::run_forever(
+        WindowBuilder::new().with_title("Nitrogen Demo"),
+        simulation_main,
+    )
 }
-
-// const STEP: Duration = Duration::from_micros(16_666);
 
 fn simulation_main(
     os_window: OsWindow,
     input_controller: Arc<Mutex<InputController>>,
 ) -> Result<()> {
-    // Get the window updated asap
-    os_window.set_title("Nitrogen Demo");
-
     // Create the world and add un-bound resources to it.
     let mut world = World::default();
     input_controller.lock().create_resources(&mut world);
@@ -419,10 +417,6 @@ fn simulation_main(
     let mapper = EventMapper::new(&mut interpreter);
     world.insert_resource(mapper);
 
-    // Hack so that our window APIs work, so that we can discover the system.
-    // We want to do this as late as possible so that we don't have to wait long.
-    // But it needs to happen before we create the window or graphics subsystems.
-    input_controller.lock().wait_for_window_configuration()?;
     world.insert_resource(input_controller);
     let display_config = DisplayConfig::discover(&opt.display_opts, &os_window);
 
@@ -579,6 +573,9 @@ fn simulation_main(
             .with_system(Window::sys_handle_system_events.system())
             .with_system(CameraComponent::sys_apply_display_changes.system())
             .with_system(Gpu::sys_handle_display_config_change.system())
+            .with_system(TerrainBuffer::sys_handle_display_config_change.system())
+            .with_system(WorldRenderPass::sys_handle_display_config_change.system())
+            .with_system(UiRenderPass::sys_handle_display_config_change.system())
             .with_system(update_widget_track_state_changes.system())
             .with_system(update_globals_track_state_changes.system())
             .with_system(update_terrain_track_state_changes.system()),

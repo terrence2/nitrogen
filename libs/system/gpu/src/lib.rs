@@ -64,11 +64,6 @@ pub struct TestResources {
     pub input: InputController,
 }
 
-/// Implement this and register with the gpu instance to get resize notifications.
-pub trait RenderExtentChangeReceiver: Debug + Send + Sync + 'static {
-    fn on_render_extent_changed(&mut self, gpu: &Gpu) -> Result<()>;
-}
-
 #[derive(Debug, NitrousModule)]
 pub struct Gpu {
     _instance: wgpu::Instance,
@@ -88,7 +83,6 @@ pub struct Gpu {
 
     // Render extent is usually decoupled from
     render_extent: wgpu::Extent3d,
-    render_extent_change_receivers: Vec<Arc<RwLock<dyn RenderExtentChangeReceiver>>>,
 
     config: RenderConfig,
     frame_count: usize,
@@ -162,7 +156,6 @@ impl Gpu {
             swap_chain,
             depth_texture,
             render_extent,
-            render_extent_change_receivers: Vec::new(),
             config,
             frame_count: 0,
         }));

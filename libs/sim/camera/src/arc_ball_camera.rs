@@ -23,6 +23,7 @@ use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
 use std::{f64::consts::PI, sync::Arc};
 
+#[derive(Component)]
 pub struct ArcBallController {
     inner: Arc<RwLock<ArcBallCamera>>,
 }

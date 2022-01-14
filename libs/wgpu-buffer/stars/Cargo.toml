@@ -20,7 +20,6 @@ gpu = { path = "../../system/gpu" }
 [dev-dependencies]
 chrono = "^ 0.4"
 parking_lot = "^ 0.11"
-winit = { version = "^ 0.24", features = ["web-sys"] }
 absolute_unit = { path = "../../util/absolute_unit" }
 camera = { path = "../../sim/camera" }
 event_mapper = { path = "../../sim/event_mapper" }

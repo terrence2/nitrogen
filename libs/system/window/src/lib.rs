@@ -26,7 +26,7 @@ use structopt::StructOpt;
 
 pub use winit::{
     dpi::{LogicalSize, PhysicalSize},
-    window::Window as OsWindow,
+    window::{Window as OsWindow, WindowBuilder},
 };
 
 #[derive(Debug, Default, StructOpt)]

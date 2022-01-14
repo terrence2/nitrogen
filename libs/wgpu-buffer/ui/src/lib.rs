@@ -13,8 +13,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
+use bevy_ecs::prelude::*;
 use global_data::GlobalParametersBuffer;
-use gpu::{Gpu, RenderExtentChangeReceiver};
+use gpu::{DisplayConfig, Gpu};
 use log::trace;
 use parking_lot::RwLock;
 use shader_shared::Group;
@@ -326,6 +327,31 @@ impl UiRenderPass {
         })
     }
 
+    pub fn sys_handle_display_config_change(
+        updated_config: Res<Option<DisplayConfig>>,
+        gpu: Res<Arc<RwLock<Gpu>>>,
+        ui: Res<Arc<RwLock<UiRenderPass>>>,
+    ) {
+        if updated_config.is_some() {
+            let mut ui = ui.write();
+            let gpu = gpu.read();
+            ui.handle_render_extent_changed(&gpu)
+                .expect("UI::handle_render_extent_changed")
+        }
+    }
+
+    fn handle_render_extent_changed(&mut self, gpu: &Gpu) -> Result<()> {
+        self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
+        self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
+        self.deferred_bind_group = Self::_make_deferred_bind_group(
+            gpu,
+            &self.deferred_bind_group_layout,
+            &self.deferred_texture.1,
+            &self.deferred_sampler,
+        );
+        Ok(())
+    }
+
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.deferred_bind_group_layout
     }
@@ -383,19 +409,5 @@ impl UiRenderPass {
         rpass.draw(widget_buffer.text_vertex_range(), 0..1);
 
         Ok(rpass)
-    }
-}
-
-impl RenderExtentChangeReceiver for UiRenderPass {
-    fn on_render_extent_changed(&mut self, gpu: &Gpu) -> Result<()> {
-        self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
-        self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
-        self.deferred_bind_group = Self::_make_deferred_bind_group(
-            gpu,
-            &self.deferred_bind_group_layout,
-            &self.deferred_texture.1,
-            &self.deferred_sampler,
-        );
-        Ok(())
     }
 }

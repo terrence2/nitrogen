@@ -26,11 +26,13 @@ use nitrous::Interpreter;
 use orrery::Orrery;
 use parking_lot::Mutex;
 use std::sync::Arc;
-use window::{DisplayConfig, DisplayOpts, Window};
-use winit::window::Window as OsWindow;
+use window::{DisplayConfig, DisplayOpts, OsWindow, Window, WindowBuilder};
 
 fn main() -> Result<()> {
-    InputSystem::run_forever(window_main)
+    InputSystem::run_forever(
+        WindowBuilder::new().with_title("Nitrogen Render Demo"),
+        window_main,
+    )
 }
 
 fn window_main(os_window: OsWindow, input_controller: Arc<Mutex<InputController>>) -> Result<()> {

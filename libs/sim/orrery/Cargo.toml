@@ -7,7 +7,7 @@ edition = "2021"
 [dependencies]
 chrono = "^ 0.4"
 anyhow = { version = "^ 1", features = ["backtrace"] }
-bevy_ecs = "^ 0.5"
+bevy_ecs = "^ 0.6"
 lazy_static = "^ 1"
 log = "^ 0.4"
 nalgebra = "^ 0.29"

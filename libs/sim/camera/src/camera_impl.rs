@@ -27,6 +27,7 @@ use parking_lot::{RwLock, RwLockReadGuard};
 use std::sync::Arc;
 use window::DisplayConfig;
 
+#[derive(Component)]
 pub struct CameraComponent {
     inner: Arc<RwLock<Camera>>,
 }

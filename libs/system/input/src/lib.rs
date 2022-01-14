@@ -35,7 +35,7 @@ use winit::{
         DeviceEvent, DeviceId, Event, KeyboardInput, MouseScrollDelta, StartCause, WindowEvent,
     },
     event_loop::{ControlFlow, EventLoop, EventLoopProxy},
-    window::Window,
+    window::{Window, WindowBuilder},
 };
 
 pub type InputEventVec = SmallVec<[InputEvent; 8]>;
@@ -273,14 +273,12 @@ impl InputSystem {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn run_forever<M>(mut window_main: M) -> Result<()>
+    pub fn run_forever<M>(window_builder: WindowBuilder, mut window_main: M) -> Result<()>
     where
         M: 'static + Send + FnMut(Window, Arc<Mutex<InputController>>) -> Result<()>,
     {
         let event_loop = EventLoop::<MetaEvent>::with_user_event();
-        let window = winit::window::WindowBuilder::new()
-            .with_title("Nitrogen Engine")
-            .build(&event_loop)?;
+        let window = window_builder.build(&event_loop)?;
         let (tx_input_event, rx_input_event) = channel();
         let (tx_system_event, rx_system_event) = channel();
         let input_controller =
@@ -289,6 +287,11 @@ impl InputSystem {
         // Spawn the game thread.
         std::thread::spawn(move || {
             let input_controller = input_controller.wrapped();
+
+            // Hack so that our window APIs work properly from the get-go.
+            // TODO: is this needed (or even working) on all platforms?
+            input_controller.lock().wait_for_window_configuration().ok();
+
             if let Err(e) = window_main(window, input_controller.clone()) {
                 println!("Error: {:?}", e);
             }

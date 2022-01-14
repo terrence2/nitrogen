@@ -30,8 +30,7 @@ use nitrous::Interpreter;
 use parking_lot::Mutex;
 use std::{fs, path::PathBuf, sync::Arc, time::Instant};
 use structopt::StructOpt;
-use window::{DisplayConfig, DisplayOpts, Window};
-use winit::window::Window as OsWindow;
+use window::{DisplayConfig, DisplayOpts, OsWindow, Window, WindowBuilder};
 
 /// Demonstrate the capabilities of the Nitrogen engine
 #[derive(Debug, StructOpt)]
@@ -43,7 +42,10 @@ struct Opt {
 
 fn main() -> Result<()> {
     env_logger::init();
-    InputSystem::run_forever(window_main)
+    InputSystem::run_forever(
+        WindowBuilder::new().with_title("Build Atmosphere Tables"),
+        window_main,
+    )
 }
 
 fn window_main(os_window: OsWindow, _input_controller: Arc<Mutex<InputController>>) -> Result<()> {

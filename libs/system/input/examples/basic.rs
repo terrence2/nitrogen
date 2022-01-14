@@ -16,10 +16,13 @@ use anyhow::Result;
 use input::{InputController, InputEvent, InputSystem, SystemEvent, VirtualKeyCode};
 use parking_lot::Mutex;
 use std::sync::Arc;
-use winit::window::Window;
+use winit::window::{Window, WindowBuilder};
 
 fn main() -> Result<()> {
-    InputSystem::run_forever(window_main)
+    InputSystem::run_forever(
+        WindowBuilder::new().with_title("Input Example"),
+        window_main,
+    )
 }
 
 fn window_main(window: Window, input_controller: Arc<Mutex<InputController>>) -> Result<()> {
