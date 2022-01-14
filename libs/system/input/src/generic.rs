@@ -38,9 +38,12 @@ pub enum MouseAxis {
 //   * The virtual keycode is just a friendly name for the physical key that was interacted.
 //     e.g. Events in alternate planes reflect the plane in the ModifiersState, not in the keycode.
 //   * Mouse movement and button events fire always, but are marked with the window in-out state.
+//     (we cannot track this accurately on all platforms, so generally we can ignore this entirely)
 //   * There is only one "user-caused-window-to-close" signal.
+
+// DeviceEvents flow into the game logic.
 #[derive(Debug, Clone)]
-pub enum GenericEvent {
+pub enum InputEvent {
     KeyboardKey {
         scancode: u32,
         virtual_keycode: VirtualKeyCode,
@@ -94,11 +97,33 @@ pub enum GenericEvent {
         window_focused: bool,
     },
 
-    Window(GenericWindowEvent),
-    System(GenericSystemEvent),
+    // We do not generally care about individual mice or keyboards: the events will still come
+    // through automatically. This will be very important for Joystick management, however, as we
+    // expect those to cycle relatively frequently during gameplay.
+    DeviceAdded {
+        dummy: u32,
+    },
+    DeviceRemoved {
+        dummy: u32,
+    },
 }
 
-impl GenericEvent {
+#[derive(Debug, Clone)]
+pub enum SystemEvent {
+    // Note that the sizes passed here may race with the ones returned by the surface/window,
+    // so code should be careful to use these values instead of the ones returned by those apis.
+    WindowResized { width: u32, height: u32 },
+
+    // Note that the scale factor passed here may race with the one given back by the surface
+    // so code that responds to this should be careful to use this value instead of the one there.
+    ScaleFactorChanged { scale: f64 },
+
+    // Aggregate of various "user wants the program to go away" interactions. Close button (the X)
+    // pressed in the window's bar or task bar, Win+F4 pressed, File+Quit, etc.
+    Quit,
+}
+
+impl InputEvent {
     pub fn press_state(&self) -> Option<ElementState> {
         match self {
             Self::KeyboardKey { press_state, .. } => Some(*press_state),
@@ -159,8 +184,7 @@ impl GenericEvent {
             } | Self::JoystickAxis {
                 window_focused: true,
                 ..
-            } | Self::Window(_)
-                | Self::System(_)
+            }
         )
     }
 
@@ -190,28 +214,4 @@ impl GenericEvent {
             _ => false,
         }
     }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum GenericWindowEvent {
-    // Note that the sizes passed here may race with the ones returned by the surface/window,
-    // so code should be careful to use these values instead of the ones returned by those apis.
-    Resized { width: u32, height: u32 },
-
-    // Note that the scale factor passed here may race with the one given back by the surface
-    // so code that responds to this should be careful to use this value instead of the one there.
-    ScaleFactorChanged { scale: f64 },
-}
-
-#[derive(Debug, Copy, Clone)]
-pub enum GenericSystemEvent {
-    // Aggregate of various "user wants the program to go away" interactions. Close button (the X)
-    // pressed in the window's bar or task bar, Win+F4 pressed, File+Quit, etc.
-    Quit,
-
-    // We do not generally care about individual mice or keyboards: the events will still come
-    // through automatically. This will be very important for Joystick management, however, as we
-    // expect those to cycle relatively frequently during gameplay.
-    DeviceAdded { dummy: u32 },
-    DeviceRemoved { dummy: u32 },
 }

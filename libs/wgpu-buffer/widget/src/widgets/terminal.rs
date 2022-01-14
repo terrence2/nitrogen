@@ -22,7 +22,7 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use gpu::Gpu;
-use input::{ElementState, GenericEvent, VirtualKeyCode};
+use input::{ElementState, InputEvent, InputFocus, VirtualKeyCode};
 use nitrous::{
     ir::{Expr, Stmt, Term},
     Interpreter, Module, Script, Value,
@@ -152,7 +152,7 @@ impl Terminal {
         self.output.write().append_line(line);
     }
 
-    fn try_completion(&self, mut partial: Script, interpreter: Interpreter) -> Option<String> {
+    fn try_completion(&self, mut partial: Script, interpreter: &mut Interpreter) -> Option<String> {
         if partial.statements().len() != 1 {
             return None;
         }
@@ -189,7 +189,7 @@ impl Terminal {
         None
     }
 
-    fn on_tab_pressed(&mut self, interpreter: Interpreter) {
+    fn on_tab_pressed(&mut self, interpreter: &mut Interpreter) {
         let incomplete = self.edit.read().line().flatten();
         if let Ok(partial) = Script::compile(&incomplete) {
             if let Some(full) = self.try_completion(partial, interpreter) {
@@ -225,7 +225,7 @@ impl Terminal {
         }
     }
 
-    fn on_enter_pressed(&mut self, mut interpreter: Interpreter) -> Result<()> {
+    fn on_enter_pressed(&mut self, interpreter: &mut Interpreter) -> Result<()> {
         let command = self.edit.read().line().flatten();
         self.edit.write().line_mut().select_all();
         self.edit.write().line_mut().delete();
@@ -233,6 +233,7 @@ impl Terminal {
         self.add_command_to_history(&command)?;
 
         let output = self.output.clone();
+        let mut interpreter = interpreter.to_owned();
         rayon::spawn(move || match interpreter.interpret_once(&command) {
             Ok(value) => {
                 let s = match value {
@@ -298,24 +299,23 @@ impl Widget for Terminal {
 
     fn handle_event(
         &mut self,
-        now: Instant,
-        event: &GenericEvent,
-        focus: &str,
+        event: &InputEvent,
+        focus: InputFocus,
         cursor_position: Position<AbsSize>,
-        interpreter: Interpreter,
+        interpreter: &mut Interpreter,
     ) -> Result<()> {
         // FIXME: don't hard-code the name
-        if focus != "terminal" {
+        if focus != InputFocus::Terminal {
             return Ok(());
         }
 
         // FIXME: set focus parameter here equal to whatever we call the line_edit child
         self.edit
             .write()
-            .handle_event(now, event, focus, cursor_position, interpreter.clone())?;
+            .handle_event(event, focus, cursor_position, interpreter)?;
 
         // Intercept the enter key and process the command in edit into the terminal.
-        if let GenericEvent::KeyboardKey {
+        if let InputEvent::KeyboardKey {
             virtual_keycode,
             press_state,
             modifiers_state,

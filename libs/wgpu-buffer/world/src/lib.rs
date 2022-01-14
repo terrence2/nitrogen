@@ -14,9 +14,10 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
 use atmosphere::AtmosphereBuffer;
+use bevy_ecs::prelude::*;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::GlobalParametersBuffer;
-use gpu::{Gpu, RenderExtentChangeReceiver};
+use gpu::{DisplayConfig, Gpu};
 use log::trace;
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -283,7 +284,7 @@ impl WorldRenderPass {
             debug_mode: DebugMode::None,
         }));
 
-        gpu.register_render_extent_change_receiver(world.clone());
+        // gpu.register_render_extent_change_receiver(world.clone());
 
         interpreter.put_global("world", Value::Module(world.clone()));
 
@@ -431,6 +432,32 @@ impl WorldRenderPass {
         Ok(())
     }
 
+    pub fn sys_handle_display_config_change(
+        updated_config: Res<Option<DisplayConfig>>,
+        gpu: Res<Arc<RwLock<Gpu>>>,
+        world: Res<Arc<RwLock<WorldRenderPass>>>,
+    ) {
+        if updated_config.is_some() {
+            let mut world = world.write();
+            let gpu = gpu.read();
+            world
+                .handle_render_extent_changed(&gpu)
+                .expect("World::handle_render_extent_changed")
+        }
+    }
+
+    fn handle_render_extent_changed(&mut self, gpu: &Gpu) -> Result<()> {
+        self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
+        self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
+        self.deferred_bind_group = Self::_make_deferred_bind_group(
+            gpu,
+            &self.deferred_bind_group_layout,
+            &self.deferred_texture.1,
+            &self.deferred_sampler,
+        );
+        Ok(())
+    }
+
     #[method]
     pub fn toggle_wireframe_mode(&mut self, pressed: bool) {
         if pressed {
@@ -562,19 +589,5 @@ impl WorldRenderPass {
         }
 
         Ok(rpass)
-    }
-}
-
-impl RenderExtentChangeReceiver for WorldRenderPass {
-    fn on_render_extent_changed(&mut self, gpu: &Gpu) -> Result<()> {
-        self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
-        self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
-        self.deferred_bind_group = Self::_make_deferred_bind_group(
-            gpu,
-            &self.deferred_bind_group_layout,
-            &self.deferred_texture.1,
-            &self.deferred_sampler,
-        );
-        Ok(())
     }
 }

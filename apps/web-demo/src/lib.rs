@@ -14,13 +14,13 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{degrees, meters};
 use anyhow::{bail, Result};
-use camera::ArcBallCamera;
+use camera::{ArcBallCamera, Camera};
 //use fullscreen::FullscreenBuffer;
 use chrono::{TimeZone, Utc};
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
 use gpu::Gpu;
-use input::{GenericEvent, InputController, InputSystem, VirtualKeyCode};
+use input::{InputController, InputEvent, InputSystem, VirtualKeyCode};
 //use legion::*;
 // use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
 use nitrous::Interpreter;
@@ -53,6 +53,7 @@ struct AppContext {
     interpreter: Interpreter,
     window: Arc<RwLock<Window>>,
     gpu: Arc<RwLock<Gpu>>,
+    camera: Arc<RwLock<Camera>>,
     arcball: Arc<RwLock<ArcBallCamera>>,
     orrery: Arc<RwLock<Orrery>>,
     // //async_rt: Runtime,
@@ -68,7 +69,7 @@ async fn async_main() -> Result<()> {
         .build(&event_loop)?;
 
     // FIXME: we need a different mechanism for handling resize events on web
-    let mut input_controller = InputController::for_web(&event_loop);
+    let _input_controller = InputController::for_web(&event_loop);
 
     #[cfg(target_arch = "wasm32")]
     {
@@ -86,18 +87,19 @@ async fn async_main() -> Result<()> {
     // let mapper = EventMapper::new(&mut interpreter);
 
     let display_config = DisplayConfig::discover(&DisplayOpts::default(), &os_window);
-    let window = Window::new(
-        os_window,
-        &mut input_controller,
-        display_config,
-        &mut interpreter,
-    )?;
+    let window = Window::new(os_window, display_config, &mut interpreter)?;
     let gpu = Gpu::new_async(&mut window.write(), Default::default(), &mut interpreter).await?;
 
     let globals_buffer = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter);
     // let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
 
-    let arcball = ArcBallCamera::new(meters!(0.1), &mut window.write(), &mut interpreter)?;
+    let camera = Camera::install(
+        degrees!(90),
+        window.read().render_aspect_ratio(),
+        meters!(0.5),
+        &mut interpreter,
+    )?;
+    let arcball = ArcBallCamera::install(&mut interpreter)?;
     arcball.write().set_eye(Graticule::<Target>::new(
         degrees!(0),
         degrees!(0),
@@ -115,6 +117,7 @@ async fn async_main() -> Result<()> {
         interpreter,
         window,
         gpu,
+        camera,
         arcball,
         //async_rt,
         //legion,
@@ -134,16 +137,16 @@ fn window_loop(
     input_controller: &InputController,
     app: &mut AppContext,
 ) -> Result<()> {
-    for event in input_controller.poll_events()? {
+    for event in input_controller.poll_input_events()? {
         console::log_1(&format!("EVENT: {:?}", event).into());
         match event {
-            GenericEvent::KeyboardKey {
+            InputEvent::KeyboardKey {
                 virtual_keycode: VirtualKeyCode::B,
                 ..
             } => {
                 bail!("soft crash");
             }
-            GenericEvent::KeyboardKey {
+            InputEvent::KeyboardKey {
                 virtual_keycode: VirtualKeyCode::P,
                 ..
             } => {
@@ -152,11 +155,13 @@ fn window_loop(
             _ => {}
         }
     }
-    app.arcball.write().track_state_changes();
+    app.arcball.write().apply_input_state();
+    let frame = app.arcball.read().world_space_frame();
+    app.camera.write().update_frame(&frame);
 
     // Sim
     app.globals_buffer.write().track_state_changes(
-        app.arcball.read().camera(),
+        &app.camera.read(),
         &app.orrery.read(),
         &app.window.read(),
     );

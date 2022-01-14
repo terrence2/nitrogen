@@ -13,33 +13,38 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
-use input::{GenericEvent, GenericSystemEvent, InputController, InputSystem, VirtualKeyCode};
-use winit::window::Window;
+use input::{InputController, InputEvent, InputSystem, SystemEvent, VirtualKeyCode};
+use parking_lot::Mutex;
+use std::sync::Arc;
+use winit::window::{Window, WindowBuilder};
 
 fn main() -> Result<()> {
-    InputSystem::run_forever(window_main)
+    InputSystem::run_forever(
+        WindowBuilder::new().with_title("Input Example"),
+        window_main,
+    )
 }
 
-fn window_main(window: Window, input_controller: &mut InputController) -> Result<()> {
+fn window_main(window: Window, input_controller: Arc<Mutex<InputController>>) -> Result<()> {
     loop {
-        for event in input_controller.poll_events()? {
+        for event in input_controller.lock().poll_input_events()? {
             println!("EVENT: {:?} <- {:?}", window, event);
-            match event {
-                GenericEvent::System(GenericSystemEvent::Quit) => {
-                    input_controller.quit()?;
+            if let InputEvent::KeyboardKey {
+                virtual_keycode, ..
+            } = event
+            {
+                if virtual_keycode == VirtualKeyCode::Escape || virtual_keycode == VirtualKeyCode::Q
+                {
+                    input_controller.lock().quit()?;
                     return Ok(());
                 }
-                GenericEvent::KeyboardKey {
-                    virtual_keycode, ..
-                } => {
-                    if virtual_keycode == VirtualKeyCode::Escape
-                        || virtual_keycode == VirtualKeyCode::Q
-                    {
-                        input_controller.quit()?;
-                        return Ok(());
-                    }
-                }
-                _ => {}
+            }
+        }
+        for event in input_controller.lock().poll_system_events()? {
+            println!("EVENT: {:?} <- {:?}", window, event);
+            if matches!(event, SystemEvent::Quit) {
+                input_controller.lock().quit()?;
+                return Ok(());
             }
         }
     }

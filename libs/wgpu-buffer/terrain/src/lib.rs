@@ -25,11 +25,12 @@ pub use crate::{
 
 use absolute_unit::{Length, Meters};
 use anyhow::Result;
+use bevy_ecs::prelude::*;
 use camera::Camera;
 use catalog::Catalog;
 use geodesy::{GeoCenter, Graticule};
 use global_data::GlobalParametersBuffer;
-use gpu::{CpuDetailLevel, Gpu, GpuDetailLevel, RenderExtentChangeReceiver, UploadTracker};
+use gpu::{CpuDetailLevel, DisplayConfig, Gpu, GpuDetailLevel, UploadTracker};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
@@ -476,8 +477,6 @@ impl TerrainBuffer {
             accumulate_clear_pipeline,
         }));
 
-        gpu.register_render_extent_change_receiver(terrain.clone());
-
         interpreter.put_global("terrain", Value::Module(terrain.clone()));
 
         Ok(terrain)
@@ -486,6 +485,48 @@ impl TerrainBuffer {
     pub fn init(self) -> Result<Arc<RwLock<Self>>> {
         let terrain = Arc::new(RwLock::new(self));
         Ok(terrain)
+    }
+
+    pub fn sys_handle_display_config_change(
+        updated_config: Res<Option<DisplayConfig>>,
+        gpu: Res<Arc<RwLock<Gpu>>>,
+        terrain: Res<Arc<RwLock<TerrainBuffer>>>,
+    ) {
+        if updated_config.is_some() {
+            let mut terrain = terrain.write();
+            let gpu = gpu.read();
+            terrain
+                .handle_render_extent_changed(&gpu)
+                .expect("Terrain::handle_render_extent_changed")
+        }
+    }
+
+    fn handle_render_extent_changed(&mut self, gpu: &Gpu) -> Result<()> {
+        self.acc_extent = gpu.attachment_extent();
+        self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
+        self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
+        self.color_acc = Self::_make_color_accumulator_targets(gpu);
+        self.normal_acc = Self::_make_normal_accumulator_targets(gpu);
+        self.composite_bind_group = Self::_make_composite_bind_group(
+            gpu.device(),
+            &self.composite_bind_group_layout,
+            &self.deferred_texture.1,
+            &self.deferred_depth.1,
+            &self.color_acc.1,
+            &self.normal_acc.1,
+            &self.sampler_linear,
+            &self.sampler_nearest,
+        );
+        self.accumulate_common_bind_group = Self::_make_accumulate_common_bind_group(
+            gpu.device(),
+            &self.accumulate_common_bind_group_layout,
+            &self.deferred_texture.1,
+            &self.deferred_depth.1,
+            &self.color_acc.1,
+            &self.normal_acc.1,
+            &self.sampler_linear,
+        );
+        Ok(())
     }
 
     fn _make_deferred_texture_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
@@ -876,36 +917,6 @@ impl TerrainBuffer {
 
     pub fn wireframe_index_range(&self, winding: PatchWinding) -> Range<u32> {
         self.patch_manager.wireframe_index_range(winding)
-    }
-}
-
-impl RenderExtentChangeReceiver for TerrainBuffer {
-    fn on_render_extent_changed(&mut self, gpu: &Gpu) -> Result<()> {
-        self.acc_extent = gpu.attachment_extent();
-        self.deferred_texture = Self::_make_deferred_texture_targets(gpu);
-        self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
-        self.color_acc = Self::_make_color_accumulator_targets(gpu);
-        self.normal_acc = Self::_make_normal_accumulator_targets(gpu);
-        self.composite_bind_group = Self::_make_composite_bind_group(
-            gpu.device(),
-            &self.composite_bind_group_layout,
-            &self.deferred_texture.1,
-            &self.deferred_depth.1,
-            &self.color_acc.1,
-            &self.normal_acc.1,
-            &self.sampler_linear,
-            &self.sampler_nearest,
-        );
-        self.accumulate_common_bind_group = Self::_make_accumulate_common_bind_group(
-            gpu.device(),
-            &self.accumulate_common_bind_group_layout,
-            &self.deferred_texture.1,
-            &self.deferred_depth.1,
-            &self.color_acc.1,
-            &self.normal_acc.1,
-            &self.sampler_linear,
-        );
-        Ok(())
     }
 }
 

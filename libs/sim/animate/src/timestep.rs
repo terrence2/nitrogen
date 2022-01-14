@@ -12,9 +12,37 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-mod bindings;
-mod input;
-mod widget;
+use bevy_ecs::prelude::*;
+use std::time::{Duration, Instant};
 
-pub(crate) use crate::widgets::event_mapper::widget::State;
-pub use crate::widgets::event_mapper::{bindings::Bindings, widget::EventMapper};
+#[derive(Clone, Debug)]
+pub struct TimeStep {
+    now: Instant,
+    delta: Duration,
+}
+
+impl TimeStep {
+    pub fn new_60fps() -> Self {
+        Self {
+            now: Instant::now(),
+            delta: Duration::from_micros(16_666),
+        }
+    }
+
+    pub fn sys_tick_time(mut timestep: ResMut<TimeStep>) {
+        let dt = timestep.delta;
+        timestep.now += dt;
+    }
+
+    pub fn now(&self) -> &Instant {
+        &self.now
+    }
+
+    pub fn step(&self) -> &Duration {
+        &self.delta
+    }
+
+    pub fn next_now(&self) -> Instant {
+        self.now + self.delta
+    }
+}

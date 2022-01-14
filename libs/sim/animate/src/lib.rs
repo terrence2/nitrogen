@@ -12,11 +12,12 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-pub(crate) mod button;
-pub(crate) mod expander;
-pub(crate) mod float_box;
-pub(crate) mod label;
-pub(crate) mod line_edit;
-pub(crate) mod terminal;
-pub(crate) mod text_edit;
-pub(crate) mod vertical_box;
+mod animation;
+mod timeline;
+mod timestep;
+
+pub use crate::{
+    animation::{Animation, LinearAnimationTemplate},
+    timeline::Timeline,
+    timestep::TimeStep,
+};

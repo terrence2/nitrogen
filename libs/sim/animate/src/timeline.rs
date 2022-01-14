@@ -12,10 +12,13 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use crate::TimeStep;
 use absolute_unit::{meters, radians};
 use anyhow::{ensure, Result};
+use bevy_ecs::prelude::*;
 use futures::future::{ready, FutureExt};
 use geodesy::Graticule;
+use log::error;
 use lyon_geom::{cubic_bezier::CubicBezierSegment, Point};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
@@ -147,8 +150,7 @@ impl ScriptableAnimation {
             (self.start.clone(), false)
         };
         if let Some(callable) = &self.callable {
-            let (module, name) = callable.to_method()?;
-            module.write().call_method(name, &[current])?;
+            callable.spawn_method(&[current]);
         }
         if ended {
             self.state = AnimationState::Finished;
@@ -182,12 +184,18 @@ impl Timeline {
         timeline
     }
 
-    pub fn step_time(&mut self, now: &Instant) -> Result<()> {
+    pub fn sys_animate(step: Res<TimeStep>, timeline: Res<Arc<RwLock<Timeline>>>) {
+        timeline.write().step_time(step.now());
+    }
+
+    pub fn step_time(&mut self, now: &Instant) {
         for animation in &mut self.animations {
-            animation.step_time(now)?;
+            // One animation failing should not propagate to others.
+            if let Err(e) = animation.step_time(now) {
+                error!("step_time failed with: {}", e);
+            }
         }
         self.animations.retain(|animation| !animation.is_finished());
-        Ok(())
     }
 
     pub fn with_curve(

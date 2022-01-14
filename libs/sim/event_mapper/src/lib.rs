@@ -12,10 +12,9 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-mod animation;
-mod timeline;
+mod bindings;
+mod input;
+mod widget;
 
-pub use crate::{
-    animation::{Animation, LinearAnimationTemplate},
-    timeline::Timeline,
-};
+pub(crate) use crate::widget::State;
+pub use crate::{bindings::Bindings, widget::EventMapper};

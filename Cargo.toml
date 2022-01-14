@@ -16,7 +16,6 @@ members = [
     # Only external dependencies, appropriate for splitting
     # out fully, once mature enough.
     "libs/util/absolute_unit",
-    "libs/util/animate",
     "libs/util/ansi",
     "libs/util/build_shaders",
     "libs/util/geodesy",
@@ -36,7 +35,10 @@ members = [
 
     # Only external, util, and system dependencies. Generally concerned
     # with running the simulated environment.
+    "libs/sim/animate",
     "libs/sim/camera",
+    "libs/sim/event_mapper",
+    "libs/sim/measure",
     "libs/sim/orrery",
 
     # GPU buffer management and drawing pass implementations.
@@ -59,8 +61,8 @@ members = [
 chrono = "^ 0.4"
 env_logger = "^ 0.8"
 anyhow = { version = "^ 1", features = ["backtrace"] }
+bevy_ecs = "^ 0.6"
 image = "^ 0.23"
-legion = "^ 0.4"
 log = "^ 0.4"
 nalgebra = "^ 0.29"
 parking_lot = "^ 0.11"
@@ -70,16 +72,18 @@ rayon = "= 1.4.0"
 structopt = "^ 0.3"
 terminal_size = "^ 0.1"
 absolute_unit = { path = "libs/util/absolute_unit" }
-animate = { path = "libs/util/animate" }
+animate = { path = "libs/sim/animate" }
 atmosphere = { path = "libs/wgpu-buffer/atmosphere" }
 camera = { path = "libs/sim/camera" }
 catalog = { path = "libs/system/catalog" }
 composite = { path = "libs/wgpu-buffer/composite" }
+event_mapper = { path = "libs/sim/event_mapper" }
 fullscreen = { path = "libs/wgpu-buffer/fullscreen" }
 geodesy = { path = "libs/util/geodesy" }
 global_data = { path = "libs/wgpu-buffer/global_data" }
 gpu = { path = "libs/system/gpu" }
 input = { path = "libs/system/input" }
+measure = { path = "libs/sim/measure" }
 nitrous = { path = "libs/util/nitrous" }
 nitrous_injector = { path = "libs/util/nitrous_injector" }
 orrery = { path = "libs/sim/orrery" }
@@ -88,4 +92,4 @@ terrain = { path = "libs/wgpu-buffer/terrain" }
 ui = { path = "libs/wgpu-buffer/ui" }
 widget = { path = "libs/wgpu-buffer/widget" }
 window = { path = "libs/system/window" }
-world = { path = "libs/wgpu-buffer/world" }
+world_render = { package = "world", path = "libs/wgpu-buffer/world" }

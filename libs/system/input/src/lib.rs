@@ -14,12 +14,13 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 mod generic;
 
-pub use generic::{GenericEvent, GenericSystemEvent, GenericWindowEvent, MouseAxis};
+pub use generic::{InputEvent, MouseAxis, SystemEvent};
 pub use winit::event::{ButtonId, ElementState, ModifiersState, VirtualKeyCode};
 
 use anyhow::{bail, Result};
+use bevy_ecs::prelude::*;
 use log::warn;
-use parking_lot::RwLock;
+use parking_lot::Mutex;
 use smallvec::SmallVec;
 use std::{
     collections::HashMap,
@@ -34,8 +35,27 @@ use winit::{
         DeviceEvent, DeviceId, Event, KeyboardInput, MouseScrollDelta, StartCause, WindowEvent,
     },
     event_loop::{ControlFlow, EventLoop, EventLoopProxy},
-    window::Window,
+    window::{Window, WindowBuilder},
 };
+
+pub type InputEventVec = SmallVec<[InputEvent; 8]>;
+pub type SystemEventVec = SmallVec<[SystemEvent; 8]>;
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum InputFocus {
+    Game,
+    Terminal,
+}
+
+impl InputFocus {
+    pub fn toggle_terminal(&mut self) {
+        if *self == Self::Game {
+            *self = Self::Terminal;
+        } else {
+            *self = Self::Game;
+        }
+    }
+}
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum MetaEvent {
@@ -49,34 +69,71 @@ pub struct InputState {
     window_focused: bool,
 }
 
-pub trait WindowEventReceiver: Send + Sync + 'static {
-    fn on_window_event(&mut self, event: GenericWindowEvent);
-}
-
 pub struct InputController {
     proxy: EventLoopProxy<MetaEvent>,
-    event_source: Receiver<GenericEvent>,
-
-    window_event_receivers: Vec<Arc<RwLock<dyn WindowEventReceiver>>>,
+    input_event_source: Receiver<InputEvent>,
+    system_event_source: Receiver<SystemEvent>,
 }
 
 impl InputController {
-    fn new(proxy: EventLoopProxy<MetaEvent>, event_source: Receiver<GenericEvent>) -> Self {
+    fn new(
+        proxy: EventLoopProxy<MetaEvent>,
+        input_event_source: Receiver<InputEvent>,
+        system_event_source: Receiver<SystemEvent>,
+    ) -> Self {
         Self {
             proxy,
-            event_source,
-            window_event_receivers: Vec::new(),
+            input_event_source,
+            system_event_source,
         }
     }
 
+    fn wrapped(self) -> Arc<Mutex<Self>> {
+        Arc::new(Mutex::new(self))
+    }
+
+    pub fn create_resources(&self, world: &mut World) {
+        world.insert_resource(InputEventVec::new());
+        world.insert_resource(SystemEventVec::new());
+        world.insert_resource(InputFocus::Game);
+    }
+
+    pub fn sys_read_input_events(
+        input_controller: Res<Arc<Mutex<InputController>>>,
+        mut input_events: ResMut<InputEventVec>,
+    ) {
+        // Note: if we are stopping, the queue might have shut down, in which case we don't
+        // really care about the output anymore.
+        *input_events = if let Ok(events) = input_controller.lock().poll_input_events() {
+            events
+        } else {
+            InputEventVec::new()
+        };
+    }
+
+    pub fn sys_read_system_events(
+        input_controller: Res<Arc<Mutex<InputController>>>,
+        mut system_events: ResMut<SystemEventVec>,
+    ) {
+        // Note: if we are stopping, the queue might have shut down, in which case we don't
+        // really care about the output anymore.
+        *system_events = if let Ok(events) = input_controller.lock().poll_system_events() {
+            events
+        } else {
+            SystemEventVec::new()
+        };
+    }
+
     pub fn for_test(event_loop: &EventLoop<MetaEvent>) -> Self {
-        let (_, rx_event) = channel();
-        InputController::new(event_loop.create_proxy(), rx_event)
+        let (_, rx_input_event) = channel();
+        let (_, rx_system_event) = channel();
+        InputController::new(event_loop.create_proxy(), rx_input_event, rx_system_event)
     }
 
     pub fn for_web(event_loop: &EventLoop<MetaEvent>) -> Self {
-        let (_, rx_event) = channel();
-        InputController::new(event_loop.create_proxy(), rx_event)
+        let (_, rx_input_event) = channel();
+        let (_, rx_system_event) = channel();
+        InputController::new(event_loop.create_proxy(), rx_input_event, rx_system_event)
     }
 
     #[cfg(unix)]
@@ -97,11 +154,8 @@ impl InputController {
     pub fn wait_for_window_configuration(&mut self) -> Result<()> {
         let start = Instant::now();
         loop {
-            for evt in self.poll_events()? {
-                if matches!(
-                    evt,
-                    GenericEvent::Window(GenericWindowEvent::Resized { .. })
-                ) {
+            for evt in self.poll_system_events()? {
+                if matches!(evt, SystemEvent::WindowResized { .. }) {
                     warn!("Waited {:?} for size event", start.elapsed());
                     return Ok(());
                 }
@@ -109,27 +163,29 @@ impl InputController {
         }
     }
 
-    pub fn register_window_event_receiver<T: WindowEventReceiver>(
-        &mut self,
-        callback: Arc<RwLock<T>>,
-    ) {
-        self.window_event_receivers.push(callback);
-    }
-
-    pub fn poll_events(&self) -> Result<SmallVec<[GenericEvent; 8]>> {
+    pub fn poll_input_events(&self) -> Result<InputEventVec> {
         let mut out = SmallVec::new();
-        let mut maybe_event_input = self.event_source.try_recv();
+        let mut maybe_event_input = self.input_event_source.try_recv();
         while maybe_event_input.is_ok() {
             let event_input = maybe_event_input?;
-            if let GenericEvent::Window(gwe) = event_input {
-                for receiver in self.window_event_receivers.iter() {
-                    receiver.write().on_window_event(gwe);
-                }
-            }
             out.push(event_input);
-            maybe_event_input = self.event_source.try_recv();
+            maybe_event_input = self.input_event_source.try_recv();
         }
         match maybe_event_input.err().unwrap() {
+            TryRecvError::Empty => Ok(out),
+            TryRecvError::Disconnected => bail!("input system stopped"),
+        }
+    }
+
+    pub fn poll_system_events(&self) -> Result<SystemEventVec> {
+        let mut out = SmallVec::new();
+        let mut maybe_system_event = self.system_event_source.try_recv();
+        while maybe_system_event.is_ok() {
+            let event_input = maybe_system_event?;
+            out.push(event_input);
+            maybe_system_event = self.system_event_source.try_recv();
+        }
+        match maybe_system_event.err().unwrap() {
             TryRecvError::Empty => Ok(out),
             TryRecvError::Disconnected => bail!("input system stopped"),
         }
@@ -217,27 +273,34 @@ impl InputSystem {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn run_forever<M>(mut window_main: M) -> Result<()>
+    pub fn run_forever<M>(window_builder: WindowBuilder, mut window_main: M) -> Result<()>
     where
-        M: 'static + Send + FnMut(Window, &mut InputController) -> Result<()>,
+        M: 'static + Send + FnMut(Window, Arc<Mutex<InputController>>) -> Result<()>,
     {
         let event_loop = EventLoop::<MetaEvent>::with_user_event();
-        let window = winit::window::WindowBuilder::new()
-            .with_title("Nitrogen Engine")
-            .build(&event_loop)?;
-        let (tx_event, rx_event) = channel();
-        let mut input_controller = InputController::new(event_loop.create_proxy(), rx_event);
+        let window = window_builder.build(&event_loop)?;
+        let (tx_input_event, rx_input_event) = channel();
+        let (tx_system_event, rx_system_event) = channel();
+        let input_controller =
+            InputController::new(event_loop.create_proxy(), rx_input_event, rx_system_event);
 
         // Spawn the game thread.
         std::thread::spawn(move || {
-            if let Err(e) = window_main(window, &mut input_controller) {
+            let input_controller = input_controller.wrapped();
+
+            // Hack so that our window APIs work properly from the get-go.
+            // TODO: is this needed (or even working) on all platforms?
+            input_controller.lock().wait_for_window_configuration().ok();
+
+            if let Err(e) = window_main(window, input_controller.clone()) {
                 println!("Error: {:?}", e);
             }
-            input_controller.quit().ok();
+            input_controller.lock().quit().ok();
         });
 
         // Hijack the main thread.
-        let mut generic_events = Vec::new();
+        let mut input_events = Vec::new();
+        let mut system_events = Vec::new();
         let mut input_state: InputState = Default::default();
         event_loop.run(move |event, _target, control_flow| {
             *control_flow = ControlFlow::Wait;
@@ -246,9 +309,21 @@ impl InputSystem {
                 return;
             }
 
-            Self::wrap_event(&event, &mut input_state, &mut generic_events);
-            for evt in generic_events.drain(..) {
-                if let Err(e) = tx_event.send(evt) {
+            Self::wrap_event(
+                &event,
+                &mut input_state,
+                &mut input_events,
+                &mut system_events,
+            );
+            for evt in input_events.drain(..) {
+                if let Err(e) = tx_input_event.send(evt) {
+                    println!("Game loop hung up ({}), exiting...", e);
+                    *control_flow = ControlFlow::Exit;
+                    return;
+                }
+            }
+            for evt in system_events.drain(..) {
+                if let Err(e) = tx_system_event.send(evt) {
                     println!("Game loop hung up ({}), exiting...", e);
                     *control_flow = ControlFlow::Exit;
                     return;
@@ -257,11 +332,18 @@ impl InputSystem {
         });
     }
 
-    fn wrap_event(e: &Event<MetaEvent>, input_state: &mut InputState, out: &mut Vec<GenericEvent>) {
+    fn wrap_event(
+        e: &Event<MetaEvent>,
+        input_state: &mut InputState,
+        input_events: &mut Vec<InputEvent>,
+        system_events: &mut Vec<SystemEvent>,
+    ) {
         match e {
-            Event::WindowEvent { event, .. } => Self::wrap_window_event(event, input_state, out),
+            Event::WindowEvent { event, .. } => {
+                Self::wrap_window_event(event, input_state, input_events, system_events)
+            }
             Event::DeviceEvent { device_id, event } => {
-                Self::wrap_device_event(device_id, event, input_state, out)
+                Self::wrap_device_event(device_id, event, input_state, input_events)
             }
             Event::MainEventsCleared => {}
             Event::RedrawRequested(_window_id) => {}
@@ -276,21 +358,22 @@ impl InputSystem {
     fn wrap_window_event(
         event: &WindowEvent,
         input_state: &mut InputState,
-        out: &mut Vec<GenericEvent>,
+        out: &mut Vec<InputEvent>,
+        system_events: &mut Vec<SystemEvent>,
     ) {
         match event {
             WindowEvent::Resized(s) => {
-                out.push(GenericEvent::Window(GenericWindowEvent::Resized {
+                system_events.push(SystemEvent::WindowResized {
                     width: s.width,
                     height: s.height,
-                }));
+                });
             }
             WindowEvent::Moved(_) => {}
             WindowEvent::Destroyed => {
-                out.push(GenericEvent::System(GenericSystemEvent::Quit));
+                system_events.push(SystemEvent::Quit);
             }
             WindowEvent::CloseRequested => {
-                out.push(GenericEvent::System(GenericSystemEvent::Quit));
+                system_events.push(SystemEvent::Quit);
             }
             WindowEvent::Focused(b) => {
                 input_state.window_focused = *b;
@@ -299,11 +382,9 @@ impl InputSystem {
             WindowEvent::HoveredFile(_) => {}
             WindowEvent::HoveredFileCancelled => {}
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-                out.push(GenericEvent::Window(
-                    GenericWindowEvent::ScaleFactorChanged {
-                        scale: *scale_factor,
-                    },
-                ));
+                system_events.push(SystemEvent::ScaleFactorChanged {
+                    scale: *scale_factor,
+                });
             }
             WindowEvent::CursorEntered { device_id } => {
                 input_state.cursor_in_window.insert(*device_id, true);
@@ -324,7 +405,7 @@ impl InputSystem {
                     .cursor_in_window
                     .get(device_id)
                     .unwrap_or(&false);
-                out.push(GenericEvent::CursorMove {
+                out.push(InputEvent::CursorMove {
                     pixel_position: (position.x, position.y),
                     modifiers_state: input_state.modifiers_state,
                     in_window,
@@ -348,7 +429,7 @@ impl InputSystem {
                     *virtual_keycode,
                     input_state.modifiers_state.shift(),
                 ) {
-                    out.push(GenericEvent::KeyboardKey {
+                    out.push(InputEvent::KeyboardKey {
                         scancode: *scancode,
                         virtual_keycode: vkey,
                         press_state: *state,
@@ -380,19 +461,15 @@ impl InputSystem {
         device_id: &DeviceId,
         event: &DeviceEvent,
         input_state: &mut InputState,
-        out: &mut Vec<GenericEvent>,
+        out: &mut Vec<InputEvent>,
     ) {
         match event {
             // Device change events
             DeviceEvent::Added => {
-                out.push(GenericEvent::System(GenericSystemEvent::DeviceAdded {
-                    dummy: 0,
-                }));
+                out.push(InputEvent::DeviceAdded { dummy: 0 });
             }
             DeviceEvent::Removed => {
-                out.push(GenericEvent::System(GenericSystemEvent::DeviceRemoved {
-                    dummy: 0,
-                }));
+                out.push(InputEvent::DeviceRemoved { dummy: 0 });
             }
 
             // Mouse Motion: unfiltered, arbitrary units
@@ -401,7 +478,7 @@ impl InputSystem {
                     .cursor_in_window
                     .get(device_id)
                     .unwrap_or(&false);
-                out.push(GenericEvent::MouseMotion {
+                out.push(InputEvent::MouseMotion {
                     dx: *dx,
                     dy: *dy,
                     modifiers_state: input_state.modifiers_state,
@@ -418,7 +495,7 @@ impl InputSystem {
                     .cursor_in_window
                     .get(device_id)
                     .unwrap_or(&false);
-                out.push(GenericEvent::MouseWheel {
+                out.push(InputEvent::MouseWheel {
                     horizontal_delta: *dh as f64,
                     vertical_delta: *dv as f64,
                     modifiers_state: input_state.modifiers_state,
@@ -433,7 +510,7 @@ impl InputSystem {
                     .cursor_in_window
                     .get(device_id)
                     .unwrap_or(&false);
-                out.push(GenericEvent::MouseWheel {
+                out.push(InputEvent::MouseWheel {
                     horizontal_delta: s.x,
                     vertical_delta: s.y,
                     modifiers_state: input_state.modifiers_state,
@@ -448,7 +525,7 @@ impl InputSystem {
                     .cursor_in_window
                     .get(device_id)
                     .unwrap_or(&false);
-                out.push(GenericEvent::MouseButton {
+                out.push(InputEvent::MouseButton {
                     button: *button,
                     press_state: *state,
                     modifiers_state: input_state.modifiers_state,
@@ -472,7 +549,7 @@ impl InputSystem {
                         *virtual_keycode,
                         input_state.modifiers_state.shift(),
                     ) {
-                        out.push(GenericEvent::KeyboardKey {
+                        out.push(InputEvent::KeyboardKey {
                             scancode: *scancode,
                             virtual_keycode: vkey,
                             press_state: *state,
@@ -485,7 +562,7 @@ impl InputSystem {
 
             // Includes both joystick and mouse axis motion.
             DeviceEvent::Motion { axis, value } => {
-                out.push(GenericEvent::JoystickAxis {
+                out.push(InputEvent::JoystickAxis {
                     id: *axis,
                     value: *value,
                     modifiers_state: input_state.modifiers_state,
@@ -669,84 +746,95 @@ mod test {
         let psz = physical_size();
 
         let mut evts = Vec::new();
+        let mut syss = Vec::new();
         InputSystem::wrap_event(
             &win_evt(WindowEvent::Resized(psz)),
             &mut input_state,
             &mut evts,
+            &mut syss,
         );
-        assert!(matches!(
-            evts[0],
-            GenericEvent::Window(GenericWindowEvent::Resized { .. })
-        ));
+        assert!(matches!(syss[0], SystemEvent::WindowResized { .. }));
 
         let mut evts = Vec::new();
+        let mut syss = Vec::new();
         InputSystem::wrap_event(
             &win_evt(WindowEvent::Destroyed),
             &mut input_state,
             &mut evts,
+            &mut syss,
         );
-        assert!(matches!(
-            evts[0],
-            GenericEvent::System(GenericSystemEvent::Quit)
-        ));
+        assert!(matches!(syss[0], SystemEvent::Quit));
 
         let mut evts = Vec::new();
+        let mut syss = Vec::new();
         InputSystem::wrap_event(
             &win_evt(WindowEvent::CloseRequested),
             &mut input_state,
             &mut evts,
+            &mut syss,
         );
-        assert!(matches!(
-            evts[0],
-            GenericEvent::System(GenericSystemEvent::Quit)
-        ));
+        assert!(matches!(syss[0], SystemEvent::Quit));
 
         let mut evts = Vec::new();
+        let mut syss = Vec::new();
         InputSystem::wrap_event(
             &win_evt(WindowEvent::DroppedFile(path())),
             &mut input_state,
             &mut evts,
+            &mut syss,
         );
         assert!(evts.is_empty());
 
         let mut evts = Vec::new();
+        let mut syss = Vec::new();
         InputSystem::wrap_event(
             &win_evt(WindowEvent::Focused(true)),
             &mut input_state,
             &mut evts,
+            &mut syss,
         );
         assert!(evts.is_empty());
 
         let mut evts = Vec::new();
-        InputSystem::wrap_event(&dev_evt(DeviceEvent::Added), &mut input_state, &mut evts);
-        assert!(matches!(
-            evts[0],
-            GenericEvent::System(GenericSystemEvent::DeviceAdded { .. })
-        ));
+        let mut syss = Vec::new();
+        InputSystem::wrap_event(
+            &dev_evt(DeviceEvent::Added),
+            &mut input_state,
+            &mut evts,
+            &mut syss,
+        );
+        assert!(matches!(evts[0], InputEvent::DeviceAdded { .. }));
 
         let mut evts = Vec::new();
-        InputSystem::wrap_event(&dev_evt(DeviceEvent::Removed), &mut input_state, &mut evts);
-        assert!(matches!(
-            evts[0],
-            GenericEvent::System(GenericSystemEvent::DeviceRemoved { .. })
-        ));
+        let mut syss = Vec::new();
+        InputSystem::wrap_event(
+            &dev_evt(DeviceEvent::Removed),
+            &mut input_state,
+            &mut evts,
+            &mut syss,
+        );
+        assert!(matches!(evts[0], InputEvent::DeviceRemoved { .. }));
 
         let mut evts = Vec::new();
+        let mut syss = Vec::new();
         InputSystem::wrap_event(
             &dev_evt(DeviceEvent::MouseMotion { delta: (8., 9.) }),
             &mut input_state,
             &mut evts,
+            &mut syss,
         );
-        assert!(matches!(evts[0], GenericEvent::MouseMotion { .. }));
+        assert!(matches!(evts[0], InputEvent::MouseMotion { .. }));
 
         let mut evts = Vec::new();
+        let mut syss = Vec::new();
         InputSystem::wrap_event(
             &dev_evt(DeviceEvent::MouseWheel {
                 delta: MouseScrollDelta::LineDelta(8., 9.),
             }),
             &mut input_state,
             &mut evts,
+            &mut syss,
         );
-        assert!(matches!(evts[0], GenericEvent::MouseWheel { .. }));
+        assert!(matches!(evts[0], InputEvent::MouseWheel { .. }));
     }
 }

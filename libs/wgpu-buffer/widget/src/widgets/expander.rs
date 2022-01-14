@@ -24,7 +24,7 @@ use crate::{
 };
 use anyhow::Result;
 use gpu::Gpu;
-use input::GenericEvent;
+use input::{InputEvent, InputFocus};
 use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::{sync::Arc, time::Instant};
@@ -221,11 +221,10 @@ impl Widget for Expander {
 
     fn handle_event(
         &mut self,
-        _now: Instant,
-        event: &GenericEvent,
-        _focus: &str,
+        event: &InputEvent,
+        _focus: InputFocus,
         cursor_position: Position<AbsSize>,
-        _interpreter: Interpreter,
+        _interpreter: &mut Interpreter,
     ) -> Result<()> {
         if event.is_primary_mouse_down() && self.header_region.intersects(&cursor_position) {
             self.expanded = !self.expanded;

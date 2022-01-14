@@ -6,9 +6,10 @@ authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 edition = "2021"
 
 [dependencies]
-approx = "^ 0.5"
-bzip2 = "^ 0.4"
 anyhow = { version = "^ 1", features = ["backtrace"] }
+approx = "^ 0.5"
+bevy_ecs = "^ 0.6"
+bzip2 = "^ 0.4"
 crossbeam = "^ 0.8"
 float-ord = "^ 0.2"
 fxhash = "^ 0.2"

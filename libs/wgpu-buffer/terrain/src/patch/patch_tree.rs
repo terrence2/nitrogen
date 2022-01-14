@@ -1108,14 +1108,15 @@ mod test {
     use super::*;
     use absolute_unit::{degrees, meters};
     use anyhow::Result;
-    use camera::ArcBallCamera;
+    use camera::{ArcBallCamera, Camera};
     use geodesy::{GeoSurface, Graticule, Target};
 
     #[test]
     fn test_pathological() -> Result<()> {
         let mut tree = PatchTree::new(15, 150.0, 300);
         let mut live_patches = Vec::new();
-        let mut arcball = ArcBallCamera::detached(16.0 / 9.0, meters!(0.1));
+        let mut camera = Camera::detached(degrees!(90), 16.0 / 9.0, meters!(0.1));
+        let mut arcball = ArcBallCamera::detached();
         arcball.set_eye(Graticule::<Target>::new(
             degrees!(89),
             degrees!(0),
@@ -1127,24 +1128,27 @@ mod test {
             degrees!(0),
             meters!(2),
         ));
+        camera.update_frame(&arcball.world_space_frame());
         live_patches.clear();
-        tree.optimize_for_view(arcball.camera(), &mut live_patches);
+        tree.optimize_for_view(&camera, &mut live_patches);
 
         arcball.set_target(Graticule::<GeoSurface>::new(
             degrees!(0),
             degrees!(180),
             meters!(2),
         ));
+        camera.update_frame(&arcball.world_space_frame());
         live_patches.clear();
-        tree.optimize_for_view(arcball.camera(), &mut live_patches);
+        tree.optimize_for_view(&camera, &mut live_patches);
 
         arcball.set_target(Graticule::<GeoSurface>::new(
             degrees!(0),
             degrees!(0),
             meters!(2),
         ));
+        camera.update_frame(&arcball.world_space_frame());
         live_patches.clear();
-        tree.optimize_for_view(arcball.camera(), &mut live_patches);
+        tree.optimize_for_view(&camera, &mut live_patches);
         Ok(())
     }
 
@@ -1152,7 +1156,8 @@ mod test {
     fn test_zoom_in() -> Result<()> {
         let mut tree = PatchTree::new(15, 150.0, 300);
         let mut live_patches = Vec::new();
-        let mut arcball = ArcBallCamera::detached(16.0 / 9.0, meters!(0.1));
+        let mut camera = Camera::detached(degrees!(90), 16.0 / 9.0, meters!(0.1));
+        let mut arcball = ArcBallCamera::detached();
         arcball.set_target(Graticule::<GeoSurface>::new(
             degrees!(0),
             degrees!(0),
@@ -1166,8 +1171,9 @@ mod test {
                 degrees!(0),
                 meters!(4_000_000 - i * (4_000_000 / CNT)),
             ))?;
+            camera.update_frame(&arcball.world_space_frame());
             live_patches.clear();
-            tree.optimize_for_view(arcball.camera(), &mut live_patches);
+            tree.optimize_for_view(&camera, &mut live_patches);
         }
 
         Ok(())
@@ -1177,7 +1183,8 @@ mod test {
     fn test_fly_forward() -> Result<()> {
         let mut tree = PatchTree::new(15, 150.0, 300);
         let mut live_patches = Vec::new();
-        let mut arcball = ArcBallCamera::detached(16.0 / 9.0, meters!(0.1));
+        let mut camera = Camera::detached(degrees!(90), 16.0 / 9.0, meters!(0.1));
+        let mut arcball = ArcBallCamera::detached();
         arcball.set_target(Graticule::<GeoSurface>::new(
             degrees!(0),
             degrees!(0),
@@ -1196,8 +1203,9 @@ mod test {
                 degrees!(4 * i),
                 meters!(1000),
             ));
+            camera.update_frame(&arcball.world_space_frame());
             live_patches.clear();
-            tree.optimize_for_view(arcball.camera(), &mut live_patches);
+            tree.optimize_for_view(&camera, &mut live_patches);
         }
 
         Ok(())

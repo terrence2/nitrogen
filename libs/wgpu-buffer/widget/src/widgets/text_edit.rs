@@ -23,7 +23,7 @@ use crate::{
 };
 use anyhow::Result;
 use gpu::Gpu;
-use input::GenericEvent;
+use input::{InputEvent, InputFocus};
 use nitrous::Interpreter;
 use parking_lot::RwLock;
 use std::{sync::Arc, time::Instant};
@@ -162,11 +162,10 @@ impl Widget for TextEdit {
 
     fn handle_event(
         &mut self,
-        _now: Instant,
-        _event: &GenericEvent,
-        _focus: &str,
+        _event: &InputEvent,
+        _focus: InputFocus,
         _cursor_position: Position<AbsSize>,
-        _interpreter: Interpreter,
+        _interpreter: &mut Interpreter,
     ) -> Result<()> {
         assert!(self.read_only);
         Ok(())

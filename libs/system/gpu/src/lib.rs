@@ -23,12 +23,14 @@ pub use crate::{
         UploadTracker,
     },
 };
+pub use window::DisplayConfig;
 
 // Note: re-export for use by FrameGraph when it is instantiated in other crates.
 pub use wgpu;
 pub use winit::dpi::{LogicalSize, PhysicalSize};
 
 use anyhow::{anyhow, bail, Result};
+use bevy_ecs::prelude::*;
 use futures::executor::block_on;
 use input::InputController;
 use log::{info, trace};
@@ -38,7 +40,7 @@ use parking_lot::RwLock;
 use std::{fmt::Debug, fs, mem, path::PathBuf, sync::Arc};
 use tokio::runtime::Runtime;
 use wgpu::util::DeviceExt;
-use window::{DisplayConfig, DisplayConfigChangeReceiver, Window};
+use window::Window;
 use zerocopy::AsBytes;
 
 #[derive(Debug)]
@@ -62,11 +64,6 @@ pub struct TestResources {
     pub input: InputController,
 }
 
-/// Implement this and register with the gpu instance to get resize notifications.
-pub trait RenderExtentChangeReceiver: Debug + Send + Sync + 'static {
-    fn on_render_extent_changed(&mut self, gpu: &Gpu) -> Result<()>;
-}
-
 #[derive(Debug, NitrousModule)]
 pub struct Gpu {
     _instance: wgpu::Instance,
@@ -86,7 +83,6 @@ pub struct Gpu {
 
     // Render extent is usually decoupled from
     render_extent: wgpu::Extent3d,
-    render_extent_change_receivers: Vec<Arc<RwLock<dyn RenderExtentChangeReceiver>>>,
 
     config: RenderConfig,
     frame_count: usize,
@@ -160,25 +156,18 @@ impl Gpu {
             swap_chain,
             depth_texture,
             render_extent,
-            render_extent_change_receivers: Vec::new(),
             config,
             frame_count: 0,
         }));
         interpreter.put_global("gpu", Value::Module(gpu.clone()));
-        win.register_display_config_change_receiver(gpu.clone());
         Ok(gpu)
     }
 
     #[cfg(unix)]
     pub fn for_test_unix() -> Result<TestResources> {
-        let (os_window, mut input) = input::InputController::for_test_unix()?;
+        let (os_window, input) = input::InputController::for_test_unix()?;
         let mut interpreter = Interpreter::default();
-        let window = Window::new(
-            os_window,
-            &mut input,
-            DisplayConfig::for_test(),
-            &mut interpreter,
-        )?;
+        let window = Window::new(os_window, DisplayConfig::for_test(), &mut interpreter)?;
         let gpu = Self::new(&mut window.write(), Default::default(), &mut interpreter)?;
         let async_rt = Runtime::new()?;
         Ok(TestResources {
@@ -321,12 +310,54 @@ impl Gpu {
         })
     }
 
-    pub fn register_render_extent_change_receiver<T: RenderExtentChangeReceiver>(
-        &mut self,
-        observer: Arc<RwLock<T>>,
+    pub fn sys_handle_display_config_change(
+        updated_config: Res<Option<DisplayConfig>>,
+        gpu: Res<Arc<RwLock<Gpu>>>,
     ) {
-        self.render_extent_change_receivers.push(observer);
+        if let Some(config) = updated_config.as_ref() {
+            gpu.write()
+                .on_display_config_changed(config)
+                .expect("Gpu::on_display_config_changed");
+        }
     }
+
+    pub fn on_display_config_changed(&mut self, config: &DisplayConfig) -> Result<()> {
+        info!(
+            "window config changed {}x{}",
+            config.window_size().width,
+            config.window_size().height
+        );
+
+        // Recreate the screen resources for the new window size.
+        let sc_desc = wgpu::SwapChainDescriptor {
+            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+            format: Self::SCREEN_FORMAT,
+            width: config.window_size().width,
+            height: config.window_size().height,
+            present_mode: self.config.present_mode,
+        };
+        self.swap_chain = self.device.create_swap_chain(&self.surface, &sc_desc);
+        self.depth_texture = Self::create_depth_texture(&self.device, &sc_desc);
+
+        // Check if our render extent has changed and re-broadcast
+        let extent = config.render_extent();
+        if self.render_extent.width != extent.width || self.render_extent.height != extent.height {
+            self.render_extent = wgpu::Extent3d {
+                width: extent.width,
+                height: extent.height,
+                depth: 1,
+            };
+        }
+
+        Ok(())
+    }
+
+    // pub fn register_render_extent_change_receiver<T: RenderExtentChangeReceiver>(
+    //     &mut self,
+    //     observer: Arc<RwLock<T>>,
+    // ) {
+    //     self.render_extent_change_receivers.push(observer);
+    // }
 
     pub fn attachment_extent(&self) -> wgpu::Extent3d {
         self.render_extent
@@ -557,11 +588,9 @@ impl Gpu {
         gpu.device().poll(wgpu::Maintain::Wait);
         let reader = download_buffer.slice(..).map_async(wgpu::MapMode::Read);
         gpu.device().poll(wgpu::Maintain::Wait);
-        tokio::spawn(async move {
-            reader.await.unwrap();
-            let raw = download_buffer.slice(..).get_mapped_range().to_owned();
-            callback(extent, format, raw);
-        });
+        block_on(reader)?;
+        let raw = download_buffer.slice(..).get_mapped_range().to_owned();
+        callback(extent, format, raw);
         Ok(())
     }
 
@@ -579,42 +608,6 @@ impl Gpu {
 
     pub fn device_and_queue_mut(&mut self) -> (&mut wgpu::Device, &mut wgpu::Queue) {
         (&mut self.device, &mut self.queue)
-    }
-}
-
-impl DisplayConfigChangeReceiver for Gpu {
-    fn on_display_config_changed(&mut self, config: &DisplayConfig) -> Result<()> {
-        info!(
-            "window config changed {}x{}",
-            config.window_size().width,
-            config.window_size().height
-        );
-
-        // Recreate the screen resources for the new window size.
-        let sc_desc = wgpu::SwapChainDescriptor {
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
-            format: Self::SCREEN_FORMAT,
-            width: config.window_size().width,
-            height: config.window_size().height,
-            present_mode: self.config.present_mode,
-        };
-        self.swap_chain = self.device.create_swap_chain(&self.surface, &sc_desc);
-        self.depth_texture = Self::create_depth_texture(&self.device, &sc_desc);
-
-        // Check if our render extent has changed and re-broadcast
-        let extent = config.render_extent();
-        if self.render_extent.width != extent.width || self.render_extent.height != extent.height {
-            self.render_extent = wgpu::Extent3d {
-                width: extent.width,
-                height: extent.height,
-                depth: 1,
-            };
-            for module in &self.render_extent_change_receivers {
-                module.write().on_render_extent_changed(self)?;
-            }
-        }
-
-        Ok(())
     }
 }
 

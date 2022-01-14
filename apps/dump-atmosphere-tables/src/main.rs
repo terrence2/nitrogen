@@ -27,10 +27,10 @@ use futures::executor::block_on;
 use gpu::Gpu;
 use input::{InputController, InputSystem};
 use nitrous::Interpreter;
-use std::{fs, path::PathBuf, time::Instant};
+use parking_lot::Mutex;
+use std::{fs, path::PathBuf, sync::Arc, time::Instant};
 use structopt::StructOpt;
-use window::{DisplayConfig, DisplayOpts, Window};
-use winit::window::Window as OsWindow;
+use window::{DisplayConfig, DisplayOpts, OsWindow, Window, WindowBuilder};
 
 /// Demonstrate the capabilities of the Nitrogen engine
 #[derive(Debug, StructOpt)]
@@ -42,20 +42,18 @@ struct Opt {
 
 fn main() -> Result<()> {
     env_logger::init();
-    InputSystem::run_forever(window_main)
+    InputSystem::run_forever(
+        WindowBuilder::new().with_title("Build Atmosphere Tables"),
+        window_main,
+    )
 }
 
-fn window_main(os_window: OsWindow, input_controller: &mut InputController) -> Result<()> {
+fn window_main(os_window: OsWindow, _input_controller: Arc<Mutex<InputController>>) -> Result<()> {
     let opt = Opt::from_args();
     let mut interpreter = Interpreter::default();
 
     let display_config = DisplayConfig::discover(&DisplayOpts::default(), &os_window);
-    let window = Window::new(
-        os_window,
-        input_controller,
-        display_config,
-        &mut interpreter,
-    )?;
+    let window = Window::new(os_window, display_config, &mut interpreter)?;
     let gpu = Gpu::new(&mut window.write(), Default::default(), &mut interpreter)?;
 
     let precompute_start = Instant::now();

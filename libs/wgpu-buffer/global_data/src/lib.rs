@@ -134,7 +134,7 @@ impl Globals {
                 .to_rotation_matrix()
                 .to_homogeneous(),
         );
-        self.camera_exposure = camera.exposure();
+        self.camera_exposure = camera.exposure() as f32;
     }
 
     pub fn set_orrery(&mut self, orrery: &Orrery) {
@@ -250,7 +250,7 @@ impl GlobalParametersBuffer {
         self.globals.set_window_info(win);
     }
 
-    pub fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) -> Result<()> {
+    pub fn ensure_uploaded(&self, gpu: &Gpu, tracker: &mut UploadTracker) -> Result<()> {
         let buffer = gpu.push_data(
             "global-upload-buffer",
             &self.globals,

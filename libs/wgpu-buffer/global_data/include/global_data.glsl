@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 
-layout(set = 0, binding = 0) buffer CameraParameters {
+layout(set = 0, binding = 0) buffer GlobalParameters {
     float screen_physical_width;
     float screen_physical_height;
     float screen_render_width;

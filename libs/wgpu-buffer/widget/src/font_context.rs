@@ -180,8 +180,8 @@ impl FontContext {
 
     pub fn dump_glyphs(&mut self) -> Result<()> {
         let mut path = env::current_dir()?;
-        path.push("font_context");
-        path.push("glyphs.png");
+        path.push("__dump__");
+        path.push("font_context_glyphs.png");
         self.glyph_sheet.dump(path);
         Ok(())
     }
