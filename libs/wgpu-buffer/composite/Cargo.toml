@@ -7,7 +7,7 @@ edition = "2021"
 [dependencies]
 anyhow = { version = "^ 1", features = ["backtrace"] }
 log = "^ 0.4"
-wgpu = "^ 0.7"
+wgpu = "^ 0.12"
 fullscreen = { path = "../../wgpu-buffer/fullscreen" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 gpu = { path = "../../system/gpu" }
