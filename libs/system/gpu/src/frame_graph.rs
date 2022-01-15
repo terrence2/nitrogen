@@ -55,29 +55,24 @@ macro_rules! make_frame_graph_pass {
         )*
     }};
     (Render(Screen) {
-        $owner:ident, $gpu:ident, $encoder:ident, $need_rebuild:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
+        $surface_texture:ident, $gpu:ident, $encoder:ident, $need_rebuild:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
      }
     ) => {
-        let maybe_surface_texture = $gpu.get_next_framebuffer()?;
-        if let Some(surface_texture) = maybe_surface_texture {
-            let view = surface_texture.texture.create_view(&::wgpu::TextureViewDescriptor::default());
-            println!("Begin screen render pass");
-            let _rpass = $encoder.begin_render_pass(&$crate::wgpu::RenderPassDescriptor {
-                label: Some("screen-render-pass"),
-                color_attachments: &[$crate::Gpu::color_attachment(&view)],
-                depth_stencil_attachment: Some($gpu.depth_stencil_attachment()),
-            });
-            $(
-                let _rpass = $pass_item_name.$pass_name(
-                    _rpass,
-                    $(
-                        &$pass_item_input_name
-                    ),*
-                )?;
-            )*
-        } else {
-            $need_rebuild = true;
-        }
+        let view = $surface_texture.texture.create_view(&::wgpu::TextureViewDescriptor::default());
+        println!("Begin screen render pass");
+        let _rpass = $encoder.begin_render_pass(&$crate::wgpu::RenderPassDescriptor {
+            label: Some("screen-render-pass"),
+            color_attachments: &[$crate::Gpu::color_attachment(&view)],
+            depth_stencil_attachment: Some($gpu.depth_stencil_attachment()),
+        });
+        $(
+            let _rpass = $pass_item_name.$pass_name(
+                _rpass,
+                $(
+                    &$pass_item_input_name
+                ),*
+            )?;
+        )*
     };
 }
 
@@ -139,18 +134,26 @@ macro_rules! make_frame_graph {
                         .create_command_encoder(&$crate::wgpu::CommandEncoderDescriptor {
                             label: Some("frame-encoder"),
                         });
-                    tracker.dispatch_uploads(&mut encoder);
-                    $(
-                        let mut _need_rebuild = false;
-                        $crate::make_frame_graph_pass!($pass_type($($pass_args),*) {
-                            self, gpu, encoder, _need_rebuild, $pass_name, $($pass_item_name ( $($pass_item_input_name),* )),*
-                        });
-                    )*
-                    if !_need_rebuild {
-                        gpu.queue_mut().submit(vec![encoder.finish()]);
-                    }
 
-                    Ok(!_need_rebuild)
+                    let surface_texture = if let Some(surface_texture) = gpu.get_next_framebuffer()? {
+                        surface_texture
+                    } else {
+                        return Ok(true);
+                    };
+
+                    {
+                        tracker.dispatch_uploads(&mut encoder);
+                        $(
+                            let mut _need_rebuild = false;
+                            $crate::make_frame_graph_pass!($pass_type($($pass_args),*) {
+                                surface_texture, gpu, encoder, _need_rebuild, $pass_name, $($pass_item_name ( $($pass_item_input_name),* )),*
+                            });
+                        )*
+                    };
+                    gpu.queue_mut().submit(vec![encoder.finish()]);
+                    surface_texture.present();
+
+                    Ok(false)
                 }
             }
         }
@@ -309,22 +312,25 @@ mod test {
         )?));
         let mut frame_graph = FrameGraph::new(test_buffer, test_renderer)?;
 
+        let mut skip = 0;
         for _ in 0..3 {
             let mut upload_tracker = Default::default();
             frame_graph.test_buffer_mut().update(&mut upload_tracker);
             let need_rebuild = frame_graph.run(gpu.clone(), upload_tracker)?;
             if need_rebuild {
+                skip += 1;
                 gpu.write()
                     .on_display_config_changed(window.read().config())?;
             }
         }
 
+        assert!(skip < 3);
         assert_eq!(frame_graph.test_buffer().update_count, 3);
-        assert_eq!(*frame_graph.test_buffer().compute_count.borrow(), 3);
-        assert_eq!(*frame_graph.test_buffer().screen_count.borrow(), 3);
-        assert_eq!(*frame_graph.test_buffer().render_count.borrow(), 3);
-        assert_eq!(*frame_graph.test_buffer().any_count.borrow(), 3);
-        assert_eq!(*frame_graph.test_renderer().render_count.borrow(), 3);
+        assert_eq!(*frame_graph.test_buffer().compute_count.borrow(), 3 - skip);
+        assert_eq!(*frame_graph.test_buffer().screen_count.borrow(), 3 - skip);
+        assert_eq!(*frame_graph.test_buffer().render_count.borrow(), 3 - skip);
+        assert_eq!(*frame_graph.test_buffer().any_count.borrow(), 3 - skip);
+        assert_eq!(*frame_graph.test_renderer().render_count.borrow(), 3 - skip);
         Ok(())
     }
 }
