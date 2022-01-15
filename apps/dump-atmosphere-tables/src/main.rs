@@ -32,10 +32,10 @@ use std::{fs, path::PathBuf, sync::Arc, time::Instant};
 use structopt::StructOpt;
 use window::{DisplayConfig, DisplayOpts, OsWindow, Window, WindowBuilder};
 
-/// Demonstrate the capabilities of the Nitrogen engine
+/// Pre-compute atmosphere tables for embedding in code
 #[derive(Debug, StructOpt)]
 struct Opt {
-    /// Extra directories to treat as libraries
+    /// Write tables here
     #[structopt(short, long)]
     output: PathBuf,
 }

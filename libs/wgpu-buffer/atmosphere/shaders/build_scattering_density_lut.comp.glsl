@@ -28,7 +28,7 @@ layout(binding = 8) uniform texture3D delta_multiple_scattering_texture;
 layout(binding = 9) uniform sampler delta_multiple_scattering_sampler;
 layout(binding = 10) uniform texture2D delta_irradiance_texture;
 layout(binding = 11) uniform sampler delta_irradiance_sampler;
-layout(binding = 12, rgba8) uniform writeonly image3D delta_scattering_density_texture;
+layout(binding = 12, rgba32f) uniform writeonly image3D delta_scattering_density_texture;
 
 vec4
 compute_scattering_density(

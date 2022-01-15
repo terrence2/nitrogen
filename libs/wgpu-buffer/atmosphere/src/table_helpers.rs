@@ -15,12 +15,12 @@
 use crate::earth_consts::{EarthParameters, RGB_LAMBDAS};
 use anyhow::Result;
 use gpu::{texture_format_size, Gpu};
-use std::{fs, path::Path};
+use std::{fs, num::NonZeroU32, path::Path};
 
 pub const TRANSMITTANCE_EXTENT: wgpu::Extent3d = wgpu::Extent3d {
     width: 256,
     height: 64,
-    depth: 1,
+    depth_or_array_layers: 1,
 };
 
 const SCATTERING_TEXTURE_R_SIZE: u32 = 32;
@@ -30,13 +30,13 @@ const SCATTERING_TEXTURE_NU_SIZE: u32 = 8;
 pub const SCATTERING_EXTENT: wgpu::Extent3d = wgpu::Extent3d {
     width: SCATTERING_TEXTURE_NU_SIZE * SCATTERING_TEXTURE_MU_S_SIZE,
     height: SCATTERING_TEXTURE_MU_SIZE,
-    depth: SCATTERING_TEXTURE_R_SIZE,
+    depth_or_array_layers: SCATTERING_TEXTURE_R_SIZE,
 };
 
 pub const IRRADIANCE_EXTENT: wgpu::Extent3d = wgpu::Extent3d {
     width: 64,
     height: 16,
-    depth: 1,
+    depth_or_array_layers: 1,
 };
 
 const TRANSMITTANCE_TABLE: &[u8] = include_bytes!("../tables/solar_transmittance.wgpu.bin");
@@ -55,7 +55,7 @@ impl TableHelpers {
         gpu.push_data(
             "atmosphere-srgb-params-buffer",
             &srgb_atmosphere,
-            wgpu::BufferUsage::UNIFORM,
+            wgpu::BufferUsages::UNIFORM,
         )
     }
 
@@ -65,23 +65,23 @@ impl TableHelpers {
         let transmittance_buffer = gpu.push_buffer(
             "atmosphere-transmittance-file-upload-buffer",
             TRANSMITTANCE_TABLE,
-            wgpu::BufferUsage::all(),
+            wgpu::BufferUsages::all(),
         );
         let irradiance_buffer = gpu.push_buffer(
             "atmosphere-irradiance-file-upload-buffer",
             IRRADIANCE_TABLE,
-            wgpu::BufferUsage::all(),
+            wgpu::BufferUsages::all(),
         );
 
         let scattering_buffer = gpu.push_buffer(
             "atmosphere-scattering-file-upload-buffer",
             SCATTERING_TABLE,
-            wgpu::BufferUsage::all(),
+            wgpu::BufferUsages::all(),
         );
         let single_mie_scattering_buffer = gpu.push_buffer(
             "atmosphere-single-mie-scattering-file-upload-buffer",
             SINGLE_MIE_SCATTERING_TABLE,
-            wgpu::BufferUsage::all(),
+            wgpu::BufferUsages::all(),
         );
 
         let transmittance_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
@@ -91,7 +91,7 @@ impl TableHelpers {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsage::all(),
+            usage: wgpu::TextureUsages::all(),
         });
         let scattering_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("atmosphere-scattering-texture"),
@@ -100,7 +100,7 @@ impl TableHelpers {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D3,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsage::all(),
+            usage: wgpu::TextureUsages::all(),
         });
         let single_mie_scattering_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("atmosphere-single-mie-scattering-texture"),
@@ -109,7 +109,7 @@ impl TableHelpers {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D3,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsage::all(),
+            usage: wgpu::TextureUsages::all(),
         });
         let irradiance_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("atmosphere-irradiance-texture"),
@@ -118,7 +118,7 @@ impl TableHelpers {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsage::all(),
+            usage: wgpu::TextureUsages::all(),
         });
 
         fn mk_copy(
@@ -128,19 +128,21 @@ impl TableHelpers {
             extent: wgpu::Extent3d,
         ) {
             encoder.copy_buffer_to_texture(
-                wgpu::BufferCopyView {
+                wgpu::ImageCopyBuffer {
                     buffer,
-                    layout: wgpu::TextureDataLayout {
+                    layout: wgpu::ImageDataLayout {
                         offset: 0,
-                        bytes_per_row: extent.width
-                            * texture_format_size(wgpu::TextureFormat::Rgba32Float),
-                        rows_per_image: extent.height,
+                        bytes_per_row: NonZeroU32::new(
+                            extent.width * texture_format_size(wgpu::TextureFormat::Rgba32Float),
+                        ),
+                        rows_per_image: NonZeroU32::new(extent.height),
                     },
                 },
-                wgpu::TextureCopyView {
+                wgpu::ImageCopyTexture {
                     texture,
                     mip_level: 0,
                     origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
                 },
                 extent,
             );
@@ -202,31 +204,34 @@ impl TableHelpers {
         let irradiance_buf_size =
             u64::from(IRRADIANCE_EXTENT.width * IRRADIANCE_EXTENT.height * 16);
         let scattering_buf_size = u64::from(
-            SCATTERING_EXTENT.width * SCATTERING_EXTENT.height * SCATTERING_EXTENT.depth * 16,
+            SCATTERING_EXTENT.width
+                * SCATTERING_EXTENT.height
+                * SCATTERING_EXTENT.depth_or_array_layers
+                * 16,
         );
 
         let transmittance_buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
             label: Some("atmosphere-cache-download-transmittance-buffer"),
             size: transmittance_buf_size,
-            usage: wgpu::BufferUsage::all(),
+            usage: wgpu::BufferUsages::all(),
             mapped_at_creation: false,
         });
         let irradiance_buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
             label: Some("atmosphere-cache-download-irradiance-buffer"),
             size: irradiance_buf_size,
-            usage: wgpu::BufferUsage::all(),
+            usage: wgpu::BufferUsages::all(),
             mapped_at_creation: false,
         });
         let scattering_buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
             label: Some("atmosphere-cache-download-scatter-buffer"),
             size: scattering_buf_size,
-            usage: wgpu::BufferUsage::all(),
+            usage: wgpu::BufferUsages::all(),
             mapped_at_creation: false,
         });
         let single_mie_scattering_buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
             label: Some("atmosphere-cache-download-single-mie-scatter-buffer"),
             size: scattering_buf_size,
-            usage: wgpu::BufferUsage::all(),
+            usage: wgpu::BufferUsages::all(),
             mapped_at_creation: false,
         });
 
@@ -237,17 +242,18 @@ impl TableHelpers {
             extent: wgpu::Extent3d,
         ) {
             encoder.copy_texture_to_buffer(
-                wgpu::TextureCopyView {
+                wgpu::ImageCopyTexture {
                     texture,
                     mip_level: 0,
                     origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
                 },
-                wgpu::BufferCopyView {
+                wgpu::ImageCopyBuffer {
                     buffer,
-                    layout: wgpu::TextureDataLayout {
+                    layout: wgpu::ImageDataLayout {
                         offset: 0,
-                        bytes_per_row: extent.width * 16,
-                        rows_per_image: extent.height,
+                        bytes_per_row: NonZeroU32::new(extent.width * 16),
+                        rows_per_image: NonZeroU32::new(extent.height),
                     },
                 },
                 extent,

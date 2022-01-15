@@ -20,10 +20,10 @@ layout(binding = 0) uniform AtmosphereParams { AtmosphereParameters atmosphere; 
 layout(binding = 1) uniform texture2D transmittance_texture;
 layout(binding = 2) uniform sampler transmittance_sampler;
 layout(binding = 3) uniform RadToLum { mat4 rad_to_lum; };
-layout(binding = 4, rgba8) uniform restrict writeonly image3D delta_rayleigh_scattering_texture;
-layout(binding = 5, rgba8) uniform restrict writeonly image3D delta_mie_scattering_texture;
-layout(binding = 6, rgba8) uniform coherent image3D scattering_texture;
-layout(binding = 7, rgba8) uniform coherent image3D single_mie_scattering_texture;
+layout(binding = 4, rgba32f) uniform restrict writeonly image3D delta_rayleigh_scattering_texture;
+layout(binding = 5, rgba32f) uniform restrict writeonly image3D delta_mie_scattering_texture;
+layout(binding = 6, rgba32f) uniform coherent image3D scattering_texture;
+layout(binding = 7, rgba32f) uniform coherent image3D single_mie_scattering_texture;
 
 void
 compute_single_scattering_integrand(
