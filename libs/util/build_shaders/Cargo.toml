@@ -7,5 +7,5 @@ edition = "2021"
 [dependencies]
 log = "^ 0.4"
 anyhow = { version = "^ 1", features = ["backtrace"] }
-naga = { version = "^ 0.5", features = ["spv-in"] }
+naga = { version = "^ 0.8", features = ["spv-in"] }
 shaderc = "^ 0.7"

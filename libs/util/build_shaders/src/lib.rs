@@ -157,7 +157,7 @@ pub fn build() -> Result<()> {
             let options = naga::front::spv::Options {
                 adjust_coordinate_space: false, // we require NDC_Y_UP feature
                 strict_capabilities: true,
-                flow_graph_dump_prefix: None,
+                block_ctx_dump_prefix: None,
             };
             let parser = naga::front::spv::Parser::new(spirv.as_binary().iter().cloned(), &options);
             match parser.parse() {
@@ -168,7 +168,6 @@ pub fn build() -> Result<()> {
                         pathbuf, err
                     );
                     log::warn!("{}", &msg);
-                    // Note: naga fails for many common glsl constructs in 0.5
                     bail!(msg)
                 }
             };
