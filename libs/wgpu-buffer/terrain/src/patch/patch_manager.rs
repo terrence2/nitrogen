@@ -118,7 +118,7 @@ impl PatchManager {
         let patch_upload_buffer = Arc::new(gpu.device().create_buffer(&wgpu::BufferDescriptor {
             label: Some("terrain-geo-patch-vertex-buffer"),
             size: patch_upload_buffer_size,
-            usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::COPY_DST,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         }));
 
@@ -130,7 +130,7 @@ impl PatchManager {
         let subdivide_context_buffer = Arc::new(gpu.push_data(
             "subdivision-context",
             &subdivide_context,
-            wgpu::BufferUsage::UNIFORM,
+            wgpu::BufferUsages::UNIFORM,
         ));
 
         // Create target vertex buffer.
@@ -143,7 +143,7 @@ impl PatchManager {
         let target_vertex_buffer = Arc::new(gpu.device().create_buffer(&wgpu::BufferDescriptor {
             label: Some("terrain-geo-sub-vertex-buffer"),
             size: target_vertex_buffer_size,
-            usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::VERTEX,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::VERTEX,
             mapped_at_creation: false,
         }));
 
@@ -154,7 +154,7 @@ impl PatchManager {
                     entries: &[
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
-                            visibility: wgpu::ShaderStage::COMPUTE,
+                            visibility: wgpu::ShaderStages::COMPUTE,
                             ty: wgpu::BindingType::Buffer {
                                 ty: wgpu::BufferBindingType::Uniform,
                                 has_dynamic_offset: false,
@@ -166,7 +166,7 @@ impl PatchManager {
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
-                            visibility: wgpu::ShaderStage::COMPUTE,
+                            visibility: wgpu::ShaderStages::COMPUTE,
                             ty: wgpu::BindingType::Buffer {
                                 ty: wgpu::BufferBindingType::Storage { read_only: false },
                                 has_dynamic_offset: false,
@@ -177,7 +177,7 @@ impl PatchManager {
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 2,
-                            visibility: wgpu::ShaderStage::COMPUTE,
+                            visibility: wgpu::ShaderStages::COMPUTE,
                             ty: wgpu::BindingType::Buffer {
                                 ty: wgpu::BufferBindingType::Storage { read_only: true },
                                 has_dynamic_offset: false,
@@ -215,27 +215,27 @@ impl PatchManager {
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::Buffer {
+                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                             buffer: &subdivide_context_buffer,
                             offset: 0,
                             size: NonZeroU64::new(mem::size_of::<SubdivisionContext>() as u64),
-                        },
+                        }),
                     },
                     wgpu::BindGroupEntry {
                         binding: 1,
-                        resource: wgpu::BindingResource::Buffer {
+                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                             buffer: &target_vertex_buffer,
                             offset: 0,
                             size: None,
-                        },
+                        }),
                     },
                     wgpu::BindGroupEntry {
                         binding: 2,
-                        resource: wgpu::BindingResource::Buffer {
+                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                             buffer: &patch_upload_buffer,
                             offset: 0,
                             size: None,
-                        },
+                        }),
                     },
                 ],
             });
@@ -247,7 +247,7 @@ impl PatchManager {
         let index_dependency_lut_buffer = gpu.push_slice(
             "terrain-geo-index-dependency-lut",
             get_index_dependency_lut(max_subdivisions),
-            wgpu::BufferUsage::STORAGE,
+            wgpu::BufferUsages::STORAGE,
         );
 
         let subdivide_expand_bind_group_layout =
@@ -258,7 +258,7 @@ impl PatchManager {
                         // Subdivide context
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
-                            visibility: wgpu::ShaderStage::COMPUTE,
+                            visibility: wgpu::ShaderStages::COMPUTE,
                             ty: wgpu::BindingType::Buffer {
                                 ty: wgpu::BufferBindingType::Uniform,
                                 has_dynamic_offset: false,
@@ -271,7 +271,7 @@ impl PatchManager {
                         // Subdivide expand context
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
-                            visibility: wgpu::ShaderStage::COMPUTE,
+                            visibility: wgpu::ShaderStages::COMPUTE,
                             ty: wgpu::BindingType::Buffer {
                                 ty: wgpu::BufferBindingType::Uniform,
                                 has_dynamic_offset: false,
@@ -286,7 +286,7 @@ impl PatchManager {
                         // Target vertex buffer
                         wgpu::BindGroupLayoutEntry {
                             binding: 2,
-                            visibility: wgpu::ShaderStage::COMPUTE,
+                            visibility: wgpu::ShaderStages::COMPUTE,
                             ty: wgpu::BindingType::Buffer {
                                 ty: wgpu::BufferBindingType::Storage { read_only: false },
                                 has_dynamic_offset: false,
@@ -297,7 +297,7 @@ impl PatchManager {
                         // Index dependency LUT
                         wgpu::BindGroupLayoutEntry {
                             binding: 3,
-                            visibility: wgpu::ShaderStage::COMPUTE,
+                            visibility: wgpu::ShaderStages::COMPUTE,
                             ty: wgpu::BindingType::Buffer {
                                 ty: wgpu::BufferBindingType::Storage { read_only: true },
                                 has_dynamic_offset: false,
@@ -339,7 +339,7 @@ impl PatchManager {
             let expand_context_buffer = gpu.push_data(
                 "terrain-geo-expand-context-SUB",
                 &expand_context,
-                wgpu::BufferUsage::UNIFORM,
+                wgpu::BufferUsages::UNIFORM,
             );
             let subdivide_expand_bind_group =
                 gpu.device().create_bind_group(&wgpu::BindGroupDescriptor {
@@ -348,35 +348,35 @@ impl PatchManager {
                     entries: &[
                         wgpu::BindGroupEntry {
                             binding: 0,
-                            resource: wgpu::BindingResource::Buffer {
+                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                                 buffer: &subdivide_context_buffer,
                                 offset: 0,
                                 size: None,
-                            },
+                            }),
                         },
                         wgpu::BindGroupEntry {
                             binding: 1,
-                            resource: wgpu::BindingResource::Buffer {
+                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                                 buffer: &expand_context_buffer,
                                 offset: 0,
                                 size: None,
-                            },
+                            }),
                         },
                         wgpu::BindGroupEntry {
                             binding: 2,
-                            resource: wgpu::BindingResource::Buffer {
+                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                                 buffer: &target_vertex_buffer,
                                 offset: 0,
                                 size: None,
-                            },
+                            }),
                         },
                         wgpu::BindGroupEntry {
                             binding: 3,
-                            resource: wgpu::BindingResource::Buffer {
+                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                                 buffer: &index_dependency_lut_buffer,
                                 offset: 0,
                                 size: None,
-                            },
+                            }),
                         },
                     ],
                 });
@@ -389,7 +389,7 @@ impl PatchManager {
                     label: Some("terrain-geo-displace-height-bind-group-layout"),
                     entries: &[wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStage::COMPUTE,
+                        visibility: wgpu::ShaderStages::COMPUTE,
                         ty: wgpu::BindingType::Buffer {
                             ty: wgpu::BufferBindingType::Storage { read_only: false },
                             has_dynamic_offset: false,
@@ -404,11 +404,11 @@ impl PatchManager {
                 layout: &displace_height_bind_group_layout,
                 entries: &[wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer {
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: &target_vertex_buffer,
                         offset: 0,
                         size: None,
-                    },
+                    }),
                 }],
             });
 
@@ -421,7 +421,7 @@ impl PatchManager {
                 gpu.push_slice(
                     "terrain-geo-wireframe-indices-SUB",
                     get_wireframe_index_buffer(max_subdivisions, winding),
-                    wgpu::BufferUsage::INDEX,
+                    wgpu::BufferUsages::INDEX,
                 )
             })
             .collect::<Vec<_>>();
@@ -440,7 +440,7 @@ impl PatchManager {
                 gpu.push_slice(
                     "terrain-geo-tristrip-indices-SUB",
                     get_tri_strip_index_buffer(max_subdivisions, winding),
-                    wgpu::BufferUsage::INDEX,
+                    wgpu::BufferUsages::INDEX,
                 )
             })
             .collect::<Vec<_>>();

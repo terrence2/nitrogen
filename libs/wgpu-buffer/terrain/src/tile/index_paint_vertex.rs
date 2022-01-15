@@ -39,17 +39,17 @@ impl IndexPaintVertex {
     pub fn descriptor() -> wgpu::VertexBufferLayout<'static> {
         let tmp = wgpu::VertexBufferLayout {
             array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
-            step_mode: wgpu::InputStepMode::Vertex,
+            step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[
                 // position
                 wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float2,
+                    format: wgpu::VertexFormat::Float32x2,
                     offset: 0,
                     shader_location: 0,
                 },
                 // color
                 wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Uint,
+                    format: wgpu::VertexFormat::Uint32,
                     offset: 8,
                     shader_location: 1,
                 },

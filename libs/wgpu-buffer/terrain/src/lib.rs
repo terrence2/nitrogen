@@ -201,17 +201,18 @@ impl TerrainBuffer {
                         entry_point: "main",
                         targets: &[wgpu::ColorTargetState {
                             format: Self::DEFERRED_TEXTURE_FORMAT,
-                            color_blend: wgpu::BlendState::REPLACE,
-                            alpha_blend: wgpu::BlendState::REPLACE,
-                            write_mask: wgpu::ColorWrite::ALL,
+                            blend: None,
+                            write_mask: wgpu::ColorWrites::ALL,
                         }],
                     }),
                     primitive: wgpu::PrimitiveState {
                         topology: wgpu::PrimitiveTopology::TriangleStrip,
                         strip_index_format: Some(wgpu::IndexFormat::Uint32),
                         front_face: wgpu::FrontFace::Ccw,
-                        cull_mode: wgpu::CullMode::Back,
+                        cull_mode: Some(wgpu::Face::Back),
+                        unclipped_depth: true,
                         polygon_mode: wgpu::PolygonMode::Fill,
+                        conservative: false,
                     },
                     depth_stencil: Some(wgpu::DepthStencilState {
                         format: Self::DEFERRED_TEXTURE_DEPTH,
@@ -228,13 +229,13 @@ impl TerrainBuffer {
                             slope_scale: 0.0,
                             clamp: 0.0,
                         },
-                        clamp_depth: false,
                     }),
                     multisample: wgpu::MultisampleState {
                         count: 1,
                         mask: !0,
                         alpha_to_coverage_enabled: false,
                     },
+                    multiview: None,
                 });
 
         let sampler_linear = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
@@ -277,7 +278,7 @@ impl TerrainBuffer {
                         // deferred texture
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 view_dimension: wgpu::TextureViewDimension::D2,
                                 sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -288,7 +289,7 @@ impl TerrainBuffer {
                         // deferred depth
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 view_dimension: wgpu::TextureViewDimension::D2,
                                 sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -299,7 +300,7 @@ impl TerrainBuffer {
                         // color accumulator
                         wgpu::BindGroupLayoutEntry {
                             binding: 2,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 view_dimension: wgpu::TextureViewDimension::D2,
                                 sample_type: wgpu::TextureSampleType::Uint,
@@ -310,7 +311,7 @@ impl TerrainBuffer {
                         // normal accumulator
                         wgpu::BindGroupLayoutEntry {
                             binding: 3,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 view_dimension: wgpu::TextureViewDimension::D2,
                                 sample_type: wgpu::TextureSampleType::Sint,
@@ -321,21 +322,15 @@ impl TerrainBuffer {
                         // linear sampler
                         wgpu::BindGroupLayoutEntry {
                             binding: 4,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler {
-                                filtering: true,
-                                comparison: false,
-                            },
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                             count: None,
                         },
                         // nearest sampler
                         wgpu::BindGroupLayoutEntry {
                             binding: 5,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler {
-                                filtering: false,
-                                comparison: false,
-                            },
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
                             count: None,
                         },
                     ],
@@ -350,7 +345,7 @@ impl TerrainBuffer {
                         // deferred texture
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
-                            visibility: wgpu::ShaderStage::COMPUTE,
+                            visibility: wgpu::ShaderStages::COMPUTE,
                             ty: wgpu::BindingType::Texture {
                                 view_dimension: wgpu::TextureViewDimension::D2,
                                 sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -361,7 +356,7 @@ impl TerrainBuffer {
                         // deferred depth
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
-                            visibility: wgpu::ShaderStage::COMPUTE,
+                            visibility: wgpu::ShaderStages::COMPUTE,
                             ty: wgpu::BindingType::Texture {
                                 view_dimension: wgpu::TextureViewDimension::D2,
                                 sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -372,7 +367,7 @@ impl TerrainBuffer {
                         // Color acc as storage
                         wgpu::BindGroupLayoutEntry {
                             binding: 2,
-                            visibility: wgpu::ShaderStage::COMPUTE,
+                            visibility: wgpu::ShaderStages::COMPUTE,
                             ty: wgpu::BindingType::StorageTexture {
                                 format: Self::COLOR_ACCUMULATION_FORMAT,
                                 access: wgpu::StorageTextureAccess::ReadWrite,
@@ -383,7 +378,7 @@ impl TerrainBuffer {
                         // Normal acc as storage
                         wgpu::BindGroupLayoutEntry {
                             binding: 3,
-                            visibility: wgpu::ShaderStage::COMPUTE,
+                            visibility: wgpu::ShaderStages::COMPUTE,
                             ty: wgpu::BindingType::StorageTexture {
                                 format: Self::NORMAL_ACCUMULATION_FORMAT,
                                 access: wgpu::StorageTextureAccess::ReadWrite,
@@ -394,11 +389,8 @@ impl TerrainBuffer {
                         // linear sampler
                         wgpu::BindGroupLayoutEntry {
                             binding: 4,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::Sampler {
-                                filtering: true,
-                                comparison: false,
-                            },
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                             count: None,
                         },
                     ],
@@ -538,9 +530,9 @@ impl TerrainBuffer {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Self::DEFERRED_TEXTURE_FORMAT,
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT
-                | wgpu::TextureUsage::COPY_SRC
-                | wgpu::TextureUsage::SAMPLED,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING,
         });
         let view = target.create_view(&wgpu::TextureViewDescriptor {
             label: Some("deferred-texture-target-view"),
@@ -548,7 +540,7 @@ impl TerrainBuffer {
             dimension: None,
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,
-            level_count: None,
+            mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: None,
         });
@@ -564,9 +556,9 @@ impl TerrainBuffer {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Self::DEFERRED_TEXTURE_DEPTH,
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT
-                | wgpu::TextureUsage::COPY_SRC
-                | wgpu::TextureUsage::SAMPLED,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING,
         });
         let depth_view = depth_texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some("deferred-depth-texture-view"),
@@ -574,7 +566,7 @@ impl TerrainBuffer {
             dimension: None,
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,
-            level_count: None,
+            mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: None,
         });
@@ -590,9 +582,9 @@ impl TerrainBuffer {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Self::COLOR_ACCUMULATION_FORMAT,
-            usage: wgpu::TextureUsage::COPY_SRC
-                | wgpu::TextureUsage::SAMPLED
-                | wgpu::TextureUsage::STORAGE,
+            usage: wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::STORAGE_BINDING,
         });
         let color_view = color_acc.create_view(&wgpu::TextureViewDescriptor {
             label: Some("terrain-color-acc-texture-view"),
@@ -600,7 +592,7 @@ impl TerrainBuffer {
             dimension: None,
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,
-            level_count: None,
+            mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: None,
         });
@@ -616,9 +608,9 @@ impl TerrainBuffer {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Self::NORMAL_ACCUMULATION_FORMAT,
-            usage: wgpu::TextureUsage::COPY_SRC
-                | wgpu::TextureUsage::SAMPLED
-                | wgpu::TextureUsage::STORAGE,
+            usage: wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::STORAGE_BINDING,
         });
         let normal_view = normal_acc.create_view(&wgpu::TextureViewDescriptor {
             label: Some("terrain-normal-acc-texture-view"),
@@ -626,7 +618,7 @@ impl TerrainBuffer {
             dimension: None,
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,
-            level_count: None,
+            mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: None,
         });
@@ -778,20 +770,20 @@ impl TerrainBuffer {
     pub fn deferred_texture_target(
         &self,
     ) -> (
-        [wgpu::RenderPassColorAttachmentDescriptor; 1],
-        Option<wgpu::RenderPassDepthStencilAttachmentDescriptor>,
+        [wgpu::RenderPassColorAttachment; 1],
+        Option<wgpu::RenderPassDepthStencilAttachment>,
     ) {
         (
-            [wgpu::RenderPassColorAttachmentDescriptor {
-                attachment: &self.deferred_texture.1,
+            [wgpu::RenderPassColorAttachment {
+                view: &self.deferred_texture.1,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color::RED),
                     store: true,
                 },
             }],
-            Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-                attachment: &self.deferred_depth.1,
+            Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &self.deferred_depth.1,
                 depth_ops: Some(wgpu::Operations {
                     load: wgpu::LoadOp::Clear(-1f32),
                     store: true,

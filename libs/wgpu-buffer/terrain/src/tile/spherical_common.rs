@@ -178,7 +178,7 @@ impl SphericalTileSetCommon {
         let index_texture_extent = wgpu::Extent3d {
             width: TerrainLevel::index_resolution().1,
             height: TerrainLevel::index_resolution().0,
-            depth: 1,
+            depth_or_array_layers: 1,
         };
         let index_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("terrain-geo-tile-index-texture"),
@@ -187,9 +187,9 @@ impl SphericalTileSetCommon {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: index_texture_format,
-            usage: wgpu::TextureUsage::SAMPLED
-                | wgpu::TextureUsage::RENDER_ATTACHMENT
-                | wgpu::TextureUsage::COPY_SRC,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC,
         });
         let index_texture_view = index_texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some("terrain-index-texture-view"),
@@ -197,7 +197,7 @@ impl SphericalTileSetCommon {
             dimension: None,
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,
-            level_count: None,
+            mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: None,
         });
@@ -220,7 +220,7 @@ impl SphericalTileSetCommon {
             label: Some("index-paint-vert-buffer"),
             size: (IndexPaintVertex::mem_size() * 6 * gpu_detail.tile_cache_size as usize)
                 as wgpu::BufferAddress,
-            usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::VERTEX,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::VERTEX,
             mapped_at_creation: false,
         });
         let index_paint_vert_shader = gpu.create_shader_module(
@@ -252,17 +252,18 @@ impl SphericalTileSetCommon {
                         entry_point: "main",
                         targets: &[wgpu::ColorTargetState {
                             format: index_texture_format,
-                            color_blend: wgpu::BlendState::REPLACE,
-                            alpha_blend: wgpu::BlendState::REPLACE,
-                            write_mask: wgpu::ColorWrite::ALL,
+                            blend: None,
+                            write_mask: wgpu::ColorWrites::ALL,
                         }],
                     }),
                     primitive: wgpu::PrimitiveState {
                         topology: wgpu::PrimitiveTopology::TriangleList,
                         strip_index_format: None,
                         front_face: wgpu::FrontFace::Ccw,
-                        cull_mode: wgpu::CullMode::Back,
+                        cull_mode: Some(wgpu::Face::Back),
+                        unclipped_depth: false,
                         polygon_mode: wgpu::PolygonMode::Fill,
+                        conservative: false,
                     },
                     depth_stencil: None,
                     multisample: wgpu::MultisampleState {
@@ -270,6 +271,7 @@ impl SphericalTileSetCommon {
                         mask: !0,
                         alpha_to_coverage_enabled: false,
                     },
+                    multiview: None,
                 });
 
         // The atlas texture is a 2d array of tiles. All tiles have the same size, but may be
@@ -280,7 +282,7 @@ impl SphericalTileSetCommon {
         let atlas_texture_extent = wgpu::Extent3d {
             width: TILE_SIZE,
             height: TILE_SIZE,
-            depth: gpu_detail.tile_cache_size,
+            depth_or_array_layers: gpu_detail.tile_cache_size,
         };
         let atlas_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("terrain-geo-tile-atlas-texture"),
@@ -289,7 +291,7 @@ impl SphericalTileSetCommon {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: atlas_texture_format,
-            usage: wgpu::TextureUsage::COPY_DST | wgpu::TextureUsage::SAMPLED,
+            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
         });
         let atlas_texture_view = atlas_texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some("terrain-atlas-texture-view"),
@@ -297,7 +299,7 @@ impl SphericalTileSetCommon {
             dimension: Some(wgpu::TextureViewDimension::D2Array),
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,
-            level_count: None,
+            mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: NonZeroU32::new(gpu_detail.tile_cache_size),
         });
@@ -322,7 +324,7 @@ impl SphericalTileSetCommon {
             label: Some("terrain-geo-tile-info-buffer"),
             size: atlas_tile_info_buffer_size,
             mapped_at_creation: false,
-            usage: wgpu::BufferUsage::all(),
+            usage: wgpu::BufferUsages::all(),
         }));
 
         // Note: layout has to correspond to kind.texture_format()
@@ -334,7 +336,7 @@ impl SphericalTileSetCommon {
                         // Index Texture
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
-                            visibility: wgpu::ShaderStage::COMPUTE,
+                            visibility: wgpu::ShaderStages::COMPUTE,
                             ty: wgpu::BindingType::Texture {
                                 sample_type: wgpu::TextureSampleType::Uint,
                                 view_dimension: wgpu::TextureViewDimension::D2,
@@ -344,17 +346,14 @@ impl SphericalTileSetCommon {
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::Sampler {
-                                filtering: false,
-                                comparison: false,
-                            },
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
                             count: None,
                         },
                         // Atlas Textures, as referenced by the above index
                         wgpu::BindGroupLayoutEntry {
                             binding: 2,
-                            visibility: wgpu::ShaderStage::COMPUTE,
+                            visibility: wgpu::ShaderStages::COMPUTE,
                             ty: wgpu::BindingType::Texture {
                                 view_dimension: wgpu::TextureViewDimension::D2Array,
                                 sample_type: kind.texture_sample_type(),
@@ -364,17 +363,14 @@ impl SphericalTileSetCommon {
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 3,
-                            visibility: wgpu::ShaderStage::COMPUTE,
-                            ty: wgpu::BindingType::Sampler {
-                                filtering: true,
-                                comparison: false,
-                            },
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                             count: None,
                         },
                         // Tile metadata
                         wgpu::BindGroupLayoutEntry {
                             binding: 4,
-                            visibility: wgpu::ShaderStage::COMPUTE,
+                            visibility: wgpu::ShaderStages::COMPUTE,
                             ty: wgpu::BindingType::Buffer {
                                 ty: wgpu::BufferBindingType::Storage { read_only: true },
                                 has_dynamic_offset: false,
@@ -410,11 +406,11 @@ impl SphericalTileSetCommon {
                 // Tile Metadata
                 wgpu::BindGroupEntry {
                     binding: 4,
-                    resource: wgpu::BindingResource::Buffer {
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: &atlas_tile_info,
                         offset: 0,
                         size: None,
-                    },
+                    }),
                 },
             ],
         });
@@ -664,16 +660,18 @@ impl SphericalTileSetCommon {
             let texture_buffer = gpu.push_slice(
                 "terrain-geo-atlas-tile-texture-upload-buffer",
                 &data,
-                wgpu::BufferUsage::COPY_SRC,
+                wgpu::BufferUsages::COPY_SRC,
             );
             tracker.copy_owned_buffer_to_arc_texture(
                 OwnedBufferCopyView {
                     buffer: texture_buffer,
-                    layout: wgpu::TextureDataLayout {
+                    layout: wgpu::ImageDataLayout {
                         offset: 0,
-                        bytes_per_row: self.atlas_texture_extent.width
-                            * texture_format_size(self.atlas_texture_format),
-                        rows_per_image: self.atlas_texture_extent.height,
+                        bytes_per_row: NonZeroU32::new(
+                            self.atlas_texture_extent.width
+                                * texture_format_size(self.atlas_texture_format),
+                        ),
+                        rows_per_image: NonZeroU32::new(self.atlas_texture_extent.height),
                     },
                 },
                 ArcTextureCopyView {
@@ -688,7 +686,7 @@ impl SphericalTileSetCommon {
                 wgpu::Extent3d {
                     width: self.atlas_texture_extent.width,
                     height: self.atlas_texture_extent.height,
-                    depth: 1,
+                    depth_or_array_layers: 1,
                 },
             );
 
@@ -699,7 +697,7 @@ impl SphericalTileSetCommon {
             let info_buffer = gpu.push_data(
                 "terrain-geo-atlas-tile-info-upload-buffer",
                 &tile_info,
-                wgpu::BufferUsage::COPY_SRC,
+                wgpu::BufferUsages::COPY_SRC,
             );
             tracker.upload_to_array_element::<TileInfo>(
                 info_buffer,
@@ -776,8 +774,8 @@ impl SphericalTileSetCommon {
     pub(crate) fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) {
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("paint-atlas-index-render-pass"),
-            color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                attachment: &self.index_texture_view,
+            color_attachments: &[wgpu::RenderPassColorAttachment {
+                view: &self.index_texture_view,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),

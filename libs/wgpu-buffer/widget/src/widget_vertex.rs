@@ -37,29 +37,29 @@ impl WidgetVertex {
     pub fn descriptor() -> wgpu::VertexBufferLayout<'static> {
         let tmp = wgpu::VertexBufferLayout {
             array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
-            step_mode: wgpu::InputStepMode::Vertex,
+            step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[
                 // position
                 wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float3,
+                    format: wgpu::VertexFormat::Float32x3,
                     offset: 0,
                     shader_location: 0,
                 },
                 // tex_coord
                 wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float3,
+                    format: wgpu::VertexFormat::Float32x3,
                     offset: 12,
                     shader_location: 1,
                 },
                 // color
                 wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Uchar4Norm,
+                    format: wgpu::VertexFormat::Unorm8x4,
                     offset: 20,
                     shader_location: 2,
                 },
                 // info_index
                 wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Uint,
+                    format: wgpu::VertexFormat::Uint32,
                     offset: 24,
                     shader_location: 3,
                 },
