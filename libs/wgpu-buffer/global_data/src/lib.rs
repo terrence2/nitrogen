@@ -165,7 +165,7 @@ impl GlobalParametersBuffer {
         let parameters_buffer = Arc::new(device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("globals-buffer"),
             size: buffer_size,
-            usage: wgpu::BufferUsage::STORAGE | wgpu::BufferUsage::COPY_DST,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         }));
 
@@ -173,7 +173,7 @@ impl GlobalParametersBuffer {
             label: Some("globals-bind-group-layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                visibility: wgpu::ShaderStage::all(),
+                visibility: wgpu::ShaderStages::all(),
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Storage { read_only: true },
                     has_dynamic_offset: false,
@@ -188,11 +188,11 @@ impl GlobalParametersBuffer {
             layout: &bind_group_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::Buffer {
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                     buffer: &parameters_buffer,
                     offset: 0,
                     size: None,
-                },
+                }),
             }],
         });
 
@@ -254,7 +254,7 @@ impl GlobalParametersBuffer {
         let buffer = gpu.push_data(
             "global-upload-buffer",
             &self.globals,
-            wgpu::BufferUsage::MAP_READ | wgpu::BufferUsage::COPY_SRC,
+            wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_SRC,
         );
         tracker.upload_ba(buffer, self.parameters_buffer.clone(), self.buffer_size);
         Ok(())
