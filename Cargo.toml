@@ -71,6 +71,7 @@ platform-dirs = "^ 0.3"
 rayon = "= 1.4.0"
 structopt = "^ 0.3"
 terminal_size = "^ 0.1"
+wgpu = { version = "^ 0.12", features = ["spirv"] }
 absolute_unit = { path = "libs/util/absolute_unit" }
 animate = { path = "libs/sim/animate" }
 atmosphere = { path = "libs/wgpu-buffer/atmosphere" }

@@ -1981,6 +1981,7 @@ dependencies = [
  "terminal_size",
  "terrain",
  "ui",
+ "wgpu",
  "widget",
  "window",
  "world",

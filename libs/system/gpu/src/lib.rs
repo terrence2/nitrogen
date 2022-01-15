@@ -559,7 +559,7 @@ impl Gpu {
     }
 
     // Copy of the old util method that went away.
-    fn make_spirv<'a>(data: &'a [u8]) -> wgpu::ShaderSource {
+    fn make_spirv(data: &[u8]) -> wgpu::ShaderSource {
         const MAGIC_NUMBER: u32 = 0x0723_0203;
 
         assert_eq!(

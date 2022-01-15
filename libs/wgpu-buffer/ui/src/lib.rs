@@ -54,7 +54,7 @@ impl UiRenderPass {
                     entries: &[
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 view_dimension: wgpu::TextureViewDimension::D2,
                                 sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -64,11 +64,8 @@ impl UiRenderPass {
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler {
-                                filtering: true,
-                                comparison: false,
-                            },
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                             count: None,
                         },
                     ],
@@ -132,21 +129,25 @@ impl UiRenderPass {
                         entry_point: "main",
                         targets: &[wgpu::ColorTargetState {
                             format: Gpu::SCREEN_FORMAT,
-                            color_blend: wgpu::BlendState {
-                                src_factor: wgpu::BlendFactor::SrcAlpha,
-                                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                                operation: wgpu::BlendOperation::Add,
-                            },
-                            alpha_blend: wgpu::BlendState::REPLACE,
-                            write_mask: wgpu::ColorWrite::ALL,
+                            blend: Some(wgpu::BlendState {
+                                color: wgpu::BlendComponent {
+                                    src_factor: wgpu::BlendFactor::SrcAlpha,
+                                    dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                                    operation: wgpu::BlendOperation::Add,
+                                },
+                                alpha: wgpu::BlendComponent::REPLACE,
+                            }),
+                            write_mask: wgpu::ColorWrites::ALL,
                         }],
                     }),
                     primitive: wgpu::PrimitiveState {
                         topology: wgpu::PrimitiveTopology::TriangleList,
                         strip_index_format: None,
                         front_face: wgpu::FrontFace::Ccw,
-                        cull_mode: wgpu::CullMode::Back,
+                        cull_mode: Some(wgpu::Face::Back),
+                        unclipped_depth: false,
                         polygon_mode: wgpu::PolygonMode::Fill,
+                        conservative: false,
                     },
                     depth_stencil: Some(wgpu::DepthStencilState {
                         format: Gpu::DEPTH_FORMAT,
@@ -163,13 +164,13 @@ impl UiRenderPass {
                             slope_scale: 0.0,
                             clamp: 0.0,
                         },
-                        clamp_depth: false,
                     }),
                     multisample: wgpu::MultisampleState {
                         count: 1,
                         mask: !0,
                         alpha_to_coverage_enabled: false,
                     },
+                    multiview: None,
                 });
 
         let text_pipeline = gpu
@@ -193,25 +194,29 @@ impl UiRenderPass {
                     entry_point: "main",
                     targets: &[wgpu::ColorTargetState {
                         format: Gpu::SCREEN_FORMAT,
-                        alpha_blend: wgpu::BlendState {
-                            src_factor: wgpu::BlendFactor::SrcAlpha,
-                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                            operation: wgpu::BlendOperation::Max,
-                        },
-                        color_blend: wgpu::BlendState {
-                            src_factor: wgpu::BlendFactor::SrcAlpha,
-                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                            operation: wgpu::BlendOperation::Add,
-                        },
-                        write_mask: wgpu::ColorWrite::ALL,
+                        blend: Some(wgpu::BlendState {
+                            color: wgpu::BlendComponent {
+                                src_factor: wgpu::BlendFactor::SrcAlpha,
+                                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                                operation: wgpu::BlendOperation::Add,
+                            },
+                            alpha: wgpu::BlendComponent {
+                                src_factor: wgpu::BlendFactor::SrcAlpha,
+                                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                                operation: wgpu::BlendOperation::Max,
+                            },
+                        }),
+                        write_mask: wgpu::ColorWrites::ALL,
                     }],
                 }),
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleList,
                     strip_index_format: None,
                     front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: wgpu::CullMode::Back,
+                    cull_mode: Some(wgpu::Face::Back),
+                    unclipped_depth: false,
                     polygon_mode: wgpu::PolygonMode::Fill,
+                    conservative: false,
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: Gpu::DEPTH_FORMAT,
@@ -228,13 +233,13 @@ impl UiRenderPass {
                         slope_scale: 0.0,
                         clamp: 0.0,
                     },
-                    clamp_depth: false,
                 }),
                 multisample: wgpu::MultisampleState {
                     count: 1,
                     mask: !0,
                     alpha_to_coverage_enabled: false,
                 },
+                multiview: None,
             });
 
         let ui = Arc::new(RwLock::new(Self {
@@ -262,9 +267,9 @@ impl UiRenderPass {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Gpu::SCREEN_FORMAT,
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT
-                | wgpu::TextureUsage::COPY_SRC
-                | wgpu::TextureUsage::SAMPLED,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING,
         });
         let view = target.create_view(&wgpu::TextureViewDescriptor {
             label: Some("world-offscreen-texture-target-view"),
@@ -272,7 +277,7 @@ impl UiRenderPass {
             dimension: None,
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,
-            level_count: None,
+            mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: None,
         });
@@ -288,9 +293,9 @@ impl UiRenderPass {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Gpu::DEPTH_FORMAT,
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT
-                | wgpu::TextureUsage::COPY_SRC
-                | wgpu::TextureUsage::SAMPLED,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING,
         });
         let depth_view = depth_texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some("world-offscreen-depth-texture-view"),
@@ -298,7 +303,7 @@ impl UiRenderPass {
             dimension: None,
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,
-            level_count: None,
+            mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: None,
         });
@@ -363,20 +368,20 @@ impl UiRenderPass {
     pub fn offscreen_target(
         &self,
     ) -> (
-        [wgpu::RenderPassColorAttachmentDescriptor; 1],
-        Option<wgpu::RenderPassDepthStencilAttachmentDescriptor>,
+        [wgpu::RenderPassColorAttachment; 1],
+        Option<wgpu::RenderPassDepthStencilAttachment>,
     ) {
         (
-            [wgpu::RenderPassColorAttachmentDescriptor {
-                attachment: &self.deferred_texture.1,
+            [wgpu::RenderPassColorAttachment {
+                view: &self.deferred_texture.1,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                     store: true,
                 },
             }],
-            Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-                attachment: &self.deferred_depth.1,
+            Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &self.deferred_depth.1,
                 depth_ops: Some(wgpu::Operations {
                     load: wgpu::LoadOp::Clear(0f32),
                     store: true,
