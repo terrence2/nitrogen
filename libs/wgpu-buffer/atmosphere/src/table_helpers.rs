@@ -65,23 +65,22 @@ impl TableHelpers {
         let transmittance_buffer = gpu.push_buffer(
             "atmosphere-transmittance-file-upload-buffer",
             TRANSMITTANCE_TABLE,
-            wgpu::BufferUsages::all(),
+            wgpu::BufferUsages::COPY_SRC,
         );
         let irradiance_buffer = gpu.push_buffer(
             "atmosphere-irradiance-file-upload-buffer",
             IRRADIANCE_TABLE,
-            wgpu::BufferUsages::all(),
+            wgpu::BufferUsages::COPY_SRC,
         );
-
         let scattering_buffer = gpu.push_buffer(
             "atmosphere-scattering-file-upload-buffer",
             SCATTERING_TABLE,
-            wgpu::BufferUsages::all(),
+            wgpu::BufferUsages::COPY_SRC,
         );
         let single_mie_scattering_buffer = gpu.push_buffer(
             "atmosphere-single-mie-scattering-file-upload-buffer",
             SINGLE_MIE_SCATTERING_TABLE,
-            wgpu::BufferUsages::all(),
+            wgpu::BufferUsages::COPY_SRC,
         );
 
         let transmittance_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
@@ -91,7 +90,7 @@ impl TableHelpers {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsages::all(),
+            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
         });
         let scattering_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("atmosphere-scattering-texture"),
@@ -100,7 +99,7 @@ impl TableHelpers {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D3,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsages::all(),
+            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
         });
         let single_mie_scattering_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("atmosphere-single-mie-scattering-texture"),
@@ -109,7 +108,7 @@ impl TableHelpers {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D3,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsages::all(),
+            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
         });
         let irradiance_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("atmosphere-irradiance-texture"),
@@ -118,7 +117,7 @@ impl TableHelpers {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsages::all(),
+            usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
         });
 
         fn mk_copy(

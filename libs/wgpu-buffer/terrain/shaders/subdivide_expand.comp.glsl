@@ -19,8 +19,8 @@
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 layout(binding = 0) uniform SubdivisionCtx { SubdivisionContext context; };
 layout(binding = 1) uniform ExpansionCtx { SubdivisionExpandContext expand; };
-layout(binding = 2) buffer TargetVertices { TerrainVertex target_vertices[]; };
-layout(binding = 3) buffer IndexDependencyLut { uint index_dependency_lut[]; };
+layout(binding = 2) coherent buffer TargetVertices { TerrainVertex target_vertices[]; };
+layout(binding = 3) readonly buffer IndexDependencyLut { uint index_dependency_lut[]; };
 
 void
 main()
