@@ -24,7 +24,7 @@ parking_lot = "^ 0.11"
 rayon = "= 1.4.0"
 smallvec = "^ 1.4"
 static_assertions = "^ 1"
-wgpu = "^ 0.12"
+wgpu = { version = "^ 0.12", features = ["spirv"] }
 zerocopy = "^ 0.5"
 absolute_unit = { path = "../../util/absolute_unit" }
 camera = { path = "../../sim/camera" }

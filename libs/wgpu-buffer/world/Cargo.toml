@@ -10,7 +10,7 @@ anyhow = { version = "^ 1", features = ["backtrace"] }
 bevy_ecs = "^ 0.6"
 log = "^ 0.4"
 parking_lot = "^ 0.11"
-wgpu = "^ 0.12"
+wgpu = { version = "^ 0.12", features = ["spirv"] }
 atmosphere = { path = "../../wgpu-buffer/atmosphere" }
 fullscreen = { path = "../../wgpu-buffer/fullscreen" }
 global_data = { path = "../../wgpu-buffer/global_data" }

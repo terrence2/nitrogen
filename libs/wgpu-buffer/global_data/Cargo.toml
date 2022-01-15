@@ -9,7 +9,7 @@ anyhow = { version = "^ 1", features = ["backtrace"] }
 log = "^ 0.4"
 nalgebra = "^ 0.29"
 parking_lot = "^ 0.11"
-wgpu = "^ 0.12"
+wgpu = { version = "^ 0.12", features = ["spirv"] }
 zerocopy = "^ 0.5"
 absolute_unit = { path = "../../util/absolute_unit" }
 geodesy = { path = "../../util/geodesy" }

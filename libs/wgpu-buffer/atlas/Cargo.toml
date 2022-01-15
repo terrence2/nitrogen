@@ -8,7 +8,7 @@ edition = "2021"
 anyhow = { version = "^ 1", features = ["backtrace"] }
 image = "^ 0.23"
 log = "^ 0.4"
-wgpu = "^ 0.12"
+wgpu = { version = "^ 0.12", features = ["spirv"] }
 geometry = { path = "../../util/geometry" }
 gpu = { path = "../../system/gpu" }
 zerocopy = "^ 0.5"

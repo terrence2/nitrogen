@@ -58,11 +58,13 @@ macro_rules! make_frame_graph_pass {
         $owner:ident, $gpu:ident, $encoder:ident, $need_rebuild:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
      }
     ) => {
-        let maybe_color_attachment = $gpu.get_next_framebuffer()?;
-        if let Some(color_attachment) = maybe_color_attachment.as_ref() {
+        let maybe_surface_texture = $gpu.get_next_framebuffer()?;
+        if let Some(surface_texture) = maybe_surface_texture {
+            let view = surface_texture.texture.create_view(&::wgpu::TextureViewDescriptor::default());
+            println!("Begin screen render pass");
             let _rpass = $encoder.begin_render_pass(&$crate::wgpu::RenderPassDescriptor {
                 label: Some("screen-render-pass"),
-                color_attachments: &[$crate::Gpu::color_attachment(&color_attachment.output.view)],
+                color_attachments: &[$crate::Gpu::color_attachment(&view)],
                 depth_stencil_attachment: Some($gpu.depth_stencil_attachment()),
             });
             $(
@@ -178,13 +180,13 @@ mod test {
                 size: wgpu::Extent3d {
                     width: 1,
                     height: 1,
-                    depth: 1,
+                    depth_or_array_layers: 1,
                 },
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::Rgba8Uint,
-                usage: wgpu::TextureUsage::all(),
+                usage: wgpu::TextureUsages::all(),
             });
             let render_target = texture.create_view(&wgpu::TextureViewDescriptor {
                 label: None,
@@ -192,7 +194,7 @@ mod test {
                 dimension: Some(wgpu::TextureViewDimension::D2),
                 aspect: wgpu::TextureAspect::All,
                 base_mip_level: 0,
-                level_count: None,
+                mip_level_count: None,
                 base_array_layer: 0,
                 array_layer_count: None,
             });
@@ -227,12 +229,12 @@ mod test {
         fn example_render_pass_attachments(
             &self,
         ) -> (
-            [wgpu::RenderPassColorAttachmentDescriptor; 1],
-            Option<wgpu::RenderPassDepthStencilAttachmentDescriptor>,
+            [wgpu::RenderPassColorAttachment; 1],
+            Option<wgpu::RenderPassDepthStencilAttachment>,
         ) {
             (
-                [wgpu::RenderPassColorAttachmentDescriptor {
-                    attachment: &self.render_target,
+                [wgpu::RenderPassColorAttachment {
+                    view: &self.render_target,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),

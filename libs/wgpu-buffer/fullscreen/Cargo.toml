@@ -7,7 +7,7 @@ edition = "2021"
 [dependencies]
 log = "^ 0.4"
 parking_lot = "^ 0.11"
-wgpu = "^ 0.12"
+wgpu = { version = "^ 0.12", features = ["spirv"] }
 zerocopy = "^ 0.5"
 gpu = { path = "../../system/gpu" }
 

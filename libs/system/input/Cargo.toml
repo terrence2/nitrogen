@@ -10,7 +10,7 @@ bevy_ecs = "^ 0.6"
 log = "^ 0.4"
 parking_lot = "^ 0.11"
 smallvec = "^ 1.4"
-winit = { version = "^ 0.24", features = ["web-sys"] }
+winit = "^ 0.26"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Note: need to match wgpu exactly
