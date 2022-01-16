@@ -59,7 +59,6 @@ macro_rules! make_frame_graph_pass {
      }
     ) => {
         let view = $surface_texture.texture.create_view(&::wgpu::TextureViewDescriptor::default());
-        println!("Begin screen render pass");
         let _rpass = $encoder.begin_render_pass(&$crate::wgpu::RenderPassDescriptor {
             label: Some("screen-render-pass"),
             color_attachments: &[$crate::Gpu::color_attachment(&view)],
