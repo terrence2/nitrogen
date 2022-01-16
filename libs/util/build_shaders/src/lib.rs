@@ -148,11 +148,11 @@ pub fn build() -> Result<()> {
                 .expect("a string"),
         );
         fs::write(&target_path, spirv.as_binary_u8())?;
-
         if let Some(spirv_assembly) = assembly {
             fs::write(&format!("{}.s", target_path), spirv_assembly.as_text())?;
         }
 
+        // Parse the generated spirv with naga to simulate what wgpu will be doing.
         {
             let options = naga::front::spv::Options {
                 adjust_coordinate_space: false, // we require NDC_Y_UP feature
@@ -160,8 +160,8 @@ pub fn build() -> Result<()> {
                 block_ctx_dump_prefix: None,
             };
             let parser = naga::front::spv::Parser::new(spirv.as_binary().iter().cloned(), &options);
-            match parser.parse() {
-                Ok(_module) => {}
+            let module = match parser.parse() {
+                Ok(module) => module,
                 Err(err) => {
                     let msg = format!(
                         "Failed to parse shader SPIR-V code for {:?}: {:?}",
@@ -171,6 +171,14 @@ pub fn build() -> Result<()> {
                     bail!(msg)
                 }
             };
+            let dot_content = naga::back::dot::write(&module, None)?;
+            if dump_spirv {
+                fs::write(
+                    &format!("{}.module", target_path),
+                    &format!("{:#?}", module),
+                )?;
+                fs::write(&format!("{}.dot", target_path), dot_content)?;
+            }
         }
     }
 
