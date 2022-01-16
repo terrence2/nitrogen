@@ -312,21 +312,20 @@ vec4 get_transmittance(
     );
     float mu_d = clamp_cosine((r * mu + d) / r_d);
 
+    vec2 a_rmu = vec2(0);
+    vec2 b_rmu = vec2(0);
     if (ray_r_mu_intersects_ground) {
-        return min(
-            get_transmittance_to_top_atmosphere_boundary(
-                vec2(r_d, -mu_d), transmittance_texture, transmittance_sampler, bottom_radius, top_radius) /
-            get_transmittance_to_top_atmosphere_boundary(
-                vec2(r, -mu), transmittance_texture, transmittance_sampler, bottom_radius, top_radius),
-            vec4(1.0));
+        a_rmu = vec2(r_d, -mu_d);
+        b_rmu = vec2(r, -mu);
     } else {
-        return min(
-            get_transmittance_to_top_atmosphere_boundary(
-                vec2(r, mu), transmittance_texture, transmittance_sampler, bottom_radius, top_radius) /
-            get_transmittance_to_top_atmosphere_boundary(
-                vec2(r_d, mu_d), transmittance_texture, transmittance_sampler, bottom_radius, top_radius),
-            vec4(1.0));
+        a_rmu = vec2(r, mu);
+        b_rmu = vec2(r_d, mu_d);
     }
+    vec4 a = get_transmittance_to_top_atmosphere_boundary(
+        a_rmu, transmittance_texture, transmittance_sampler, bottom_radius, top_radius);
+    vec4 b = get_transmittance_to_top_atmosphere_boundary(
+        b_rmu, transmittance_texture, transmittance_sampler, bottom_radius, top_radius);
+    return min(a / b, vec4(1.0));
 }
 
 // In order to precompute the ground irradiance in a texture we need a mapping

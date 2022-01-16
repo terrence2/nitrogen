@@ -22,7 +22,7 @@ layout(location = 2) in vec4 color;
 layout(location = 3) in uint widget_info_id;
 
 layout(location = 0) out vec2 v_tex_coord;
-layout(location = 1) flat out vec4 v_color;
+layout(location = 1) out vec4 v_color;
 layout(location = 2) out vec2 v_screen_tex_coord;
 layout(location = 3) flat out uint widget_info_id_frag;
 

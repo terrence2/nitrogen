@@ -23,7 +23,7 @@ layout(set = 1, binding = 0) uniform utexture2D index_texture;
 layout(set = 1, binding = 1) uniform sampler index_sampler;
 layout(set = 1, binding = 2) uniform itexture2DArray atlas_texture;
 layout(set = 1, binding = 3) uniform sampler atlas_sampler;
-layout(set = 1, binding = 4) buffer TileLayout { TileInfo tile_info[]; };
+layout(set = 1, binding = 4) readonly buffer TileLayout { TileInfo tile_info[]; };
 
 void
 main()
