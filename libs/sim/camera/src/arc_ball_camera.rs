@@ -164,12 +164,30 @@ impl ArcBallCamera {
     #[method]
     pub fn show_parameters(&self) -> String {
         let mut out = String::new();
-        out += &format!("tgt lat: {}\n", self.target.latitude.f64());
-        out += &format!("tgt lon: {}\n", self.target.longitude.f64());
-        out += &format!("tgt dst: {}\n", self.target.distance.f64());
-        out += &format!("eye lat: {}\n", self.eye.latitude.f64());
-        out += &format!("eye lon: {}\n", self.eye.longitude.f64());
-        out += &format!("eye dst: {}\n", self.eye.distance.f64());
+        out += &format!(
+            "arcball.set_target_latitude_degrees({});\n",
+            self.target_latitude_degrees()
+        );
+        out += &format!(
+            "arcball.set_target_longitude_degrees({});\n",
+            self.target_longitude_degrees()
+        );
+        out += &format!(
+            "arcball.set_target_height_meters({});\n",
+            self.target_height_meters()
+        );
+        out += &format!(
+            "arcball.set_eye_latitude_degrees({});\n",
+            self.eye_latitude_degrees()
+        );
+        out += &format!(
+            "arcball.set_eye_longitude_degrees({});\n",
+            self.eye_longitude_degrees()
+        );
+        out += &format!(
+            "arcball.set_eye_distance_meters({});\n",
+            self.eye_distance_meters()
+        );
         println!("{}", out);
         out
     }
@@ -277,9 +295,6 @@ impl ArcBallCamera {
     fn cartesian_target_position<Unit: LengthUnit>(&self) -> Cartesian<GeoCenter, Unit> {
         Cartesian::<GeoCenter, Unit>::from(Graticule::<GeoCenter>::from(self.target))
     }
-
-    // fn graticule_eye_position<Unit: LengthUnit>(&self) -> Graticule<GeoSurface> {
-    // }
 
     fn cartesian_eye_position<Unit: LengthUnit>(&self) -> Cartesian<GeoCenter, Unit> {
         let r_lon = UnitQuaternion::from_axis_angle(
