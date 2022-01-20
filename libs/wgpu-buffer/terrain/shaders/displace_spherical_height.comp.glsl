@@ -16,7 +16,9 @@
 #include <wgpu-buffer/shader_shared/include/buffer_helpers.glsl>
 #include <wgpu-buffer/terrain/include/terrain.glsl>
 
-layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+const uint WORKGROUP_WIDTH = 1024;
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 layout(set = 0, binding = 0) buffer Vertices { TerrainVertex vertices[]; };
 layout(set = 1, binding = 0) uniform utexture2D index_texture;
@@ -29,7 +31,7 @@ void
 main()
 {
     // One invocation per vertex.
-    uint i = gl_GlobalInvocationID.x;
+    uint i = gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * WORKGROUP_WIDTH;
 
     vec2 v_graticule = arr_to_vec2(vertices[i].graticule);
     uint atlas_slot = terrain_atlas_slot_for_graticule(v_graticule, index_texture, index_sampler);

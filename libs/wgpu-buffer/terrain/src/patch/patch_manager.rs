@@ -592,9 +592,11 @@ impl PatchManager {
         mut cpass: wgpu::ComputePass<'a>,
     ) -> Result<wgpu::ComputePass<'a>> {
         // Copy our upload buffer into seed positions for subdivisions.
+        let patch_count = 3 * self.desired_patch_count as u32;
+        assert!(patch_count < u16::MAX as u32);
         cpass.set_pipeline(&self.subdivide_prepare_pipeline);
         cpass.set_bind_group(0, &self.subdivide_prepare_bind_group, &[]);
-        cpass.dispatch(3 * self.desired_patch_count as u32, 1, 1);
+        cpass.dispatch(patch_count, 1, 1);
 
         // Iterative subdivision by recursion level
         cpass.set_pipeline(&self.subdivide_expand_pipeline);
@@ -602,8 +604,11 @@ impl PatchManager {
             let (expand, bind_group) = &self.subdivide_expand_bind_groups[i];
             let iteration_count =
                 expand.compute_vertices_in_patch * self.desired_patch_count as u32;
+            const WORKGROUP_WIDTH: u32 = 1024;
+            let wg_x = (iteration_count % WORKGROUP_WIDTH).max(1);
+            let wg_y = (iteration_count / WORKGROUP_WIDTH).max(1);
             cpass.set_bind_group(0, bind_group, &[]);
-            cpass.dispatch(iteration_count, 1, 1);
+            cpass.dispatch(wg_x, wg_y, 1);
         }
 
         Ok(cpass)
