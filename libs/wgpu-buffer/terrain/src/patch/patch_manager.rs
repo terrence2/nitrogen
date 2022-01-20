@@ -604,7 +604,7 @@ impl PatchManager {
             let (expand, bind_group) = &self.subdivide_expand_bind_groups[i];
             let iteration_count =
                 expand.compute_vertices_in_patch * self.desired_patch_count as u32;
-            const WORKGROUP_WIDTH: u32 = 1024;
+            const WORKGROUP_WIDTH: u32 = 65536;
             let wg_x = (iteration_count % WORKGROUP_WIDTH).max(1);
             let wg_y = (iteration_count / WORKGROUP_WIDTH).max(1);
             cpass.set_bind_group(0, bind_group, &[]);

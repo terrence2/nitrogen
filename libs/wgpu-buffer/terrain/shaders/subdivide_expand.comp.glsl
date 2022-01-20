@@ -16,9 +16,9 @@
 #include <wgpu-buffer/terrain/include/terrain.glsl>
 #include <wgpu-buffer/shader_shared/include/buffer_helpers.glsl>
 
-const uint WORKGROUP_WIDTH = 1024;
+const uint WORKGROUP_WIDTH = 65536;
 
-layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+layout(local_size_x = 64, local_size_y = 2, local_size_z = 1) in;
 
 layout(binding = 0) uniform SubdivisionCtx { SubdivisionContext context; };
 layout(binding = 1) uniform ExpansionCtx { SubdivisionExpandContext expand; };

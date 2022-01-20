@@ -16,9 +16,9 @@
 #include <wgpu-buffer/shader_shared/include/buffer_helpers.glsl>
 #include <wgpu-buffer/terrain/include/terrain.glsl>
 
-const uint WORKGROUP_WIDTH = 1024;
+const uint WORKGROUP_WIDTH = 65536;
 
-layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+layout(local_size_x = 64, local_size_y = 2, local_size_z = 1) in;
 
 layout(set = 0, binding = 0) buffer Vertices { TerrainVertex vertices[]; };
 layout(set = 1, binding = 0) uniform utexture2D index_texture;
