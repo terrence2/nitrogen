@@ -21,11 +21,12 @@ layout(location = 0) out vec4 f_color;
 layout(location = 0) in vec2 v_tc;
 layout(location = 1) in vec3 v_ray_world;
 layout(location = 2) in vec2 v_fullscreen;
+layout(location = 3) in vec2 v_tc_idx;
 
 void
 main()
 {
-    vec4 texel = texture(sampler2D(terrain_deferred_depth, terrain_linear_sampler), v_tc);
+    vec4 texel = texelFetch(sampler2D(terrain_deferred_depth, terrain_linear_sampler), ivec2(v_tc_idx), 0);
 
     float zp = texel.x;
 

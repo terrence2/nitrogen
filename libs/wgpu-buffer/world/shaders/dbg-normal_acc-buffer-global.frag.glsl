@@ -22,13 +22,15 @@ layout(location = 0) out vec4 f_color;
 layout(location = 0) in vec2 v_tc;
 layout(location = 1) in vec3 v_ray_world;
 layout(location = 2) in vec2 v_fullscreen;
+layout(location = 3) in vec2 v_tc_idx;
 
 void
 main()
 {
-    float depth = texture(sampler2D(terrain_deferred_depth, terrain_linear_sampler), v_tc).x;
+    vec2 latlon = texelFetch(sampler2D(terrain_deferred_texture, terrain_linear_sampler), ivec2(v_tc_idx), 0).xy;
+    float depth = texelFetch(sampler2D(terrain_deferred_depth, terrain_linear_sampler), ivec2(v_tc_idx), 0).x;
+    ivec2 raw_normal = texelFetch(isampler2D(terrain_normal_acc_texture, terrain_nearest_sampler), ivec2(v_tc_idx), 0).xy;
     if (depth > -1) {
-        ivec2 raw_normal = texture(isampler2D(terrain_normal_acc_texture, terrain_nearest_sampler), v_tc).xy;
         vec2 flat_normal = raw_normal / 32768.0;
         vec3 local_normal = vec3(
             flat_normal.x,
@@ -36,8 +38,6 @@ main()
             flat_normal.y
         );
 
-        vec4 samp = texture(sampler2D(terrain_deferred_texture, terrain_linear_sampler), v_tc);
-        vec2 latlon = samp.xy;
         vec4 r_lon = quat_from_axis_angle(vec3(0, 1, 0), latlon.y);
         vec3 lat_axis = quat_rotate(r_lon, vec3(1, 0, 0)).xyz;
         vec4 r_lat = quat_from_axis_angle(lat_axis, -latlon.x);
