@@ -16,26 +16,28 @@
 #include <wgpu-buffer/shader_shared/include/buffer_helpers.glsl>
 #include <wgpu-buffer/terrain/include/terrain.glsl>
 
-layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+const uint WORKGROUP_WIDTH = 65536;
+
+layout(local_size_x = 64, local_size_y = 2, local_size_z = 1) in;
 
 layout(set = 0, binding = 0) buffer Vertices { TerrainVertex vertices[]; };
 layout(set = 1, binding = 0) uniform utexture2D index_texture;
 layout(set = 1, binding = 1) uniform sampler index_sampler;
 layout(set = 1, binding = 2) uniform itexture2DArray atlas_texture;
 layout(set = 1, binding = 3) uniform sampler atlas_sampler;
-layout(set = 1, binding = 4) buffer TileLayout { TileInfo tile_info[]; };
+layout(set = 1, binding = 4) readonly buffer TileLayout { TileInfo tile_info[]; };
 
 void
 main()
 {
     // One invocation per vertex.
-    uint i = gl_GlobalInvocationID.x;
+    uint i = gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * WORKGROUP_WIDTH;
 
     vec2 v_graticule = arr_to_vec2(vertices[i].graticule);
     uint atlas_slot = terrain_atlas_slot_for_graticule(v_graticule, index_texture, index_sampler);
-    int height = terrain_height_in_tile(v_graticule, tile_info[atlas_slot], atlas_texture, atlas_sampler);
+    float height = terrain_height_in_tile(v_graticule, tile_info[atlas_slot], atlas_texture, atlas_sampler);
 
     vec3 v_normal = arr_to_vec3(vertices[i].normal);
     vec3 v_position = arr_to_vec3(vertices[i].surface_position);
-    vertices[i].position = vec3_to_arr(v_position + (float(height) * v_normal));
+    vertices[i].position = vec3_to_arr(v_position + (height * v_normal));
 }

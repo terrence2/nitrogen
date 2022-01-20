@@ -11,7 +11,7 @@ bevy_ecs = "^ 0.6"
 ordered-float = "^ 2"
 parking_lot = "^ 0.11"
 structopt = "^ 0.3"
-winit = { version = "^ 0.24", features = ["web-sys"] }
+winit = "^ 0.26"
 input = { path = "../../system/input" }
 nitrous = { path = "../../util/nitrous" }
 nitrous_injector = { path = "../../util/nitrous_injector" }

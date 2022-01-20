@@ -20,6 +20,7 @@ layout(location = 0) in vec2 position;
 layout(location = 0) out vec2 v_tc;
 layout(location = 1) out vec3 v_ray_world;
 layout(location = 2) out vec2 v_fullscreen;
+layout(location = 3) out vec2 v_tc_idx;
 
 void main() {
     // Assignment of clip space will produce ndc on the other side.
@@ -33,4 +34,7 @@ void main() {
     tc.y = -tc.y;
     tc = (tc + vec2(1)) / 2;
     v_tc = tc;
+
+    // We need a screen tc version for texelFetch for integer textures.
+    v_tc_idx = v_tc * vec2(screen_render_width, screen_render_height * camera_aspect_ratio) + vec2(0.5);
 }

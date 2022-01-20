@@ -60,29 +60,29 @@ impl TerrainVertex {
     pub fn descriptor() -> wgpu::VertexBufferLayout<'static> {
         let tmp = wgpu::VertexBufferLayout {
             array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
-            step_mode: wgpu::InputStepMode::Vertex,
+            step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[
                 // surface_position
                 wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float3,
+                    format: wgpu::VertexFormat::Float32x3,
                     offset: 0,
                     shader_location: 0,
                 },
                 // position
                 wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float3,
+                    format: wgpu::VertexFormat::Float32x3,
                     offset: 12,
                     shader_location: 1,
                 },
                 // normal
                 wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float3,
+                    format: wgpu::VertexFormat::Float32x3,
                     offset: 24,
                     shader_location: 2,
                 },
                 // graticule
                 wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float2,
+                    format: wgpu::VertexFormat::Float32x2,
                     offset: 36,
                     shader_location: 3,
                 },

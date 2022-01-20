@@ -16,17 +16,20 @@
 #include <wgpu-buffer/terrain/include/terrain.glsl>
 #include <wgpu-buffer/shader_shared/include/buffer_helpers.glsl>
 
-layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+const uint WORKGROUP_WIDTH = 65536;
+
+layout(local_size_x = 64, local_size_y = 2, local_size_z = 1) in;
+
 layout(binding = 0) uniform SubdivisionCtx { SubdivisionContext context; };
 layout(binding = 1) uniform ExpansionCtx { SubdivisionExpandContext expand; };
-layout(binding = 2) buffer TargetVertices { TerrainVertex target_vertices[]; };
-layout(binding = 3) buffer IndexDependencyLut { uint index_dependency_lut[]; };
+layout(binding = 2) coherent buffer TargetVertices { TerrainVertex target_vertices[]; };
+layout(binding = 3) readonly buffer IndexDependencyLut { uint index_dependency_lut[]; };
 
 void
 main()
 {
     // The iteration vector is over expand.compute_vertices_in_patch * num_patches.
-    uint i = gl_GlobalInvocationID.x;
+    uint i = gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * WORKGROUP_WIDTH;
 
     // Find our patch offset and our offset within the current work set.
     uint patch_id = i / expand.compute_vertices_in_patch;

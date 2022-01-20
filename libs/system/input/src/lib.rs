@@ -30,6 +30,7 @@ use std::{
     },
     time::Instant,
 };
+use winit::platform::run_return::EventLoopExtRunReturn;
 use winit::{
     event::{
         DeviceEvent, DeviceId, Event, KeyboardInput, MouseScrollDelta, StartCause, WindowEvent,
@@ -139,8 +140,23 @@ impl InputController {
     #[cfg(unix)]
     pub fn for_test_unix() -> Result<(Window, Self)> {
         use winit::platform::unix::EventLoopExtUnix;
-        let event_loop = EventLoop::<MetaEvent>::new_any_thread();
+        let mut event_loop = EventLoop::<MetaEvent>::new_any_thread();
         let os_window = Window::new(&event_loop).unwrap();
+        let mut have_config = false;
+        while !have_config {
+            event_loop.run_return(|evt, _tgt, flow| {
+                if matches!(
+                    evt,
+                    Event::WindowEvent {
+                        event: WindowEvent::Resized(_),
+                        ..
+                    }
+                ) {
+                    have_config = true;
+                }
+                *flow = winit::event_loop::ControlFlow::Exit;
+            });
+        }
         Ok((os_window, Self::for_test(&event_loop)))
     }
 

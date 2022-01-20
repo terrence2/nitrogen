@@ -79,17 +79,18 @@ fn window_main(os_window: OsWindow, input_controller: Arc<Mutex<InputController>
                 entry_point: "main",
                 targets: &[wgpu::ColorTargetState {
                     format: Gpu::SCREEN_FORMAT,
-                    color_blend: wgpu::BlendState::REPLACE,
-                    alpha_blend: wgpu::BlendState::REPLACE,
-                    write_mask: wgpu::ColorWrite::ALL,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::COLOR,
                 }],
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleStrip,
                 strip_index_format: Some(wgpu::IndexFormat::Uint16),
                 front_face: wgpu::FrontFace::Cw,
-                cull_mode: wgpu::CullMode::Back,
+                cull_mode: Some(wgpu::Face::Back),
+                unclipped_depth: false,
                 polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: Gpu::DEPTH_FORMAT,
@@ -106,13 +107,13 @@ fn window_main(os_window: OsWindow, input_controller: Arc<Mutex<InputController>
                     slope_scale: 0.0,
                     clamp: 0.0,
                 },
-                clamp_depth: false,
             }),
             multisample: wgpu::MultisampleState {
                 count: 1,
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
+            multiview: None,
         });
 
     let camera = Camera::install(
@@ -183,11 +184,23 @@ fn window_main(os_window: OsWindow, input_controller: Arc<Mutex<InputController>
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("frame-encoder"),
             });
+        let view = framebuffer
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor {
+                label: None,
+                format: None,
+                dimension: None,
+                aspect: Default::default(),
+                base_mip_level: 0,
+                mip_level_count: None,
+                base_array_layer: 0,
+                array_layer_count: None,
+            });
         tracker.dispatch_uploads(&mut encoder);
         {
             let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: None,
-                color_attachments: &[Gpu::color_attachment(&framebuffer.output.view)],
+                color_attachments: &[Gpu::color_attachment(&view)],
                 depth_stencil_attachment: Some(gpu.depth_stencil_attachment()),
             });
             rpass.set_pipeline(&pipeline);
@@ -196,5 +209,6 @@ fn window_main(os_window: OsWindow, input_controller: Arc<Mutex<InputController>
             rpass.draw(0..4, 0..1);
         }
         gpu.queue_mut().submit(vec![encoder.finish()]);
+        framebuffer.present();
     }
 }

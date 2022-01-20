@@ -23,8 +23,8 @@ layout(binding = 3) uniform texture2D transmittance_texture;
 layout(binding = 4) uniform sampler transmittance_sampler;
 layout(binding = 5) uniform texture3D delta_scattering_density_texture;
 layout(binding = 6) uniform sampler delta_scattering_density_sampler;
-layout(binding = 7, rgba8) uniform writeonly image3D delta_multiple_scattering_texture;
-layout(binding = 8, rgba8) uniform image3D scattering_texture;
+layout(binding = 7, rgba32f) uniform writeonly image3D delta_multiple_scattering_texture;
+layout(binding = 8, rgba32f) uniform image3D scattering_texture;
 
 vec4
 compute_multiple_scattering(

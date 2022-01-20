@@ -69,17 +69,18 @@ impl CompositeRenderPass {
                     entry_point: "main",
                     targets: &[wgpu::ColorTargetState {
                         format: Gpu::SCREEN_FORMAT,
-                        color_blend: wgpu::BlendState::REPLACE,
-                        alpha_blend: wgpu::BlendState::REPLACE,
-                        write_mask: wgpu::ColorWrite::ALL,
+                        blend: None,
+                        write_mask: wgpu::ColorWrites::ALL,
                     }],
                 }),
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleStrip,
                     strip_index_format: Some(wgpu::IndexFormat::Uint32),
                     front_face: wgpu::FrontFace::Cw,
-                    cull_mode: wgpu::CullMode::Back,
+                    cull_mode: Some(wgpu::Face::Back),
+                    unclipped_depth: false,
                     polygon_mode: wgpu::PolygonMode::Fill,
+                    conservative: false,
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: Gpu::DEPTH_FORMAT,
@@ -96,13 +97,13 @@ impl CompositeRenderPass {
                         slope_scale: 0.0,
                         clamp: 0.0,
                     },
-                    clamp_depth: false,
                 }),
                 multisample: wgpu::MultisampleState {
                     count: 1,
                     mask: !0,
                     alpha_to_coverage_enabled: false,
                 },
+                multiview: None,
             });
 
         Ok(Self { pipeline })

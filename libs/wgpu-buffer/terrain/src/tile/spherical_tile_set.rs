@@ -120,7 +120,10 @@ impl TileSet for SphericalHeightTileSet {
             self.common.bind_group(),
             &[],
         );
-        cpass.dispatch(vertex_count, 1, 1);
+        const WORKGROUP_WIDTH: u32 = 65536;
+        let wg_x = (vertex_count % WORKGROUP_WIDTH).max(1);
+        let wg_y = (vertex_count / WORKGROUP_WIDTH).max(1);
+        cpass.dispatch(wg_x, wg_y, 1);
         Ok(cpass)
     }
 

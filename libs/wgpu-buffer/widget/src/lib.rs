@@ -133,7 +133,7 @@ impl WidgetBuffer {
         let widget_info_buffer = Arc::new(gpu.device().create_buffer(&wgpu::BufferDescriptor {
             label: Some("widget-info-buffer"),
             size: widget_info_buffer_size,
-            usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::UNIFORM,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::UNIFORM,
             mapped_at_creation: false,
         }));
 
@@ -144,7 +144,7 @@ impl WidgetBuffer {
             Arc::new(gpu.device().create_buffer(&wgpu::BufferDescriptor {
                 label: Some("widget-bg-vertex-buffer"),
                 size: background_vertex_buffer_size,
-                usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::VERTEX,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::VERTEX,
                 mapped_at_creation: false,
             }));
 
@@ -154,7 +154,7 @@ impl WidgetBuffer {
         let image_vertex_buffer = Arc::new(gpu.device().create_buffer(&wgpu::BufferDescriptor {
             label: Some("widget-image-vertex-buffer"),
             size: image_vertex_buffer_size,
-            usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::VERTEX,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::VERTEX,
             mapped_at_creation: false,
         }));
 
@@ -164,7 +164,7 @@ impl WidgetBuffer {
         let text_vertex_buffer = Arc::new(gpu.device().create_buffer(&wgpu::BufferDescriptor {
             label: Some("widget-text-vertex-buffer"),
             size: text_vertex_buffer_size,
-            usage: wgpu::BufferUsage::COPY_DST | wgpu::BufferUsage::VERTEX,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::VERTEX,
             mapped_at_creation: false,
         }));
 
@@ -176,7 +176,7 @@ impl WidgetBuffer {
                         // widget_info: WidgetInfo[MAX_WIDGETS]
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
-                            visibility: wgpu::ShaderStage::all(),
+                            visibility: wgpu::ShaderStages::all(),
                             ty: wgpu::BindingType::Buffer {
                                 ty: wgpu::BufferBindingType::Uniform,
                                 has_dynamic_offset: false,
@@ -456,11 +456,11 @@ impl WidgetBuffer {
                     // widget_info
                     wgpu::BindGroupEntry {
                         binding: 0,
-                        resource: wgpu::BindingResource::Buffer {
+                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                             buffer: &self.widget_info_buffer,
                             offset: 0,
                             size: None,
-                        },
+                        }),
                     },
                     // glyph_sheet_texture: Texture2dArray
                     self.paint_context

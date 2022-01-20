@@ -37,6 +37,19 @@ enum DebugMode {
     NormalGlobal,
 }
 
+impl DebugMode {
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "deferred" => Self::Deferred,
+            "depth" => Self::Depth,
+            "color" => Self::Color,
+            "normal_local" => Self::NormalLocal,
+            "normal_global" | "normal" => Self::NormalGlobal,
+            _ => Self::None,
+        }
+    }
+}
+
 #[derive(Debug, NitrousModule)]
 pub struct WorldRenderPass {
     // Offscreen render targets
@@ -85,7 +98,7 @@ impl WorldRenderPass {
                     entries: &[
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 view_dimension: wgpu::TextureViewDimension::D2,
                                 sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -95,11 +108,8 @@ impl WorldRenderPass {
                         },
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler {
-                                filtering: true,
-                                comparison: false,
-                            },
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                             count: None,
                         },
                     ],
@@ -136,7 +146,7 @@ impl WorldRenderPass {
         let fullscreen_layout =
             gpu.device()
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("world-dbg-deferred-pipeline-layout"),
+                    label: Some("world-deferred-pipeline-layout"),
                     push_constant_ranges: &[],
                     bind_group_layouts: &[
                         globals_buffer.bind_group_layout(),
@@ -228,18 +238,18 @@ impl WorldRenderPass {
                         entry_point: "main",
                         targets: &[wgpu::ColorTargetState {
                             format: Gpu::SCREEN_FORMAT,
-                            color_blend: wgpu::BlendState::REPLACE,
-                            alpha_blend: wgpu::BlendState::REPLACE,
-                            write_mask: wgpu::ColorWrite::ALL,
+                            blend: None,
+                            write_mask: wgpu::ColorWrites::ALL,
                         }],
                     }),
                     primitive: wgpu::PrimitiveState {
                         topology: wgpu::PrimitiveTopology::LineList,
                         strip_index_format: None,
                         front_face: wgpu::FrontFace::Cw,
-                        cull_mode: wgpu::CullMode::None,
-                        // TODO: should we use fill here, since it's line list?
+                        cull_mode: None,
+                        unclipped_depth: false,
                         polygon_mode: wgpu::PolygonMode::Line,
+                        conservative: false,
                     },
                     depth_stencil: Some(wgpu::DepthStencilState {
                         format: Gpu::DEPTH_FORMAT,
@@ -256,13 +266,13 @@ impl WorldRenderPass {
                             slope_scale: 0.0,
                             clamp: 0.0,
                         },
-                        clamp_depth: false,
                     }),
                     multisample: wgpu::MultisampleState {
                         count: 1,
                         mask: !0,
                         alpha_to_coverage_enabled: false,
                     },
+                    multiview: None,
                 });
 
         let world = Arc::new(RwLock::new(Self {
@@ -300,9 +310,9 @@ impl WorldRenderPass {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Gpu::SCREEN_FORMAT,
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT
-                | wgpu::TextureUsage::COPY_SRC
-                | wgpu::TextureUsage::SAMPLED,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING,
         });
         let view = target.create_view(&wgpu::TextureViewDescriptor {
             label: Some("world-offscreen-texture-target-view"),
@@ -310,7 +320,7 @@ impl WorldRenderPass {
             dimension: None,
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,
-            level_count: None,
+            mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: None,
         });
@@ -326,9 +336,9 @@ impl WorldRenderPass {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Gpu::DEPTH_FORMAT,
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT
-                | wgpu::TextureUsage::COPY_SRC
-                | wgpu::TextureUsage::SAMPLED,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING,
         });
         let depth_view = depth_texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some("world-offscreen-depth-texture-view"),
@@ -336,7 +346,7 @@ impl WorldRenderPass {
             dimension: None,
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,
-            level_count: None,
+            mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: None,
         });
@@ -384,17 +394,18 @@ impl WorldRenderPass {
                 entry_point: "main",
                 targets: &[wgpu::ColorTargetState {
                     format: Gpu::SCREEN_FORMAT,
-                    color_blend: wgpu::BlendState::REPLACE,
-                    alpha_blend: wgpu::BlendState::REPLACE,
-                    write_mask: wgpu::ColorWrite::ALL,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
                 }],
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleStrip,
                 strip_index_format: Some(wgpu::IndexFormat::Uint32),
                 front_face: wgpu::FrontFace::Cw,
-                cull_mode: wgpu::CullMode::Back,
+                cull_mode: Some(wgpu::Face::Back),
+                unclipped_depth: true,
                 polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: Gpu::DEPTH_FORMAT,
@@ -411,13 +422,13 @@ impl WorldRenderPass {
                     slope_scale: 0.0,
                     clamp: 0.0,
                 },
-                clamp_depth: false,
             }),
             multisample: wgpu::MultisampleState {
                 count: 1,
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
+            multiview: None,
         })
     }
 
@@ -480,6 +491,12 @@ impl WorldRenderPass {
         }
     }
 
+    #[method]
+    pub fn set_debug_mode(&mut self, value: &str) {
+        self.debug_mode = DebugMode::from_str(value);
+        println!("Debug Mode is now: {:?}", self.debug_mode);
+    }
+
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.deferred_bind_group_layout
     }
@@ -491,8 +508,8 @@ impl WorldRenderPass {
     pub fn offscreen_target_cleared(
         &self,
     ) -> (
-        [wgpu::RenderPassColorAttachmentDescriptor; 1],
-        Option<wgpu::RenderPassDepthStencilAttachmentDescriptor>,
+        [wgpu::RenderPassColorAttachment; 1],
+        Option<wgpu::RenderPassDepthStencilAttachment>,
     ) {
         self.offscreen_target_maybe_clear(
             wgpu::LoadOp::Clear(wgpu::Color::RED),
@@ -503,8 +520,8 @@ impl WorldRenderPass {
     pub fn offscreen_target_preserved(
         &self,
     ) -> (
-        [wgpu::RenderPassColorAttachmentDescriptor; 1],
-        Option<wgpu::RenderPassDepthStencilAttachmentDescriptor>,
+        [wgpu::RenderPassColorAttachment; 1],
+        Option<wgpu::RenderPassDepthStencilAttachment>,
     ) {
         self.offscreen_target_maybe_clear(wgpu::LoadOp::Load, wgpu::LoadOp::Load)
     }
@@ -514,20 +531,20 @@ impl WorldRenderPass {
         color_load: wgpu::LoadOp<wgpu::Color>,
         depth_load: wgpu::LoadOp<f32>,
     ) -> (
-        [wgpu::RenderPassColorAttachmentDescriptor; 1],
-        Option<wgpu::RenderPassDepthStencilAttachmentDescriptor>,
+        [wgpu::RenderPassColorAttachment; 1],
+        Option<wgpu::RenderPassDepthStencilAttachment>,
     ) {
         (
-            [wgpu::RenderPassColorAttachmentDescriptor {
-                attachment: &self.deferred_texture.1,
+            [wgpu::RenderPassColorAttachment {
+                view: &self.deferred_texture.1,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: color_load,
                     store: true,
                 },
             }],
-            Some(wgpu::RenderPassDepthStencilAttachmentDescriptor {
-                attachment: &self.deferred_depth.1,
+            Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &self.deferred_depth.1,
                 depth_ops: Some(wgpu::Operations {
                     load: depth_load,
                     store: true,

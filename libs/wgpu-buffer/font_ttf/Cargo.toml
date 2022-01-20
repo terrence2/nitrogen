@@ -11,6 +11,6 @@ anyhow = { version = "^ 1", features = ["backtrace"] }
 image = "^ 0.23"
 rusttype = "^ 0.9"
 parking_lot = "^ 0.11"
-wgpu = "^ 0.7"
+wgpu = { version = "^ 0.12", features = ["spirv"] }
 window = { path = "../../system/window" }
 font_common = { path = "../../wgpu-buffer/font_common" }

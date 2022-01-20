@@ -37,7 +37,7 @@ use log::{info, trace};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
-use std::{fmt::Debug, fs, mem, path::PathBuf, sync::Arc};
+use std::{borrow::Cow, fmt::Debug, fs, mem, num::NonZeroU32, path::PathBuf, ptr, sync::Arc};
 use tokio::runtime::Runtime;
 use wgpu::util::DeviceExt;
 use window::Window;
@@ -78,7 +78,6 @@ pub struct Gpu {
     // to follow the window size exactly.
 
     // The swap chain and depth buffer need to follow window size changes exactly.
-    swap_chain: wgpu::SwapChain,
     depth_texture: wgpu::TextureView,
 
     // Render extent is usually decoupled from
@@ -106,10 +105,11 @@ impl Gpu {
         config: RenderConfig,
         interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
-        let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
+        let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
+                force_fallback_adapter: false,
                 compatible_surface: None,
             })
             .await
@@ -130,21 +130,21 @@ impl Gpu {
             .await?;
 
         let physical_size = win.physical_size();
-        let sc_desc = wgpu::SwapChainDescriptor {
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+        let sc_desc = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: Self::SCREEN_FORMAT,
             width: physical_size.width,
             height: physical_size.height,
             present_mode: config.present_mode,
         };
-        let swap_chain = device.create_swap_chain(&surface, &sc_desc);
+        surface.configure(&device, &sc_desc);
         let depth_texture = Self::create_depth_texture(&device, &sc_desc);
 
         let render_size = win.render_extent();
         let render_extent = wgpu::Extent3d {
             width: render_size.width,
             height: render_size.height,
-            depth: 1,
+            depth_or_array_layers: 1,
         };
 
         let gpu = Arc::new(RwLock::new(Self {
@@ -153,7 +153,6 @@ impl Gpu {
             adapter,
             device,
             queue,
-            swap_chain,
             depth_texture,
             render_extent,
             config,
@@ -222,11 +221,14 @@ impl Gpu {
     pub fn features(&self) -> String {
         let f = self.adapter.features();
         format!(
-            "{:^6} - DEPTH_CLAMPING\n",
-            f.contains(wgpu::Features::DEPTH_CLAMPING)
+            "{:^6} - DEPTH_CLIP_CONTROL\n",
+            f.contains(wgpu::Features::DEPTH_CLIP_CONTROL)
         ) + &format!(
             "{:^6} - TEXTURE_COMPRESSION_BC\n",
             f.contains(wgpu::Features::TEXTURE_COMPRESSION_BC)
+        ) + &format!(
+            "{:^6} - INDIRECT_FIRST_INSTANCE\n",
+            f.contains(wgpu::Features::INDIRECT_FIRST_INSTANCE)
         ) + &format!(
             "{:^6} - TIMESTAMP_QUERY\n",
             f.contains(wgpu::Features::TIMESTAMP_QUERY)
@@ -237,14 +239,30 @@ impl Gpu {
             "{:^6} - MAPPABLE_PRIMARY_BUFFERS\n",
             f.contains(wgpu::Features::MAPPABLE_PRIMARY_BUFFERS)
         ) + &format!(
-            "{:^6} - SAMPLED_TEXTURE_BINDING_ARRAY\n",
-            f.contains(wgpu::Features::SAMPLED_TEXTURE_BINDING_ARRAY)
+            "{:^6} - TEXTURE_BINDING_ARRAY\n",
+            f.contains(wgpu::Features::TEXTURE_BINDING_ARRAY)
         ) + &format!(
-            "{:^6} - SAMPLED_TEXTURE_ARRAY_DYNAMIC_INDEXING\n",
-            f.contains(wgpu::Features::SAMPLED_TEXTURE_ARRAY_DYNAMIC_INDEXING)
+            "{:^6} - BUFFER_BINDING_ARRAY\n",
+            f.contains(wgpu::Features::BUFFER_BINDING_ARRAY)
         ) + &format!(
-            "{:^6} - SAMPLED_TEXTURE_ARRAY_NON_UNIFORM_INDEXING\n",
-            f.contains(wgpu::Features::SAMPLED_TEXTURE_ARRAY_NON_UNIFORM_INDEXING)
+            "{:^6} - BUFFER_BINDING_ARRAY\n",
+            f.contains(wgpu::Features::BUFFER_BINDING_ARRAY)
+        ) + &format!(
+            "{:^6} - STORAGE_RESOURCE_BINDING_ARRAY\n",
+            f.contains(wgpu::Features::STORAGE_RESOURCE_BINDING_ARRAY)
+        ) + &format!(
+            "{:^6} - SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING\n",
+            f.contains(
+                wgpu::Features::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING
+            )
+        ) + &format!(
+            "{:^6} - UNIFORM_BUFFER_AND_STORAGE_TEXTURE_ARRAY_NON_UNIFORM_INDEXING\n",
+            f.contains(
+                wgpu::Features::UNIFORM_BUFFER_AND_STORAGE_TEXTURE_ARRAY_NON_UNIFORM_INDEXING
+            )
+        ) + &format!(
+            "{:^6} - PARTIALLY_BOUND_BINDING_ARRAY\n",
+            f.contains(wgpu::Features::PARTIALLY_BOUND_BINDING_ARRAY)
         ) + &format!(
             "{:^6} - UNSIZED_BINDING_ARRAY\n",
             f.contains(wgpu::Features::UNSIZED_BINDING_ARRAY)
@@ -261,8 +279,11 @@ impl Gpu {
             "{:^6} - ADDRESS_MODE_CLAMP_TO_BORDER\n",
             f.contains(wgpu::Features::ADDRESS_MODE_CLAMP_TO_BORDER)
         ) + &format!(
-            "{:^6} - NON_FILL_POLYGON_MODE\n",
-            f.contains(wgpu::Features::NON_FILL_POLYGON_MODE)
+            "{:^6} - POLYGON_MODE_LINE\n",
+            f.contains(wgpu::Features::POLYGON_MODE_LINE)
+        ) + &format!(
+            "{:^6} - POLYGON_MODE_POINT\n",
+            f.contains(wgpu::Features::POLYGON_MODE_POINT)
         ) + &format!(
             "{:^6} - TEXTURE_COMPRESSION_ETC2\n",
             f.contains(wgpu::Features::TEXTURE_COMPRESSION_ETC2)
@@ -278,25 +299,44 @@ impl Gpu {
         ) + &format!(
             "{:^6} - VERTEX_ATTRIBUTE_64BIT\n",
             f.contains(wgpu::Features::VERTEX_ATTRIBUTE_64BIT)
-        )
+        ) + &format!(
+            "{:^6} - CONSERVATIVE_RASTERIZATION\n",
+            f.contains(wgpu::Features::CONSERVATIVE_RASTERIZATION)
+        ) + &format!(
+            "{:^6} - VERTEX_WRITABLE_STORAGE\n",
+            f.contains(wgpu::Features::VERTEX_WRITABLE_STORAGE)
+        ) + &format!(
+            "{:^6} - CLEAR_COMMANDS\n",
+            f.contains(wgpu::Features::CLEAR_COMMANDS)
+        ) + &format!(
+            "{:^6} - SPIRV_SHADER_PASSTHROUGH\n",
+            f.contains(wgpu::Features::SPIRV_SHADER_PASSTHROUGH)
+        ) + &format!(
+            "{:^6} - SHADER_PRIMITIVE_INDEX\n",
+            f.contains(wgpu::Features::SHADER_PRIMITIVE_INDEX)
+        ) + &format!("{:^6} - MULTIVIEW\n", f.contains(wgpu::Features::MULTIVIEW))
+            + &format!(
+                "{:^6} - TEXTURE_FORMAT_16BIT_NORM\n",
+                f.contains(wgpu::Features::TEXTURE_FORMAT_16BIT_NORM)
+            )
     }
 
     fn create_depth_texture(
         device: &wgpu::Device,
-        sc_desc: &wgpu::SwapChainDescriptor,
+        sc_desc: &wgpu::SurfaceConfiguration,
     ) -> wgpu::TextureView {
         let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("depth-texture"),
             size: wgpu::Extent3d {
                 width: sc_desc.width,
                 height: sc_desc.height,
-                depth: 1,
+                depth_or_array_layers: 1,
             },
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: Self::DEPTH_FORMAT,
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
         });
         depth_texture.create_view(&wgpu::TextureViewDescriptor {
             label: Some("depth-texture-view"),
@@ -304,7 +344,7 @@ impl Gpu {
             dimension: Some(wgpu::TextureViewDimension::D2),
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,
-            level_count: None,
+            mip_level_count: None,
             base_array_layer: 0,
             array_layer_count: None,
         })
@@ -329,14 +369,14 @@ impl Gpu {
         );
 
         // Recreate the screen resources for the new window size.
-        let sc_desc = wgpu::SwapChainDescriptor {
-            usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+        let sc_desc = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: Self::SCREEN_FORMAT,
             width: config.window_size().width,
             height: config.window_size().height,
             present_mode: self.config.present_mode,
         };
-        self.swap_chain = self.device.create_swap_chain(&self.surface, &sc_desc);
+        self.surface.configure(&self.device, &sc_desc);
         self.depth_texture = Self::create_depth_texture(&self.device, &sc_desc);
 
         // Check if our render extent has changed and re-broadcast
@@ -345,7 +385,7 @@ impl Gpu {
             self.render_extent = wgpu::Extent3d {
                 width: extent.width,
                 height: extent.height,
-                depth: 1,
+                depth_or_array_layers: 1,
             };
         }
 
@@ -372,14 +412,14 @@ impl Gpu {
         self.frame_count as i64
     }
 
-    pub fn get_next_framebuffer(&mut self) -> Result<Option<wgpu::SwapChainFrame>> {
+    pub fn get_next_framebuffer(&mut self) -> Result<Option<wgpu::SurfaceTexture>> {
         self.frame_count += 1;
-        match self.swap_chain.get_current_frame() {
+        match self.surface.get_current_texture() {
             Ok(frame) => Ok(Some(frame)),
-            Err(wgpu::SwapChainError::Timeout) => bail!("Timeout: gpu is locked up"),
-            Err(wgpu::SwapChainError::OutOfMemory) => bail!("OOM: gpu is out of memory"),
-            Err(wgpu::SwapChainError::Lost) => bail!("Lost: our context wondered off"),
-            Err(wgpu::SwapChainError::Outdated) => {
+            Err(wgpu::SurfaceError::Timeout) => bail!("Timeout: gpu is locked up"),
+            Err(wgpu::SurfaceError::OutOfMemory) => bail!("OOM: gpu is out of memory"),
+            Err(wgpu::SurfaceError::Lost) => bail!("Lost: our context wondered off"),
+            Err(wgpu::SurfaceError::Outdated) => {
                 info!("GPU: swap chain outdated, must be recreated");
                 Ok(None)
             }
@@ -390,9 +430,9 @@ impl Gpu {
         &self.depth_texture
     }
 
-    pub fn depth_stencil_attachment(&self) -> wgpu::RenderPassDepthStencilAttachmentDescriptor {
-        wgpu::RenderPassDepthStencilAttachmentDescriptor {
-            attachment: &self.depth_texture,
+    pub fn depth_stencil_attachment(&self) -> wgpu::RenderPassDepthStencilAttachment {
+        wgpu::RenderPassDepthStencilAttachment {
+            view: &self.depth_texture,
             depth_ops: Some(wgpu::Operations {
                 // Note: clear to *behind* the plane so that our skybox raytrace pass can check
                 // for pixels that have not yet been set.
@@ -406,11 +446,9 @@ impl Gpu {
         }
     }
 
-    pub fn color_attachment(
-        attachment: &wgpu::TextureView,
-    ) -> wgpu::RenderPassColorAttachmentDescriptor {
-        wgpu::RenderPassColorAttachmentDescriptor {
-            attachment,
+    pub fn color_attachment(view: &wgpu::TextureView) -> wgpu::RenderPassColorAttachment {
+        wgpu::RenderPassColorAttachment {
+            view,
             resolve_target: None,
             ops: wgpu::Operations {
                 load: wgpu::LoadOp::Clear(wgpu::Color::RED),
@@ -425,7 +463,7 @@ impl Gpu {
         &self,
         label: &'static str,
         data: &[u8],
-        usage: wgpu::BufferUsage,
+        usage: wgpu::BufferUsages,
     ) -> Option<wgpu::Buffer> {
         if data.is_empty() {
             return None;
@@ -448,7 +486,7 @@ impl Gpu {
         &self,
         label: &'static str,
         data: &[T],
-        usage: wgpu::BufferUsage,
+        usage: wgpu::BufferUsages,
     ) -> Option<wgpu::Buffer> {
         if data.is_empty() {
             return None;
@@ -470,7 +508,7 @@ impl Gpu {
         &self,
         label: &'static str,
         data: &[u8],
-        usage: wgpu::BufferUsage,
+        usage: wgpu::BufferUsages,
     ) -> wgpu::Buffer {
         self.maybe_push_buffer(label, data, usage)
             .expect("push non-empty buffer")
@@ -481,7 +519,7 @@ impl Gpu {
         &self,
         label: &'static str,
         data: &[T],
-        usage: wgpu::BufferUsage,
+        usage: wgpu::BufferUsages,
     ) -> wgpu::Buffer {
         self.maybe_push_slice(label, data, usage)
             .expect("push non-empty slice")
@@ -492,7 +530,7 @@ impl Gpu {
         &self,
         label: &'static str,
         data: &T,
-        usage: wgpu::BufferUsage,
+        usage: wgpu::BufferUsages,
     ) -> wgpu::Buffer {
         let size = mem::size_of::<T>() as wgpu::BufferAddress;
         trace!("uploading {} with {} bytes", label, size);
@@ -515,20 +553,51 @@ impl Gpu {
         target: Arc<wgpu::Buffer>,
         tracker: &mut UploadTracker,
     ) {
-        if let Some(source) = self.maybe_push_slice(label, data, wgpu::BufferUsage::COPY_SRC) {
+        if let Some(source) = self.maybe_push_slice(label, data, wgpu::BufferUsages::COPY_SRC) {
             tracker.upload(source, target, mem::size_of::<T>() * data.len());
         }
     }
 
+    // Copy of the old util method that went away.
+    fn make_spirv(data: &[u8]) -> wgpu::ShaderSource {
+        const MAGIC_NUMBER: u32 = 0x0723_0203;
+
+        assert_eq!(
+            data.len() % mem::size_of::<u32>(),
+            0,
+            "data size is not a multiple of 4"
+        );
+
+        //If the data happens to be aligned, directly use the byte array,
+        // otherwise copy the byte array in an owned vector and use that instead.
+        let words = if data.as_ptr().align_offset(mem::align_of::<u32>()) == 0 {
+            let (pre, words, post) = unsafe { data.align_to::<u32>() };
+            debug_assert!(pre.is_empty());
+            debug_assert!(post.is_empty());
+            Cow::from(words)
+        } else {
+            let mut words = vec![0u32; data.len() / mem::size_of::<u32>()];
+            unsafe {
+                ptr::copy_nonoverlapping(data.as_ptr(), words.as_mut_ptr() as *mut u8, data.len());
+            }
+            Cow::from(words)
+        };
+
+        assert_eq!(
+            words[0], MAGIC_NUMBER,
+            "wrong magic word {:x}. Make sure you are using a binary SPIRV file.",
+            words[0]
+        );
+        wgpu::ShaderSource::SpirV(words)
+    }
+
     pub fn create_shader_module(&self, name: &str, spirv: &[u8]) -> Result<wgpu::ShaderModule> {
-        let spirv_words = wgpu::util::make_spirv(spirv);
+        let spirv_words = Self::make_spirv(spirv);
         Ok(self
             .device
             .create_shader_module(&wgpu::ShaderModuleDescriptor {
                 label: Some(name),
                 source: spirv_words,
-                // FIXME: make configurable?
-                flags: wgpu::ShaderFlags::VALIDATION,
             }))
     }
 
@@ -554,7 +623,7 @@ impl Gpu {
         let download_buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
             label: Some("dump-download-buffer"),
             size: buf_size,
-            usage: wgpu::BufferUsage::all(),
+            usage: wgpu::BufferUsages::all(),
             mapped_at_creation: false,
         });
         let mut encoder = gpu
@@ -569,17 +638,18 @@ impl Gpu {
             bytes_per_row
         );
         encoder.copy_texture_to_buffer(
-            wgpu::TextureCopyView {
+            wgpu::ImageCopyTexture {
                 texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
             },
-            wgpu::BufferCopyView {
+            wgpu::ImageCopyBuffer {
                 buffer: &download_buffer,
-                layout: wgpu::TextureDataLayout {
+                layout: wgpu::ImageDataLayout {
                     offset: 0,
-                    bytes_per_row,
-                    rows_per_image: extent.height,
+                    bytes_per_row: NonZeroU32::new(bytes_per_row),
+                    rows_per_image: NonZeroU32::new(extent.height),
                 },
             },
             extent,

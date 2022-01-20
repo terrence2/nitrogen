@@ -23,7 +23,7 @@ layout(set = 2, binding = 0) uniform utexture2D index_texture;
 layout(set = 2, binding = 1) uniform sampler index_sampler;
 layout(set = 2, binding = 2) uniform itexture2DArray atlas_texture;
 layout(set = 2, binding = 3) uniform sampler atlas_sampler;
-layout(set = 2, binding = 4) buffer TileLayout { TileInfo tile_info[]; };
+layout(set = 2, binding = 4) readonly buffer TileLayout { TileInfo tile_info[]; };
 
 void
 main()
@@ -36,7 +36,7 @@ main()
         // Load the relevant normal sample.
         vec2 grat = texelFetch(sampler2D(terrain_deferred_texture, terrain_linear_sampler), coord, 0).xy;
         uint atlas_slot = terrain_atlas_slot_for_graticule(grat, index_texture, index_sampler);
-        ivec2 raw_normal = terrain_normal_in_tile(grat, tile_info[atlas_slot], atlas_texture, atlas_sampler);
+        vec2 raw_normal = terrain_normal_in_tile(grat, tile_info[atlas_slot], atlas_texture, atlas_sampler);
 
         // FIXME: blend normal with existing buffer.
 

@@ -17,7 +17,7 @@ use geometry::Aabb;
 use gpu::{texture_format_size, ArcTextureCopyView, Gpu, OwnedBufferCopyView, UploadTracker};
 use image::{ImageBuffer, Luma, Pixel, Rgba};
 use log::debug;
-use std::{marker::PhantomData, mem, path::PathBuf, sync::Arc};
+use std::{marker::PhantomData, mem, num::NonZeroU32, path::PathBuf, sync::Arc};
 use wgpu::Origin3d;
 use zerocopy::{AsBytes, FromBytes};
 
@@ -49,21 +49,21 @@ impl BlitVertex {
             Self::new([x1, y1], [1., 1.]),
             Self::new([x1, y0], [1., 0.]),
         ];
-        gpu.push_slice("blit-vertices", &vertices, wgpu::BufferUsage::VERTEX)
+        gpu.push_slice("blit-vertices", &vertices, wgpu::BufferUsages::VERTEX)
     }
 
     pub fn descriptor() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
-            step_mode: wgpu::InputStepMode::Vertex,
+            step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[
                 wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float2,
+                    format: wgpu::VertexFormat::Float32x2,
                     offset: 0,
                     shader_location: 0,
                 },
                 wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float2,
+                    format: wgpu::VertexFormat::Float32x2,
                     offset: 4 * 2,
                     shader_location: 1,
                 },
@@ -180,7 +180,7 @@ pub struct AtlasPacker<P: Pixel + 'static> {
     initial_height: u32,
     padding: u32,
     format: wgpu::TextureFormat,
-    usage: wgpu::TextureUsage,
+    usage: wgpu::TextureUsages,
 
     // Pack state
     width: u32,
@@ -229,11 +229,11 @@ where
         format: wgpu::TextureFormat,
         filter: wgpu::FilterMode,
     ) -> Result<Self> {
-        let usage = wgpu::TextureUsage::SAMPLED
-            | wgpu::TextureUsage::COPY_SRC
-            | wgpu::TextureUsage::COPY_DST
-            | wgpu::TextureUsage::STORAGE
-            | wgpu::TextureUsage::RENDER_ATTACHMENT;
+        let usage = wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_SRC
+            | wgpu::TextureUsages::COPY_DST
+            | wgpu::TextureUsages::STORAGE_BINDING
+            | wgpu::TextureUsages::RENDER_ATTACHMENT;
         assert_eq!(texture_format_size(format) as usize, mem::size_of::<P>());
         let pix_size = mem::size_of::<P>() as u32;
         assert_eq!(
@@ -259,7 +259,7 @@ where
             size: wgpu::Extent3d {
                 width: initial_width,
                 height: initial_height,
-                depth: 1,
+                depth_or_array_layers: 1,
             },
             mip_level_count: 1, // TODO: mip-mapping for atlas textures?
             sample_count: 1,
@@ -273,7 +273,7 @@ where
             dimension: None,
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,
-            level_count: None, // mip_
+            mip_level_count: None, // mip_
             base_array_layer: 0,
             array_layer_count: None,
         });
@@ -302,7 +302,7 @@ where
                         // Texture Source
                         wgpu::BindGroupLayoutEntry {
                             binding: 0,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
+                            visibility: wgpu::ShaderStages::FRAGMENT,
                             ty: wgpu::BindingType::Texture {
                                 sample_type: wgpu::TextureSampleType::Float { filterable: false },
                                 view_dimension: wgpu::TextureViewDimension::D2,
@@ -313,11 +313,8 @@ where
                         // Sampler
                         wgpu::BindGroupLayoutEntry {
                             binding: 1,
-                            visibility: wgpu::ShaderStage::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler {
-                                filtering: false,
-                                comparison: false,
-                            },
+                            visibility: wgpu::ShaderStages::FRAGMENT,
+                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
                             count: None,
                         },
                     ],
@@ -350,17 +347,18 @@ where
                         entry_point: "main",
                         targets: &[wgpu::ColorTargetState {
                             format,
-                            color_blend: wgpu::BlendState::REPLACE,
-                            alpha_blend: wgpu::BlendState::REPLACE,
-                            write_mask: wgpu::ColorWrite::ALL,
+                            blend: None,
+                            write_mask: wgpu::ColorWrites::all(),
                         }],
                     }),
                     primitive: wgpu::PrimitiveState {
                         topology: wgpu::PrimitiveTopology::TriangleStrip,
                         strip_index_format: None,
                         front_face: wgpu::FrontFace::Cw,
-                        cull_mode: wgpu::CullMode::Back,
+                        cull_mode: Some(wgpu::Face::Back),
+                        unclipped_depth: false,
                         polygon_mode: wgpu::PolygonMode::Fill,
+                        conservative: false,
                     },
                     depth_stencil: None,
                     multisample: wgpu::MultisampleState {
@@ -368,6 +366,7 @@ where
                         mask: !0,
                         alpha_to_coverage_enabled: false,
                     },
+                    multiview: None,
                 });
 
         Ok(Self {
@@ -529,7 +528,7 @@ where
         let img_buffer = gpu.push_buffer(
             "atlas-image-upload",
             upload_img.as_bytes(),
-            wgpu::BufferUsage::COPY_SRC,
+            wgpu::BufferUsages::COPY_SRC,
         );
         self.push_buffer(img_buffer, image.width(), image.height(), upload_stride)
     }
@@ -546,7 +545,7 @@ where
         let img_buffer = gpu.push_buffer(
             "atlas-image-upload",
             image.as_bytes(),
-            wgpu::BufferUsage::COPY_SRC,
+            wgpu::BufferUsages::COPY_SRC,
         );
         self.push_buffer(img_buffer, image.width(), image.height(), upload_stride)
     }
@@ -554,7 +553,7 @@ where
     pub fn texture_layout_entry(&self, binding: u32) -> wgpu::BindGroupLayoutEntry {
         wgpu::BindGroupLayoutEntry {
             binding,
-            visibility: wgpu::ShaderStage::FRAGMENT,
+            visibility: wgpu::ShaderStages::FRAGMENT,
             ty: wgpu::BindingType::Texture {
                 multisampled: false,
                 sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -567,11 +566,8 @@ where
     pub fn sampler_layout_entry(&self, binding: u32) -> wgpu::BindGroupLayoutEntry {
         wgpu::BindGroupLayoutEntry {
             binding,
-            visibility: wgpu::ShaderStage::FRAGMENT,
-            ty: wgpu::BindingType::Sampler {
-                filtering: true,
-                comparison: false,
-            },
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
             count: None,
         }
     }
@@ -612,7 +608,7 @@ where
                 dimension: None,
                 aspect: wgpu::TextureAspect::All,
                 base_mip_level: 0,
-                level_count: None, // mip_
+                mip_level_count: None, // mip_
                 base_array_layer: 0,
                 array_layer_count: None,
             });
@@ -639,7 +635,7 @@ where
                         size: wgpu::Extent3d {
                             width: self.width,
                             height: self.height,
-                            depth: 1,
+                            depth_or_array_layers: 1,
                         },
                         mip_level_count: 1, // TODO: mip-mapping for atlas textures
                         sample_count: 1,
@@ -655,7 +651,7 @@ where
                     wgpu::Extent3d {
                         width: hi_x,
                         height: hi_y,
-                        depth: 1,
+                        depth_or_array_layers: 1,
                     },
                 );
                 self.next_texture = Some(next_texture);
@@ -669,7 +665,7 @@ where
             let img_extent = wgpu::Extent3d {
                 width: item.width,
                 height: item.height,
-                depth: 1,
+                depth_or_array_layers: 1,
             };
             let img_texture = Arc::new(gpu.device().create_texture(&wgpu::TextureDescriptor {
                 label: Some("atlas-img-upload-texture"),
@@ -678,15 +674,15 @@ where
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: self.format,
-                usage: wgpu::TextureUsage::COPY_DST | wgpu::TextureUsage::SAMPLED,
+                usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
             }));
             tracker.copy_owned_buffer_to_arc_texture(
                 OwnedBufferCopyView {
                     buffer: item.img_buffer,
-                    layout: wgpu::TextureDataLayout {
+                    layout: wgpu::ImageDataLayout {
                         offset: 0,
-                        bytes_per_row: item.stride_bytes,
-                        rows_per_image: item.height,
+                        bytes_per_row: NonZeroU32::new(item.stride_bytes),
+                        rows_per_image: NonZeroU32::new(item.height),
                     },
                 },
                 ArcTextureCopyView {
@@ -702,7 +698,7 @@ where
                 dimension: None,
                 aspect: wgpu::TextureAspect::All,
                 base_mip_level: 0,
-                level_count: None,
+                mip_level_count: None,
                 base_array_layer: 0,
                 array_layer_count: None,
             });
@@ -756,7 +752,7 @@ where
                 wgpu::Extent3d {
                     width: self.width,
                     height: self.height,
-                    depth: 1,
+                    depth_or_array_layers: 1,
                 },
                 self.format,
                 gpu,
@@ -780,14 +776,14 @@ where
             dimension: None,
             aspect: wgpu::TextureAspect::All,
             base_mip_level: 0,
-            level_count: None, // mip_
+            mip_level_count: None, // mip_
             base_array_layer: 0,
             array_layer_count: None,
         });
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("atlas-finish-render-pass"),
-            color_attachments: &[wgpu::RenderPassColorAttachmentDescriptor {
-                attachment: &target_view,
+            color_attachments: &[wgpu::RenderPassColorAttachment {
+                view: &target_view,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Load,
@@ -926,7 +922,7 @@ mod test {
         let extent = wgpu::Extent3d {
             width: packer.width(),
             height: packer.height(),
-            depth: 1,
+            depth_or_array_layers: 1,
         };
         let (texture, _view, _sampler) =
             packer.finish(&mut gpu.write(), &mut Default::default())?;

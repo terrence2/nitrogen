@@ -27,8 +27,8 @@ void main() {
     float alpha = texture(sampler2D(glyph_sheet_texture, glyph_sheet_sampler), v_tex_coord).r;
 
     WidgetInfo info = widget_info[widget_info_id];
+    vec3 world_clr = texture(sampler2D(world_deferred_texture, world_deferred_sampler), v_screen_tex_coord).rgb;
     if (widget_has_pre_blended_text(info)) {
-        vec3 world_clr = texture(sampler2D(world_deferred_texture, world_deferred_sampler), v_screen_tex_coord).rgb;
         f_color = vec4(world_clr * (1.0 - alpha) + v_color.rgb * alpha, 1);
     } else {
         f_color = vec4(v_color.xyz, alpha);

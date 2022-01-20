@@ -55,27 +55,23 @@ macro_rules! make_frame_graph_pass {
         )*
     }};
     (Render(Screen) {
-        $owner:ident, $gpu:ident, $encoder:ident, $need_rebuild:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
+        $surface_texture:ident, $gpu:ident, $encoder:ident, $need_rebuild:ident, $pass_name:ident, $($pass_item_name:ident ( $($pass_item_input_name:ident),* )),*
      }
     ) => {
-        let maybe_color_attachment = $gpu.get_next_framebuffer()?;
-        if let Some(color_attachment) = maybe_color_attachment.as_ref() {
-            let _rpass = $encoder.begin_render_pass(&$crate::wgpu::RenderPassDescriptor {
-                label: Some("screen-render-pass"),
-                color_attachments: &[$crate::Gpu::color_attachment(&color_attachment.output.view)],
-                depth_stencil_attachment: Some($gpu.depth_stencil_attachment()),
-            });
-            $(
-                let _rpass = $pass_item_name.$pass_name(
-                    _rpass,
-                    $(
-                        &$pass_item_input_name
-                    ),*
-                )?;
-            )*
-        } else {
-            $need_rebuild = true;
-        }
+        let view = $surface_texture.texture.create_view(&::wgpu::TextureViewDescriptor::default());
+        let _rpass = $encoder.begin_render_pass(&$crate::wgpu::RenderPassDescriptor {
+            label: Some("screen-render-pass"),
+            color_attachments: &[$crate::Gpu::color_attachment(&view)],
+            depth_stencil_attachment: Some($gpu.depth_stencil_attachment()),
+        });
+        $(
+            let _rpass = $pass_item_name.$pass_name(
+                _rpass,
+                $(
+                    &$pass_item_input_name
+                ),*
+            )?;
+        )*
     };
 }
 
@@ -137,18 +133,26 @@ macro_rules! make_frame_graph {
                         .create_command_encoder(&$crate::wgpu::CommandEncoderDescriptor {
                             label: Some("frame-encoder"),
                         });
-                    tracker.dispatch_uploads(&mut encoder);
-                    $(
-                        let mut _need_rebuild = false;
-                        $crate::make_frame_graph_pass!($pass_type($($pass_args),*) {
-                            self, gpu, encoder, _need_rebuild, $pass_name, $($pass_item_name ( $($pass_item_input_name),* )),*
-                        });
-                    )*
-                    if !_need_rebuild {
-                        gpu.queue_mut().submit(vec![encoder.finish()]);
-                    }
 
-                    Ok(!_need_rebuild)
+                    let surface_texture = if let Some(surface_texture) = gpu.get_next_framebuffer()? {
+                        surface_texture
+                    } else {
+                        return Ok(true);
+                    };
+
+                    {
+                        tracker.dispatch_uploads(&mut encoder);
+                        $(
+                            let mut _need_rebuild = false;
+                            $crate::make_frame_graph_pass!($pass_type($($pass_args),*) {
+                                surface_texture, gpu, encoder, _need_rebuild, $pass_name, $($pass_item_name ( $($pass_item_input_name),* )),*
+                            });
+                        )*
+                    };
+                    gpu.queue_mut().submit(vec![encoder.finish()]);
+                    surface_texture.present();
+
+                    Ok(false)
                 }
             }
         }
@@ -178,13 +182,13 @@ mod test {
                 size: wgpu::Extent3d {
                     width: 1,
                     height: 1,
-                    depth: 1,
+                    depth_or_array_layers: 1,
                 },
                 mip_level_count: 1,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::Rgba8Uint,
-                usage: wgpu::TextureUsage::all(),
+                usage: wgpu::TextureUsages::all(),
             });
             let render_target = texture.create_view(&wgpu::TextureViewDescriptor {
                 label: None,
@@ -192,7 +196,7 @@ mod test {
                 dimension: Some(wgpu::TextureViewDimension::D2),
                 aspect: wgpu::TextureAspect::All,
                 base_mip_level: 0,
-                level_count: None,
+                mip_level_count: None,
                 base_array_layer: 0,
                 array_layer_count: None,
             });
@@ -227,12 +231,12 @@ mod test {
         fn example_render_pass_attachments(
             &self,
         ) -> (
-            [wgpu::RenderPassColorAttachmentDescriptor; 1],
-            Option<wgpu::RenderPassDepthStencilAttachmentDescriptor>,
+            [wgpu::RenderPassColorAttachment; 1],
+            Option<wgpu::RenderPassDepthStencilAttachment>,
         ) {
             (
-                [wgpu::RenderPassColorAttachmentDescriptor {
-                    attachment: &self.render_target,
+                [wgpu::RenderPassColorAttachment {
+                    view: &self.render_target,
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::GREEN),
@@ -307,22 +311,25 @@ mod test {
         )?));
         let mut frame_graph = FrameGraph::new(test_buffer, test_renderer)?;
 
+        let mut skip = 0;
         for _ in 0..3 {
             let mut upload_tracker = Default::default();
             frame_graph.test_buffer_mut().update(&mut upload_tracker);
             let need_rebuild = frame_graph.run(gpu.clone(), upload_tracker)?;
             if need_rebuild {
+                skip += 1;
                 gpu.write()
                     .on_display_config_changed(window.read().config())?;
             }
         }
 
+        assert!(skip < 3);
         assert_eq!(frame_graph.test_buffer().update_count, 3);
-        assert_eq!(*frame_graph.test_buffer().compute_count.borrow(), 3);
-        assert_eq!(*frame_graph.test_buffer().screen_count.borrow(), 3);
-        assert_eq!(*frame_graph.test_buffer().render_count.borrow(), 3);
-        assert_eq!(*frame_graph.test_buffer().any_count.borrow(), 3);
-        assert_eq!(*frame_graph.test_renderer().render_count.borrow(), 3);
+        assert_eq!(*frame_graph.test_buffer().compute_count.borrow(), 3 - skip);
+        assert_eq!(*frame_graph.test_buffer().screen_count.borrow(), 3 - skip);
+        assert_eq!(*frame_graph.test_buffer().render_count.borrow(), 3 - skip);
+        assert_eq!(*frame_graph.test_buffer().any_count.borrow(), 3 - skip);
+        assert_eq!(*frame_graph.test_renderer().render_count.borrow(), 3 - skip);
         Ok(())
     }
 }

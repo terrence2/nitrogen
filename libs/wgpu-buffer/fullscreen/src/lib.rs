@@ -40,16 +40,16 @@ impl FullscreenVertex {
         gpu.push_slice(
             "fullscreen-corner-vertices",
             &vertices,
-            wgpu::BufferUsage::VERTEX,
+            wgpu::BufferUsages::VERTEX,
         )
     }
 
     pub fn descriptor() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: mem::size_of::<Self>() as wgpu::BufferAddress,
-            step_mode: wgpu::InputStepMode::Vertex,
+            step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &[wgpu::VertexAttribute {
-                format: wgpu::VertexFormat::Float2,
+                format: wgpu::VertexFormat::Float32x2,
                 offset: 0,
                 shader_location: 0,
             }],

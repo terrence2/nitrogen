@@ -23,6 +23,7 @@ use futures::executor::block_on;
 use gpu::Gpu;
 use image::{ImageBuffer, Luma, Rgb};
 use log::trace;
+use std::num::NonZeroU32;
 use std::{mem, num::NonZeroU64, slice, time::Instant};
 
 const NUM_PRECOMPUTED_WAVELENGTHS: usize = 40;
@@ -92,7 +93,7 @@ impl Precompute {
         fn uniform(binding: u32, min_binding_size: usize) -> wgpu::BindGroupLayoutEntry {
             wgpu::BindGroupLayoutEntry {
                 binding,
-                visibility: wgpu::ShaderStage::COMPUTE,
+                visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
@@ -104,10 +105,22 @@ impl Precompute {
         fn storage_texture2d(binding: u32) -> wgpu::BindGroupLayoutEntry {
             wgpu::BindGroupLayoutEntry {
                 binding,
-                visibility: wgpu::ShaderStage::COMPUTE,
+                visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::StorageTexture {
                     view_dimension: wgpu::TextureViewDimension::D2,
-                    format: wgpu::TextureFormat::R32Float,
+                    format: wgpu::TextureFormat::Rgba32Float,
+                    access: wgpu::StorageTextureAccess::WriteOnly,
+                },
+                count: None,
+            }
+        }
+        fn storage_texture2d_coherent(binding: u32) -> wgpu::BindGroupLayoutEntry {
+            wgpu::BindGroupLayoutEntry {
+                binding,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::StorageTexture {
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    format: wgpu::TextureFormat::Rgba32Float,
                     access: wgpu::StorageTextureAccess::ReadWrite,
                 },
                 count: None,
@@ -116,10 +129,22 @@ impl Precompute {
         fn storage_texture3d(binding: u32) -> wgpu::BindGroupLayoutEntry {
             wgpu::BindGroupLayoutEntry {
                 binding,
-                visibility: wgpu::ShaderStage::COMPUTE,
+                visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::StorageTexture {
                     view_dimension: wgpu::TextureViewDimension::D3,
-                    format: wgpu::TextureFormat::R32Float,
+                    format: wgpu::TextureFormat::Rgba32Float,
+                    access: wgpu::StorageTextureAccess::WriteOnly,
+                },
+                count: None,
+            }
+        }
+        fn storage_texture3d_coherent(binding: u32) -> wgpu::BindGroupLayoutEntry {
+            wgpu::BindGroupLayoutEntry {
+                binding,
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::StorageTexture {
+                    view_dimension: wgpu::TextureViewDimension::D3,
+                    format: wgpu::TextureFormat::Rgba32Float,
                     access: wgpu::StorageTextureAccess::ReadWrite,
                 },
                 count: None,
@@ -128,7 +153,7 @@ impl Precompute {
         fn texture2d(binding: u32) -> wgpu::BindGroupLayoutEntry {
             wgpu::BindGroupLayoutEntry {
                 binding,
-                visibility: wgpu::ShaderStage::COMPUTE,
+                visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::Texture {
                     multisampled: false,
                     sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -140,7 +165,7 @@ impl Precompute {
         fn texture3d(binding: u32) -> wgpu::BindGroupLayoutEntry {
             wgpu::BindGroupLayoutEntry {
                 binding,
-                visibility: wgpu::ShaderStage::COMPUTE,
+                visibility: wgpu::ShaderStages::COMPUTE,
                 ty: wgpu::BindingType::Texture {
                     multisampled: false,
                     sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -152,11 +177,8 @@ impl Precompute {
         fn sampler(binding: u32) -> wgpu::BindGroupLayoutEntry {
             wgpu::BindGroupLayoutEntry {
                 binding,
-                visibility: wgpu::ShaderStage::COMPUTE,
-                ty: wgpu::BindingType::Sampler {
-                    filtering: true,
-                    comparison: false,
-                },
+                visibility: wgpu::ShaderStages::COMPUTE,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                 count: None,
             }
         }
@@ -232,8 +254,8 @@ impl Precompute {
                     uniform(3, mem::size_of::<[[f32; 4]; 4]>()),        // rad_to_lum
                     storage_texture3d(4), // delta_rayleigh_scattering_texture
                     storage_texture3d(5), // delta_mie_scattering_texture
-                    storage_texture3d(6), // scattering_texture
-                    storage_texture3d(7), // single_mie_scattering_texture
+                    storage_texture3d_coherent(6), // scattering_texture
+                    storage_texture3d_coherent(7), // single_mie_scattering_texture
                 ],
             });
         let build_single_scattering_lut_pipeline =
@@ -300,14 +322,14 @@ impl Precompute {
                     uniform(0, mem::size_of::<AtmosphereParameters>()), // atmosphere
                     uniform(1, mem::size_of::<[[f32; 4]; 4]>()),        // rad_to_lum
                     uniform(2, mem::size_of::<u32>()),                  // scattering_order
-                    texture3d(3),          // delta_rayleigh_scattering_texture
-                    sampler(4),            // delta_rayleigh_scattering_sampler
-                    texture3d(5),          // delta_mie_scattering_texture
-                    sampler(6),            // delta_mie_scattering_sampler
-                    texture3d(7),          // delta_multiple_scattering_texture
-                    sampler(8),            // delta_multiple_scattering_sampler
-                    storage_texture2d(9),  // delta_irradiance_texture
-                    storage_texture2d(10), // irradiance_texture
+                    texture3d(3),                   // delta_rayleigh_scattering_texture
+                    sampler(4),                     // delta_rayleigh_scattering_sampler
+                    texture3d(5),                   // delta_mie_scattering_texture
+                    sampler(6),                     // delta_mie_scattering_sampler
+                    texture3d(7),                   // delta_multiple_scattering_texture
+                    sampler(8),                     // delta_multiple_scattering_sampler
+                    storage_texture2d(9),           // delta_irradiance_texture
+                    storage_texture2d_coherent(10), // irradiance_texture
                 ],
             });
         let build_indirect_irradiance_lut_pipeline =
@@ -338,10 +360,10 @@ impl Precompute {
                     uniform(2, mem::size_of::<u32>()),                  // scattering_order; };
                     texture2d(3),                                       // transmittance_texture;
                     sampler(4),                                         // transmittance_sampler;
-                    texture3d(5),         // delta_scattering_density_texture;
-                    sampler(6),           // delta_scattering_density_sampler;
-                    storage_texture3d(7), // delta_multiple_scattering_texture;
-                    storage_texture3d(8), // scattering_texture;
+                    texture3d(5),                  // delta_scattering_density_texture;
+                    sampler(6),                    // delta_scattering_density_sampler;
+                    storage_texture3d(7),          // delta_multiple_scattering_texture;
+                    storage_texture3d_coherent(8), // scattering_texture;
                 ],
             });
         let build_multiple_scattering_lut_pipeline =
@@ -366,7 +388,7 @@ impl Precompute {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsage::all(),
+            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
         });
         let delta_irradiance_texture_view =
             delta_irradiance_texture.create_view(&wgpu::TextureViewDescriptor {
@@ -375,7 +397,7 @@ impl Precompute {
                 dimension: None,
                 aspect: wgpu::TextureAspect::All,
                 base_mip_level: 0,
-                level_count: None,
+                mip_level_count: None,
                 base_array_layer: 0,
                 array_layer_count: None,
             });
@@ -386,7 +408,7 @@ impl Precompute {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D3,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsage::all(),
+            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
         });
         let delta_rayleigh_scattering_texture_view =
             delta_rayleigh_scattering_texture.create_view(&wgpu::TextureViewDescriptor {
@@ -395,7 +417,7 @@ impl Precompute {
                 dimension: None,
                 aspect: wgpu::TextureAspect::All,
                 base_mip_level: 0,
-                level_count: None,
+                mip_level_count: None,
                 base_array_layer: 0,
                 array_layer_count: None,
             });
@@ -406,7 +428,7 @@ impl Precompute {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D3,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsage::all(),
+            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
         });
         let delta_mie_scattering_texture_view =
             delta_mie_scattering_texture.create_view(&wgpu::TextureViewDescriptor {
@@ -415,7 +437,7 @@ impl Precompute {
                 dimension: None,
                 aspect: wgpu::TextureAspect::All,
                 base_mip_level: 0,
-                level_count: None,
+                mip_level_count: None,
                 base_array_layer: 0,
                 array_layer_count: None,
             });
@@ -426,7 +448,7 @@ impl Precompute {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D3,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsage::all(),
+            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
         });
         let delta_multiple_scattering_texture_view =
             delta_multiple_scattering_texture.create_view(&wgpu::TextureViewDescriptor {
@@ -435,7 +457,7 @@ impl Precompute {
                 dimension: None,
                 aspect: wgpu::TextureAspect::All,
                 base_mip_level: 0,
-                level_count: None,
+                mip_level_count: None,
                 base_array_layer: 0,
                 array_layer_count: None,
             });
@@ -446,7 +468,7 @@ impl Precompute {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D3,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsage::all(),
+            usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
         });
         let delta_scattering_density_texture_view =
             delta_scattering_density_texture.create_view(&wgpu::TextureViewDescriptor {
@@ -455,7 +477,7 @@ impl Precompute {
                 dimension: None,
                 aspect: wgpu::TextureAspect::All,
                 base_mip_level: 0,
-                level_count: None,
+                mip_level_count: None,
                 base_array_layer: 0,
                 array_layer_count: None,
             });
@@ -467,7 +489,9 @@ impl Precompute {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsage::all(),
+            usage: wgpu::TextureUsages::STORAGE_BINDING
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
         });
         let transmittance_texture_view =
             transmittance_texture.create_view(&wgpu::TextureViewDescriptor {
@@ -476,7 +500,7 @@ impl Precompute {
                 dimension: None,
                 aspect: wgpu::TextureAspect::All,
                 base_mip_level: 0,
-                level_count: None,
+                mip_level_count: None,
                 base_array_layer: 0,
                 array_layer_count: None,
             });
@@ -487,7 +511,9 @@ impl Precompute {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D3,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsage::all(),
+            usage: wgpu::TextureUsages::STORAGE_BINDING
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
         });
         let scattering_texture_view =
             scattering_texture.create_view(&wgpu::TextureViewDescriptor {
@@ -496,7 +522,7 @@ impl Precompute {
                 dimension: None,
                 aspect: wgpu::TextureAspect::All,
                 base_mip_level: 0,
-                level_count: None,
+                mip_level_count: None,
                 base_array_layer: 0,
                 array_layer_count: None,
             });
@@ -507,7 +533,9 @@ impl Precompute {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D3,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsage::all(),
+            usage: wgpu::TextureUsages::STORAGE_BINDING
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
         });
         let single_mie_scattering_texture_view =
             single_mie_scattering_texture.create_view(&wgpu::TextureViewDescriptor {
@@ -516,7 +544,7 @@ impl Precompute {
                 dimension: None,
                 aspect: wgpu::TextureAspect::All,
                 base_mip_level: 0,
-                level_count: None,
+                mip_level_count: None,
                 base_array_layer: 0,
                 array_layer_count: None,
             });
@@ -527,7 +555,9 @@ impl Precompute {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Rgba32Float,
-            usage: wgpu::TextureUsage::all(),
+            usage: wgpu::TextureUsages::STORAGE_BINDING
+                | wgpu::TextureUsages::TEXTURE_BINDING
+                | wgpu::TextureUsages::COPY_SRC,
         });
         let irradiance_texture_view =
             irradiance_texture.create_view(&wgpu::TextureViewDescriptor {
@@ -536,7 +566,7 @@ impl Precompute {
                 dimension: None,
                 aspect: wgpu::TextureAspect::All,
                 base_mip_level: 0,
-                level_count: None,
+                mip_level_count: None,
                 base_array_layer: 0,
                 array_layer_count: None,
             });
@@ -601,7 +631,7 @@ impl Precompute {
         let srgb_atmosphere_buffer = gpu.push_data(
             "atmosphere-srgb-params-buffer",
             &srgb_atmosphere,
-            wgpu::BufferUsage::UNIFORM,
+            wgpu::BufferUsages::UNIFORM,
         );
 
         trace!("Building atmosphere parameters");
@@ -683,7 +713,7 @@ impl Precompute {
         let atmosphere_params_buffer = gpu.push_data(
             "atmosphere-params-buffer",
             &self.params.sample(lambdas),
-            wgpu::BufferUsage::UNIFORM,
+            wgpu::BufferUsages::UNIFORM,
         );
 
         let rad_to_lum32: [[f32; 4]; 4] = [
@@ -715,7 +745,7 @@ impl Precompute {
         let rad_to_lum_buffer = gpu.push_slice(
             "atmosphere-rad-to-lum-buffer",
             &rad_to_lum32,
-            wgpu::BufferUsage::UNIFORM,
+            wgpu::BufferUsages::UNIFORM,
         );
 
         let transmittance_start = Instant::now();
@@ -759,7 +789,7 @@ impl Precompute {
             let scattering_order_buffer = gpu.push_slice(
                 "atmosphere-scattering-order-buffer",
                 &[scattering_order as u32],
-                wgpu::BufferUsage::UNIFORM,
+                wgpu::BufferUsages::UNIFORM,
             );
 
             let scattering_density_start = Instant::now();
@@ -829,11 +859,11 @@ impl Precompute {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer {
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: atmosphere_params_buffer,
                         offset: 0,
                         size: None,
-                    },
+                    }),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -884,11 +914,11 @@ impl Precompute {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer {
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: atmosphere_params_buffer,
                         offset: 0,
                         size: None,
-                    },
+                    }),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -960,11 +990,11 @@ impl Precompute {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer {
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: atmosphere_params_buffer,
                         offset: 0,
                         size: None,
-                    },
+                    }),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -976,11 +1006,11 @@ impl Precompute {
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
-                    resource: wgpu::BindingResource::Buffer {
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: rad_to_lum_buffer,
                         offset: 0,
                         size: None,
-                    },
+                    }),
                 },
                 wgpu::BindGroupEntry {
                     binding: 4,
@@ -1021,7 +1051,7 @@ impl Precompute {
             cpass.dispatch(
                 SCATTERING_EXTENT.width / BLOCK_SIZE,
                 SCATTERING_EXTENT.height / BLOCK_SIZE,
-                SCATTERING_EXTENT.depth / BLOCK_SIZE,
+                SCATTERING_EXTENT.depth_or_array_layers / BLOCK_SIZE,
             );
         }
         gpu.queue_mut().submit(vec![encoder.finish()]);
@@ -1093,19 +1123,19 @@ impl Precompute {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer {
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: atmosphere_params_buffer,
                         offset: 0,
                         size: None,
-                    },
+                    }),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Buffer {
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: scattering_order_buffer,
                         offset: 0,
                         size: None,
-                    },
+                    }),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
@@ -1178,7 +1208,7 @@ impl Precompute {
             cpass.dispatch(
                 SCATTERING_EXTENT.width / BLOCK_SIZE,
                 SCATTERING_EXTENT.height / BLOCK_SIZE,
-                SCATTERING_EXTENT.depth / BLOCK_SIZE,
+                SCATTERING_EXTENT.depth_or_array_layers / BLOCK_SIZE,
             );
         }
         gpu.queue_mut().submit(vec![encoder.finish()]);
@@ -1223,27 +1253,27 @@ impl Precompute {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer {
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: atmosphere_params_buffer,
                         offset: 0,
                         size: None,
-                    },
+                    }),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Buffer {
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: rad_to_lum_buffer,
                         offset: 0,
                         size: None,
-                    },
+                    }),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: wgpu::BindingResource::Buffer {
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: scattering_order_buffer,
                         offset: 0,
                         size: None,
-                    },
+                    }),
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
@@ -1354,27 +1384,27 @@ impl Precompute {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer {
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: atmosphere_params_buffer,
                         offset: 0,
                         size: None,
-                    },
+                    }),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Buffer {
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: rad_to_lum_buffer,
                         offset: 0,
                         size: None,
-                    },
+                    }),
                 },
                 wgpu::BindGroupEntry {
                     binding: 2,
-                    resource: wgpu::BindingResource::Buffer {
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
                         buffer: scattering_order_buffer,
                         offset: 0,
                         size: None,
-                    },
+                    }),
                 },
                 wgpu::BindGroupEntry {
                     binding: 3,
@@ -1421,7 +1451,7 @@ impl Precompute {
             cpass.dispatch(
                 SCATTERING_EXTENT.width / BLOCK_SIZE,
                 SCATTERING_EXTENT.height / BLOCK_SIZE,
-                SCATTERING_EXTENT.depth / BLOCK_SIZE,
+                SCATTERING_EXTENT.depth_or_array_layers / BLOCK_SIZE,
             );
         }
         gpu.queue_mut().submit(vec![encoder.finish()]);
@@ -1472,30 +1502,33 @@ impl Precompute {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("atmosphere-debug-dump-command-encoder"),
             });
-        let staging_buffer_size = u64::from(extent.width * extent.height * extent.depth * 16);
+        let staging_buffer_size =
+            u64::from(extent.width * extent.height * extent.depth_or_array_layers * 16);
         let staging_buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
             label: Some("atmosphere-debug-dump-texture-buffer"),
             size: staging_buffer_size,
-            usage: wgpu::BufferUsage::all(),
-            mapped_at_creation: true,
+            usage: wgpu::BufferUsages::all(),
+            mapped_at_creation: false,
         });
         encoder.copy_texture_to_buffer(
-            wgpu::TextureCopyView {
+            wgpu::ImageCopyTexture {
                 texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
             },
-            wgpu::BufferCopyView {
+            wgpu::ImageCopyBuffer {
                 buffer: &staging_buffer,
-                layout: wgpu::TextureDataLayout {
+                layout: wgpu::ImageDataLayout {
                     offset: 0,
-                    bytes_per_row: extent.width * 16,
-                    rows_per_image: extent.height,
+                    bytes_per_row: NonZeroU32::new(extent.width * 16),
+                    rows_per_image: NonZeroU32::new(extent.height),
                 },
             },
             extent,
         );
         gpu.queue_mut().submit(vec![encoder.finish()]);
+        gpu.device().poll(wgpu::Maintain::Wait);
 
         let reader = staging_buffer.slice(..).map_async(wgpu::MapMode::Read);
         gpu.device().poll(wgpu::Maintain::Wait);
@@ -1515,7 +1548,7 @@ impl Precompute {
             3,
             extent,
             &format!(
-                "dump/atmosphere/{}-{}-{}-{}",
+                "__dump__/atmosphere/{}-{}-{}-{}",
                 prefix, lambdas[0] as usize, lambdas[1] as usize, lambdas[2] as usize
             ),
         );
@@ -1523,7 +1556,7 @@ impl Precompute {
             p1,
             1,
             extent,
-            &format!("dump/{}-{}", prefix, lambdas[3] as usize),
+            &format!("__dump__/{}-{}", prefix, lambdas[3] as usize),
         );
     }
 
@@ -1543,14 +1576,16 @@ impl Precompute {
     }
 
     fn split_pixels(src: &[f32], dim: wgpu::Extent3d) -> (Vec<u8>, Vec<u8>) {
-        let mut p0 = Vec::with_capacity((dim.width * dim.height * dim.depth) as usize * 3);
-        let mut p1 = Vec::with_capacity((dim.width * dim.height * dim.depth) as usize);
+        let mut p0 =
+            Vec::with_capacity((dim.width * dim.height * dim.depth_or_array_layers) as usize * 3);
+        let mut p1 =
+            Vec::with_capacity((dim.width * dim.height * dim.depth_or_array_layers) as usize);
         const WHITE_POINT_R: f32 = 1.082_414f32;
         const WHITE_POINT_G: f32 = 0.967_556f32;
         const WHITE_POINT_B: f32 = 0.950_030f32;
         const WHITE_POINT_A: f32 = 1.0;
         const EXPOSURE: f32 = 683f32 * 0.0001f32;
-        for i in 0usize..(dim.width * dim.height * dim.depth) as usize {
+        for i in 0usize..(dim.width * dim.height * dim.depth_or_array_layers) as usize {
             let r0 = src[4 * i];
             let g0 = src[4 * i + 1];
             let b0 = src[4 * i + 2];
@@ -1589,7 +1624,7 @@ impl Precompute {
 
     fn save_layered(data: Vec<u8>, px_size: usize, extent: wgpu::Extent3d, prefix: &str) {
         let layer_size = (extent.width * extent.height) as usize * px_size;
-        for layer_num in 0..extent.depth as usize {
+        for layer_num in 0..extent.depth_or_array_layers as usize {
             let data = &data[layer_num * layer_size..(layer_num + 1) * layer_size];
             let name = format!("{}-layer{:02}.png", prefix, layer_num);
             if px_size == 3 {
