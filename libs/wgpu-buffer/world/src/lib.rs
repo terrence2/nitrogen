@@ -37,6 +37,19 @@ enum DebugMode {
     NormalGlobal,
 }
 
+impl DebugMode {
+    pub fn from_str(s: &str) -> Self {
+        match s {
+            "deferred" => Self::Deferred,
+            "depth" => Self::Depth,
+            "color" => Self::Color,
+            "normal_local" => Self::NormalLocal,
+            "normal_global" | "normal" => Self::NormalGlobal,
+            _ => Self::None,
+        }
+    }
+}
+
 #[derive(Debug, NitrousModule)]
 pub struct WorldRenderPass {
     // Offscreen render targets
@@ -133,7 +146,7 @@ impl WorldRenderPass {
         let fullscreen_layout =
             gpu.device()
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                    label: Some("world-dbg-deferred-pipeline-layout"),
+                    label: Some("world-deferred-pipeline-layout"),
                     push_constant_ranges: &[],
                     bind_group_layouts: &[
                         globals_buffer.bind_group_layout(),
@@ -476,6 +489,12 @@ impl WorldRenderPass {
             };
             println!("Debug Mode is now: {:?}", self.debug_mode);
         }
+    }
+
+    #[method]
+    pub fn set_debug_mode(&mut self, value: &str) {
+        self.debug_mode = DebugMode::from_str(value);
+        println!("Debug Mode is now: {:?}", self.debug_mode);
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
