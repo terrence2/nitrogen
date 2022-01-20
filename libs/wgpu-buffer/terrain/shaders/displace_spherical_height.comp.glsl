@@ -33,9 +33,9 @@ main()
 
     vec2 v_graticule = arr_to_vec2(vertices[i].graticule);
     uint atlas_slot = terrain_atlas_slot_for_graticule(v_graticule, index_texture, index_sampler);
-    int height = terrain_height_in_tile(v_graticule, tile_info[atlas_slot], atlas_texture, atlas_sampler);
+    float height = terrain_height_in_tile(v_graticule, tile_info[atlas_slot], atlas_texture, atlas_sampler);
 
     vec3 v_normal = arr_to_vec3(vertices[i].normal);
     vec3 v_position = arr_to_vec3(vertices[i].surface_position);
-    vertices[i].position = vec3_to_arr(v_position + (float(height) * v_normal));
+    vertices[i].position = vec3_to_arr(v_position + (height * v_normal));
 }
