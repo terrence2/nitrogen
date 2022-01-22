@@ -492,20 +492,6 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
             .expect("Widgets::track_state_changes");
     }
 
-    fn update_globals_track_state_changes(
-        query: Query<&CameraComponent>,
-        orrery: Res<Arc<RwLock<Orrery>>>,
-        window: Res<Window>,
-        mut globals: ResMut<GlobalParametersBuffer>,
-    ) {
-        // FIXME: multiple camera support
-        let orrery = orrery.read();
-        for (i, camera) in query.iter().enumerate() {
-            assert_eq!(i, 0);
-            globals.track_state_changes(&camera.camera(), &orrery, &window);
-        }
-    }
-
     fn update_terrain_track_state_changes(
         query: Query<&CameraComponent>,
         catalog: Res<Arc<RwLock<Catalog>>>,
@@ -536,12 +522,10 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         SystemStage::single_threaded()
             .with_system(Window::sys_handle_system_events.system())
             .with_system(CameraComponent::sys_apply_display_changes.system())
-            .with_system(Gpu::sys_handle_display_config_change.system())
             .with_system(TerrainBuffer::sys_handle_display_config_change.system())
             .with_system(WorldRenderPass::sys_handle_display_config_change.system())
             .with_system(UiRenderPass::sys_handle_display_config_change.system())
             .with_system(update_widget_track_state_changes.system())
-            .with_system(update_globals_track_state_changes.system())
             .with_system(update_terrain_track_state_changes.system()), // .with_wystem(update_widgets_ensure_uploaded),
     );
 

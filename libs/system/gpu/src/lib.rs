@@ -95,6 +95,12 @@ impl Extension for Gpu {
         runtime
             .frame_stage_mut(FrameStage::HandleDisplayChange)
             .add_system(Self::sys_handle_display_config_change);
+        runtime.insert_resource(UploadTracker::default());
+
+        // FIXME: Once we've tied into this all...
+        // runtime
+        //     .frame_stage_mut(FrameStage::PostRender)
+        //     .add_system(Self::sys_clear_upload_tracker);
         Ok(())
     }
 }

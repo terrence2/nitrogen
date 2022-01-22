@@ -37,8 +37,8 @@ pub enum FrameStage {
     HandleSystem,
     HandleDisplayChange,
     PostSystem,
-    SimStateChange,
-    EnsureUpdate,
+    TrackStateChanges,
+    EnsureGpuUpdated,
     Render,
 }
 
@@ -64,8 +64,8 @@ impl Default for Runtime {
             .with_stage(FrameStage::HandleSystem, SystemStage::parallel())
             .with_stage(FrameStage::HandleDisplayChange, SystemStage::parallel())
             .with_stage(FrameStage::PostSystem, SystemStage::parallel())
-            .with_stage(FrameStage::SimStateChange, SystemStage::parallel())
-            .with_stage(FrameStage::EnsureUpdate, SystemStage::parallel())
+            .with_stage(FrameStage::TrackStateChanges, SystemStage::parallel())
+            .with_stage(FrameStage::EnsureGpuUpdated, SystemStage::parallel())
             .with_stage(FrameStage::Render, SystemStage::parallel());
 
         Self {

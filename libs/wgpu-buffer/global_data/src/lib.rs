@@ -14,7 +14,8 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{Kilometers, Meters};
 use anyhow::Result;
-use camera::Camera;
+use bevy_ecs::prelude::*;
+use camera::{Camera, CameraComponent};
 use core::num::NonZeroU64;
 use gpu::{Gpu, UploadTracker};
 use nalgebra::{convert, Matrix3, Matrix4, Point3, Vector3, Vector4};
@@ -22,7 +23,7 @@ use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use orrery::Orrery;
 use parking_lot::RwLock;
-use runtime::{Extension, Runtime};
+use runtime::{Extension, FrameStage, Runtime};
 use std::{mem, sync::Arc};
 use window::Window;
 use zerocopy::{AsBytes, FromBytes};
@@ -160,9 +161,15 @@ pub struct GlobalParametersBuffer {
 impl Extension for GlobalParametersBuffer {
     fn init(runtime: &mut Runtime) -> Result<()> {
         let globals = GlobalParametersBuffer::new(runtime.resource::<Gpu>().device());
-        // FIXME: how do we do this?
+
+        // FIXME: what about debug key bindings?
         // globals.add_debug_bindings(interpreter)?;
+
         runtime.insert_module("globals", globals);
+        runtime
+            .frame_stage_mut(FrameStage::TrackStateChanges)
+            .add_system(Self::sys_track_state_changes);
+
         Ok(())
     }
 }
@@ -248,6 +255,20 @@ impl GlobalParametersBuffer {
 
     pub fn bind_group(&self) -> &wgpu::BindGroup {
         &self.bind_group
+    }
+
+    fn sys_track_state_changes(
+        query: Query<&CameraComponent>,
+        orrery: Res<Arc<RwLock<Orrery>>>,
+        window: Res<Window>,
+        mut globals: ResMut<GlobalParametersBuffer>,
+    ) {
+        // FIXME: multiple camera support
+        let orrery = orrery.read();
+        for (i, camera) in query.iter().enumerate() {
+            assert_eq!(i, 0);
+            globals.track_state_changes(&camera.camera(), &orrery, &window);
+        }
     }
 
     pub fn track_state_changes(&mut self, camera: &Camera, orrery: &Orrery, win: &Window) {

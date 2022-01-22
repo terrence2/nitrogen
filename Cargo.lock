@@ -1382,6 +1382,7 @@ version = "0.0.0"
 dependencies = [
  "absolute_unit",
  "anyhow",
+ "bevy_ecs",
  "build_shaders",
  "camera",
  "geodesy",
