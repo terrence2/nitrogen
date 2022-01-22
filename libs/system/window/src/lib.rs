@@ -218,13 +218,17 @@ pub struct Window {
 
 impl Extension for Window {
     fn init(runtime: &mut Runtime) -> Result<()> {
-        // FIXME: pass the option struct instead of using a temp resource
-        let display_config = runtime.remove_resource::<DisplayConfig>().unwrap();
+        let display_config = DisplayConfig::discover(
+            runtime.resource::<DisplayOpts>(),
+            runtime.resource::<OsWindow>(),
+        );
+
         // FIXME: can we pull this off the runtime when we need it?
         let os_window = runtime.remove_resource::<OsWindow>().unwrap();
 
         let window = Window::new(os_window, display_config);
         runtime.insert_module("window", window);
+        runtime.insert_resource(None as Option<DisplayConfig>);
         runtime
             .frame_stage_mut(FrameStage::HandleSystem)
             .add_system(Self::sys_handle_system_events);

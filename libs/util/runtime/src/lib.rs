@@ -97,8 +97,9 @@ impl Runtime {
     }
 
     #[inline]
-    pub fn insert_resource<T: Resource>(&mut self, value: T) {
+    pub fn insert_resource<T: Resource>(&mut self, value: T) -> &mut Self {
         self.world.insert_resource(value);
+        self
     }
 
     #[inline]

@@ -85,7 +85,7 @@ impl WorldRenderPass {
         atmosphere_buffer: &AtmosphereBuffer,
         stars_buffer: &StarsBuffer,
         globals_buffer: &GlobalParametersBuffer,
-        gpu: &mut Gpu,
+        gpu: &Gpu,
         interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
         trace!("WorldRenderPass::new");
@@ -293,8 +293,6 @@ impl WorldRenderPass {
             show_wireframe: false,
             debug_mode: DebugMode::None,
         }));
-
-        // gpu.register_render_extent_change_receiver(world.clone());
 
         interpreter.put_global("world", Value::Module(world.clone()));
 

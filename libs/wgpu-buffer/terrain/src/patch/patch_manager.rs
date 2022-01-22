@@ -109,7 +109,7 @@ impl PatchManager {
         target_refinement: f64,
         desired_patch_count: usize,
         max_subdivisions: usize,
-        gpu: &mut Gpu,
+        gpu: &Gpu,
     ) -> Result<Self> {
         let patch_upload_stride = 3; // 3 vertices per patch in the upload buffer.
         let patch_upload_byte_size = TerrainUploadVertex::mem_size() * patch_upload_stride;

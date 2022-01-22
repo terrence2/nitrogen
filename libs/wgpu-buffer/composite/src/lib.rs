@@ -31,7 +31,7 @@ impl CompositeRenderPass {
         ui: &UiRenderPass,
         world: &WorldRenderPass,
         globals: &GlobalParametersBuffer,
-        gpu: &mut Gpu,
+        gpu: &Gpu,
     ) -> Result<Self> {
         trace!("CompositeRenderPass::new");
 

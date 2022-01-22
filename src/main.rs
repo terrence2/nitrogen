@@ -18,7 +18,7 @@ use anyhow::{anyhow, Result};
 use atmosphere::AtmosphereBuffer;
 use bevy_ecs::prelude::*;
 use camera::{ArcBallCamera, ArcBallController, Camera, CameraComponent};
-use catalog::{Catalog, DirectoryDrawer};
+use catalog::{Catalog, CatalogOpts, DirectoryDrawer};
 use chrono::{TimeZone, Utc};
 use composite::CompositeRenderPass;
 use event_mapper::EventMapper;
@@ -52,9 +52,8 @@ use world_render::WorldRenderPass;
 #[derive(Debug, StructOpt)]
 #[structopt(set_term_width = if let Some((Width(w), _)) = terminal_size() { w as usize } else { 80 })]
 struct Opt {
-    /// Extra directories to treat as libraries
-    #[structopt(short, long)]
-    libdir: Vec<PathBuf>,
+    #[structopt(flatten)]
+    catalog_opts: CatalogOpts,
 
     #[structopt(flatten)]
     detail_opts: DetailLevelOpts,
@@ -64,32 +63,6 @@ struct Opt {
 
     #[structopt(flatten)]
     startup_opts: StartupOpts,
-}
-
-impl Extension for Opt {
-    fn init(runtime: &mut Runtime) -> Result<()> {
-        let opt = {
-            let catalog_ref = runtime.resource_mut::<Arc<RwLock<Catalog>>>();
-            let mut catalog = catalog_ref.write();
-            let opt = Opt::from_args();
-            for (i, d) in opt.libdir.iter().enumerate() {
-                catalog.add_drawer(DirectoryDrawer::from_directory(100 + i as i64, d)?)?;
-            }
-            opt
-        };
-
-        runtime.insert_resource(None as Option<DisplayConfig>);
-        runtime.insert_resource(DisplayConfig::discover(
-            &opt.display_opts,
-            runtime.resource::<OsWindow>(),
-        ));
-
-        runtime.insert_resource(opt.detail_opts.cpu_detail());
-        runtime.insert_resource(opt.detail_opts.gpu_detail());
-
-        runtime.insert_resource(opt);
-        Ok(())
-    }
 }
 
 #[derive(Debug)]
@@ -311,20 +284,84 @@ make_frame_graph!(
     }
 );
 
-fn build_frame_graph(
-    app_dirs: &AppDirs,
-    interpreter: &mut Interpreter,
-    runtime: &mut Runtime,
-) -> Result<FrameGraph> {
-    let atmosphere_buffer = AtmosphereBuffer::new(&mut runtime.resource_mut::<Gpu>())?;
-    runtime.insert_resource(atmosphere_buffer.clone());
+// fn build_frame_graph(
+//     app_dirs: &AppDirs,
+//     interpreter: &mut Interpreter,
+//     runtime: &mut Runtime,
+// ) -> Result<FrameGraph> {
+//     // let atmosphere_buffer = AtmosphereBuffer::new(&mut runtime.resource_mut::<Gpu>())?;
+//     // runtime.insert_resource(atmosphere_buffer.clone());
+//
+//
+//     // Compose the frame graph.
+//     // TODO: should this be dynamic?
+//     let frame_graph = FrameGraph::new(
+//         composite,
+//         ui,
+//         widgets,
+//         world_gfx,
+//         terrain,
+//         atmosphere_buffer,
+//         stars_buffer,
+//         fullscreen_buffer,
+//         globals,
+//     )?;
+//
+//     Ok(frame_graph)
+// }
 
-    let fullscreen_buffer = FullscreenBuffer::new(runtime.resource::<Gpu>());
-    runtime.insert_resource(fullscreen_buffer.clone());
+fn main() -> Result<()> {
+    env_logger::init();
+    InputSystem::run_forever(
+        WindowBuilder::new().with_title("Nitrogen Demo"),
+        simulation_main,
+    )
+}
 
-    let globals = GlobalParametersBuffer::new(runtime.resource::<Gpu>().device(), interpreter);
-    runtime.insert_resource(globals.clone());
-    // globals.write().add_debug_bindings(interpreter)?;
+fn simulation_main(mut runtime: Runtime) -> Result<()> {
+    let opt = Opt::from_args();
+
+    // Make sure various config locations exist
+    let app_dirs = AppDirs::new(Some("nitrogen"), true)
+        .ok_or_else(|| anyhow!("unable to find app directories"))?;
+    create_dir_all(&app_dirs.config_dir)?;
+    create_dir_all(&app_dirs.state_dir)?;
+
+    fn timestep(runtime: &Runtime) -> &TimeStep {
+        runtime.resource::<TimeStep>()
+    }
+
+    // Create the game interpreter
+    let mut interpreter = Interpreter::default();
+    runtime.world.insert_resource(interpreter.clone());
+
+    runtime
+        .insert_resource(opt.catalog_opts)
+        .insert_resource(opt.display_opts)
+        .insert_resource(opt.detail_opts.cpu_detail())
+        .insert_resource(opt.detail_opts.gpu_detail())
+        .load_extension::<Catalog>()?
+        .load_extension::<EventMapper>()?
+        .load_extension::<Window>()?
+        .load_extension::<Gpu>()?
+        .load_extension::<AtmosphereBuffer>()?
+        .load_extension::<FullscreenBuffer>()?
+        .load_extension::<GlobalParametersBuffer>()?
+        .load_extension::<TimeStep>()?;
+
+    // We don't technically need the window here, just the graphics configuration, and we could
+    // even potentially create blind and expect the resize later. Worth looking into as it would
+    // let us initialize async. The main work to do in parallel is discovering tile trees; this
+    // does not technically depend on the gpu, but does because it lives with terrain creation,
+    // which does need the gpu for resource creation. Probably worth looking to parallelize this
+    // as we could potentially half our startup time.
+    //let mut frame_graph = build_frame_graph(&app_dirs, &mut interpreter, &mut runtime)?;
+
+    // let fullscreen_buffer = FullscreenBuffer::new(runtime.resource::<Gpu>());
+    // runtime.insert_resource(fullscreen_buffer.clone());
+
+    // let globals = GlobalParametersBuffer::new(runtime.resource::<Gpu>().device(), &mut interpreter);
+    // runtime.insert_resource(globals.clone());
 
     let stars_buffer = Arc::new(RwLock::new(StarsBuffer::new(runtime.resource::<Gpu>())?));
     runtime.insert_resource(stars_buffer.clone());
@@ -338,9 +375,9 @@ fn build_frame_graph(
             catalog,
             cpu_detail_level,
             gpu_detail_level,
-            &globals.read(),
-            &mut runtime.resource_mut::<Gpu>(),
-            interpreter,
+            runtime.resource::<GlobalParametersBuffer>(),
+            &runtime.resource::<Gpu>(),
+            &mut interpreter,
         )?;
         runtime.insert_resource(terrain_buffer.clone());
         terrain_buffer
@@ -348,18 +385,18 @@ fn build_frame_graph(
 
     let world_gfx = WorldRenderPass::new(
         &terrain.read(),
-        &atmosphere_buffer.read(),
+        &runtime.resource::<AtmosphereBuffer>(),
         &stars_buffer.read(),
-        &globals.read(),
-        &mut runtime.resource_mut::<Gpu>(),
-        interpreter,
+        runtime.resource::<GlobalParametersBuffer>(),
+        runtime.resource::<Gpu>(),
+        &mut interpreter,
     )?;
     runtime.insert_resource(world_gfx.clone());
     // world_gfx.write().add_debug_bindings(interpreter)?;
 
     let widgets = WidgetBuffer::new(
         &mut runtime.resource_mut::<Gpu>(),
-        interpreter,
+        &mut interpreter,
         &app_dirs.state_dir,
     )?;
     runtime.insert_resource(widgets.clone());
@@ -368,90 +405,18 @@ fn build_frame_graph(
     let ui = UiRenderPass::new(
         &widgets.read(),
         &world_gfx.read(),
-        &globals.read(),
-        &mut runtime.resource_mut::<Gpu>(),
+        runtime.resource::<GlobalParametersBuffer>(),
+        runtime.resource::<Gpu>(),
     )?;
     runtime.insert_resource(ui.clone());
 
     let composite = Arc::new(RwLock::new(CompositeRenderPass::new(
         &ui.read(),
         &world_gfx.read(),
-        &globals.read(),
-        &mut runtime.resource_mut::<Gpu>(),
+        runtime.resource::<GlobalParametersBuffer>(),
+        runtime.resource::<Gpu>(),
     )?));
     runtime.insert_resource(composite.clone());
-
-    // Compose the frame graph.
-    // TODO: should this be dynamic?
-    let frame_graph = FrameGraph::new(
-        composite,
-        ui,
-        widgets,
-        world_gfx,
-        terrain,
-        atmosphere_buffer,
-        stars_buffer,
-        fullscreen_buffer,
-        globals,
-    )?;
-
-    Ok(frame_graph)
-}
-
-fn main() -> Result<()> {
-    env_logger::init();
-    InputSystem::run_forever(
-        WindowBuilder::new().with_title("Nitrogen Demo"),
-        simulation_main,
-    )
-}
-
-fn simulation_main(mut runtime: Runtime) -> Result<()> {
-    runtime
-        .load_extension::<Catalog>()?
-        .load_extension::<Opt>()?
-        .load_extension::<EventMapper>()?
-        .load_extension::<Window>()?
-        .load_extension::<Gpu>()?
-        .load_extension::<TimeStep>()?;
-
-    let opt = Opt::from_args();
-    //let opt = runtime.get_resource::<Opt>().to_owned();
-
-    fn timestep(runtime: &Runtime) -> &TimeStep {
-        runtime.resource::<TimeStep>()
-    }
-
-    // Create the game interpreter
-    let mut interpreter = Interpreter::default();
-    runtime.world.insert_resource(interpreter.clone());
-
-    // Make sure various config locations exist
-    let app_dirs = AppDirs::new(Some("nitrogen"), true)
-        .ok_or_else(|| anyhow!("unable to find app directories"))?;
-    create_dir_all(&app_dirs.config_dir)?;
-    create_dir_all(&app_dirs.state_dir)?;
-
-    // We have to create the mapper immediately so that the namespace will be available to scripts.
-    // let mapper = EventMapper::new(&mut interpreter);
-    // runtime.world.insert_resource(mapper);
-
-    // So that we can create the window.
-    // let window = Window::new(
-    //     runtime.remove_resource::<OsWindow>().unwrap(),
-    //     runtime.remove_resource::<DisplayConfig>().unwrap(),
-    //     &mut interpreter,
-    // )?;
-    // runtime.world.insert_resource(window.clone());
-
-    // We don't technically need the window here, just the graphics configuration, and we could
-    // even potentially create blind and expect the resize later. Worth looking into as it would
-    // let us initialize async. The main work to do in parallel is discovering tile trees; this
-    // does not technically depend on the gpu, but does because it lives with terrain creation,
-    // which does need the gpu for resource creation. Probably worth looking to parallelize this
-    // as we could potentially half our startup time.
-    let mut frame_graph = build_frame_graph(&app_dirs, &mut interpreter, &mut runtime)?;
-
     // Create rest of game resources
     let initial_utc = Utc.ymd(1964, 2, 24).and_hms(12, 0, 0);
     let orrery = Orrery::new(initial_utc, &mut interpreter)?;
@@ -459,11 +424,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     let timeline = Timeline::new(&mut interpreter);
     runtime.world.insert_resource(timeline);
 
-    let system = System::new(
-        &frame_graph.widgets(),
-        //&resources.get::<Arc<RwLock<WidgetBuffer>>>().unwrap().read(),
-        &mut interpreter,
-    )?;
+    let system = System::new(&widgets.read(), &mut interpreter)?;
     runtime.world.insert_resource(system.clone());
 
     // But we need at least a camera and controller before the sim is ready to run.
@@ -491,19 +452,12 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     let mut sim_schedule = Schedule::default();
     sim_schedule.add_stage(
         "time",
-        SystemStage::single_threaded()
-            .with_system(TimeStep::sys_tick_time.system())
-            .with_system(Orrery::sys_step_time.system()),
-    );
-    sim_schedule.add_stage(
-        "read_input_events",
-        SystemStage::single_threaded().with_system(InputController::sys_read_input_events.system()),
+        SystemStage::single_threaded().with_system(Orrery::sys_step_time.system()),
     );
     sim_schedule.add_stage(
         "interpret_input_events",
         SystemStage::parallel()
             .with_system(WidgetBuffer::sys_handle_input_events.system())
-            // .with_system(EventMapper::sys_handle_input_events.system())
             .with_system(Timeline::sys_animate.system()),
     );
     sim_schedule.add_stage(
@@ -542,14 +496,13 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         query: Query<&CameraComponent>,
         orrery: Res<Arc<RwLock<Orrery>>>,
         window: Res<Window>,
-        global_data: Res<Arc<RwLock<GlobalParametersBuffer>>>,
+        mut globals: ResMut<GlobalParametersBuffer>,
     ) {
         // FIXME: multiple camera support
-        let mut global_data = global_data.write();
         let orrery = orrery.read();
         for (i, camera) in query.iter().enumerate() {
             assert_eq!(i, 0);
-            global_data.track_state_changes(&camera.camera(), &orrery, &window);
+            globals.track_state_changes(&camera.camera(), &orrery, &window);
         }
     }
 
@@ -581,7 +534,6 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     update_frame_schedule.add_stage(
         "update_frame",
         SystemStage::single_threaded()
-            .with_system(InputController::sys_read_system_events.system())
             .with_system(Window::sys_handle_system_events.system())
             .with_system(CameraComponent::sys_apply_display_changes.system())
             .with_system(Gpu::sys_handle_display_config_change.system())
@@ -608,23 +560,154 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         update_frame_schedule.run_once(&mut runtime.world);
 
         let mut tracker = Default::default();
-        frame_graph
-            .globals()
+        runtime
+            .resource::<GlobalParametersBuffer>()
             .ensure_uploaded(runtime.resource::<Gpu>(), &mut tracker)?;
-        frame_graph
-            .terrain_mut()
+        terrain
+            .write()
             .ensure_uploaded(&mut runtime.resource_mut::<Gpu>(), &mut tracker)?;
-        frame_graph.widgets_mut().ensure_uploaded(
+        widgets.write().ensure_uploaded(
             *timestep(&runtime).now(),
             runtime.resource::<Gpu>(),
             runtime.resource::<Window>(),
             &mut tracker,
         )?;
-        if !frame_graph.run(&mut runtime.resource_mut::<Gpu>(), tracker)? {
+
+        {
+            // if !frame_graph.run(&mut runtime.resource_mut::<Gpu>(), tracker)? {
+            //     let config = runtime.resource::<Window>().config().to_owned();
+            //     runtime
+            //         .resource_mut::<Gpu>()
+            //         .on_display_config_changed(&config)?;
+            // }
             let config = runtime.resource::<Window>().config().to_owned();
+            //let gpu = &mut runtime.resource_mut::<Gpu>();
+            let composite = composite.read();
+            let ui = ui.read();
+            let widgets = widgets.read();
+            let world = world_gfx.read();
+            let terrain = terrain.read();
+            let stars = stars_buffer.read();
+            // let fullscreen = fullscreen_buffer.read();
+            // let globals = globals.read();
+
+            let mut encoder = runtime
+                .resource_mut::<Gpu>()
+                .device()
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("frame-encoder"),
+                });
+
+            let surface_texture = if let Some(surface_texture) =
+                runtime.resource_mut::<Gpu>().get_next_framebuffer()?
+            {
+                surface_texture
+            } else {
+                runtime
+                    .resource_mut::<Gpu>()
+                    .on_display_config_changed(&config)?;
+                continue;
+            };
+
+            {
+                tracker.dispatch_uploads(&mut encoder);
+
+                encoder = widgets.maintain_font_atlas(encoder)?;
+                encoder = terrain.paint_atlas_indices(encoder)?;
+
+                // terrain
+                {
+                    let cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                        label: Some("compute-pass"),
+                    });
+                    let cpass = terrain.tessellate(cpass)?;
+                }
+                {
+                    let (color_attachments, depth_stencil_attachment) =
+                        terrain.deferred_texture_target();
+                    let render_pass_desc_ref = wgpu::RenderPassDescriptor {
+                        label: Some(concat!("non-screen-render-pass-terrain-deferred",)),
+                        color_attachments: &color_attachments,
+                        depth_stencil_attachment,
+                    };
+                    let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
+                    let rpass = terrain
+                        .deferred_texture(rpass, runtime.resource::<GlobalParametersBuffer>())?;
+                }
+                {
+                    let cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                        label: Some("compute-pass"),
+                    });
+                    let cpass = terrain.accumulate_normal_and_color(
+                        cpass,
+                        runtime.resource::<GlobalParametersBuffer>(),
+                    )?;
+                }
+
+                // world: Flatten terrain g-buffer into the final image and mix in stars.
+                {
+                    let (color_attachments, depth_stencil_attachment) =
+                        world.offscreen_target_cleared();
+                    let render_pass_desc_ref = wgpu::RenderPassDescriptor {
+                        label: Some("offscreen-draw-world"),
+                        color_attachments: &color_attachments,
+                        depth_stencil_attachment,
+                    };
+                    let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
+                    let rpass = world.render_world(
+                        rpass,
+                        runtime.resource::<GlobalParametersBuffer>(),
+                        runtime.resource::<FullscreenBuffer>(),
+                        runtime.resource::<AtmosphereBuffer>(),
+                        &stars,
+                        &terrain,
+                    )?;
+                }
+
+                // ui: Draw our widgets onto a buffer with resolution independent of the world.
+                {
+                    let (color_attachments, depth_stencil_attachment) = ui.offscreen_target();
+                    let render_pass_desc_ref = wgpu::RenderPassDescriptor {
+                        label: Some(concat!("non-screen-render-pass-ui-draw-offscreen",)),
+                        color_attachments: &color_attachments,
+                        depth_stencil_attachment,
+                    };
+                    let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
+                    let rpass = ui.render_ui(
+                        rpass,
+                        runtime.resource::<GlobalParametersBuffer>(),
+                        &widgets,
+                        &world,
+                    )?;
+                }
+
+                // composite: Accumulate offscreen buffers into a final image.
+                {
+                    let gpu = runtime.resource::<Gpu>();
+                    let view = surface_texture
+                        .texture
+                        .create_view(&::wgpu::TextureViewDescriptor::default());
+                    let render_pass_desc_ref = wgpu::RenderPassDescriptor {
+                        label: Some("screen-composite-render-pass"),
+                        color_attachments: &[Gpu::color_attachment(&view)],
+                        depth_stencil_attachment: Some(gpu.depth_stencil_attachment()),
+                    };
+                    let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
+                    let rpass = composite.composite_scene(
+                        rpass,
+                        runtime.resource::<FullscreenBuffer>(),
+                        runtime.resource::<GlobalParametersBuffer>(),
+                        &world,
+                        &ui,
+                    )?;
+                }
+            };
+
             runtime
                 .resource_mut::<Gpu>()
-                .on_display_config_changed(&config)?;
+                .queue_mut()
+                .submit(vec![encoder.finish()]);
+            surface_texture.present();
         }
 
         system.write().track_visible_state(

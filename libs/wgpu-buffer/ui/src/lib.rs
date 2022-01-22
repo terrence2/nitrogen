@@ -42,7 +42,7 @@ impl UiRenderPass {
         widget_buffer: &WidgetBuffer,
         world_render_pass: &WorldRenderPass,
         global_data: &GlobalParametersBuffer,
-        gpu: &mut Gpu,
+        gpu: &Gpu,
     ) -> Result<Arc<RwLock<Self>>> {
         trace!("UiRenderPass::new");
 

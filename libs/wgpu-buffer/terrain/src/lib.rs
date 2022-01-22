@@ -77,7 +77,7 @@ impl CpuDetail {
 
     fn for_level(level: CpuDetailLevel) -> Self {
         match level {
-            CpuDetailLevel::Low => Self::new(8, 150.0, 200),
+            CpuDetailLevel::Low => Self::new(11, 150.0, 200),
             CpuDetailLevel::Medium => Self::new(15, 150.0, 300),
             CpuDetailLevel::High => Self::new(16, 150.0, 400),
             CpuDetailLevel::Ultra => Self::new(17, 150.0, 500),
@@ -103,8 +103,8 @@ impl GpuDetail {
 
     fn for_level(level: GpuDetailLevel) -> Self {
         match level {
-            GpuDetailLevel::Low => Self::new(3, 32), // 64MiB
-            GpuDetailLevel::Medium => Self::new(4, 64),
+            GpuDetailLevel::Low => Self::new(4, 32), // 64MiB
+            GpuDetailLevel::Medium => Self::new(5, 64),
             GpuDetailLevel::High => Self::new(6, 128),
             GpuDetailLevel::Ultra => Self::new(7, 256),
         }
@@ -160,7 +160,7 @@ impl TerrainBuffer {
         cpu_detail_level: CpuDetailLevel,
         gpu_detail_level: GpuDetailLevel,
         globals_buffer: &GlobalParametersBuffer,
-        gpu: &mut Gpu,
+        gpu: &Gpu,
         interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
         let cpu_detail = CpuDetail::for_level(cpu_detail_level);

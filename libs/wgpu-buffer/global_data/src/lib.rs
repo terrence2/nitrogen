@@ -22,6 +22,7 @@ use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use orrery::Orrery;
 use parking_lot::RwLock;
+use runtime::{Extension, Runtime};
 use std::{mem, sync::Arc};
 use window::Window;
 use zerocopy::{AsBytes, FromBytes};
@@ -156,11 +157,21 @@ pub struct GlobalParametersBuffer {
     tone_gamma: f32,
 }
 
+impl Extension for GlobalParametersBuffer {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        let globals = GlobalParametersBuffer::new(runtime.resource::<Gpu>().device());
+        // FIXME: how do we do this?
+        // globals.add_debug_bindings(interpreter)?;
+        runtime.insert_module("globals", globals);
+        Ok(())
+    }
+}
+
 #[inject_nitrous_module]
 impl GlobalParametersBuffer {
     const INITIAL_GAMMA: f32 = 2.2f32;
 
-    pub fn new(device: &wgpu::Device, interpreter: &mut Interpreter) -> Arc<RwLock<Self>> {
+    pub fn new(device: &wgpu::Device) -> Self {
         let buffer_size = mem::size_of::<Globals>() as wgpu::BufferAddress;
         let parameters_buffer = Arc::new(device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("globals-buffer"),
@@ -196,18 +207,14 @@ impl GlobalParametersBuffer {
             }],
         });
 
-        let globals = Arc::new(RwLock::new(Self {
+        Self {
             bind_group_layout,
             bind_group,
             buffer_size,
             parameters_buffer,
             globals: Default::default(),
             tone_gamma: Self::INITIAL_GAMMA,
-        }));
-
-        interpreter.put_global("globals", Value::Module(globals.clone()));
-
-        globals
+        }
     }
 
     pub fn add_debug_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {

@@ -12,8 +12,10 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use anyhow::Result;
 use gpu::Gpu;
 use parking_lot::RwLock;
+use runtime::{Extension, Runtime};
 use std::{mem, ops::Range, sync::Arc};
 use zerocopy::{AsBytes, FromBytes};
 
@@ -62,11 +64,19 @@ pub struct FullscreenBuffer {
     vertex_buffer: wgpu::Buffer,
 }
 
+impl Extension for FullscreenBuffer {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        let fullscreen = FullscreenBuffer::new(runtime.resource::<Gpu>());
+        runtime.insert_resource(fullscreen);
+        Ok(())
+    }
+}
+
 impl FullscreenBuffer {
-    pub fn new(gpu: &Gpu) -> Arc<RwLock<Self>> {
-        Arc::new(RwLock::new(Self {
+    pub fn new(gpu: &Gpu) -> Self {
+        Self {
             vertex_buffer: FullscreenVertex::buffer(gpu),
-        }))
+        }
     }
 
     pub fn vertex_buffer(&self) -> wgpu::BufferSlice {
