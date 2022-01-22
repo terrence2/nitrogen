@@ -62,19 +62,19 @@ impl ArcBallCamera {
     pub fn install(interpreter: &mut Interpreter) -> Result<Arc<RwLock<Self>>> {
         let arcball = Arc::new(RwLock::new(Self::detached()));
         interpreter.put_global("arcball", Value::Module(arcball.clone()));
-        interpreter.interpret_once(
-            r#"
-                let bindings := mapper.create_bindings("arc_ball_controller");
-                bindings.bind("mouse1", "arcball.pan_view(pressed)");
-                bindings.bind("mouse3", "arcball.move_view(pressed)");
-                bindings.bind("mouseMotion", "arcball.handle_mousemotion(dx, dy)");
-                bindings.bind("mouseWheel", "arcball.handle_mousewheel(vertical_delta)");
-                bindings.bind("Shift+Up", "arcball.target_up_fast(pressed)");
-                bindings.bind("Shift+Down", "arcball.target_down_fast(pressed)");
-                bindings.bind("Up", "arcball.target_up(pressed)");
-                bindings.bind("Down", "arcball.target_down(pressed)");
-            "#,
-        )?;
+        // interpreter.interpret_once(
+        //     r#"
+        //         let bindings := mapper.create_bindings("arc_ball_controller");
+        //         bindings.bind("mouse1", "arcball.pan_view(pressed)");
+        //         bindings.bind("mouse3", "arcball.move_view(pressed)");
+        //         bindings.bind("mouseMotion", "arcball.handle_mousemotion(dx, dy)");
+        //         bindings.bind("mouseWheel", "arcball.handle_mousewheel(vertical_delta)");
+        //         bindings.bind("Shift+Up", "arcball.target_up_fast(pressed)");
+        //         bindings.bind("Shift+Down", "arcball.target_down_fast(pressed)");
+        //         bindings.bind("Up", "arcball.target_up(pressed)");
+        //         bindings.bind("Down", "arcball.target_down(pressed)");
+        //     "#,
+        // )?;
         Ok(arcball)
     }
 

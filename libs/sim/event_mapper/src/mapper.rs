@@ -23,7 +23,7 @@ use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
-use runtime::{Extension, Runtime};
+use runtime::{Extension, Runtime, SimStage};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -42,21 +42,23 @@ pub struct EventMapper {
     state: State,
 }
 
-// impl Extension for EventMapper {
-//     fn init(runtime: &mut Runtime) -> Result<()> {
-//         runtime.insert_module("mapper", EventMapper::new())
-//     }
-// }
+impl Extension for EventMapper {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        runtime.insert_module("mapper", EventMapper::new());
+        runtime
+            .sim_stage_mut(SimStage::HandleInput)
+            .add_system(Self::sys_handle_input_events);
+        Ok(())
+    }
+}
 
 #[inject_nitrous_module]
 impl EventMapper {
-    pub fn new(interpreter: &mut Interpreter) -> Arc<RwLock<Self>> {
-        let mapper = Arc::new(RwLock::new(Self {
+    pub fn new() -> Self {
+        Self {
             bindings: HashMap::new(),
             state: State::default(),
-        }));
-        interpreter.put_global("mapper", Value::Module(mapper.clone()));
-        mapper
+        }
     }
 
     #[method]
@@ -74,10 +76,9 @@ impl EventMapper {
         events: Res<InputEventVec>,
         input_focus: Res<InputFocus>,
         mut interpreter: ResMut<Interpreter>,
-        mapper: Res<Arc<RwLock<EventMapper>>>,
+        mut mapper: ResMut<EventMapper>,
     ) {
         mapper
-            .write()
             .handle_events(&events, *input_focus, &mut interpreter)
             .expect("EventMapper::handle_events");
     }

@@ -334,12 +334,11 @@ impl UiRenderPass {
 
     pub fn sys_handle_display_config_change(
         updated_config: Res<Option<DisplayConfig>>,
-        gpu: Res<Arc<RwLock<Gpu>>>,
+        gpu: Res<Gpu>,
         ui: Res<Arc<RwLock<UiRenderPass>>>,
     ) {
         if updated_config.is_some() {
             let mut ui = ui.write();
-            let gpu = gpu.read();
             ui.handle_render_extent_changed(&gpu)
                 .expect("UI::handle_render_extent_changed")
         }

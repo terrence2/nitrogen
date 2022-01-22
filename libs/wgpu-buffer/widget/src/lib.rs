@@ -328,13 +328,13 @@ impl WidgetBuffer {
     pub fn sys_handle_input_events(
         events: Res<InputEventVec>,
         mut input_focus: ResMut<InputFocus>,
-        window: Res<Arc<RwLock<Window>>>,
+        window: Res<Window>,
         mut interpreter: ResMut<Interpreter>,
         widgets: Res<Arc<RwLock<WidgetBuffer>>>,
     ) {
         widgets
             .write()
-            .handle_events(&events, *input_focus, &mut interpreter, &window.read())
+            .handle_events(&events, *input_focus, &mut interpreter, &window)
             .expect("Widgets::handle_events");
 
         let widgets = widgets.read();
@@ -393,7 +393,7 @@ impl WidgetBuffer {
     pub fn ensure_uploaded(
         &mut self,
         now: Instant,
-        gpu: &mut Gpu,
+        gpu: &Gpu,
         win: &Window,
         tracker: &mut UploadTracker,
     ) -> Result<()> {

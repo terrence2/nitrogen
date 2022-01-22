@@ -343,13 +343,13 @@ impl Orrery {
         }));
 
         interpreter.put_global("orrery", Value::Module(orrery.clone()));
-        interpreter.interpret_once(
-            r#"
-                let bindings := mapper.create_bindings("orrery");
-                bindings.bind("mouse2", "orrery.move_sun(pressed)");
-                bindings.bind("mouseMotion", "orrery.handle_mousemove(dx)");
-            "#,
-        )?;
+        // interpreter.interpret_once(
+        //     r#"
+        //         let bindings := mapper.create_bindings("orrery");
+        //         bindings.bind("mouse2", "orrery.move_sun(pressed)");
+        //         bindings.bind("mouseMotion", "orrery.handle_mousemove(dx)");
+        //     "#,
+        // )?;
 
         Ok(orrery)
     }

@@ -110,15 +110,15 @@ impl Camera {
     ) -> Result<Arc<RwLock<Self>>> {
         let camera = Arc::new(RwLock::new(Self::detached(fov_y, aspect_ratio, z_near)));
         interpreter.put_global("camera", Value::Module(camera.clone()));
-        interpreter.interpret_once(
-            r#"
-                let bindings := mapper.create_bindings("camera");
-                bindings.bind("PageUp", "camera.increase_fov(pressed)");
-                bindings.bind("PageDown", "camera.decrease_fov(pressed)");
-                bindings.bind("Shift+LBracket", "camera.decrease_exposure(pressed)");
-                bindings.bind("Shift+RBracket", "camera.increase_exposure(pressed)");
-            "#,
-        )?;
+        // interpreter.interpret_once(
+        //     r#"
+        //         let bindings := mapper.create_bindings("camera");
+        //         bindings.bind("PageUp", "camera.increase_fov(pressed)");
+        //         bindings.bind("PageDown", "camera.decrease_fov(pressed)");
+        //         bindings.bind("Shift+LBracket", "camera.decrease_exposure(pressed)");
+        //         bindings.bind("Shift+RBracket", "camera.increase_exposure(pressed)");
+        //     "#,
+        // )?;
         Ok(camera)
     }
 

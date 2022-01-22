@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 mod bindings;
 mod input;
-mod widget;
+mod mapper;
 
-pub(crate) use crate::widget::State;
-pub use crate::{bindings::Bindings, widget::EventMapper};
+pub(crate) use crate::mapper::State;
+pub use crate::{bindings::Bindings, mapper::EventMapper};

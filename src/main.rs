@@ -120,15 +120,15 @@ impl System {
             visible_widgets,
         }));
         interpreter.put_global("system", Value::Module(system.clone()));
-        interpreter.interpret_once(
-            r#"
-                let bindings := mapper.create_bindings("system");
-                bindings.bind("Escape", "system.exit()");
-                bindings.bind("q", "system.exit()");
-                bindings.bind("p", "system.toggle_pin_camera(pressed)");
-                bindings.bind("g", "widget.dump_glyphs(pressed)");
-            "#,
-        )?;
+        // interpreter.interpret_once(
+        //     r#"
+        //         let bindings := mapper.create_bindings("system");
+        //         bindings.bind("Escape", "system.exit()");
+        //         bindings.bind("q", "system.exit()");
+        //         bindings.bind("p", "system.toggle_pin_camera(pressed)");
+        //         bindings.bind("g", "widget.dump_glyphs(pressed)");
+        //     "#,
+        // )?;
         Ok(system)
     }
 
@@ -312,54 +312,56 @@ make_frame_graph!(
 );
 
 fn build_frame_graph(
-    // cpu_detail: CpuDetailLevel,
-    // gpu_detail: GpuDetailLevel,
     app_dirs: &AppDirs,
-    // catalog: &Catalog,
-    window: &mut Window,
     interpreter: &mut Interpreter,
     runtime: &mut Runtime,
-) -> Result<(Arc<RwLock<Gpu>>, FrameGraph)> {
-    let gpu = Gpu::new(window, Default::default(), interpreter)?;
-    runtime.insert_resource(gpu.clone());
-
-    let atmosphere_buffer = AtmosphereBuffer::new(&mut gpu.write())?;
+) -> Result<FrameGraph> {
+    let atmosphere_buffer = AtmosphereBuffer::new(&mut runtime.resource_mut::<Gpu>())?;
     runtime.insert_resource(atmosphere_buffer.clone());
 
-    let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
+    let fullscreen_buffer = FullscreenBuffer::new(runtime.resource::<Gpu>());
     runtime.insert_resource(fullscreen_buffer.clone());
 
-    let globals = GlobalParametersBuffer::new(gpu.read().device(), interpreter);
+    let globals = GlobalParametersBuffer::new(runtime.resource::<Gpu>().device(), interpreter);
     runtime.insert_resource(globals.clone());
-    globals.write().add_debug_bindings(interpreter)?;
+    // globals.write().add_debug_bindings(interpreter)?;
 
-    let stars_buffer = Arc::new(RwLock::new(StarsBuffer::new(&gpu.read())?));
+    let stars_buffer = Arc::new(RwLock::new(StarsBuffer::new(runtime.resource::<Gpu>())?));
     runtime.insert_resource(stars_buffer.clone());
 
-    let terrain_buffer = TerrainBuffer::new(
-        &runtime.resource::<Arc<RwLock<Catalog>>>().read(),
-        *runtime.resource::<CpuDetailLevel>(),
-        *runtime.resource::<GpuDetailLevel>(),
-        // cpu_detail,
-        // gpu_detail,
-        &globals.read(),
-        &mut gpu.write(),
-        interpreter,
-    )?;
-    runtime.insert_resource(terrain_buffer.clone());
+    let terrain = {
+        let catalog_ref = runtime.resource::<Arc<RwLock<Catalog>>>().clone();
+        let catalog = &catalog_ref.read();
+        let cpu_detail_level = *runtime.resource::<CpuDetailLevel>();
+        let gpu_detail_level = *runtime.resource::<GpuDetailLevel>();
+        let terrain_buffer = TerrainBuffer::new(
+            catalog,
+            cpu_detail_level,
+            gpu_detail_level,
+            &globals.read(),
+            &mut runtime.resource_mut::<Gpu>(),
+            interpreter,
+        )?;
+        runtime.insert_resource(terrain_buffer.clone());
+        terrain_buffer
+    };
 
     let world_gfx = WorldRenderPass::new(
-        &terrain_buffer.read(),
+        &terrain.read(),
         &atmosphere_buffer.read(),
         &stars_buffer.read(),
         &globals.read(),
-        &mut gpu.write(),
+        &mut runtime.resource_mut::<Gpu>(),
         interpreter,
     )?;
     runtime.insert_resource(world_gfx.clone());
-    world_gfx.write().add_debug_bindings(interpreter)?;
+    // world_gfx.write().add_debug_bindings(interpreter)?;
 
-    let widgets = WidgetBuffer::new(&mut gpu.write(), interpreter, &app_dirs.state_dir)?;
+    let widgets = WidgetBuffer::new(
+        &mut runtime.resource_mut::<Gpu>(),
+        interpreter,
+        &app_dirs.state_dir,
+    )?;
     runtime.insert_resource(widgets.clone());
 
     // This is just rendering for widgets, so should be merged.
@@ -367,7 +369,7 @@ fn build_frame_graph(
         &widgets.read(),
         &world_gfx.read(),
         &globals.read(),
-        &mut gpu.write(),
+        &mut runtime.resource_mut::<Gpu>(),
     )?;
     runtime.insert_resource(ui.clone());
 
@@ -375,7 +377,7 @@ fn build_frame_graph(
         &ui.read(),
         &world_gfx.read(),
         &globals.read(),
-        &mut gpu.write(),
+        &mut runtime.resource_mut::<Gpu>(),
     )?));
     runtime.insert_resource(composite.clone());
 
@@ -386,14 +388,14 @@ fn build_frame_graph(
         ui,
         widgets,
         world_gfx,
-        terrain_buffer,
+        terrain,
         atmosphere_buffer,
         stars_buffer,
         fullscreen_buffer,
         globals,
     )?;
 
-    Ok((gpu, frame_graph))
+    Ok(frame_graph)
 }
 
 fn main() -> Result<()> {
@@ -408,8 +410,10 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     runtime
         .load_extension::<Catalog>()?
         .load_extension::<Opt>()?
-        .load_extension::<TimeStep>()?
-        .load_extension::<EventMapper>()?;
+        .load_extension::<EventMapper>()?
+        .load_extension::<Window>()?
+        .load_extension::<Gpu>()?
+        .load_extension::<TimeStep>()?;
 
     let opt = Opt::from_args();
     //let opt = runtime.get_resource::<Opt>().to_owned();
@@ -433,12 +437,12 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     // runtime.world.insert_resource(mapper);
 
     // So that we can create the window.
-    let window = Window::new(
-        runtime.remove_resource::<OsWindow>().unwrap(),
-        runtime.remove_resource::<DisplayConfig>().unwrap(),
-        &mut interpreter,
-    )?;
-    runtime.world.insert_resource(window.clone());
+    // let window = Window::new(
+    //     runtime.remove_resource::<OsWindow>().unwrap(),
+    //     runtime.remove_resource::<DisplayConfig>().unwrap(),
+    //     &mut interpreter,
+    // )?;
+    // runtime.world.insert_resource(window.clone());
 
     // We don't technically need the window here, just the graphics configuration, and we could
     // even potentially create blind and expect the resize later. Worth looking into as it would
@@ -446,14 +450,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     // does not technically depend on the gpu, but does because it lives with terrain creation,
     // which does need the gpu for resource creation. Probably worth looking to parallelize this
     // as we could potentially half our startup time.
-    let (gpu, mut frame_graph) = build_frame_graph(
-        // cpu_detail,
-        // gpu_detail,
-        &app_dirs,
-        &mut window.write(),
-        &mut interpreter,
-        &mut runtime,
-    )?;
+    let mut frame_graph = build_frame_graph(&app_dirs, &mut interpreter, &mut runtime)?;
 
     // Create rest of game resources
     let initial_utc = Utc.ymd(1964, 2, 24).and_hms(12, 0, 0);
@@ -472,7 +469,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     // But we need at least a camera and controller before the sim is ready to run.
     let camera = Camera::install(
         radians!(PI / 2.0),
-        window.read().render_aspect_ratio(),
+        runtime.resource::<Window>().render_aspect_ratio(),
         meters!(0.5),
         &mut interpreter,
     )?;
@@ -506,7 +503,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         "interpret_input_events",
         SystemStage::parallel()
             .with_system(WidgetBuffer::sys_handle_input_events.system())
-            .with_system(EventMapper::sys_handle_input_events.system())
+            // .with_system(EventMapper::sys_handle_input_events.system())
             .with_system(Timeline::sys_animate.system()),
     );
     sim_schedule.add_stage(
@@ -532,24 +529,23 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
 
     fn update_widget_track_state_changes(
         step: Res<TimeStep>,
-        window: Res<Arc<RwLock<Window>>>,
+        window: Res<Window>,
         widgets: Res<Arc<RwLock<WidgetBuffer>>>,
     ) {
         widgets
             .write()
-            .track_state_changes(*step.now(), &window.read())
+            .track_state_changes(*step.now(), &window)
             .expect("Widgets::track_state_changes");
     }
 
     fn update_globals_track_state_changes(
         query: Query<&CameraComponent>,
         orrery: Res<Arc<RwLock<Orrery>>>,
-        window: Res<Arc<RwLock<Window>>>,
+        window: Res<Window>,
         global_data: Res<Arc<RwLock<GlobalParametersBuffer>>>,
     ) {
         // FIXME: multiple camera support
         let mut global_data = global_data.write();
-        let window = window.read();
         let orrery = orrery.read();
         for (i, camera) in query.iter().enumerate() {
             assert_eq!(i, 0);
@@ -594,7 +590,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
             .with_system(UiRenderPass::sys_handle_display_config_change.system())
             .with_system(update_widget_track_state_changes.system())
             .with_system(update_globals_track_state_changes.system())
-            .with_system(update_terrain_track_state_changes.system()),
+            .with_system(update_terrain_track_state_changes.system()), // .with_wystem(update_widgets_ensure_uploaded),
     );
 
     // We are now finished and can safely run the startup scripts / configuration.
@@ -604,27 +600,31 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         // Catch monotonic sim time up to system time.
         let frame_start = Instant::now();
         while timestep(&runtime).next_now() < frame_start {
+            runtime.run_sim_once();
             sim_schedule.run_once(&mut runtime.world);
         }
 
+        runtime.run_frame_once();
         update_frame_schedule.run_once(&mut runtime.world);
 
         let mut tracker = Default::default();
         frame_graph
             .globals()
-            .ensure_uploaded(&gpu.read(), &mut tracker)?;
+            .ensure_uploaded(runtime.resource::<Gpu>(), &mut tracker)?;
         frame_graph
             .terrain_mut()
-            .ensure_uploaded(&mut gpu.write(), &mut tracker)?;
+            .ensure_uploaded(&mut runtime.resource_mut::<Gpu>(), &mut tracker)?;
         frame_graph.widgets_mut().ensure_uploaded(
             *timestep(&runtime).now(),
-            &mut gpu.write(),
-            &window.read(),
+            runtime.resource::<Gpu>(),
+            runtime.resource::<Window>(),
             &mut tracker,
         )?;
-        if !frame_graph.run(gpu.clone(), tracker)? {
-            gpu.write()
-                .on_display_config_changed(window.read().config())?;
+        if !frame_graph.run(&mut runtime.resource_mut::<Gpu>(), tracker)? {
+            let config = runtime.resource::<Window>().config().to_owned();
+            runtime
+                .resource_mut::<Gpu>()
+                .on_display_config_changed(&config)?;
         }
 
         system.write().track_visible_state(

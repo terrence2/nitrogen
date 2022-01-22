@@ -595,7 +595,7 @@ where
 
     /// Upload the current contents to the GPU. Note that this is non-destructive. If needed,
     /// the builder can accumulate more textures and upload again later.
-    pub fn make_upload_buffer(&mut self, gpu: &mut Gpu, tracker: &mut UploadTracker) -> Result<()> {
+    pub fn make_upload_buffer(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) -> Result<()> {
         // If we started a texture upload last frame, replace the prior texture with the new.
         // Any glyphs in the new region will have an oob Frame for one frame, but that's better
         // than having the entire glyph texture be noise for one frame.
@@ -747,17 +747,17 @@ where
                     }
                     _ => panic!("don't know how to dump texture format: {:?}", fmt),
                 };
-            Gpu::dump_texture(
-                &self.texture,
-                wgpu::Extent3d {
-                    width: self.width,
-                    height: self.height,
-                    depth_or_array_layers: 1,
-                },
-                self.format,
-                gpu,
-                Box::new(write_img),
-            )?;
+            // Gpu::dump_texture(
+            //     &self.texture,
+            //     wgpu::Extent3d {
+            //         width: self.width,
+            //         height: self.height,
+            //         depth_or_array_layers: 1,
+            //     },
+            //     self.format,
+            //     gpu,
+            //     Box::new(write_img),
+            // )?;
         }
         self.dump_texture = None;
 

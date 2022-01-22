@@ -445,12 +445,11 @@ impl WorldRenderPass {
 
     pub fn sys_handle_display_config_change(
         updated_config: Res<Option<DisplayConfig>>,
-        gpu: Res<Arc<RwLock<Gpu>>>,
+        gpu: Res<Gpu>,
         world: Res<Arc<RwLock<WorldRenderPass>>>,
     ) {
         if updated_config.is_some() {
             let mut world = world.write();
-            let gpu = gpu.read();
             world
                 .handle_render_extent_changed(&gpu)
                 .expect("World::handle_render_extent_changed")

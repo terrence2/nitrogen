@@ -91,7 +91,7 @@ impl FontContext {
         })
     }
 
-    pub fn make_upload_buffer(&mut self, gpu: &mut Gpu, tracker: &mut UploadTracker) -> Result<()> {
+    pub fn make_upload_buffer(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) -> Result<()> {
         self.glyph_sheet.make_upload_buffer(gpu, tracker)
     }
 

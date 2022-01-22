@@ -37,8 +37,9 @@ use log::{info, trace};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::{Mutex, RwLock};
+use runtime::{Extension, FrameStage, Runtime};
 use std::{borrow::Cow, fmt::Debug, fs, mem, num::NonZeroU32, path::PathBuf, ptr, sync::Arc};
-use tokio::runtime::Runtime;
+use tokio::runtime::Runtime as AsyncRuntime;
 use wgpu::util::DeviceExt;
 use window::Window;
 use zerocopy::AsBytes;
@@ -59,7 +60,7 @@ impl Default for RenderConfig {
 pub struct TestResources {
     pub window: Arc<RwLock<Window>>,
     pub gpu: Arc<RwLock<Gpu>>,
-    pub async_rt: Runtime,
+    pub async_rt: AsyncRuntime,
     pub interpreter: Interpreter,
     pub input: Arc<Mutex<InputController>>,
 }
@@ -87,24 +88,27 @@ pub struct Gpu {
     frame_count: usize,
 }
 
+impl Extension for Gpu {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        let gpu = Self::new(runtime.resource::<Window>(), Default::default())?;
+        runtime.insert_module("gpu", gpu);
+        runtime
+            .frame_stage_mut(FrameStage::HandleDisplayChange)
+            .add_system(Self::sys_handle_display_config_change);
+        Ok(())
+    }
+}
+
 #[inject_nitrous_module]
 impl Gpu {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
     pub const SCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 
-    pub fn new(
-        win: &mut Window,
-        config: RenderConfig,
-        interpreter: &mut Interpreter,
-    ) -> Result<Arc<RwLock<Self>>> {
-        block_on(Self::new_async(win, config, interpreter))
+    pub fn new(window: &Window, config: RenderConfig) -> Result<Self> {
+        block_on(Self::new_async(window, config))
     }
 
-    pub async fn new_async(
-        win: &mut Window,
-        config: RenderConfig,
-        interpreter: &mut Interpreter,
-    ) -> Result<Arc<RwLock<Self>>> {
+    pub async fn new_async(window: &Window, config: RenderConfig) -> Result<Self> {
         let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -115,7 +119,7 @@ impl Gpu {
             .await
             .ok_or_else(|| anyhow!("no suitable graphics adapter"))?;
 
-        let surface = { unsafe { instance.create_surface(win.os_window()) } };
+        let surface = { unsafe { instance.create_surface(window.os_window()) } };
 
         let trace_path = PathBuf::from("api_tracing.txt");
         let (device, queue) = adapter
@@ -129,7 +133,7 @@ impl Gpu {
             )
             .await?;
 
-        let physical_size = win.physical_size();
+        let physical_size = window.physical_size();
         let sc_desc = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: Self::SCREEN_FORMAT,
@@ -140,14 +144,14 @@ impl Gpu {
         surface.configure(&device, &sc_desc);
         let depth_texture = Self::create_depth_texture(&device, &sc_desc);
 
-        let render_size = win.render_extent();
+        let render_size = window.render_extent();
         let render_extent = wgpu::Extent3d {
             width: render_size.width,
             height: render_size.height,
             depth_or_array_layers: 1,
         };
 
-        let gpu = Arc::new(RwLock::new(Self {
+        Ok(Self {
             _instance: instance,
             surface,
             adapter,
@@ -157,11 +161,10 @@ impl Gpu {
             render_extent,
             config,
             frame_count: 0,
-        }));
-        interpreter.put_global("gpu", Value::Module(gpu.clone()));
-        Ok(gpu)
+        })
     }
 
+    /*
     #[cfg(unix)]
     pub fn for_test_unix() -> Result<TestResources> {
         let (os_window, input) = input::InputController::for_test_unix()?;
@@ -177,6 +180,7 @@ impl Gpu {
             input,
         })
     }
+     */
 
     #[method]
     pub fn info(&self) -> String {
@@ -352,11 +356,10 @@ impl Gpu {
 
     pub fn sys_handle_display_config_change(
         updated_config: Res<Option<DisplayConfig>>,
-        gpu: Res<Arc<RwLock<Gpu>>>,
+        mut gpu: ResMut<Gpu>,
     ) {
         if let Some(config) = updated_config.as_ref() {
-            gpu.write()
-                .on_display_config_changed(config)
+            gpu.on_display_config_changed(config)
                 .expect("Gpu::on_display_config_changed");
         }
     }

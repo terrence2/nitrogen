@@ -15,3 +15,4 @@ winit = "^ 0.26"
 input = { path = "../../system/input" }
 nitrous = { path = "../../util/nitrous" }
 nitrous_injector = { path = "../../util/nitrous_injector" }
+runtime = { path = "../../util/runtime" }

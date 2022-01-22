@@ -122,11 +122,10 @@ macro_rules! make_frame_graph {
                     }
                 )*
 
-                pub fn run(&mut self, gpu: std::sync::Arc<::parking_lot::RwLock<$crate::Gpu>>, tracker: $crate::UploadTracker) -> ::anyhow::Result<bool> {
+                pub fn run(&mut self, gpu: &mut $crate::Gpu, tracker: $crate::UploadTracker) -> ::anyhow::Result<bool> {
                     $(
                         let $buffer_name = &self.$buffer_name.read();
                     )*
-                    let mut gpu = gpu.write();
 
                     let mut encoder = gpu
                         .device()

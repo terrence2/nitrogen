@@ -21,6 +21,7 @@ use log::info;
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
+use runtime::{Extension, FrameStage, Runtime};
 use std::{fmt::Debug, str::FromStr, string::ToString, sync::Arc};
 use structopt::StructOpt;
 
@@ -215,20 +216,30 @@ pub struct Window {
     config_changed: bool,
 }
 
+impl Extension for Window {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        // FIXME: pass the option struct instead of using a temp resource
+        let display_config = runtime.remove_resource::<DisplayConfig>().unwrap();
+        // FIXME: can we pull this off the runtime when we need it?
+        let os_window = runtime.remove_resource::<OsWindow>().unwrap();
+
+        let window = Window::new(os_window, display_config);
+        runtime.insert_module("window", window);
+        runtime
+            .frame_stage_mut(FrameStage::HandleSystem)
+            .add_system(Self::sys_handle_system_events);
+        Ok(())
+    }
+}
+
 #[inject_nitrous_module]
 impl Window {
-    pub fn new(
-        os_window: OsWindow,
-        config: DisplayConfig,
-        interpreter: &mut Interpreter,
-    ) -> Result<Arc<RwLock<Self>>> {
-        let win = Arc::new(RwLock::new(Self {
+    pub fn new(os_window: OsWindow, config: DisplayConfig) -> Self {
+        Self {
             os_window,
             config,
             config_changed: false,
-        }));
-        interpreter.put_global("window", Value::Module(win.clone()));
-        Ok(win)
+        }
     }
 
     fn note_display_config_change(&mut self) {
@@ -237,10 +248,10 @@ impl Window {
 
     pub fn sys_handle_system_events(
         events: Res<SystemEventVec>,
-        window: Res<Arc<RwLock<Window>>>,
+        mut window: ResMut<Window>,
         mut updated_config: ResMut<Option<DisplayConfig>>,
     ) {
-        *updated_config = window.write().handle_system_events(&events);
+        *updated_config = window.handle_system_events(&events);
     }
 
     pub fn handle_system_events(&mut self, events: &[SystemEvent]) -> Option<DisplayConfig> {

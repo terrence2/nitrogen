@@ -30,10 +30,23 @@ pub enum SimStage {
     PostInput,
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, StageLabel)]
+pub enum FrameStage {
+    PreInput,
+    ReadSystem,
+    HandleSystem,
+    HandleDisplayChange,
+    PostSystem,
+    SimStateChange,
+    EnsureUpdate,
+    Render,
+}
+
 pub struct Runtime {
     modules: HashMap<String, TypeId>,
     pub world: World,
     sim_schedule: Schedule,
+    frame_schedule: Schedule,
 }
 
 impl Default for Runtime {
@@ -45,10 +58,21 @@ impl Default for Runtime {
             .with_stage(SimStage::HandleInput, SystemStage::parallel())
             .with_stage(SimStage::PostInput, SystemStage::parallel());
 
+        let frame_schedule = Schedule::default()
+            .with_stage(FrameStage::PreInput, SystemStage::parallel())
+            .with_stage(FrameStage::ReadSystem, SystemStage::parallel())
+            .with_stage(FrameStage::HandleSystem, SystemStage::parallel())
+            .with_stage(FrameStage::HandleDisplayChange, SystemStage::parallel())
+            .with_stage(FrameStage::PostSystem, SystemStage::parallel())
+            .with_stage(FrameStage::SimStateChange, SystemStage::parallel())
+            .with_stage(FrameStage::EnsureUpdate, SystemStage::parallel())
+            .with_stage(FrameStage::Render, SystemStage::parallel());
+
         Self {
             modules: HashMap::new(),
             world: World::default(),
             sim_schedule,
+            frame_schedule,
         }
     }
 }
@@ -56,6 +80,10 @@ impl Default for Runtime {
 impl Runtime {
     pub fn sim_stage_mut(&mut self, sim_stage: SimStage) -> &mut SystemStage {
         self.sim_schedule.get_stage_mut(&sim_stage).unwrap()
+    }
+
+    pub fn frame_stage_mut(&mut self, frame_stage: FrameStage) -> &mut SystemStage {
+        self.frame_schedule.get_stage_mut(&frame_stage).unwrap()
     }
 
     pub fn load_extension<T: Extension>(&mut self) -> Result<&mut Self> {
@@ -91,6 +119,14 @@ impl Runtime {
     #[inline]
     pub fn remove_resource<T: Resource>(&mut self) -> Option<T> {
         self.world.remove_resource()
+    }
+
+    pub fn run_sim_once(&mut self) {
+        self.sim_schedule.run_once(&mut self.world);
+    }
+
+    pub fn run_frame_once(&mut self) {
+        self.frame_schedule.run_once(&mut self.world);
     }
 }
 
