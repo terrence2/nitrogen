@@ -23,6 +23,7 @@ use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
+use runtime::{Extension, Runtime};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -40,6 +41,12 @@ pub struct EventMapper {
     bindings: HashMap<String, Arc<RwLock<Bindings>>>,
     state: State,
 }
+
+// impl Extension for EventMapper {
+//     fn init(runtime: &mut Runtime) -> Result<()> {
+//         runtime.insert_module("mapper", EventMapper::new())
+//     }
+// }
 
 #[inject_nitrous_module]
 impl EventMapper {

@@ -12,15 +12,29 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use anyhow::Result;
 use bevy_ecs::prelude::*;
+use nitrous_injector::{inject_nitrous_module, NitrousModule};
+use runtime::{Extension, Runtime, SimStage};
 use std::time::{Duration, Instant};
 
-#[derive(Clone, Debug)]
+#[derive(Debug, NitrousModule)]
 pub struct TimeStep {
     now: Instant,
     delta: Duration,
 }
 
+impl Extension for TimeStep {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        runtime.insert_module("time", TimeStep::new_60fps());
+        runtime
+            .sim_stage_mut(SimStage::TimeStep)
+            .add_system(Self::sys_tick_time);
+        Ok(())
+    }
+}
+
+#[inject_nitrous_module]
 impl TimeStep {
     pub fn new_60fps() -> Self {
         Self {

@@ -16,9 +16,16 @@ use crate::{DrawerFileId, DrawerInterface, FileMetadata};
 use anyhow::{ensure, Result};
 use glob::{MatchOptions, Pattern};
 use log::debug;
+use parking_lot::RwLock;
+use runtime::{Extension, Runtime};
 use smallvec::SmallVec;
-use std::fmt::Formatter;
-use std::{borrow::Cow, collections::HashMap, fmt::Debug, ops::Range};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    fmt::{Debug, Formatter},
+    ops::Range,
+    sync::Arc,
+};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 struct DrawerId(u16);
@@ -62,6 +69,13 @@ impl Debug for Catalog {
             self.drawers.len(),
             self.index.len(),
         )
+    }
+}
+
+impl Extension for Catalog {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        runtime.insert_resource(Arc::new(RwLock::new(Catalog::empty("main"))));
+        Ok(())
     }
 }
 

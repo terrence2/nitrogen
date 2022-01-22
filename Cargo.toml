@@ -24,6 +24,7 @@ members = [
     "libs/util/nitrous_injector",
     "libs/util/packed_struct",
     "libs/util/physical_constants",
+    "libs/util/runtime",
     "libs/util/star_catalog",
 
     # Only external and util dependencies. Generally adapting or wrapping
@@ -88,6 +89,7 @@ measure = { path = "libs/sim/measure" }
 nitrous = { path = "libs/util/nitrous" }
 nitrous_injector = { path = "libs/util/nitrous_injector" }
 orrery = { path = "libs/sim/orrery" }
+runtime = { path = "libs/util/runtime" }
 stars = { path = "libs/wgpu-buffer/stars" }
 terrain = { path = "libs/wgpu-buffer/terrain" }
 ui = { path = "libs/wgpu-buffer/ui" }

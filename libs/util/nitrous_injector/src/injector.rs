@@ -121,7 +121,7 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
                 Scalar::Value => {
                     parse2(quote! { args.get(#i).expect("not enough args").clone() }).unwrap()
                 }
-                Scalar::Unit => parse2(quote! { Value::True() }).unwrap(),
+                Scalar::Unit => parse2(quote! { ::nitrous::Value::True() }).unwrap(),
             };
             arg_items.push(expr);
             if i != 0 {
@@ -257,7 +257,7 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
             fn __show_help__(&self) -> ::anyhow::Result<::nitrous::Value> {
                 let items = vec![#(#help_items),*];
                 let out = items.join("\n");
-                Ok(Value::String(out))
+                Ok(::nitrous::Value::String(out))
             }
         }
 

@@ -25,6 +25,7 @@ use input::{InputController, InputEvent, InputSystem, SystemEvent, VirtualKeyCod
 use nitrous::Interpreter;
 use orrery::Orrery;
 use parking_lot::Mutex;
+use runtime::Runtime;
 use stars::StarsBuffer;
 use std::sync::Arc;
 use window::{DisplayConfig, DisplayOpts, OsWindow, Window, WindowBuilder};
@@ -36,11 +37,16 @@ fn main() -> Result<()> {
     )
 }
 
-fn window_main(os_window: OsWindow, input_controller: Arc<Mutex<InputController>>) -> Result<()> {
+fn window_main(mut runtime: Runtime) -> Result<()> {
     let mut interpreter = Interpreter::default();
     let _mapper = EventMapper::new(&mut interpreter);
-    let display_config = DisplayConfig::discover(&DisplayOpts::default(), &os_window);
-    let window = Window::new(os_window, display_config, &mut interpreter)?;
+    let display_config =
+        DisplayConfig::discover(&DisplayOpts::default(), runtime.get_resource::<OsWindow>());
+    let window = Window::new(
+        runtime.remove_resource::<OsWindow>(),
+        display_config,
+        &mut interpreter,
+    )?;
     let gpu = Gpu::new(&mut window.write(), Default::default(), &mut interpreter)?;
     let orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0), &mut interpreter)?;
 
@@ -159,7 +165,11 @@ fn window_main(os_window: OsWindow, input_controller: Arc<Mutex<InputController>
     arcball.write().set_distance(meters!(40.0));
 
     loop {
-        for event in input_controller.lock().poll_input_events()? {
+        for event in runtime
+            .get_resource::<Arc<Mutex<InputController>>>()
+            .lock()
+            .poll_input_events()?
+        {
             if let InputEvent::KeyboardKey {
                 virtual_keycode, ..
             } = event
@@ -170,7 +180,10 @@ fn window_main(os_window: OsWindow, input_controller: Arc<Mutex<InputController>
                 }
             }
         }
-        let sys_events = input_controller.lock().poll_system_events()?;
+        let sys_events = runtime
+            .get_resource::<Arc<Mutex<InputController>>>()
+            .lock()
+            .poll_system_events()?;
         for event in &sys_events {
             if matches!(event, SystemEvent::Quit) {
                 return Ok(());

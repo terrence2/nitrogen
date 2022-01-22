@@ -25,10 +25,10 @@ use anyhow::Result;
 use atmosphere::{Precompute, TableHelpers};
 use futures::executor::block_on;
 use gpu::Gpu;
-use input::{InputController, InputSystem};
+use input::InputSystem;
 use nitrous::Interpreter;
-use parking_lot::Mutex;
-use std::{fs, path::PathBuf, sync::Arc, time::Instant};
+use runtime::Runtime;
+use std::{fs, path::PathBuf, time::Instant};
 use structopt::StructOpt;
 use window::{DisplayConfig, DisplayOpts, OsWindow, Window, WindowBuilder};
 
@@ -48,12 +48,17 @@ fn main() -> Result<()> {
     )
 }
 
-fn window_main(os_window: OsWindow, _input_controller: Arc<Mutex<InputController>>) -> Result<()> {
+fn window_main(mut runtime: Runtime) -> Result<()> {
     let opt = Opt::from_args();
     let mut interpreter = Interpreter::default();
 
-    let display_config = DisplayConfig::discover(&DisplayOpts::default(), &os_window);
-    let window = Window::new(os_window, display_config, &mut interpreter)?;
+    let display_config =
+        DisplayConfig::discover(&DisplayOpts::default(), runtime.get_resource::<OsWindow>());
+    let window = Window::new(
+        runtime.remove_resource::<OsWindow>(),
+        display_config,
+        &mut interpreter,
+    )?;
     let gpu = Gpu::new(&mut window.write(), Default::default(), &mut interpreter)?;
 
     let precompute_start = Instant::now();

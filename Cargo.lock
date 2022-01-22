@@ -72,6 +72,7 @@ dependencies = [
  "nitrous_injector",
  "parking_lot",
  "rayon",
+ "runtime",
  "triggered",
 ]
 
@@ -500,7 +501,10 @@ dependencies = [
  "bevy_ecs",
  "glob",
  "log",
+ "parking_lot",
+ "runtime",
  "smallvec",
+ "structopt",
  "tokio",
 ]
 
@@ -987,7 +991,7 @@ dependencies = [
  "gpu",
  "input",
  "nitrous",
- "parking_lot",
+ "runtime",
  "structopt",
  "window",
 ]
@@ -1096,6 +1100,7 @@ dependencies = [
  "once_cell",
  "ordered-float",
  "parking_lot",
+ "runtime",
  "smallvec",
  "strsim 0.8.0",
  "unicase",
@@ -1190,6 +1195,7 @@ dependencies = [
  "nitrous",
  "orrery",
  "parking_lot",
+ "runtime",
  "wgpu",
  "window",
  "zerocopy",
@@ -1559,6 +1565,7 @@ dependencies = [
  "futures",
  "log",
  "parking_lot",
+ "runtime",
  "smallvec",
  "wasm-bindgen",
  "web-sys",
@@ -1977,6 +1984,7 @@ dependencies = [
  "paste",
  "platform-dirs",
  "rayon",
+ "runtime",
  "stars",
  "structopt",
  "terminal_size",
@@ -2599,6 +2607,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f1382d1f0a252c4bf97dc20d979a2fdd05b024acd7c2ed0f7595d7817666a157"
 
 [[package]]
+name = "runtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bevy_ecs",
+ "nitrous",
+]
+
+[[package]]
 name = "rustc-demangle"
 version = "0.1.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2819,6 +2836,7 @@ dependencies = [
  "nitrous",
  "orrery",
  "parking_lot",
+ "runtime",
  "star_catalog",
  "static_assertions",
  "wgpu",

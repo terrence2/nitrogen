@@ -22,6 +22,7 @@ global_data = { path = "../../wgpu-buffer/global_data" }
 input = { path = "../../system/input" }
 nitrous = { path = "../../util/nitrous" }
 orrery = { path = "../../sim/orrery" }
+runtime = { path = "../../util/runtime" }
 window = { path = "../../system/window" }
 
 [build-dependencies]

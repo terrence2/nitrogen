@@ -30,8 +30,9 @@ use measure::WorldSpaceFrame;
 use nitrous::{Interpreter, StartupOpts, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use orrery::Orrery;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use platform_dirs::AppDirs;
+use runtime::{Extension, Runtime};
 use stars::StarsBuffer;
 use std::{f32::consts::PI, fs::create_dir_all, path::PathBuf, sync::Arc, time::Instant};
 use structopt::StructOpt;
@@ -63,6 +64,32 @@ struct Opt {
 
     #[structopt(flatten)]
     startup_opts: StartupOpts,
+}
+
+impl Extension for Opt {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        let opt = {
+            let catalog_ref = runtime.resource_mut::<Arc<RwLock<Catalog>>>();
+            let mut catalog = catalog_ref.write();
+            let opt = Opt::from_args();
+            for (i, d) in opt.libdir.iter().enumerate() {
+                catalog.add_drawer(DirectoryDrawer::from_directory(100 + i as i64, d)?)?;
+            }
+            opt
+        };
+
+        runtime.insert_resource(None as Option<DisplayConfig>);
+        runtime.insert_resource(DisplayConfig::discover(
+            &opt.display_opts,
+            runtime.resource::<OsWindow>(),
+        ));
+
+        runtime.insert_resource(opt.detail_opts.cpu_detail());
+        runtime.insert_resource(opt.detail_opts.gpu_detail());
+
+        runtime.insert_resource(opt);
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -285,39 +312,41 @@ make_frame_graph!(
 );
 
 fn build_frame_graph(
-    cpu_detail: CpuDetailLevel,
-    gpu_detail: GpuDetailLevel,
+    // cpu_detail: CpuDetailLevel,
+    // gpu_detail: GpuDetailLevel,
     app_dirs: &AppDirs,
-    catalog: &Catalog,
+    // catalog: &Catalog,
     window: &mut Window,
     interpreter: &mut Interpreter,
-    world: &mut World,
+    runtime: &mut Runtime,
 ) -> Result<(Arc<RwLock<Gpu>>, FrameGraph)> {
     let gpu = Gpu::new(window, Default::default(), interpreter)?;
-    world.insert_resource(gpu.clone());
+    runtime.insert_resource(gpu.clone());
 
     let atmosphere_buffer = AtmosphereBuffer::new(&mut gpu.write())?;
-    world.insert_resource(atmosphere_buffer.clone());
+    runtime.insert_resource(atmosphere_buffer.clone());
 
     let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
-    world.insert_resource(fullscreen_buffer.clone());
+    runtime.insert_resource(fullscreen_buffer.clone());
 
     let globals = GlobalParametersBuffer::new(gpu.read().device(), interpreter);
-    world.insert_resource(globals.clone());
+    runtime.insert_resource(globals.clone());
     globals.write().add_debug_bindings(interpreter)?;
 
     let stars_buffer = Arc::new(RwLock::new(StarsBuffer::new(&gpu.read())?));
-    world.insert_resource(stars_buffer.clone());
+    runtime.insert_resource(stars_buffer.clone());
 
     let terrain_buffer = TerrainBuffer::new(
-        catalog,
-        cpu_detail,
-        gpu_detail,
+        &runtime.resource::<Arc<RwLock<Catalog>>>().read(),
+        *runtime.resource::<CpuDetailLevel>(),
+        *runtime.resource::<GpuDetailLevel>(),
+        // cpu_detail,
+        // gpu_detail,
         &globals.read(),
         &mut gpu.write(),
         interpreter,
     )?;
-    world.insert_resource(terrain_buffer.clone());
+    runtime.insert_resource(terrain_buffer.clone());
 
     let world_gfx = WorldRenderPass::new(
         &terrain_buffer.read(),
@@ -327,11 +356,11 @@ fn build_frame_graph(
         &mut gpu.write(),
         interpreter,
     )?;
-    world.insert_resource(world_gfx.clone());
+    runtime.insert_resource(world_gfx.clone());
     world_gfx.write().add_debug_bindings(interpreter)?;
 
     let widgets = WidgetBuffer::new(&mut gpu.write(), interpreter, &app_dirs.state_dir)?;
-    world.insert_resource(widgets.clone());
+    runtime.insert_resource(widgets.clone());
 
     // This is just rendering for widgets, so should be merged.
     let ui = UiRenderPass::new(
@@ -340,7 +369,7 @@ fn build_frame_graph(
         &globals.read(),
         &mut gpu.write(),
     )?;
-    world.insert_resource(ui.clone());
+    runtime.insert_resource(ui.clone());
 
     let composite = Arc::new(RwLock::new(CompositeRenderPass::new(
         &ui.read(),
@@ -348,7 +377,7 @@ fn build_frame_graph(
         &globals.read(),
         &mut gpu.write(),
     )?));
-    world.insert_resource(composite.clone());
+    runtime.insert_resource(composite.clone());
 
     // Compose the frame graph.
     // TODO: should this be dynamic?
@@ -375,37 +404,23 @@ fn main() -> Result<()> {
     )
 }
 
-fn simulation_main(
-    os_window: OsWindow,
-    input_controller: Arc<Mutex<InputController>>,
-) -> Result<()> {
-    // Create the world and add un-bound resources to it.
-    let mut world = World::default();
-    input_controller.lock().create_resources(&mut world);
-    world.insert_resource(TimeStep::new_60fps());
-    fn timestep(world: &World) -> &TimeStep {
-        world.get_resource::<TimeStep>().unwrap()
+fn simulation_main(mut runtime: Runtime) -> Result<()> {
+    runtime
+        .load_extension::<Catalog>()?
+        .load_extension::<Opt>()?
+        .load_extension::<TimeStep>()?
+        .load_extension::<EventMapper>()?;
+
+    let opt = Opt::from_args();
+    //let opt = runtime.get_resource::<Opt>().to_owned();
+
+    fn timestep(runtime: &Runtime) -> &TimeStep {
+        runtime.resource::<TimeStep>()
     }
 
     // Create the game interpreter
     let mut interpreter = Interpreter::default();
-    world.insert_resource(interpreter.clone());
-
-    // Create the game resource system and insert globals
-    world.insert_resource(None as Option<DisplayConfig>);
-
-    // Parse arguments
-    let opt = Opt::from_args();
-    let cpu_detail = opt.detail_opts.cpu_detail();
-    let gpu_detail = opt.detail_opts.gpu_detail();
-
-    // Find our files
-    let mut catalog = Catalog::empty("main");
-    for (i, d) in opt.libdir.iter().enumerate() {
-        catalog.add_drawer(DirectoryDrawer::from_directory(100 + i as i64, d)?)?;
-    }
-    let catalog = Arc::new(RwLock::new(catalog));
-    world.insert_resource(catalog.clone());
+    runtime.world.insert_resource(interpreter.clone());
 
     // Make sure various config locations exist
     let app_dirs = AppDirs::new(Some("nitrogen"), true)
@@ -414,15 +429,16 @@ fn simulation_main(
     create_dir_all(&app_dirs.state_dir)?;
 
     // We have to create the mapper immediately so that the namespace will be available to scripts.
-    let mapper = EventMapper::new(&mut interpreter);
-    world.insert_resource(mapper);
-
-    world.insert_resource(input_controller);
-    let display_config = DisplayConfig::discover(&opt.display_opts, &os_window);
+    // let mapper = EventMapper::new(&mut interpreter);
+    // runtime.world.insert_resource(mapper);
 
     // So that we can create the window.
-    let window = Window::new(os_window, display_config, &mut interpreter)?;
-    world.insert_resource(window.clone());
+    let window = Window::new(
+        runtime.remove_resource::<OsWindow>().unwrap(),
+        runtime.remove_resource::<DisplayConfig>().unwrap(),
+        &mut interpreter,
+    )?;
+    runtime.world.insert_resource(window.clone());
 
     // We don't technically need the window here, just the graphics configuration, and we could
     // even potentially create blind and expect the resize later. Worth looking into as it would
@@ -431,28 +447,27 @@ fn simulation_main(
     // which does need the gpu for resource creation. Probably worth looking to parallelize this
     // as we could potentially half our startup time.
     let (gpu, mut frame_graph) = build_frame_graph(
-        cpu_detail,
-        gpu_detail,
+        // cpu_detail,
+        // gpu_detail,
         &app_dirs,
-        &catalog.read(),
         &mut window.write(),
         &mut interpreter,
-        &mut world,
+        &mut runtime,
     )?;
 
     // Create rest of game resources
     let initial_utc = Utc.ymd(1964, 2, 24).and_hms(12, 0, 0);
     let orrery = Orrery::new(initial_utc, &mut interpreter)?;
-    world.insert_resource(orrery.clone());
+    runtime.world.insert_resource(orrery.clone());
     let timeline = Timeline::new(&mut interpreter);
-    world.insert_resource(timeline);
+    runtime.world.insert_resource(timeline);
 
     let system = System::new(
         &frame_graph.widgets(),
         //&resources.get::<Arc<RwLock<WidgetBuffer>>>().unwrap().read(),
         &mut interpreter,
     )?;
-    world.insert_resource(system.clone());
+    runtime.world.insert_resource(system.clone());
 
     // But we need at least a camera and controller before the sim is ready to run.
     let camera = Camera::install(
@@ -462,7 +477,8 @@ fn simulation_main(
         &mut interpreter,
     )?;
     let arcball = ArcBallCamera::install(&mut interpreter)?;
-    let _player_ent = world
+    let _player_ent = runtime
+        .world
         .spawn()
         .insert(WorldSpaceFrame::default())
         .insert(ArcBallController::new(arcball.clone()))
@@ -587,11 +603,11 @@ fn simulation_main(
     while !system.read().exit {
         // Catch monotonic sim time up to system time.
         let frame_start = Instant::now();
-        while timestep(&world).next_now() < frame_start {
-            sim_schedule.run_once(&mut world);
+        while timestep(&runtime).next_now() < frame_start {
+            sim_schedule.run_once(&mut runtime.world);
         }
 
-        update_frame_schedule.run_once(&mut world);
+        update_frame_schedule.run_once(&mut runtime.world);
 
         let mut tracker = Default::default();
         frame_graph
@@ -601,7 +617,7 @@ fn simulation_main(
             .terrain_mut()
             .ensure_uploaded(&mut gpu.write(), &mut tracker)?;
         frame_graph.widgets_mut().ensure_uploaded(
-            *timestep(&world).now(),
+            *timestep(&runtime).now(),
             &mut gpu.write(),
             &window.read(),
             &mut tracker,

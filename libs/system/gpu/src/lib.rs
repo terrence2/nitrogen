@@ -36,7 +36,7 @@ use input::InputController;
 use log::{info, trace};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use std::{borrow::Cow, fmt::Debug, fs, mem, num::NonZeroU32, path::PathBuf, ptr, sync::Arc};
 use tokio::runtime::Runtime;
 use wgpu::util::DeviceExt;
@@ -61,7 +61,7 @@ pub struct TestResources {
     pub gpu: Arc<RwLock<Gpu>>,
     pub async_rt: Runtime,
     pub interpreter: Interpreter,
-    pub input: InputController,
+    pub input: Arc<Mutex<InputController>>,
 }
 
 #[derive(Debug, NitrousModule)]

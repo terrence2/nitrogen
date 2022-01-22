@@ -15,6 +15,7 @@
 use anyhow::Result;
 use input::{InputController, InputEvent, InputSystem, SystemEvent, VirtualKeyCode};
 use parking_lot::Mutex;
+use runtime::Runtime;
 use std::sync::Arc;
 use winit::window::{Window, WindowBuilder};
 
@@ -25,25 +26,39 @@ fn main() -> Result<()> {
     )
 }
 
-fn window_main(window: Window, input_controller: Arc<Mutex<InputController>>) -> Result<()> {
+fn window_main(runtime: Runtime) -> Result<()> {
     loop {
-        for event in input_controller.lock().poll_input_events()? {
-            println!("EVENT: {:?} <- {:?}", window, event);
+        for event in runtime
+            .resource::<Arc<Mutex<InputController>>>()
+            .lock()
+            .poll_input_events()?
+        {
+            println!("EVENT: {:?} <- {:?}", runtime.resource::<Window>(), event);
             if let InputEvent::KeyboardKey {
                 virtual_keycode, ..
             } = event
             {
                 if virtual_keycode == VirtualKeyCode::Escape || virtual_keycode == VirtualKeyCode::Q
                 {
-                    input_controller.lock().quit()?;
+                    runtime
+                        .resource::<Arc<Mutex<InputController>>>()
+                        .lock()
+                        .quit()?;
                     return Ok(());
                 }
             }
         }
-        for event in input_controller.lock().poll_system_events()? {
-            println!("EVENT: {:?} <- {:?}", window, event);
+        for event in runtime
+            .resource::<Arc<Mutex<InputController>>>()
+            .lock()
+            .poll_system_events()?
+        {
+            println!("EVENT: {:?} <- {:?}", runtime.resource::<Window>(), event);
             if matches!(event, SystemEvent::Quit) {
-                input_controller.lock().quit()?;
+                runtime
+                    .resource::<Arc<Mutex<InputController>>>()
+                    .lock()
+                    .quit()?;
                 return Ok(());
             }
         }
