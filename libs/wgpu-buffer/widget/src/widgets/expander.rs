@@ -25,8 +25,8 @@ use crate::{
 use anyhow::Result;
 use gpu::Gpu;
 use input::{InputEvent, InputFocus};
-use nitrous::Interpreter;
 use parking_lot::RwLock;
+use runtime::ScriptHerder;
 use std::{sync::Arc, time::Instant};
 use window::{
     size::{AbsSize, Size},
@@ -224,7 +224,7 @@ impl Widget for Expander {
         event: &InputEvent,
         _focus: InputFocus,
         cursor_position: Position<AbsSize>,
-        _interpreter: &mut Interpreter,
+        _herder: &mut ScriptHerder,
     ) -> Result<()> {
         if event.is_primary_mouse_down() && self.header_region.intersects(&cursor_position) {
             self.expanded = !self.expanded;

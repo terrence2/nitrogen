@@ -15,6 +15,7 @@ zerocopy = "^ 0.5"
 absolute_unit = { path = "../../util/absolute_unit" }
 geodesy = { path = "../../util/geodesy" }
 camera = { path = "../../sim/camera" }
+event_mapper = { path = "../../sim/event_mapper" }
 gpu = { path = "../../system/gpu" }
 nitrous = { path = "../../util/nitrous" }
 nitrous_injector = { path = "../../util/nitrous_injector" }

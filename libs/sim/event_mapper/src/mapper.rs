@@ -19,11 +19,11 @@ use crate::{
 use anyhow::{ensure, Result};
 use bevy_ecs::prelude::*;
 use input::{ElementState, InputEvent, InputEventVec, InputFocus, ModifiersState};
-use nitrous::{Interpreter, Value};
+use nitrous::{Interpreter, LocalNamespace, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
-use runtime::{Extension, Runtime, SimStage};
+use runtime::{Extension, Runtime, ScriptHerder, SimStage};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -75,11 +75,11 @@ impl EventMapper {
     pub fn sys_handle_input_events(
         events: Res<InputEventVec>,
         input_focus: Res<InputFocus>,
-        mut interpreter: ResMut<Interpreter>,
+        mut herder: ResMut<ScriptHerder>,
         mut mapper: ResMut<EventMapper>,
     ) {
         mapper
-            .handle_events(&events, *input_focus, &mut interpreter)
+            .handle_events(&events, *input_focus, &mut herder)
             .expect("EventMapper::handle_events");
     }
 
@@ -87,10 +87,10 @@ impl EventMapper {
         &mut self,
         events: &[InputEvent],
         focus: InputFocus,
-        interpreter: &mut Interpreter,
+        herder: &mut ScriptHerder,
     ) -> Result<()> {
         for event in events {
-            self.handle_event(event, focus, interpreter)?;
+            self.handle_event(event, focus, herder)?;
         }
         Ok(())
     }
@@ -99,7 +99,7 @@ impl EventMapper {
         &mut self,
         event: &InputEvent,
         focus: InputFocus,
-        interpreter: &mut Interpreter,
+        herder: &mut ScriptHerder,
     ) -> Result<()> {
         let input = Input::from_event(event);
         if input.is_none() {
@@ -107,8 +107,8 @@ impl EventMapper {
         }
         let input = input.unwrap();
 
-        let mut variables = Vec::with_capacity(8);
-        variables.push(("window_focused", Value::Boolean(event.is_window_focused())));
+        let mut variables = HashMap::with_capacity(8);
+        variables.insert("window_focused", Value::Boolean(event.is_window_focused()));
 
         if let Some(press_state) = event.press_state() {
             self.state.input_states.insert(input, press_state);
@@ -117,10 +117,10 @@ impl EventMapper {
 
         if let Some(modifiers_state) = event.modifiers_state() {
             self.state.modifiers_state = modifiers_state;
-            variables.push(("shift_pressed", Value::Boolean(modifiers_state.shift())));
-            variables.push(("alt_pressed", Value::Boolean(modifiers_state.alt())));
-            variables.push(("ctrl_pressed", Value::Boolean(modifiers_state.ctrl())));
-            variables.push(("logo_pressed", Value::Boolean(modifiers_state.logo())));
+            variables.insert("shift_pressed", Value::Boolean(modifiers_state.shift()));
+            variables.insert("alt_pressed", Value::Boolean(modifiers_state.alt()));
+            variables.insert("ctrl_pressed", Value::Boolean(modifiers_state.ctrl()));
+            variables.insert("logo_pressed", Value::Boolean(modifiers_state.logo()));
         }
 
         // Break *after* maintaining state.
@@ -133,9 +133,9 @@ impl EventMapper {
             InputEvent::MouseMotion {
                 dx, dy, in_window, ..
             } => {
-                variables.push(("dx", Value::Float(OrderedFloat(*dx))));
-                variables.push(("dy", Value::Float(OrderedFloat(*dy))));
-                variables.push(("in_window", Value::Boolean(*in_window)));
+                variables.insert("dx", Value::Float(OrderedFloat(*dx)));
+                variables.insert("dy", Value::Float(OrderedFloat(*dy)));
+                variables.insert("in_window", Value::Boolean(*in_window));
             }
             InputEvent::MouseWheel {
                 horizontal_delta,
@@ -143,34 +143,36 @@ impl EventMapper {
                 in_window,
                 ..
             } => {
-                variables.push((
+                variables.insert(
                     "horizontal_delta",
                     Value::Float(OrderedFloat(*horizontal_delta)),
-                ));
-                variables.push((
+                );
+                variables.insert(
                     "vertical_delta",
                     Value::Float(OrderedFloat(*vertical_delta)),
-                ));
-                variables.push(("in_window", Value::Boolean(*in_window)));
+                );
+                variables.insert("in_window", Value::Boolean(*in_window));
             }
             InputEvent::DeviceAdded { dummy } => {
-                variables.push(("device_id", Value::Integer(*dummy as i64)));
+                variables.insert("device_id", Value::Integer(*dummy as i64));
             }
             InputEvent::DeviceRemoved { dummy } => {
-                variables.push(("device_id", Value::Integer(*dummy as i64)));
+                variables.insert("device_id", Value::Integer(*dummy as i64));
             }
             // FIXME: set variables for button state, key state, joy state, etc
             _ => {}
         }
 
-        interpreter.with_locals(&variables, |inner| {
-            for bindings in self.bindings.values() {
-                bindings
-                    .read()
-                    .match_input(input, event.press_state(), &mut self.state, inner)?
-            }
-            Ok(Value::True())
-        })?;
+        let locals: LocalNamespace = variables.into();
+        for bindings in self.bindings.values() {
+            bindings.read().match_input(
+                input,
+                event.press_state(),
+                &mut self.state,
+                &locals,
+                herder,
+            )?
+        }
 
         Ok(())
     }

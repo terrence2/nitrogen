@@ -333,7 +333,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
 
     // Create the game interpreter
     let mut interpreter = Interpreter::default();
-    runtime.world.insert_resource(interpreter.clone());
+    // runtime.world.insert_resource(interpreter.clone());
 
     runtime
         .insert_resource(opt.catalog_opts)
@@ -347,6 +347,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .load_extension::<AtmosphereBuffer>()?
         .load_extension::<FullscreenBuffer>()?
         .load_extension::<GlobalParametersBuffer>()?
+        .load_extension::<StarsBuffer>()?
         .load_extension::<TimeStep>()?;
 
     // We don't technically need the window here, just the graphics configuration, and we could
@@ -363,8 +364,8 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     // let globals = GlobalParametersBuffer::new(runtime.resource::<Gpu>().device(), &mut interpreter);
     // runtime.insert_resource(globals.clone());
 
-    let stars_buffer = Arc::new(RwLock::new(StarsBuffer::new(runtime.resource::<Gpu>())?));
-    runtime.insert_resource(stars_buffer.clone());
+    // let stars_buffer = Arc::new(RwLock::new(StarsBuffer::new(runtime.resource::<Gpu>())?));
+    // runtime.insert_resource(stars_buffer.clone());
 
     let terrain = {
         let catalog_ref = runtime.resource::<Arc<RwLock<Catalog>>>().clone();
@@ -385,8 +386,8 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
 
     let world_gfx = WorldRenderPass::new(
         &terrain.read(),
-        &runtime.resource::<AtmosphereBuffer>(),
-        &stars_buffer.read(),
+        runtime.resource::<AtmosphereBuffer>(),
+        runtime.resource::<StarsBuffer>(),
         runtime.resource::<GlobalParametersBuffer>(),
         runtime.resource::<Gpu>(),
         &mut interpreter,
@@ -571,7 +572,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
             let widgets = widgets.read();
             let world = world_gfx.read();
             let terrain = terrain.read();
-            let stars = stars_buffer.read();
+            // let stars = stars_buffer.read();
             // let fullscreen = fullscreen_buffer.read();
             // let globals = globals.read();
 
@@ -643,7 +644,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
                         runtime.resource::<GlobalParametersBuffer>(),
                         runtime.resource::<FullscreenBuffer>(),
                         runtime.resource::<AtmosphereBuffer>(),
-                        &stars,
+                        runtime.resource::<StarsBuffer>(),
                         &terrain,
                     )?;
                 }

@@ -17,13 +17,14 @@ use anyhow::Result;
 use bevy_ecs::prelude::*;
 use camera::{Camera, CameraComponent};
 use core::num::NonZeroU64;
+use event_mapper::EventMapper;
 use gpu::{Gpu, UploadTracker};
 use nalgebra::{convert, Matrix3, Matrix4, Point3, Vector3, Vector4};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use orrery::Orrery;
 use parking_lot::RwLock;
-use runtime::{Extension, FrameStage, Runtime};
+use runtime::{Extension, FrameStage, Runtime, ScriptHerder};
 use std::{mem, sync::Arc};
 use window::Window;
 use zerocopy::{AsBytes, FromBytes};
@@ -162,8 +163,14 @@ impl Extension for GlobalParametersBuffer {
     fn init(runtime: &mut Runtime) -> Result<()> {
         let globals = GlobalParametersBuffer::new(runtime.resource::<Gpu>().device());
 
-        // FIXME: what about debug key bindings?
-        // globals.add_debug_bindings(interpreter)?;
+        // TODO:  move to configuration, once that's a thing
+        runtime.resource_mut::<ScriptHerder>().run_string(
+            r#"
+                let bindings := mapper.create_bindings("globals");
+                bindings.bind("LBracket", "globals.decrease_gamma(pressed)");
+                bindings.bind("RBracket", "globals.increase_gamma(pressed)");
+            "#,
+        )?;
 
         runtime.insert_module("globals", globals);
         runtime
@@ -222,17 +229,6 @@ impl GlobalParametersBuffer {
             globals: Default::default(),
             tone_gamma: Self::INITIAL_GAMMA,
         }
-    }
-
-    pub fn add_debug_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
-        interpreter.interpret_once(
-            r#"
-                let bindings := mapper.create_bindings("globals");
-                bindings.bind("LBracket", "globals.decrease_gamma(pressed)");
-                bindings.bind("RBracket", "globals.increase_gamma(pressed)");
-            "#,
-        )?;
-        Ok(())
     }
 
     #[method]

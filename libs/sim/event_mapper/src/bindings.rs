@@ -19,8 +19,9 @@ use crate::{
 use anyhow::Result;
 use input::ElementState;
 use log::{debug, trace};
-use nitrous::{Interpreter, Script, Value};
+use nitrous::{Interpreter, LocalNamespace, Script, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use runtime::ScriptHerder;
 use smallvec::{smallvec, SmallVec};
 use std::collections::HashMap;
 
@@ -70,12 +71,13 @@ impl Bindings {
         input: Input,
         press_state: Option<ElementState>,
         state: &mut State,
-        interpreter: &mut Interpreter,
+        locals: &LocalNamespace,
+        herder: &mut ScriptHerder,
     ) -> Result<()> {
         match press_state {
-            Some(ElementState::Pressed) => self.handle_press(input, state, interpreter)?,
-            Some(ElementState::Released) => self.handle_release(input, state, interpreter)?,
-            None => self.handle_edge(input, state, interpreter)?,
+            Some(ElementState::Pressed) => self.handle_press(input, state, locals, herder)?,
+            Some(ElementState::Released) => self.handle_release(input, state, locals, herder)?,
+            None => self.handle_edge(input, state, locals, herder)?,
         }
         Ok(())
     }
@@ -84,12 +86,13 @@ impl Bindings {
         &self,
         input: Input,
         state: &mut State,
-        interpreter: &mut Interpreter,
+        locals: &LocalNamespace,
+        herder: &mut ScriptHerder,
     ) -> Result<()> {
         if let Some(possible_chord_list) = self.press_chords.get(&input) {
             for chord in possible_chord_list {
                 if chord.is_pressed(Some(input), state) {
-                    interpreter.interpret(&self.script_map[chord])?;
+                    herder.run_with_locals(locals.to_owned(), &self.script_map[chord]);
                 }
             }
         }
@@ -100,14 +103,15 @@ impl Bindings {
         &self,
         input: Input,
         state: &mut State,
-        interpreter: &mut Interpreter,
+        locals: &LocalNamespace,
+        herder: &mut ScriptHerder,
     ) -> Result<()> {
         // The press chords gives us a quick map from a key press to all chords which could become
         // active in the case that it is pressed so that we don't have to look at everything.
         if let Some(possible_chord_list) = self.press_chords.get(&input) {
             for chord in possible_chord_list {
                 if chord.is_pressed(None, state) {
-                    self.maybe_activate_chord(chord, state, interpreter)?;
+                    self.maybe_activate_chord(chord, state, locals, herder)?;
                 }
             }
         }
@@ -127,7 +131,8 @@ impl Bindings {
         &self,
         chord: &InputSet,
         state: &mut State,
-        interpreter: &mut Interpreter,
+        locals: &LocalNamespace,
+        herder: &mut ScriptHerder,
     ) -> Result<()> {
         // We may have multiple binding sets active for the same KeySet, in which case the first
         // binding in the set wins and checks for subsequent activations should exit early.
@@ -156,13 +161,13 @@ impl Bindings {
         for masked in &masked_chords {
             state.active_chords.remove(masked);
             if let Some(script) = self.script_map.get(masked) {
-                self.deactiveate_chord(script, interpreter)?;
+                self.deactiveate_chord(script, locals, herder)?;
             }
         }
 
         // Activate the chord and run the command.
         state.active_chords.insert(chord.to_owned());
-        self.activate_chord(&self.script_map[chord], interpreter)?;
+        self.activate_chord(&self.script_map[chord], locals, herder)?;
 
         Ok(())
     }
@@ -171,7 +176,8 @@ impl Bindings {
         &self,
         key: Input,
         state: &mut State,
-        interpreter: &mut Interpreter,
+        locals: &LocalNamespace,
+        herder: &mut ScriptHerder,
     ) -> Result<()> {
         // Remove any chords that have been released.
         let mut released_chords: SmallVec<[InputSet; 4]> = smallvec![];
@@ -180,7 +186,7 @@ impl Bindings {
                 // Note: unlike with press, we do not implicitly filter out keys we don't care about.
                 if let Some(script) = self.script_map.get(active_chord) {
                     released_chords.push(active_chord.to_owned());
-                    self.deactiveate_chord(script, interpreter)?;
+                    self.deactiveate_chord(script, locals, herder)?;
                 }
             }
         }
@@ -194,7 +200,7 @@ impl Bindings {
             for (chord, script) in &self.script_map {
                 if chord.is_subset_of(released_chord) && chord.is_pressed(None, state) {
                     state.active_chords.insert(chord.to_owned());
-                    self.activate_chord(script, interpreter)?;
+                    self.activate_chord(script, locals, herder)?;
                 }
             }
         }
@@ -202,17 +208,27 @@ impl Bindings {
         Ok(())
     }
 
-    fn activate_chord(&self, script: &Script, interpreter: &mut Interpreter) -> Result<()> {
-        interpreter.with_locals(&[("pressed", Value::True())], |inner| {
-            inner.interpret(script)
-        })?;
+    fn activate_chord(
+        &self,
+        script: &Script,
+        locals: &LocalNamespace,
+        herder: &mut ScriptHerder,
+    ) -> Result<()> {
+        let mut locals = locals.to_owned();
+        locals.put("pressed", Value::True());
+        herder.run_with_locals(locals, script);
         Ok(())
     }
 
-    fn deactiveate_chord(&self, script: &Script, interpreter: &mut Interpreter) -> Result<()> {
-        interpreter.with_locals(&[("pressed", Value::False())], |inner| {
-            inner.interpret(script)
-        })?;
+    fn deactiveate_chord(
+        &self,
+        script: &Script,
+        locals: &LocalNamespace,
+        herder: &mut ScriptHerder,
+    ) -> Result<()> {
+        let mut locals = locals.to_owned();
+        locals.put("pressed", Value::False());
+        herder.run_with_locals(locals, script);
         Ok(())
     }
 }

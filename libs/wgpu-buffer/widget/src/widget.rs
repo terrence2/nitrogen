@@ -21,7 +21,7 @@ use crate::{
 use anyhow::Result;
 use gpu::Gpu;
 use input::{InputEvent, InputFocus};
-use nitrous::Interpreter;
+use runtime::ScriptHerder;
 use std::{fmt::Debug, time::Instant};
 use window::{
     size::{AbsSize, Size},
@@ -93,7 +93,7 @@ pub trait Widget: Debug + Send + Sync + 'static {
         _event: &InputEvent,
         _focus: InputFocus,
         _cursor_position: Position<AbsSize>,
-        _interpreter: &mut Interpreter,
+        _herder: &mut ScriptHerder,
     ) -> Result<()> {
         Ok(())
     }

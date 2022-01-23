@@ -25,9 +25,10 @@ use gpu::Gpu;
 use input::{ElementState, InputEvent, InputFocus, VirtualKeyCode};
 use nitrous::{
     ir::{Expr, Stmt, Term},
-    Interpreter, Module, Script, Value,
+    Interpreter, Module, Script, ScriptAst, Value,
 };
 use parking_lot::RwLock;
+use runtime::ScriptHerder;
 use std::io::Read;
 use std::{
     fs::{File, OpenOptions},
@@ -152,17 +153,16 @@ impl Terminal {
         self.output.write().append_line(line);
     }
 
-    fn try_completion(&self, mut partial: Script, interpreter: &mut Interpreter) -> Option<String> {
+    fn try_completion(&self, mut partial: ScriptAst, herder: &mut ScriptHerder) -> Option<String> {
         if partial.statements().len() != 1 {
             return None;
         }
-        if let Stmt::Expr(e) = partial.statements_mut()[0].as_mut() {
+        if let Stmt::Expr(ref mut e) = partial.statements_mut()[0].as_mut() {
+            // FIXME: we need access to world for global access to do matching
+            /*
             if let Expr::Term(Term::Symbol(sym)) = e.as_mut() {
-                let pin = interpreter.globals();
-                let globals = pin.read();
-                let sim = globals
-                    .names()
-                    .iter()
+                let sim = herder
+                    .global_names()
                     .filter(|&s| s.starts_with(sym.as_str()))
                     .cloned()
                     .collect::<Vec<&str>>();
@@ -171,7 +171,7 @@ impl Terminal {
                 }
             } else if let Expr::Attr(mod_name_term, Term::Symbol(sym)) = e.as_mut() {
                 if let Expr::Term(Term::Symbol(mod_name)) = mod_name_term.as_ref() {
-                    if let Some(Value::Module(pin)) = interpreter.get_global(mod_name) {
+                    if let Some(Value::Module(pin)) = herder.get_global(mod_name) {
                         let ns = pin.read();
                         let sim = ns
                             .names()
@@ -185,14 +185,15 @@ impl Terminal {
                     }
                 }
             }
+                 */
         }
         None
     }
 
-    fn on_tab_pressed(&mut self, interpreter: &mut Interpreter) {
+    fn on_tab_pressed(&mut self, herder: &mut ScriptHerder) {
         let incomplete = self.edit.read().line().flatten();
-        if let Ok(partial) = Script::compile(&incomplete) {
-            if let Some(full) = self.try_completion(partial, interpreter) {
+        if let Ok(partial) = ScriptAst::compile(&incomplete) {
+            if let Some(full) = self.try_completion(partial, herder) {
                 self.edit.write().line_mut().select_all();
                 self.edit.write().line_mut().insert(&full);
             }
@@ -225,13 +226,17 @@ impl Terminal {
         }
     }
 
-    fn on_enter_pressed(&mut self, interpreter: &mut Interpreter) -> Result<()> {
+    fn on_enter_pressed(&mut self, herder: &mut ScriptHerder) -> Result<()> {
         let command = self.edit.read().line().flatten();
         self.edit.write().line_mut().select_all();
         self.edit.write().line_mut().delete();
 
         self.add_command_to_history(&command)?;
 
+        herder.run(Script::compile(&command)?);
+
+        // FIXME: make sure we have logging of errors... entity system?
+        /*
         let output = self.output.clone();
         let mut interpreter = interpreter.to_owned();
         rayon::spawn(move || match interpreter.interpret_once(&command) {
@@ -254,6 +259,7 @@ impl Terminal {
                 output.write().append_line(&format!("  Error: {:?}", err));
             }
         });
+         */
 
         Ok(())
     }
@@ -302,7 +308,7 @@ impl Widget for Terminal {
         event: &InputEvent,
         focus: InputFocus,
         cursor_position: Position<AbsSize>,
-        interpreter: &mut Interpreter,
+        herder: &mut ScriptHerder,
     ) -> Result<()> {
         // FIXME: don't hard-code the name
         if focus != InputFocus::Terminal {
@@ -312,7 +318,7 @@ impl Widget for Terminal {
         // FIXME: set focus parameter here equal to whatever we call the line_edit child
         self.edit
             .write()
-            .handle_event(event, focus, cursor_position, interpreter)?;
+            .handle_event(event, focus, cursor_position, herder)?;
 
         // Intercept the enter key and process the command in edit into the terminal.
         if let InputEvent::KeyboardKey {
@@ -335,7 +341,7 @@ impl Widget for Terminal {
             if *press_state == ElementState::Pressed {
                 match (modifiers_state.ctrl(), virtual_keycode) {
                     (false, VirtualKeyCode::Tab) => {
-                        self.on_tab_pressed(interpreter);
+                        self.on_tab_pressed(herder);
                     }
                     (false, VirtualKeyCode::Up) => {
                         self.on_up_pressed();
@@ -344,7 +350,7 @@ impl Widget for Terminal {
                         self.on_down_pressed();
                     }
                     (false, VirtualKeyCode::Return | VirtualKeyCode::NumpadEnter) => {
-                        self.on_enter_pressed(interpreter)?;
+                        self.on_enter_pressed(herder)?;
                     }
                     _ => {}
                 }

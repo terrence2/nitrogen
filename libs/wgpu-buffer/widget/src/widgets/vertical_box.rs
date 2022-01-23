@@ -25,8 +25,8 @@ use crate::{
 use anyhow::Result;
 use gpu::Gpu;
 use input::{InputEvent, InputFocus};
-use nitrous::Interpreter;
 use parking_lot::RwLock;
+use runtime::ScriptHerder;
 use std::{sync::Arc, time::Instant};
 use window::{
     size::{AbsSize, ScreenDir, Size},
@@ -213,12 +213,12 @@ impl Widget for VerticalBox {
         event: &InputEvent,
         focus: InputFocus,
         cursor_position: Position<AbsSize>,
-        interpreter: &mut Interpreter,
+        herder: &mut ScriptHerder,
     ) -> Result<()> {
         for child in &self.children {
             child
                 .widget_mut()
-                .handle_event(event, focus, cursor_position, interpreter)?;
+                .handle_event(event, focus, cursor_position, herder)?;
         }
         Ok(())
     }

@@ -22,10 +22,10 @@ use crate::{
 use anyhow::{anyhow, Result};
 use gpu::Gpu;
 use input::{InputEvent, InputFocus};
-use nitrous::Interpreter;
 use nitrous::Value;
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
+use runtime::ScriptHerder;
 use std::{collections::HashMap, sync::Arc, time::Instant};
 use window::{
     size::{AbsSize, LeftBound, RelSize, ScreenDir, Size},
@@ -249,13 +249,13 @@ impl Widget for FloatBox {
         event: &InputEvent,
         focus: InputFocus,
         cursor_position: Position<AbsSize>,
-        interpreter: &mut Interpreter,
+        herder: &mut ScriptHerder,
     ) -> Result<()> {
         for packing in self.children.values() {
             packing
                 .widget
                 .write()
-                .handle_event(event, focus, cursor_position, interpreter)?;
+                .handle_event(event, focus, cursor_position, herder)?;
         }
         Ok(())
     }

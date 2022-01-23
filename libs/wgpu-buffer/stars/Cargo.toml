@@ -16,6 +16,7 @@ wgpu = { version = "^ 0.12", features = ["spirv"] }
 zerocopy = "^ 0.5"
 star_catalog = { path = "../../util/star_catalog" }
 gpu = { path = "../../system/gpu" }
+runtime = { path = "../../util/runtime" }
 
 [dev-dependencies]
 chrono = "^ 0.4"
@@ -29,7 +30,6 @@ global_data = { path = "../../wgpu-buffer/global_data" }
 input = { path = "../../system/input" }
 nitrous = { path = "../../util/nitrous" }
 orrery = { path = "../../sim/orrery" }
-runtime = { path = "../../util/runtime" }
 window = { path = "../../system/window" }
 
 [build-dependencies]

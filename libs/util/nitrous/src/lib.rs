@@ -16,7 +16,10 @@ pub mod ir;
 mod script;
 mod value;
 
-pub use crate::{script::Script, value::Value};
+pub use crate::{
+    script::{Script, ScriptAst},
+    value::Value,
+};
 
 use crate::ir::{Expr, Operator, Stmt, Term};
 use anyhow::{bail, ensure, Result};
@@ -58,6 +61,7 @@ impl StartupOpts {
             println!("startup commmand completed: {}", rv);
         }
 
+        /* FIXME: need green threads
         if let Some(exec_file) = self.execute.as_ref() {
             match std::fs::read_to_string(exec_file) {
                 Ok(code) => {
@@ -68,15 +72,16 @@ impl StartupOpts {
                 }
             }
         }
+         */
 
         Ok(())
     }
 }
 
 /// Evaluate Nitrous (n2o) scripts.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Interpreter {
-    locals: Arc<RwLock<LocalNamespace>>,
+    locals: LocalNamespace,
     globals: Arc<RwLock<GlobalNamespace>>,
 }
 
@@ -95,11 +100,11 @@ impl Interpreter {
         F: FnMut(&mut Interpreter) -> Result<Value>,
     {
         for (name, value) in locals {
-            self.locals.write().put_local(*name, value.to_owned());
+            self.locals.put(*name, value.to_owned());
         }
         let result = callback(self);
         for (name, _) in locals {
-            self.locals.write().remove_local(*name);
+            self.locals.remove(*name);
         }
         result
     }
@@ -120,18 +125,18 @@ impl Interpreter {
         self.interpret(&Script::compile(raw_script)?)
     }
 
-    pub fn interpret_async(&mut self, raw_script: String) -> Result<()> {
-        // Note: all of our memory are behind arcs, so clone of the interpreter is very fast.
-        let mut interp = self.clone();
-        let script = Script::compile(&raw_script)?;
-        std::thread::spawn(move || match interp.interpret(&script) {
-            Ok(_) => {}
-            Err(e) => {
-                println!("Async script execution failed: {}", e);
-            }
-        });
-        Ok(())
-    }
+    // pub fn interpret_async(&mut self, raw_script: String) -> Result<()> {
+    //     // Note: all of our memory are behind arcs, so clone of the interpreter is very fast.
+    //     let mut interp = self.clone();
+    //     let script = Script::compile(&raw_script)?;
+    //     std::thread::spawn(move || match interp.interpret(&script) {
+    //         Ok(_) => {}
+    //         Err(e) => {
+    //             println!("Async script execution failed: {}", e);
+    //         }
+    //     });
+    //     Ok(())
+    // }
 
     pub fn interpret(&mut self, script: &Script) -> Result<Value> {
         debug!("Interpret: {}", script);
@@ -141,7 +146,7 @@ impl Interpreter {
                 Stmt::LetAssign(target, expr) => {
                     let result = self.interpret_expr(expr)?;
                     if let Term::Symbol(name) = target {
-                        self.locals.write().put_local(name, result);
+                        self.locals.put(name, result);
                     }
                 }
                 Stmt::Expr(expr) => {
@@ -160,7 +165,7 @@ impl Interpreter {
                 Term::Integer(i) => Value::Integer(*i),
                 Term::String(s) => Value::String(s.to_owned()),
                 Term::Symbol(sym) => {
-                    if let Some(v) = self.locals.read().get_local(sym) {
+                    if let Some(v) = self.locals.get(sym) {
                         v
                     } else if let Ok(v) = self.globals.read().get(self.globals.clone(), sym) {
                         v
@@ -207,27 +212,46 @@ impl Interpreter {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct LocalNamespace {
     memory: HashMap<String, Value>,
 }
 
+impl From<HashMap<String, Value>> for LocalNamespace {
+    fn from(memory: HashMap<String, Value>) -> Self {
+        Self { memory }
+    }
+}
+
+impl From<HashMap<&str, Value>> for LocalNamespace {
+    fn from(mut memory: HashMap<&str, Value>) -> Self {
+        memory
+            .drain()
+            .map(|(k, v)| (k.to_owned(), v))
+            .collect::<HashMap<String, Value>>()
+            .into()
+    }
+}
+
 impl LocalNamespace {
-    pub fn empty() -> Arc<RwLock<Self>> {
-        Arc::new(RwLock::new(Self {
+    pub fn empty() -> Self {
+        Self {
             memory: HashMap::new(),
-        }))
+        }
     }
 
-    pub fn put_local(&mut self, name: &str, value: Value) {
+    #[inline]
+    pub fn put(&mut self, name: &str, value: Value) {
         self.memory.insert(name.to_owned(), value);
     }
 
-    pub fn get_local(&self, name: &str) -> Option<Value> {
+    #[inline]
+    pub fn get(&self, name: &str) -> Option<Value> {
         self.memory.get(name).cloned()
     }
 
-    pub fn remove_local(&mut self, name: &str) -> Option<Value> {
+    #[inline]
+    pub fn remove(&mut self, name: &str) -> Option<Value> {
         self.memory.remove(name)
     }
 }

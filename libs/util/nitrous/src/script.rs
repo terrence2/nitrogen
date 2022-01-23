@@ -21,13 +21,13 @@ use anyhow::{bail, Result};
 use regex::Regex;
 use std::fmt;
 
-#[derive(Debug, Clone)]
-pub struct Script {
+/// Intermediate exposed for completions and other meta purposes.
+pub struct ScriptAst {
     #[allow(clippy::vec_box)]
     stmts: Vec<Box<Stmt>>,
 }
 
-impl Script {
+impl ScriptAst {
     pub fn compile(script: &str) -> Result<Self> {
         let re = Regex::new(r"(/\*([^*]|[\r\n]|(\*+([^*/]|[\r\n])))*\*+/)|(//.*)")?;
         let preprocessed = re.replace_all(script, "");
@@ -47,6 +47,23 @@ impl Script {
 
     pub fn statements_mut(&mut self) -> &mut [Box<Stmt>] {
         &mut self.stmts
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Script {
+    #[allow(clippy::vec_box)]
+    stmts: Vec<Box<Stmt>>,
+}
+
+impl Script {
+    pub fn compile(script: &str) -> Result<Self> {
+        let ast = ScriptAst::compile(script)?;
+        Ok(Self { stmts: ast.stmts })
+    }
+
+    pub fn statements(&self) -> &[Box<Stmt>] {
+        &self.stmts
     }
 }
 

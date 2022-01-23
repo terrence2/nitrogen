@@ -160,6 +160,12 @@ impl From<String> for Value {
     }
 }
 
+impl From<&str> for Value {
+    fn from(s: &str) -> Self {
+        Self::String(s.to_owned())
+    }
+}
+
 impl From<Graticule<GeoSurface>> for Value {
     fn from(grat: Graticule<GeoSurface>) -> Self {
         Self::Graticule(grat)

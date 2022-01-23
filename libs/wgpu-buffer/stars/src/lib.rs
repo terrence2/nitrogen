@@ -16,6 +16,7 @@ use anyhow::Result;
 use gpu::Gpu;
 use log::trace;
 use nalgebra::Vector3;
+use runtime::{Extension, Runtime};
 use star_catalog::Stars;
 use static_assertions::{assert_eq_align, assert_eq_size};
 use std::{collections::HashSet, f32::consts::PI, mem, num::NonZeroU64};
@@ -139,6 +140,14 @@ const DEC_BANDS: [BandMetadata; DEC_BINS] = [
 pub struct StarsBuffer {
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
+}
+
+impl Extension for StarsBuffer {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        let stars = StarsBuffer::new(runtime.resource::<Gpu>())?;
+        runtime.insert_resource(stars);
+        Ok(())
+    }
 }
 
 impl StarsBuffer {

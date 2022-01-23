@@ -24,8 +24,8 @@ use crate::{
 use anyhow::Result;
 use gpu::Gpu;
 use input::{InputEvent, InputFocus};
-use nitrous::Interpreter;
 use parking_lot::RwLock;
+use runtime::ScriptHerder;
 use std::{sync::Arc, time::Instant};
 use window::{
     size::{AbsSize, LeftBound, Size},
@@ -165,7 +165,7 @@ impl Widget for TextEdit {
         _event: &InputEvent,
         _focus: InputFocus,
         _cursor_position: Position<AbsSize>,
-        _interpreter: &mut Interpreter,
+        _herder: &mut ScriptHerder,
     ) -> Result<()> {
         assert!(self.read_only);
         Ok(())

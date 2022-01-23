@@ -24,8 +24,8 @@ use crate::{
 use anyhow::Result;
 use gpu::Gpu;
 use input::{ElementState, InputEvent, InputFocus, ModifiersState, VirtualKeyCode};
-use nitrous::Interpreter;
 use parking_lot::RwLock;
+use runtime::ScriptHerder;
 use std::{ops::Range, sync::Arc, time::Instant};
 use window::{
     size::{AbsSize, AspectMath, ScreenDir, Size},
@@ -158,7 +158,7 @@ impl Widget for LineEdit {
         event: &InputEvent,
         _focus: InputFocus,
         _cursor_position: Position<AbsSize>,
-        _interpreter: &mut Interpreter,
+        _herder: &mut ScriptHerder,
     ) -> Result<()> {
         // FIXME: add name to widget and obey focus
         if let InputEvent::KeyboardKey {

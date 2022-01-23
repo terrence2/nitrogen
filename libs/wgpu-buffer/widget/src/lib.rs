@@ -48,6 +48,7 @@ use log::trace;
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
+use runtime::ScriptHerder;
 use std::{borrow::Borrow, mem, num::NonZeroU64, ops::Range, path::Path, sync::Arc, time::Instant};
 use window::{
     size::{AbsSize, Size},
@@ -329,12 +330,12 @@ impl WidgetBuffer {
         events: Res<InputEventVec>,
         mut input_focus: ResMut<InputFocus>,
         window: Res<Window>,
-        mut interpreter: ResMut<Interpreter>,
+        mut herder: ResMut<ScriptHerder>,
         widgets: Res<Arc<RwLock<WidgetBuffer>>>,
     ) {
         widgets
             .write()
-            .handle_events(&events, *input_focus, &mut interpreter, &window)
+            .handle_events(&events, *input_focus, &mut herder, &window)
             .expect("Widgets::handle_events");
 
         let widgets = widgets.read();
@@ -350,7 +351,7 @@ impl WidgetBuffer {
         &mut self,
         events: &[InputEvent],
         focus: InputFocus,
-        interpreter: &mut Interpreter,
+        herder: &mut ScriptHerder,
         win: &Window,
     ) -> Result<()> {
         for event in events {
@@ -369,7 +370,7 @@ impl WidgetBuffer {
                 event,
                 focus,
                 self.cursor_position,
-                interpreter,
+                herder,
             )?;
         }
         Ok(())
