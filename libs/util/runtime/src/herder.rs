@@ -14,8 +14,8 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource, world::WorldCell};
-use nitrous::{Interpreter, LocalNamespace, Module, Script};
-use std::{any::TypeId, collections::HashMap};
+use nitrous::{Interpreter, LocalNamespace, Module, ModuleTraitObject, Script};
+use std::{any::TypeId, collections::HashMap, mem::transmute, sync::atomic::AtomicPtr};
 
 struct ScriptState {
     script: Script,
@@ -36,7 +36,7 @@ impl ScriptState {
 /// Manage script execution state.
 pub struct ScriptHerder {
     gthread: Vec<ScriptState>,
-    modules: HashMap<String, TypeId>,
+    modules: HashMap<String, ModuleTraitObject>,
 }
 
 impl Default for ScriptHerder {
@@ -63,8 +63,24 @@ impl ScriptHerder {
     }
 
     #[inline]
-    pub(crate) fn insert_module<T: Resource + Module>(&mut self, name: String) {
-        self.modules.insert(name, TypeId::of::<T>());
+    pub(crate) fn insert_module<T: Resource + Module>(&mut self, name: String, resource: &T) {
+        // Safety:
+        // The resource of type T is stored as the first value in a unique_component Column,
+        // represented as a BlobVec, where it is the first and only allocation. The allocation
+        // was made with std::alloc::alloc, and will only be reallocated if the BlobVec Grows.
+        // It will not grow, since this is a unique_component.
+
+        // As such, we can cast it to the &dyn Module here, then transmute to and from TraitObject
+        // safely, as long as the underlying allocation never changes. Since modules are permanent
+        // and tied to the world and runtime, we will stop running scripts (via the runtime's
+        // scheduler) before deallocating the Runtime's World, and thus the storage.
+        // let module_trait_obj = resource as &dyn Module;
+        // // let module_ptr: *const dyn Module = unsafe { transmute(module) };
+        // let module_ptr = AtomicPtr::new(module_trait_obj);
+        self.modules.insert(
+            name,
+            ModuleTraitObject::from_module(resource as &dyn Module),
+        );
     }
 
     // pub fn global_names(&self) -> impl Iterator<Item = &str> {
@@ -82,9 +98,12 @@ impl ScriptHerder {
     }
 
     fn run_scripts(&mut self, world: &mut World) {
+        println!("RUN SCRIPTS: {:#?}", self.modules.keys());
         let mut next_gthreads = Vec::with_capacity(self.gthread.capacity());
         for mut source in self.gthread.drain(..) {
-            println!("RUNNING SCRIPT: {}", source.script);
+            let mut interpreter = Interpreter::default();
+            interpreter.set_modules(self.modules.clone());
+            interpreter.interpret2(&source.script, world).unwrap();
             // let output_state = Interpreter::run_until_blocked(&source.locals, &source.script, 0);
             // if let Some(position) = output_state {
             //     source.position = position;

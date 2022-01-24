@@ -128,10 +128,18 @@ impl Runtime {
     }
 
     #[inline]
-    pub fn insert_module<S: Into<String>, T: Resource + Module>(&mut self, name: S, value: T) {
-        self.resource_mut::<ScriptHerder>()
-            .insert_module::<T>(name.into());
+    pub fn insert_module<S, T>(&mut self, name: S, value: T)
+    where
+        S: Into<String>,
+        T: Resource + Module + 'static,
+    {
         self.world.insert_resource(value);
+        let name = name.into();
+        self.world
+            .resource_scope(|world, mut herder: Mut<ScriptHerder>| {
+                let resource = world.get_resource::<T>().unwrap();
+                herder.insert_module::<T>(name, resource);
+            });
     }
 
     #[inline]

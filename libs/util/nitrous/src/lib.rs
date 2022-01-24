@@ -26,8 +26,34 @@ use anyhow::{bail, ensure, Result};
 use futures::executor::block_on;
 use log::debug;
 use parking_lot::RwLock;
-use std::{borrow::Borrow, collections::HashMap, fmt::Debug, path::PathBuf, sync::Arc};
+use std::{
+    any::{Any, TypeId},
+    borrow::Borrow,
+    collections::HashMap,
+    fmt::Debug,
+    mem::transmute,
+    path::PathBuf,
+    sync::Arc,
+};
 use structopt::StructOpt;
+
+/// A blank slate that we can cast into and out of a module.
+#[repr(C)]
+#[derive(Copy, Clone, Debug)]
+pub struct ModuleTraitObject {
+    bad_idea_ptr: usize,
+    bad_idea_meta: usize,
+}
+
+impl ModuleTraitObject {
+    pub fn from_module(module: &dyn Module) -> Self {
+        unsafe { transmute(module) }
+    }
+
+    pub fn to_module(self) -> &'static dyn Module {
+        unsafe { transmute(self) }
+    }
+}
 
 // Note: manually passing the module until we have arbitrary self.
 pub trait Module: Debug + Send + Sync + 'static {
@@ -82,6 +108,7 @@ impl StartupOpts {
 #[derive(Debug)]
 pub struct Interpreter {
     locals: LocalNamespace,
+    modules: HashMap<String, ModuleTraitObject>,
     globals: Arc<RwLock<GlobalNamespace>>,
 }
 
@@ -107,6 +134,10 @@ impl Interpreter {
             self.locals.remove(*name);
         }
         result
+    }
+
+    pub fn set_modules(&mut self, modules: HashMap<String, ModuleTraitObject>) {
+        self.modules = modules;
     }
 
     pub fn put_global(&mut self, name: &str, value: Value) {
@@ -167,8 +198,16 @@ impl Interpreter {
                 Term::Symbol(sym) => {
                     if let Some(v) = self.locals.get(sym) {
                         v
-                    } else if let Ok(v) = self.globals.read().get(self.globals.clone(), sym) {
-                        v
+                    } else if let Some(&module_to) = self.modules.get(sym) {
+                        // let any_module: &mut dyn Any =
+                        //     world.get_resource_by_type_id_mut(typeid).unwrap();
+                        // let module = any_module.downcast_ref::<dyn Module>().expect("non-module in the modules list");
+                        // let failure = any_module.downcast_ref::<i32>().expect("this will fail");
+                        // let module_ptr: *const dyn Module = unsafe { transmute(*trait_obj) };
+                        //let module: &dyn Module = unsafe { transmute(module_ptr) };
+                        let module = module_to.to_module();
+
+                        bail!("found module: {}", module.module_name());
                     } else {
                         bail!("Unknown symbol '{}'", sym)
                     }
