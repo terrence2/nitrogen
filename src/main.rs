@@ -351,6 +351,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .load_extension::<GlobalParametersBuffer>()?
         .load_extension::<StarsBuffer>()?
         .load_extension::<TerrainBuffer>()?
+        .load_extension::<WorldRenderPass>()?
         .load_extension::<TimeStep>()?;
 
     // We don't technically need the window here, just the graphics configuration, and we could
@@ -387,15 +388,15 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     //     terrain_buffer
     // };
 
-    let world_gfx = WorldRenderPass::new(
-        &runtime.resource::<TerrainBuffer>(),
-        runtime.resource::<AtmosphereBuffer>(),
-        runtime.resource::<StarsBuffer>(),
-        runtime.resource::<GlobalParametersBuffer>(),
-        runtime.resource::<Gpu>(),
-        &mut interpreter,
-    )?;
-    runtime.insert_resource(world_gfx.clone());
+    // let world_gfx = WorldRenderPass::new(
+    //     &runtime.resource::<TerrainBuffer>(),
+    //     runtime.resource::<AtmosphereBuffer>(),
+    //     runtime.resource::<StarsBuffer>(),
+    //     runtime.resource::<GlobalParametersBuffer>(),
+    //     runtime.resource::<Gpu>(),
+    //     &mut interpreter,
+    // )?;
+    // runtime.insert_resource(world_gfx.clone());
     // world_gfx.write().add_debug_bindings(interpreter)?;
 
     let widgets = WidgetBuffer::new(
@@ -408,7 +409,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     // This is just rendering for widgets, so should be merged.
     let ui = UiRenderPass::new(
         &widgets.read(),
-        &world_gfx.read(),
+        runtime.resource::<WorldRenderPass>(),
         runtime.resource::<GlobalParametersBuffer>(),
         runtime.resource::<Gpu>(),
     )?;
@@ -416,7 +417,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
 
     let composite = Arc::new(RwLock::new(CompositeRenderPass::new(
         &ui.read(),
-        &world_gfx.read(),
+        runtime.resource::<WorldRenderPass>(),
         runtime.resource::<GlobalParametersBuffer>(),
         runtime.resource::<Gpu>(),
     )?));
@@ -524,7 +525,6 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         "update_frame",
         SystemStage::single_threaded()
             .with_system(CameraComponent::sys_apply_display_changes)
-            .with_system(WorldRenderPass::sys_handle_display_config_change)
             .with_system(UiRenderPass::sys_handle_display_config_change)
             .with_system(update_widget_track_state_changes)
             .with_system(update_terrain_track_state_changes), // .with_wystem(update_widgets_ensure_uploaded),
@@ -551,7 +551,9 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         runtime
             .world
             .resource_scope(|world, mut terrain: Mut<TerrainBuffer>| {
-                terrain.ensure_uploaded(world.get_resource::<Gpu>().unwrap(), &mut tracker);
+                terrain
+                    .ensure_uploaded(world.get_resource::<Gpu>().unwrap(), &mut tracker)
+                    .ok();
             });
         widgets.write().ensure_uploaded(
             *timestep(&runtime).now(),
@@ -572,7 +574,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
             let composite = composite.read();
             let ui = ui.read();
             let widgets = widgets.read();
-            let world = world_gfx.read();
+            // let world = world_gfx.read();
             // let terrain = terrain.read();
             // let stars = stars_buffer.read();
             // let fullscreen = fullscreen_buffer.read();
@@ -639,15 +641,16 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
 
                 // world: Flatten terrain g-buffer into the final image and mix in stars.
                 {
-                    let (color_attachments, depth_stencil_attachment) =
-                        world.offscreen_target_cleared();
+                    let (color_attachments, depth_stencil_attachment) = runtime
+                        .resource::<WorldRenderPass>()
+                        .offscreen_target_cleared();
                     let render_pass_desc_ref = wgpu::RenderPassDescriptor {
                         label: Some("offscreen-draw-world"),
                         color_attachments: &color_attachments,
                         depth_stencil_attachment,
                     };
                     let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
-                    let rpass = world.render_world(
+                    let rpass = runtime.resource::<WorldRenderPass>().render_world(
                         rpass,
                         runtime.resource::<GlobalParametersBuffer>(),
                         runtime.resource::<FullscreenBuffer>(),
@@ -670,7 +673,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
                         rpass,
                         runtime.resource::<GlobalParametersBuffer>(),
                         &widgets,
-                        &world,
+                        runtime.resource::<WorldRenderPass>(),
                     )?;
                 }
 
@@ -690,7 +693,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
                         rpass,
                         runtime.resource::<FullscreenBuffer>(),
                         runtime.resource::<GlobalParametersBuffer>(),
-                        &world,
+                        runtime.resource::<WorldRenderPass>(),
                         &ui,
                     )?;
                 }
