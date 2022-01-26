@@ -356,6 +356,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .load_extension::<UiRenderPass>()?
         .load_extension::<CompositeRenderPass>()?
         .load_extension::<Orrery>()?
+        .load_extension::<Timeline>()?
         .load_extension::<TimeStep>()?;
 
     // Create rest of game resources
@@ -363,8 +364,8 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     // let orrery = Orrery::new(initial_utc, &mut interpreter)?;
     // runtime.world.insert_resource(orrery.clone());
 
-    let timeline = Timeline::new(&mut interpreter);
-    runtime.world.insert_resource(timeline);
+    // let timeline = Timeline::new(&mut interpreter);
+    // runtime.world.insert_resource(timeline);
 
     let system = System::new(runtime.resource::<WidgetBuffer>(), &mut interpreter)?;
     runtime.world.insert_resource(system.clone());
@@ -392,10 +393,6 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     // a handful of game related resources, rather than communicating with the GPU. This generally
     // splits into two phases: per-fixed-tick resource updates and entity updates from resources.
     let mut sim_schedule = Schedule::default();
-    sim_schedule.add_stage(
-        "interpret_input_events",
-        SystemStage::parallel().with_system(Timeline::sys_animate.system()),
-    );
     sim_schedule.add_stage(
         "propagate_changes",
         SystemStage::single_threaded()

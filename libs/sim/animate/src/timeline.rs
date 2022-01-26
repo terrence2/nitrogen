@@ -23,6 +23,7 @@ use lyon_geom::{cubic_bezier::CubicBezierSegment, Point};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
+use runtime::{Extension, FrameStage, Runtime, SimStage};
 use std::{
     sync::Arc,
     time::{Duration, Instant},
@@ -166,9 +167,19 @@ impl ScriptableAnimation {
 }
 
 /// Drive scriptable animations.
-#[derive(Debug, NitrousModule)]
+#[derive(Default, Debug, NitrousModule)]
 pub struct Timeline {
     animations: Vec<ScriptableAnimation>,
+}
+
+impl Extension for Timeline {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        runtime.insert_module("timeline", Timeline::default());
+        runtime
+            .sim_stage_mut(SimStage::TimeStep)
+            .add_system(Self::sys_animate);
+        Ok(())
+    }
 }
 
 #[inject_nitrous_module]
@@ -179,14 +190,8 @@ impl Timeline {
     pub const EASE_OUT_BEZIER: CubicBezierCurve = CubicBezierCurve::new((0., 0.), (0.58, 1.));
     pub const EASE_IN_OUT_BEZIER: CubicBezierCurve = CubicBezierCurve::new((0.42, 0.), (0.58, 1.));
 
-    pub fn new(interpreter: &mut Interpreter) -> Arc<RwLock<Self>> {
-        let timeline = Arc::new(RwLock::new(Self { animations: vec![] }));
-        interpreter.put_global("timeline", Value::Module(timeline.clone()));
-        timeline
-    }
-
-    pub fn sys_animate(step: Res<TimeStep>, timeline: Res<Arc<RwLock<Timeline>>>) {
-        timeline.write().step_time(step.now());
+    pub fn sys_animate(step: Res<TimeStep>, mut timeline: ResMut<Timeline>) {
+        timeline.step_time(step.now());
     }
 
     pub fn step_time(&mut self, now: &Instant) {
