@@ -236,14 +236,15 @@ impl TileManager {
         }
     }
 
-    pub fn ensure_uploaded(&mut self, gpu: &mut Gpu, tracker: &mut UploadTracker) {
+    pub fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) {
         for ts in self.tile_sets.iter_mut() {
             ts.ensure_uploaded(gpu, tracker);
         }
 
         if self.take_index_snapshot {
             for ts in self.tile_sets.iter_mut() {
-                ts.snapshot_index(gpu);
+                // FIXME: this needs to not require a mut GPU
+                // ts.snapshot_index(gpu);
             }
             self.take_index_snapshot = false;
         }

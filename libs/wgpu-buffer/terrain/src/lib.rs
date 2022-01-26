@@ -31,9 +31,9 @@ use catalog::Catalog;
 use geodesy::{GeoCenter, Graticule};
 use global_data::GlobalParametersBuffer;
 use gpu::{CpuDetailLevel, DisplayConfig, Gpu, GpuDetailLevel, UploadTracker};
-use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
+use runtime::{Extension, FrameStage, Runtime};
 use shader_shared::Group;
 use std::{ops::Range, sync::Arc};
 
@@ -148,6 +148,25 @@ pub struct TerrainBuffer {
     accumulate_clear_pipeline: wgpu::ComputePipeline,
 }
 
+impl Extension for TerrainBuffer {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        let catalog_ref = runtime.resource::<Arc<RwLock<Catalog>>>().clone();
+        let terrain = TerrainBuffer::new(
+            &catalog_ref.read(),
+            *runtime.resource::<CpuDetailLevel>(),
+            *runtime.resource::<GpuDetailLevel>(),
+            runtime.resource::<GlobalParametersBuffer>(),
+            &runtime.resource::<Gpu>(),
+        )?;
+        runtime.insert_module("terrain", terrain);
+        runtime
+            .frame_stage_mut(FrameStage::HandleSystem)
+            .add_system(Self::sys_handle_display_config_change);
+
+        Ok(())
+    }
+}
+
 #[inject_nitrous_module]
 impl TerrainBuffer {
     const DEFERRED_TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
@@ -161,8 +180,7 @@ impl TerrainBuffer {
         gpu_detail_level: GpuDetailLevel,
         globals_buffer: &GlobalParametersBuffer,
         gpu: &Gpu,
-        interpreter: &mut Interpreter,
-    ) -> Result<Arc<RwLock<Self>>> {
+    ) -> Result<Self> {
         let cpu_detail = CpuDetail::for_level(cpu_detail_level);
         let gpu_detail = GpuDetail::for_level(gpu_detail_level);
 
@@ -450,7 +468,7 @@ impl TerrainBuffer {
             &sampler_linear,
         );
 
-        let terrain = Arc::new(RwLock::new(Self {
+        Ok(Self {
             patch_manager,
             tile_manager,
             visible_regions: Vec::new(),
@@ -467,11 +485,7 @@ impl TerrainBuffer {
             sampler_linear,
             sampler_nearest,
             accumulate_clear_pipeline,
-        }));
-
-        interpreter.put_global("terrain", Value::Module(terrain.clone()));
-
-        Ok(terrain)
+        })
     }
 
     pub fn init(self) -> Result<Arc<RwLock<Self>>> {
@@ -482,10 +496,9 @@ impl TerrainBuffer {
     pub fn sys_handle_display_config_change(
         updated_config: Res<Option<DisplayConfig>>,
         gpu: Res<Gpu>,
-        terrain: Res<Arc<RwLock<TerrainBuffer>>>,
+        mut terrain: ResMut<TerrainBuffer>,
     ) {
         if updated_config.is_some() {
-            let mut terrain = terrain.write();
             terrain
                 .handle_render_extent_changed(&gpu)
                 .expect("Terrain::handle_render_extent_changed")
@@ -736,7 +749,7 @@ impl TerrainBuffer {
     }
 
     // Push CPU state to GPU
-    pub fn ensure_uploaded(&mut self, gpu: &mut Gpu, tracker: &mut UploadTracker) -> Result<()> {
+    pub fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) -> Result<()> {
         self.patch_manager.ensure_uploaded(gpu, tracker);
         self.tile_manager.ensure_uploaded(gpu, tracker);
         Ok(())

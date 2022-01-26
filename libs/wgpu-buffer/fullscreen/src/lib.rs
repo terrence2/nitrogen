@@ -14,9 +14,8 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
 use gpu::Gpu;
-use parking_lot::RwLock;
 use runtime::{Extension, Runtime};
-use std::{mem, ops::Range, sync::Arc};
+use std::{mem, ops::Range};
 use zerocopy::{AsBytes, FromBytes};
 
 #[repr(C)]

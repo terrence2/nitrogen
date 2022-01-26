@@ -24,7 +24,7 @@ use composite::CompositeRenderPass;
 use event_mapper::EventMapper;
 use fullscreen::FullscreenBuffer;
 use global_data::GlobalParametersBuffer;
-use gpu::{make_frame_graph, CpuDetailLevel, DetailLevelOpts, Gpu, GpuDetailLevel};
+use gpu::{CpuDetailLevel, DetailLevelOpts, Gpu, GpuDetailLevel};
 use input::{InputController, InputSystem};
 use measure::WorldSpaceFrame;
 use nitrous::{Interpreter, StartupOpts, Value};
@@ -229,6 +229,7 @@ impl System {
     }
 }
 
+/*
 make_frame_graph!(
     FrameGraph {
         buffers: {
@@ -283,6 +284,7 @@ make_frame_graph!(
         ];
     }
 );
+*/
 
 // fn build_frame_graph(
 //     app_dirs: &AppDirs,
@@ -348,6 +350,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .load_extension::<FullscreenBuffer>()?
         .load_extension::<GlobalParametersBuffer>()?
         .load_extension::<StarsBuffer>()?
+        .load_extension::<TerrainBuffer>()?
         .load_extension::<TimeStep>()?;
 
     // We don't technically need the window here, just the graphics configuration, and we could
@@ -367,25 +370,25 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     // let stars_buffer = Arc::new(RwLock::new(StarsBuffer::new(runtime.resource::<Gpu>())?));
     // runtime.insert_resource(stars_buffer.clone());
 
-    let terrain = {
-        let catalog_ref = runtime.resource::<Arc<RwLock<Catalog>>>().clone();
-        let catalog = &catalog_ref.read();
-        let cpu_detail_level = *runtime.resource::<CpuDetailLevel>();
-        let gpu_detail_level = *runtime.resource::<GpuDetailLevel>();
-        let terrain_buffer = TerrainBuffer::new(
-            catalog,
-            cpu_detail_level,
-            gpu_detail_level,
-            runtime.resource::<GlobalParametersBuffer>(),
-            &runtime.resource::<Gpu>(),
-            &mut interpreter,
-        )?;
-        runtime.insert_resource(terrain_buffer.clone());
-        terrain_buffer
-    };
+    // let terrain = {
+    //     let catalog_ref = runtime.resource::<Arc<RwLock<Catalog>>>().clone();
+    //     let catalog = &catalog_ref.read();
+    //     let cpu_detail_level = *runtime.resource::<CpuDetailLevel>();
+    //     let gpu_detail_level = *runtime.resource::<GpuDetailLevel>();
+    //     let terrain_buffer = TerrainBuffer::new(
+    //         catalog,
+    //         cpu_detail_level,
+    //         gpu_detail_level,
+    //         runtime.resource::<GlobalParametersBuffer>(),
+    //         &runtime.resource::<Gpu>(),
+    //         &mut interpreter,
+    //     )?;
+    //     runtime.insert_resource(terrain_buffer.clone());
+    //     terrain_buffer
+    // };
 
     let world_gfx = WorldRenderPass::new(
-        &terrain.read(),
+        &runtime.resource::<TerrainBuffer>(),
         runtime.resource::<AtmosphereBuffer>(),
         runtime.resource::<StarsBuffer>(),
         runtime.resource::<GlobalParametersBuffer>(),
@@ -497,11 +500,10 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         query: Query<&CameraComponent>,
         catalog: Res<Arc<RwLock<Catalog>>>,
         system: Res<Arc<RwLock<System>>>,
-        terrain: Res<Arc<RwLock<TerrainBuffer>>>,
+        mut terrain: ResMut<TerrainBuffer>,
     ) {
         // FIXME: multiple camera support
         let mut system = system.write();
-        let mut terrain = terrain.write();
         for (i, camera) in query.iter().enumerate() {
             assert_eq!(i, 0);
             let vis_camera = system.current_camera(&camera.camera());
@@ -521,13 +523,11 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     update_frame_schedule.add_stage(
         "update_frame",
         SystemStage::single_threaded()
-            .with_system(Window::sys_handle_system_events.system())
-            .with_system(CameraComponent::sys_apply_display_changes.system())
-            .with_system(TerrainBuffer::sys_handle_display_config_change.system())
-            .with_system(WorldRenderPass::sys_handle_display_config_change.system())
-            .with_system(UiRenderPass::sys_handle_display_config_change.system())
-            .with_system(update_widget_track_state_changes.system())
-            .with_system(update_terrain_track_state_changes.system()), // .with_wystem(update_widgets_ensure_uploaded),
+            .with_system(CameraComponent::sys_apply_display_changes)
+            .with_system(WorldRenderPass::sys_handle_display_config_change)
+            .with_system(UiRenderPass::sys_handle_display_config_change)
+            .with_system(update_widget_track_state_changes)
+            .with_system(update_terrain_track_state_changes), // .with_wystem(update_widgets_ensure_uploaded),
     );
 
     // We are now finished and can safely run the startup scripts / configuration.
@@ -548,9 +548,11 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         runtime
             .resource::<GlobalParametersBuffer>()
             .ensure_uploaded(runtime.resource::<Gpu>(), &mut tracker)?;
-        terrain
-            .write()
-            .ensure_uploaded(&mut runtime.resource_mut::<Gpu>(), &mut tracker)?;
+        runtime
+            .world
+            .resource_scope(|world, mut terrain: Mut<TerrainBuffer>| {
+                terrain.ensure_uploaded(world.get_resource::<Gpu>().unwrap(), &mut tracker);
+            });
         widgets.write().ensure_uploaded(
             *timestep(&runtime).now(),
             runtime.resource::<Gpu>(),
@@ -571,7 +573,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
             let ui = ui.read();
             let widgets = widgets.read();
             let world = world_gfx.read();
-            let terrain = terrain.read();
+            // let terrain = terrain.read();
             // let stars = stars_buffer.read();
             // let fullscreen = fullscreen_buffer.read();
             // let globals = globals.read();
@@ -598,35 +600,41 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
                 tracker.dispatch_uploads(&mut encoder);
 
                 encoder = widgets.maintain_font_atlas(encoder)?;
-                encoder = terrain.paint_atlas_indices(encoder)?;
+                encoder = runtime
+                    .resource::<TerrainBuffer>()
+                    .paint_atlas_indices(encoder)?;
 
                 // terrain
                 {
                     let cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                         label: Some("compute-pass"),
                     });
-                    let cpass = terrain.tessellate(cpass)?;
+                    let cpass = runtime.resource::<TerrainBuffer>().tessellate(cpass)?;
                 }
                 {
-                    let (color_attachments, depth_stencil_attachment) =
-                        terrain.deferred_texture_target();
+                    let (color_attachments, depth_stencil_attachment) = runtime
+                        .resource::<TerrainBuffer>()
+                        .deferred_texture_target();
                     let render_pass_desc_ref = wgpu::RenderPassDescriptor {
                         label: Some(concat!("non-screen-render-pass-terrain-deferred",)),
                         color_attachments: &color_attachments,
                         depth_stencil_attachment,
                     };
                     let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
-                    let rpass = terrain
+                    let rpass = runtime
+                        .resource::<TerrainBuffer>()
                         .deferred_texture(rpass, runtime.resource::<GlobalParametersBuffer>())?;
                 }
                 {
                     let cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                         label: Some("compute-pass"),
                     });
-                    let cpass = terrain.accumulate_normal_and_color(
-                        cpass,
-                        runtime.resource::<GlobalParametersBuffer>(),
-                    )?;
+                    let cpass = runtime
+                        .resource::<TerrainBuffer>()
+                        .accumulate_normal_and_color(
+                            cpass,
+                            runtime.resource::<GlobalParametersBuffer>(),
+                        )?;
                 }
 
                 // world: Flatten terrain g-buffer into the final image and mix in stars.
@@ -645,7 +653,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
                         runtime.resource::<FullscreenBuffer>(),
                         runtime.resource::<AtmosphereBuffer>(),
                         runtime.resource::<StarsBuffer>(),
-                        &terrain,
+                        &runtime.resource::<TerrainBuffer>(),
                     )?;
                 }
 

@@ -150,7 +150,8 @@ impl ScriptableAnimation {
             (self.start.clone(), false)
         };
         if let Some(callable) = &self.callable {
-            callable.spawn_method(&[current]);
+            // FIXME: dispatch for resources...
+            //callable.spawn_method(&[current]);
         }
         if ended {
             self.state = AnimationState::Finished;

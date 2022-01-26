@@ -33,9 +33,8 @@ pub use crate::{
 use anyhow::Result;
 use gpu::Gpu;
 use log::trace;
-use parking_lot::RwLock;
 use runtime::{Extension, Runtime};
-use std::{mem, num::NonZeroU64, sync::Arc};
+use std::{mem, num::NonZeroU64};
 
 #[derive(Debug)]
 pub struct AtmosphereBuffer {
