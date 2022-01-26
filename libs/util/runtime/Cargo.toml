@@ -7,4 +7,5 @@ edition = "2021"
 [dependencies]
 anyhow = "^ 1"
 bevy_ecs = "^ 0.6"
+log = "^ 0.4"
 nitrous = { path = "../../util/nitrous" }

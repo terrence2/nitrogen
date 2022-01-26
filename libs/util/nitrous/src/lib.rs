@@ -12,57 +12,28 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+mod ast;
+mod exec;
 pub mod ir;
+mod lower;
+mod memory;
 mod script;
 mod value;
 
 pub use crate::{
-    script::{Script, ScriptAst},
+    ast::NitrousAst,
+    exec::{ExecutionContext, NitrousExecutor, YieldState},
+    lower::{Instr, NitrousCode},
+    memory::{LocalNamespace, Module, ResourceNamespace},
+    script::NitrousScript,
     value::Value,
 };
 
-use crate::ir::{Expr, Operator, Stmt, Term};
 use anyhow::{bail, ensure, Result};
-use futures::executor::block_on;
 use log::debug;
 use parking_lot::RwLock;
-use std::{
-    any::{Any, TypeId},
-    borrow::Borrow,
-    collections::HashMap,
-    fmt::Debug,
-    mem::transmute,
-    path::PathBuf,
-    sync::Arc,
-};
+use std::{collections::HashMap, fmt::Debug, path::PathBuf, sync::Arc};
 use structopt::StructOpt;
-
-/// A blank slate that we can cast into and out of a module.
-#[repr(C)]
-#[derive(Copy, Clone, Debug)]
-pub struct ModuleTraitObject {
-    bad_idea_ptr: usize,
-    bad_idea_meta: usize,
-}
-
-impl ModuleTraitObject {
-    pub fn from_module(module: &dyn Module) -> Self {
-        unsafe { transmute(module) }
-    }
-
-    pub fn to_module(self) -> &'static dyn Module {
-        unsafe { transmute(self) }
-    }
-}
-
-// Note: manually passing the module until we have arbitrary self.
-pub trait Module: Debug + Send + Sync + 'static {
-    fn module_name(&self) -> String;
-    fn call_method(&mut self, name: &str, args: &[Value]) -> Result<Value>;
-    fn put(&mut self, module: Arc<RwLock<dyn Module>>, name: &str, value: Value) -> Result<()>;
-    fn get(&self, module: Arc<RwLock<dyn Module>>, name: &str) -> Result<Value>;
-    fn names(&self) -> Vec<&str>;
-}
 
 #[derive(Debug, StructOpt)]
 pub struct StartupOpts {
@@ -87,18 +58,16 @@ impl StartupOpts {
             println!("startup commmand completed: {}", rv);
         }
 
-        /* FIXME: need green threads
         if let Some(exec_file) = self.execute.as_ref() {
             match std::fs::read_to_string(exec_file) {
                 Ok(code) => {
-                    interpreter.interpret_async(code)?;
+                    interpreter.interpret_once(&code)?;
                 }
                 Err(e) => {
                     println!("Read file for {:?}: {}", exec_file, e);
                 }
             }
         }
-         */
 
         Ok(())
     }
@@ -108,7 +77,7 @@ impl StartupOpts {
 #[derive(Debug)]
 pub struct Interpreter {
     locals: LocalNamespace,
-    modules: HashMap<String, ModuleTraitObject>,
+    // modules: HashMap<String, ModuleTraitObject>,
     globals: Arc<RwLock<GlobalNamespace>>,
 }
 
@@ -116,6 +85,7 @@ impl Default for Interpreter {
     fn default() -> Self {
         Self {
             locals: LocalNamespace::empty(),
+            // modules: HashMap::new(),
             globals: GlobalNamespace::new(),
         }
     }
@@ -136,9 +106,9 @@ impl Interpreter {
         result
     }
 
-    pub fn set_modules(&mut self, modules: HashMap<String, ModuleTraitObject>) {
-        self.modules = modules;
-    }
+    // pub fn set_modules(&mut self, modules: HashMap<String, ModuleTraitObject>) {
+    //     self.modules = modules;
+    // }
 
     pub fn put_global(&mut self, name: &str, value: Value) {
         self.globals.write().put_global(name, value);
@@ -153,7 +123,7 @@ impl Interpreter {
     }
 
     pub fn interpret_once(&mut self, raw_script: &str) -> Result<Value> {
-        self.interpret(&Script::compile(raw_script)?)
+        self.interpret(&NitrousScript::compile(raw_script)?)
     }
 
     // pub fn interpret_async(&mut self, raw_script: String) -> Result<()> {
@@ -169,15 +139,16 @@ impl Interpreter {
     //     Ok(())
     // }
 
-    pub fn interpret(&mut self, script: &Script) -> Result<Value> {
+    pub fn interpret(&mut self, script: &NitrousScript) -> Result<Value> {
         debug!("Interpret: {}", script);
         let mut out = Value::True();
+        /*
         for stmt in script.statements() {
             match stmt.borrow() {
                 Stmt::LetAssign(target, expr) => {
                     let result = self.interpret_expr(expr)?;
                     if let Term::Symbol(name) = target {
-                        self.locals.put(name, result);
+                        self.locals.put(&name, result);
                     }
                 }
                 Stmt::Expr(expr) => {
@@ -185,9 +156,11 @@ impl Interpreter {
                 }
             }
         }
+         */
         Ok(out)
     }
 
+    /*
     fn interpret_expr(&self, expr: &Expr) -> Result<Value> {
         Ok(match expr {
             Expr::Term(term) => match term {
@@ -198,16 +171,16 @@ impl Interpreter {
                 Term::Symbol(sym) => {
                     if let Some(v) = self.locals.get(sym) {
                         v
-                    } else if let Some(&module_to) = self.modules.get(sym) {
-                        // let any_module: &mut dyn Any =
-                        //     world.get_resource_by_type_id_mut(typeid).unwrap();
-                        // let module = any_module.downcast_ref::<dyn Module>().expect("non-module in the modules list");
-                        // let failure = any_module.downcast_ref::<i32>().expect("this will fail");
-                        // let module_ptr: *const dyn Module = unsafe { transmute(*trait_obj) };
-                        //let module: &dyn Module = unsafe { transmute(module_ptr) };
-                        let module = module_to.to_module();
-
-                        bail!("found module: {}", module.module_name());
+                    // } else if let Some(&module_to) = self.modules.get(sym) {
+                    //     // let any_module: &mut dyn Any =
+                    //     //     world.get_resource_by_type_id_mut(typeid).unwrap();
+                    //     // let module = any_module.downcast_ref::<dyn Module>().expect("non-module in the modules list");
+                    //     // let failure = any_module.downcast_ref::<i32>().expect("this will fail");
+                    //     // let module_ptr: *const dyn Module = unsafe { transmute(*trait_obj) };
+                    //     //let module: &dyn Module = unsafe { transmute(module_ptr) };
+                    //     let module = module_to.to_module();
+                    //
+                    //     bail!("found module: {}", module.module_name());
                     } else {
                         bail!("Unknown symbol '{}'", sym)
                     }
@@ -225,7 +198,7 @@ impl Interpreter {
             }
             Expr::Attr(base, member) => match self.interpret_expr(base)? {
                 Value::Module(ns) => match member {
-                    Term::Symbol(sym) => ns.read().get(ns.clone(), sym)?,
+                    Term::Symbol(sym) => ns.to_module().get(ns.clone(), sym)?,
                     _ => bail!("attribute expr member is not a symbol"),
                 },
                 _ => bail!("attribute expr base did not evaluate to a module"),
@@ -249,50 +222,7 @@ impl Interpreter {
             }
         })
     }
-}
-
-#[derive(Clone, Debug)]
-pub struct LocalNamespace {
-    memory: HashMap<String, Value>,
-}
-
-impl From<HashMap<String, Value>> for LocalNamespace {
-    fn from(memory: HashMap<String, Value>) -> Self {
-        Self { memory }
-    }
-}
-
-impl From<HashMap<&str, Value>> for LocalNamespace {
-    fn from(mut memory: HashMap<&str, Value>) -> Self {
-        memory
-            .drain()
-            .map(|(k, v)| (k.to_owned(), v))
-            .collect::<HashMap<String, Value>>()
-            .into()
-    }
-}
-
-impl LocalNamespace {
-    pub fn empty() -> Self {
-        Self {
-            memory: HashMap::new(),
-        }
-    }
-
-    #[inline]
-    pub fn put(&mut self, name: &str, value: Value) {
-        self.memory.insert(name.to_owned(), value);
-    }
-
-    #[inline]
-    pub fn get(&self, name: &str) -> Option<Value> {
-        self.memory.get(name).cloned()
-    }
-
-    #[inline]
-    pub fn remove(&mut self, name: &str) -> Option<Value> {
-        self.memory.remove(name)
-    }
+    */
 }
 
 #[derive(Debug)]
@@ -321,11 +251,17 @@ impl GlobalNamespace {
     }
 
     pub fn format_help(&self) -> Value {
+        /*
         let mut records = self
             .memory
             .iter()
             .map(|(k, v)| match v {
-                Value::Module(m) => (0, k.to_owned(), format!("[{}]", k), m.read().module_name()),
+                Value::Module(m) => (
+                    0,
+                    k.to_owned(),
+                    format!("[{}]", k),
+                    m.0.to_module().module_name(),
+                ),
                 Value::Method(_, name) => (
                     1,
                     k.to_owned(),
@@ -345,12 +281,13 @@ impl GlobalNamespace {
         for (_, _, k, _) in &records {
             width = width.max(k.len());
         }
-
         let mut out = String::new();
         for (_, _, k, v) in &records {
             out += &format!("{:0width$} - {}\n", k, v, width = width);
         }
         Value::String(out)
+         */
+        Value::True()
     }
 }
 
@@ -395,7 +332,7 @@ mod test {
     #[test]
     fn test_interpret_basic() -> Result<()> {
         let mut interpreter = Interpreter::default();
-        let script = Script::compile("2 + 2")?;
+        let script = NitrousScript::compile("2 + 2")?;
         assert_eq!(interpreter.interpret(&script)?, Value::Integer(4));
         Ok(())
     }
@@ -404,10 +341,10 @@ mod test {
     fn test_precedence() -> Result<()> {
         let mut interpreter = Interpreter::default();
 
-        let script = Script::compile("2 + 3 * 2")?;
+        let script = NitrousScript::compile("2 + 3 * 2")?;
         assert_eq!(interpreter.interpret(&script)?, Value::Integer(8));
 
-        let script = Script::compile("(2 + 3) * 2")?;
+        let script = NitrousScript::compile("(2 + 3) * 2")?;
         assert_eq!(interpreter.interpret(&script)?, Value::Integer(10));
 
         Ok(())

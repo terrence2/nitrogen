@@ -1392,6 +1392,7 @@ dependencies = [
  "nalgebra",
  "nitrous",
  "nitrous_injector",
+ "ordered-float",
  "orrery",
  "parking_lot",
  "runtime",
@@ -2006,6 +2007,7 @@ name = "nitrous"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "bevy_ecs",
  "futures",
  "geodesy",
  "lalrpop",
@@ -2617,6 +2619,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy_ecs",
+ "log",
  "nitrous",
 ]
 

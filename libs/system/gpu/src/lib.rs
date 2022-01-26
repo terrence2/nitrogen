@@ -32,14 +32,10 @@ pub use winit::dpi::{LogicalSize, PhysicalSize};
 use anyhow::{anyhow, bail, Result};
 use bevy_ecs::prelude::*;
 use futures::executor::block_on;
-use input::InputController;
 use log::{info, trace};
-use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
-use parking_lot::{Mutex, RwLock};
 use runtime::{Extension, FrameStage, Runtime};
 use std::{borrow::Cow, fmt::Debug, fs, mem, num::NonZeroU32, path::PathBuf, ptr, sync::Arc};
-use tokio::runtime::Runtime as AsyncRuntime;
 use wgpu::util::DeviceExt;
 use window::Window;
 use zerocopy::AsBytes;
@@ -55,14 +51,6 @@ impl Default for RenderConfig {
             present_mode: wgpu::PresentMode::Mailbox,
         }
     }
-}
-
-pub struct TestResources {
-    pub window: Arc<RwLock<Window>>,
-    pub gpu: Arc<RwLock<Gpu>>,
-    pub async_rt: AsyncRuntime,
-    pub interpreter: Interpreter,
-    pub input: Arc<Mutex<InputController>>,
 }
 
 #[derive(Debug, NitrousModule)]
@@ -170,23 +158,15 @@ impl Gpu {
         })
     }
 
-    /*
     #[cfg(unix)]
-    pub fn for_test_unix() -> Result<TestResources> {
-        let (os_window, input) = input::InputController::for_test_unix()?;
-        let mut interpreter = Interpreter::default();
-        let window = Window::new(os_window, DisplayConfig::for_test(), &mut interpreter)?;
-        let gpu = Self::new(&mut window.write(), Default::default(), &mut interpreter)?;
-        let async_rt = Runtime::new()?;
-        Ok(TestResources {
-            gpu,
-            window,
-            async_rt,
-            interpreter,
-            input,
-        })
+    pub fn for_test_unix() -> Result<Runtime> {
+        let mut runtime = input::InputController::for_test_unix()?;
+        runtime
+            .insert_resource(window::DisplayOpts::default())
+            .load_extension::<Window>()?
+            .load_extension::<Gpu>()?;
+        Ok(runtime)
     }
-     */
 
     #[method]
     pub fn info(&self) -> String {
@@ -697,7 +677,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn test_create() -> Result<()> {
-        let _ = Gpu::for_test_unix()?;
+        let runtime = Gpu::for_test_unix()?;
+        assert!(runtime.resource::<Gpu>().render_extent().width > 0);
         Ok(())
     }
 }

@@ -18,11 +18,9 @@ use anyhow::{bail, Result};
 use bevy_ecs::prelude::*;
 use input::{SystemEvent, SystemEventVec};
 use log::info;
-use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
-use parking_lot::RwLock;
 use runtime::{Extension, FrameStage, Runtime};
-use std::{fmt::Debug, str::FromStr, string::ToString, sync::Arc};
+use std::{fmt::Debug, str::FromStr, string::ToString};
 use structopt::StructOpt;
 
 pub use winit::{
@@ -378,9 +376,11 @@ mod tests {
 
     #[test]
     fn it_works() -> Result<()> {
-        let (os_window, _) = input::InputController::for_test_unix()?;
-        let mut interpreter = Interpreter::default();
-        let _win_handle = Window::new(os_window, DisplayConfig::for_test(), &mut interpreter)?;
+        let mut runtime = input::InputController::for_test_unix()?;
+        runtime
+            .insert_resource(DisplayOpts::default())
+            .load_extension::<Window>()?;
+        assert!(runtime.resource::<Window>().width() > 0);
         Ok(())
     }
 }

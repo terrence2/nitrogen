@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 
+/*
 #[macro_export]
 macro_rules! make_frame_graph_pass {
     (Any() {
@@ -332,3 +333,4 @@ mod test {
         Ok(())
     }
 }
+*/

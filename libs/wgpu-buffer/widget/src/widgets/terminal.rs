@@ -25,7 +25,7 @@ use gpu::Gpu;
 use input::{ElementState, InputEvent, InputFocus, VirtualKeyCode};
 use nitrous::{
     ir::{Expr, Stmt, Term},
-    Interpreter, Module, Script, ScriptAst, Value,
+    Interpreter, Module, NitrousAst, NitrousScript, Value,
 };
 use parking_lot::RwLock;
 use runtime::ScriptHerder;
@@ -153,7 +153,7 @@ impl Terminal {
         self.output.write().append_line(line);
     }
 
-    fn try_completion(&self, mut partial: ScriptAst, herder: &mut ScriptHerder) -> Option<String> {
+    fn try_completion(&self, mut partial: NitrousAst, herder: &mut ScriptHerder) -> Option<String> {
         if partial.statements().len() != 1 {
             return None;
         }
@@ -192,7 +192,7 @@ impl Terminal {
 
     fn on_tab_pressed(&mut self, herder: &mut ScriptHerder) {
         let incomplete = self.edit.read().line().flatten();
-        if let Ok(partial) = ScriptAst::compile(&incomplete) {
+        if let Ok(partial) = NitrousAst::parse(&incomplete) {
             if let Some(full) = self.try_completion(partial, herder) {
                 self.edit.write().line_mut().select_all();
                 self.edit.write().line_mut().insert(&full);
@@ -233,7 +233,7 @@ impl Terminal {
 
         self.add_command_to_history(&command)?;
 
-        herder.run(Script::compile(&command)?);
+        herder.run(NitrousScript::compile(&command)?);
 
         // FIXME: make sure we have logging of errors... entity system?
         /*

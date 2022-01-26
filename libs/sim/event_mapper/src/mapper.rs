@@ -19,7 +19,7 @@ use crate::{
 use anyhow::{ensure, Result};
 use bevy_ecs::prelude::*;
 use input::{ElementState, InputEvent, InputEventVec, InputFocus, ModifiersState};
-use nitrous::{Interpreter, LocalNamespace, Value};
+use nitrous::Value;
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
@@ -163,7 +163,7 @@ impl EventMapper {
             _ => {}
         }
 
-        let locals: LocalNamespace = variables.into();
+        let locals = variables.into();
         for bindings in self.bindings.values() {
             bindings.read().match_input(
                 input,

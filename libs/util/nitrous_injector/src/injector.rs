@@ -22,6 +22,35 @@ use syn::{
     PathArguments, ReturnType, Type, TypePath,
 };
 
+pub(crate) fn make_derive_nitrous_resource(item: DeriveInput) -> TokenStream2 {
+    let ident = item.ident;
+    let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
+
+    quote! {
+        impl #impl_generics ::nitrous::NitrousResource for #ident #ty_generics #where_clause {
+            fn resource_type_name(&self) -> String {
+                stringify!(#ident).to_owned()
+            }
+
+            fn call_method(&mut self, name: &str, args: &[::nitrous::Value]) -> ::anyhow::Result<::nitrous::Value> {
+                self.__call_method_inner__(name, args)
+            }
+
+            fn put(&mut self, name: &str, value: ::nitrous::Value) -> ::anyhow::Result<()> {
+                self.__put_inner__(name, value)
+            }
+
+            fn get(&self, name: &str) -> ::anyhow::Result<::nitrous::Value> {
+                self.__get_inner__(name)
+            }
+
+            fn names(&self) -> Vec<&str> {
+                self.__names_inner__()
+            }
+        }
+    }
+}
+
 pub(crate) fn make_derive_nitrous_module(item: DeriveInput) -> TokenStream2 {
     let ident = item.ident;
     let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();

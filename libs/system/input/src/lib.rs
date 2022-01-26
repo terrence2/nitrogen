@@ -134,6 +134,7 @@ impl InputController {
         };
     }
 
+    /*
     pub fn for_test(event_loop: &EventLoop<MetaEvent>) -> Arc<Mutex<Self>> {
         let mut runtime = Runtime::default();
         let (_, rx_input_event) = channel();
@@ -157,9 +158,10 @@ impl InputController {
             &mut runtime,
         )
     }
+     */
 
     #[cfg(unix)]
-    pub fn for_test_unix() -> Result<(Window, Arc<Mutex<Self>>)> {
+    pub fn for_test_unix() -> Result<Runtime> {
         use winit::platform::{run_return::EventLoopExtRunReturn, unix::EventLoopExtUnix};
         let mut event_loop = EventLoop::<MetaEvent>::new_any_thread();
         let os_window = Window::new(&event_loop).unwrap();
@@ -178,7 +180,17 @@ impl InputController {
                 *flow = winit::event_loop::ControlFlow::Exit;
             });
         }
-        Ok((os_window, Self::for_test(&event_loop)))
+        let mut runtime = Runtime::default();
+        let (_, rx_input_event) = channel();
+        let (_, rx_system_event) = channel();
+        InputController::new(
+            event_loop.create_proxy(),
+            rx_input_event,
+            rx_system_event,
+            &mut runtime,
+        );
+        runtime.insert_resource(os_window);
+        Ok(runtime)
     }
 
     pub fn quit(&self) -> Result<()> {

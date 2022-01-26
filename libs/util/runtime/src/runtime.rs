@@ -15,8 +15,7 @@
 use crate::herder::ScriptHerder;
 use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource};
-use nitrous::{LocalNamespace, Module, Script, Value};
-use std::{any::TypeId, collections::HashMap};
+use nitrous::Module;
 
 /// Interface for extending the Runtime.
 pub trait Extension {

@@ -17,10 +17,8 @@ use anyhow::Result;
 use bevy_ecs::prelude::*;
 use camera::{Camera, CameraComponent};
 use core::num::NonZeroU64;
-use event_mapper::EventMapper;
 use gpu::{Gpu, UploadTracker};
 use nalgebra::{convert, Matrix3, Matrix4, Point3, Vector3, Vector4};
-use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use orrery::Orrery;
 use parking_lot::RwLock;
@@ -245,6 +243,11 @@ impl GlobalParametersBuffer {
         }
     }
 
+    #[method]
+    pub fn tone_gamma(&self) -> f64 {
+        self.tone_gamma as f64
+    }
+
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.bind_group_layout
     }
@@ -288,17 +291,14 @@ impl GlobalParametersBuffer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpu::{Gpu, TestResources};
+    use gpu::Gpu;
 
     #[cfg(unix)]
     #[test]
     fn it_can_create_a_buffer() -> Result<()> {
-        let TestResources {
-            mut interpreter,
-            gpu,
-            ..
-        } = Gpu::for_test_unix()?;
-        let _globals_buffer = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter);
+        let mut runtime = Gpu::for_test_unix()?;
+        runtime.load_extension::<GlobalParametersBuffer>()?;
+        assert!(runtime.resource::<GlobalParametersBuffer>().tone_gamma() > 0.0);
         Ok(())
     }
 }
