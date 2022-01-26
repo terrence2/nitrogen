@@ -26,7 +26,7 @@ pub use crate::{
 use absolute_unit::{Length, Meters};
 use anyhow::Result;
 use bevy_ecs::prelude::*;
-use camera::Camera;
+use camera::{Camera, CameraComponent};
 use catalog::Catalog;
 use geodesy::{GeoCenter, Graticule};
 use global_data::GlobalParametersBuffer;
@@ -160,8 +160,11 @@ impl Extension for TerrainBuffer {
         )?;
         runtime.insert_module("terrain", terrain);
         runtime
-            .frame_stage_mut(FrameStage::HandleSystem)
+            .frame_stage_mut(FrameStage::HandleDisplayChange)
             .add_system(Self::sys_handle_display_config_change);
+        runtime
+            .frame_stage_mut(FrameStage::TrackStateChanges)
+            .add_system(Self::sys_track_state_changes);
 
         Ok(())
     }
@@ -721,6 +724,24 @@ impl TerrainBuffer {
                 },
             ],
         })
+    }
+
+    fn sys_track_state_changes(
+        query: Query<&CameraComponent>,
+        catalog: Res<Arc<RwLock<Catalog>>>,
+        mut terrain: ResMut<TerrainBuffer>,
+    ) {
+        // FIXME: camera debug pinning... this should probably conditionally disable copy from
+        //        camera to vis-camera using a system something? Oh, or why don't we just do it
+        //        ourselves? Put a pin state on terrain, which already has debug bindings.
+        // FIXME: multiple camera support
+        for (i, camera) in query.iter().enumerate() {
+            assert_eq!(i, 0);
+            // let vis_camera = system.current_camera(&camera.camera());
+            terrain
+                .track_state_changes(&camera.camera(), &camera.camera(), catalog.clone())
+                .expect("Terrain::track_state_changes");
+        }
     }
 
     // Given the new camera position, update our internal CPU tracking.

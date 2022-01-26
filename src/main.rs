@@ -355,6 +355,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .load_extension::<WorldRenderPass>()?
         .load_extension::<WidgetBuffer>()?
         .load_extension::<UiRenderPass>()?
+        .load_extension::<CompositeRenderPass>()?
         .load_extension::<TimeStep>()?;
 
     // We don't technically need the window here, just the graphics configuration, and we could
@@ -418,13 +419,14 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     // )?;
     // runtime.insert_resource(ui.clone());
 
-    let composite = Arc::new(RwLock::new(CompositeRenderPass::new(
-        runtime.resource::<UiRenderPass>(),
-        runtime.resource::<WorldRenderPass>(),
-        runtime.resource::<GlobalParametersBuffer>(),
-        runtime.resource::<Gpu>(),
-    )?));
-    runtime.insert_resource(composite.clone());
+    // let composite = Arc::new(RwLock::new(CompositeRenderPass::new(
+    //     runtime.resource::<UiRenderPass>(),
+    //     runtime.resource::<WorldRenderPass>(),
+    //     runtime.resource::<GlobalParametersBuffer>(),
+    //     runtime.resource::<Gpu>(),
+    // )?));
+    // runtime.insert_resource(composite.clone());
+
     // Create rest of game resources
     let initial_utc = Utc.ymd(1964, 2, 24).and_hms(12, 0, 0);
     let orrery = Orrery::new(initial_utc, &mut interpreter)?;
@@ -487,23 +489,6 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     //       We can take as many of these in parallel as we want, iff there is no parallel write
     //       to those same resource (e.g. window). Otherwise we might deadlock.
 
-    fn update_terrain_track_state_changes(
-        query: Query<&CameraComponent>,
-        catalog: Res<Arc<RwLock<Catalog>>>,
-        system: Res<Arc<RwLock<System>>>,
-        mut terrain: ResMut<TerrainBuffer>,
-    ) {
-        // FIXME: multiple camera support
-        let mut system = system.write();
-        for (i, camera) in query.iter().enumerate() {
-            assert_eq!(i, 0);
-            let vis_camera = system.current_camera(&camera.camera());
-            terrain
-                .track_state_changes(&camera.camera(), vis_camera, catalog.clone())
-                .expect("Terrain::track_state_changes");
-        }
-    }
-
     let mut frame_schedule = Schedule::default();
     frame_schedule.add_stage(
         "input",
@@ -513,9 +498,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     let mut update_frame_schedule = Schedule::default();
     update_frame_schedule.add_stage(
         "update_frame",
-        SystemStage::single_threaded()
-            .with_system(CameraComponent::sys_apply_display_changes)
-            .with_system(update_terrain_track_state_changes), // .with_wystem(update_widgets_ensure_uploaded),
+        SystemStage::single_threaded().with_system(CameraComponent::sys_apply_display_changes), // .with_system(update_terrain_track_state_changes), // .with_wystem(update_widgets_ensure_uploaded),
     );
 
     // We are now finished and can safely run the startup scripts / configuration.
@@ -571,7 +554,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
             // }
             let config = runtime.resource::<Window>().config().to_owned();
             //let gpu = &mut runtime.resource_mut::<Gpu>();
-            let composite = composite.read();
+            // let composite = composite.read();
             // let ui = ui.read();
             // let widgets = widgets.read();
             // let world = world_gfx.read();
@@ -692,7 +675,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
                         depth_stencil_attachment: Some(gpu.depth_stencil_attachment()),
                     };
                     let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
-                    let rpass = composite.composite_scene(
+                    let rpass = runtime.resource::<CompositeRenderPass>().composite_scene(
                         rpass,
                         runtime.resource::<FullscreenBuffer>(),
                         runtime.resource::<GlobalParametersBuffer>(),

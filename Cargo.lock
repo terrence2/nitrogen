@@ -627,6 +627,7 @@ dependencies = [
  "global_data",
  "gpu",
  "log",
+ "runtime",
  "shader_shared",
  "ui",
  "wgpu",

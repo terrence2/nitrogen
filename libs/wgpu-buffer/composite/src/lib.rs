@@ -17,6 +17,7 @@ use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::GlobalParametersBuffer;
 use gpu::Gpu;
 use log::trace;
+use runtime::{Extension, Runtime};
 use shader_shared::Group;
 use ui::UiRenderPass;
 use world::WorldRenderPass;
@@ -24,6 +25,19 @@ use world::WorldRenderPass;
 #[derive(Debug)]
 pub struct CompositeRenderPass {
     pipeline: wgpu::RenderPipeline,
+}
+
+impl Extension for CompositeRenderPass {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        let composite = CompositeRenderPass::new(
+            runtime.resource::<UiRenderPass>(),
+            runtime.resource::<WorldRenderPass>(),
+            runtime.resource::<GlobalParametersBuffer>(),
+            runtime.resource::<Gpu>(),
+        )?;
+        runtime.insert_resource(composite);
+        Ok(())
+    }
 }
 
 impl CompositeRenderPass {
