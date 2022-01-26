@@ -18,6 +18,7 @@ use global_data::GlobalParametersBuffer;
 use gpu::{DisplayConfig, Gpu};
 use log::trace;
 use parking_lot::RwLock;
+use runtime::{Extension, FrameStage, Runtime};
 use shader_shared::Group;
 use std::sync::Arc;
 use widget::{WidgetBuffer, WidgetVertex};
@@ -37,13 +38,29 @@ pub struct UiRenderPass {
     text_pipeline: wgpu::RenderPipeline,
 }
 
+impl Extension for UiRenderPass {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        let ui = UiRenderPass::new(
+            runtime.resource::<WidgetBuffer>(),
+            runtime.resource::<WorldRenderPass>(),
+            runtime.resource::<GlobalParametersBuffer>(),
+            runtime.resource::<Gpu>(),
+        )?;
+        runtime.insert_resource(ui);
+        runtime
+            .frame_stage_mut(FrameStage::HandleDisplayChange)
+            .add_system(Self::sys_handle_display_config_change);
+        Ok(())
+    }
+}
+
 impl UiRenderPass {
     pub fn new(
         widget_buffer: &WidgetBuffer,
         world_render_pass: &WorldRenderPass,
         global_data: &GlobalParametersBuffer,
         gpu: &Gpu,
-    ) -> Result<Arc<RwLock<Self>>> {
+    ) -> Result<Self> {
         trace!("UiRenderPass::new");
 
         // Binding layout for composite to read our offscreen render.
@@ -242,7 +259,7 @@ impl UiRenderPass {
                 multiview: None,
             });
 
-        let ui = Arc::new(RwLock::new(Self {
+        Ok(Self {
             deferred_texture,
             deferred_depth,
             deferred_sampler,
@@ -251,11 +268,7 @@ impl UiRenderPass {
 
             background_pipeline,
             text_pipeline,
-        }));
-
-        // gpu.register_render_extent_change_receiver(ui.clone());
-
-        Ok(ui)
+        })
     }
 
     fn _make_deferred_texture_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
@@ -335,10 +348,9 @@ impl UiRenderPass {
     pub fn sys_handle_display_config_change(
         updated_config: Res<Option<DisplayConfig>>,
         gpu: Res<Gpu>,
-        ui: Res<Arc<RwLock<UiRenderPass>>>,
+        mut ui: ResMut<UiRenderPass>,
     ) {
         if updated_config.is_some() {
-            let mut ui = ui.write();
             ui.handle_render_extent_changed(&gpu)
                 .expect("UI::handle_render_extent_changed")
         }

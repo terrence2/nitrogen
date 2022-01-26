@@ -3155,6 +3155,7 @@ dependencies = [
  "gpu",
  "log",
  "parking_lot",
+ "runtime",
  "shader_shared",
  "wgpu",
  "widget",

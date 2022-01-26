@@ -354,6 +354,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .load_extension::<TerrainBuffer>()?
         .load_extension::<WorldRenderPass>()?
         .load_extension::<WidgetBuffer>()?
+        .load_extension::<UiRenderPass>()?
         .load_extension::<TimeStep>()?;
 
     // We don't technically need the window here, just the graphics configuration, and we could
@@ -409,16 +410,16 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     // runtime.insert_resource(widgets.clone());
 
     // This is just rendering for widgets, so should be merged.
-    let ui = UiRenderPass::new(
-        runtime.resource::<WidgetBuffer>(),
-        runtime.resource::<WorldRenderPass>(),
-        runtime.resource::<GlobalParametersBuffer>(),
-        runtime.resource::<Gpu>(),
-    )?;
-    runtime.insert_resource(ui.clone());
+    // let ui = UiRenderPass::new(
+    //     runtime.resource::<WidgetBuffer>(),
+    //     runtime.resource::<WorldRenderPass>(),
+    //     runtime.resource::<GlobalParametersBuffer>(),
+    //     runtime.resource::<Gpu>(),
+    // )?;
+    // runtime.insert_resource(ui.clone());
 
     let composite = Arc::new(RwLock::new(CompositeRenderPass::new(
-        &ui.read(),
+        runtime.resource::<UiRenderPass>(),
         runtime.resource::<WorldRenderPass>(),
         runtime.resource::<GlobalParametersBuffer>(),
         runtime.resource::<Gpu>(),
@@ -514,7 +515,6 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         "update_frame",
         SystemStage::single_threaded()
             .with_system(CameraComponent::sys_apply_display_changes)
-            .with_system(UiRenderPass::sys_handle_display_config_change)
             .with_system(update_terrain_track_state_changes), // .with_wystem(update_widgets_ensure_uploaded),
     );
 
@@ -572,7 +572,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
             let config = runtime.resource::<Window>().config().to_owned();
             //let gpu = &mut runtime.resource_mut::<Gpu>();
             let composite = composite.read();
-            let ui = ui.read();
+            // let ui = ui.read();
             // let widgets = widgets.read();
             // let world = world_gfx.read();
             // let terrain = terrain.read();
@@ -664,14 +664,15 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
 
                 // ui: Draw our widgets onto a buffer with resolution independent of the world.
                 {
-                    let (color_attachments, depth_stencil_attachment) = ui.offscreen_target();
+                    let (color_attachments, depth_stencil_attachment) =
+                        runtime.resource::<UiRenderPass>().offscreen_target();
                     let render_pass_desc_ref = wgpu::RenderPassDescriptor {
                         label: Some(concat!("non-screen-render-pass-ui-draw-offscreen",)),
                         color_attachments: &color_attachments,
                         depth_stencil_attachment,
                     };
                     let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
-                    let rpass = ui.render_ui(
+                    let rpass = runtime.resource::<UiRenderPass>().render_ui(
                         rpass,
                         runtime.resource::<GlobalParametersBuffer>(),
                         runtime.resource::<WidgetBuffer>(),
@@ -696,7 +697,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
                         runtime.resource::<FullscreenBuffer>(),
                         runtime.resource::<GlobalParametersBuffer>(),
                         runtime.resource::<WorldRenderPass>(),
-                        &ui,
+                        runtime.resource::<UiRenderPass>(),
                     )?;
                 }
             };
