@@ -12,10 +12,12 @@ log = "^ 0.4"
 memoffset = "^ 0.6"
 ordered-float = "^ 2"
 parking_lot = "^ 0.11"
+platform-dirs = "^ 0.3"
 rayon = "= 1.4.0"
 smallvec = "^ 1.4"
 wgpu = { version = "^ 0.12", features = ["spirv"] }
 zerocopy = "^ 0.5"
+animate = { path = "../../sim/animate" }
 atlas = { path = "../../wgpu-buffer/atlas" }
 font_common = { path = "../../wgpu-buffer/font_common" }
 font_ttf = { path = "../../wgpu-buffer/font_ttf" }

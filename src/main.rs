@@ -342,6 +342,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .insert_resource(opt.display_opts)
         .insert_resource(opt.detail_opts.cpu_detail())
         .insert_resource(opt.detail_opts.gpu_detail())
+        .insert_resource(app_dirs)
         .load_extension::<Catalog>()?
         .load_extension::<EventMapper>()?
         .load_extension::<Window>()?
@@ -352,6 +353,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .load_extension::<StarsBuffer>()?
         .load_extension::<TerrainBuffer>()?
         .load_extension::<WorldRenderPass>()?
+        .load_extension::<WidgetBuffer>()?
         .load_extension::<TimeStep>()?;
 
     // We don't technically need the window here, just the graphics configuration, and we could
@@ -399,16 +401,16 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     // runtime.insert_resource(world_gfx.clone());
     // world_gfx.write().add_debug_bindings(interpreter)?;
 
-    let widgets = WidgetBuffer::new(
-        &mut runtime.resource_mut::<Gpu>(),
-        &mut interpreter,
-        &app_dirs.state_dir,
-    )?;
-    runtime.insert_resource(widgets.clone());
+    // let widgets = WidgetBuffer::new(
+    //     &mut runtime.resource_mut::<Gpu>(),
+    //     &mut interpreter,
+    //     &app_dirs.state_dir,
+    // )?;
+    // runtime.insert_resource(widgets.clone());
 
     // This is just rendering for widgets, so should be merged.
     let ui = UiRenderPass::new(
-        &widgets.read(),
+        runtime.resource::<WidgetBuffer>(),
         runtime.resource::<WorldRenderPass>(),
         runtime.resource::<GlobalParametersBuffer>(),
         runtime.resource::<Gpu>(),
@@ -429,7 +431,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     let timeline = Timeline::new(&mut interpreter);
     runtime.world.insert_resource(timeline);
 
-    let system = System::new(&widgets.read(), &mut interpreter)?;
+    let system = System::new(runtime.resource::<WidgetBuffer>(), &mut interpreter)?;
     runtime.world.insert_resource(system.clone());
 
     // But we need at least a camera and controller before the sim is ready to run.
@@ -461,9 +463,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     );
     sim_schedule.add_stage(
         "interpret_input_events",
-        SystemStage::parallel()
-            .with_system(WidgetBuffer::sys_handle_input_events.system())
-            .with_system(Timeline::sys_animate.system()),
+        SystemStage::parallel().with_system(Timeline::sys_animate.system()),
     );
     sim_schedule.add_stage(
         "propagate_changes",
@@ -485,17 +485,6 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     // Note: We have to take resources as non-mutable references, so that we can run in parallel.
     //       We can take as many of these in parallel as we want, iff there is no parallel write
     //       to those same resource (e.g. window). Otherwise we might deadlock.
-
-    fn update_widget_track_state_changes(
-        step: Res<TimeStep>,
-        window: Res<Window>,
-        widgets: Res<Arc<RwLock<WidgetBuffer>>>,
-    ) {
-        widgets
-            .write()
-            .track_state_changes(*step.now(), &window)
-            .expect("Widgets::track_state_changes");
-    }
 
     fn update_terrain_track_state_changes(
         query: Query<&CameraComponent>,
@@ -526,7 +515,6 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         SystemStage::single_threaded()
             .with_system(CameraComponent::sys_apply_display_changes)
             .with_system(UiRenderPass::sys_handle_display_config_change)
-            .with_system(update_widget_track_state_changes)
             .with_system(update_terrain_track_state_changes), // .with_wystem(update_widgets_ensure_uploaded),
     );
 
@@ -555,12 +543,24 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
                     .ensure_uploaded(world.get_resource::<Gpu>().unwrap(), &mut tracker)
                     .ok();
             });
-        widgets.write().ensure_uploaded(
-            *timestep(&runtime).now(),
-            runtime.resource::<Gpu>(),
-            runtime.resource::<Window>(),
-            &mut tracker,
-        )?;
+        runtime
+            .world
+            .resource_scope(|world, mut widget: Mut<WidgetBuffer>| {
+                widget
+                    .ensure_uploaded(
+                        *world.get_resource::<TimeStep>().unwrap().now(),
+                        world.get_resource::<Gpu>().unwrap(),
+                        world.get_resource::<Window>().unwrap(),
+                        &mut tracker,
+                    )
+                    .ok();
+            });
+        // runtime.resource::<WidgetBuffer>().ensure_uploaded(
+        //     *timestep(&runtime).now(),
+        //     runtime.resource::<Gpu>(),
+        //     runtime.resource::<Window>(),
+        //     &mut tracker,
+        // )?;
 
         {
             // if !frame_graph.run(&mut runtime.resource_mut::<Gpu>(), tracker)? {
@@ -573,7 +573,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
             //let gpu = &mut runtime.resource_mut::<Gpu>();
             let composite = composite.read();
             let ui = ui.read();
-            let widgets = widgets.read();
+            // let widgets = widgets.read();
             // let world = world_gfx.read();
             // let terrain = terrain.read();
             // let stars = stars_buffer.read();
@@ -601,7 +601,9 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
             {
                 tracker.dispatch_uploads(&mut encoder);
 
-                encoder = widgets.maintain_font_atlas(encoder)?;
+                encoder = runtime
+                    .resource::<WidgetBuffer>()
+                    .maintain_font_atlas(encoder)?;
                 encoder = runtime
                     .resource::<TerrainBuffer>()
                     .paint_atlas_indices(encoder)?;
@@ -672,7 +674,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
                     let rpass = ui.render_ui(
                         rpass,
                         runtime.resource::<GlobalParametersBuffer>(),
-                        &widgets,
+                        runtime.resource::<WidgetBuffer>(),
                         runtime.resource::<WorldRenderPass>(),
                     )?;
                 }

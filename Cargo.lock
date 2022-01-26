@@ -3509,6 +3509,7 @@ dependencies = [
 name = "widget"
 version = "0.0.0"
 dependencies = [
+ "animate",
  "anyhow",
  "atlas",
  "bevy_ecs",
@@ -3523,6 +3524,7 @@ dependencies = [
  "nitrous_injector",
  "ordered-float",
  "parking_lot",
+ "platform-dirs",
  "rayon",
  "runtime",
  "smallvec",

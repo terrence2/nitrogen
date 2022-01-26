@@ -38,6 +38,7 @@ pub use crate::{
 };
 
 use crate::font_context::FontContext;
+use animate::TimeStep;
 use anyhow::{ensure, Result};
 use bevy_ecs::prelude::*;
 use font_common::{FontAdvance, FontInterface};
@@ -48,7 +49,9 @@ use log::trace;
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
-use runtime::ScriptHerder;
+use platform_dirs::AppDirs;
+use runtime::{Extension, Runtime, SimStage};
+use runtime::{FrameStage, ScriptHerder};
 use std::{borrow::Borrow, mem, num::NonZeroU64, ops::Range, path::Path, sync::Arc, time::Instant};
 use window::{
     size::{AbsSize, Size},
@@ -102,6 +105,21 @@ pub struct WidgetBuffer {
     bind_group: Option<wgpu::BindGroup>,
 }
 
+impl Extension for WidgetBuffer {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        let state_dir = runtime.resource::<AppDirs>().state_dir.clone();
+        let widget = WidgetBuffer::new(&mut runtime.resource_mut::<Gpu>(), &state_dir)?;
+        runtime.insert_module("widget", widget);
+        runtime
+            .sim_stage_mut(SimStage::HandleInput)
+            .add_system(Self::sys_handle_input_events);
+        runtime
+            .frame_stage_mut(FrameStage::TrackStateChanges)
+            .add_system(Self::sys_track_state_changes);
+        Ok(())
+    }
+}
+
 #[inject_nitrous_module]
 impl WidgetBuffer {
     const MAX_WIDGETS: usize = 512;
@@ -109,11 +127,7 @@ impl WidgetBuffer {
     const MAX_BACKGROUND_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6; // note: rounded corners
     const MAX_IMAGE_VERTICES: usize = Self::MAX_WIDGETS * 4 * 6;
 
-    pub fn new(
-        gpu: &mut Gpu,
-        interpreter: &mut Interpreter,
-        state_dir: &Path,
-    ) -> Result<Arc<RwLock<Self>>> {
+    pub fn new(gpu: &mut Gpu, state_dir: &Path) -> Result<Self> {
         trace!("WidgetBuffer::new");
 
         let mut paint_context = PaintContext::new(gpu)?;
@@ -202,7 +216,7 @@ impl WidgetBuffer {
             .wrapped();
         root.write().add_child("terminal", terminal.clone());
 
-        let widget = Arc::new(RwLock::new(Self {
+        Ok(Self {
             root,
             paint_context,
             cursor_position: Position::origin(),
@@ -217,11 +231,7 @@ impl WidgetBuffer {
 
             bind_group_layout,
             bind_group: None,
-        }));
-
-        interpreter.put_global("widget", Value::Module(widget.clone()));
-
-        Ok(widget)
+        })
     }
 
     pub fn root_container(&self) -> Arc<RwLock<FloatBox>> {
@@ -331,14 +341,12 @@ impl WidgetBuffer {
         mut input_focus: ResMut<InputFocus>,
         window: Res<Window>,
         mut herder: ResMut<ScriptHerder>,
-        widgets: Res<Arc<RwLock<WidgetBuffer>>>,
+        mut widgets: ResMut<WidgetBuffer>,
     ) {
         widgets
-            .write()
             .handle_events(&events, *input_focus, &mut herder, &window)
             .expect("Widgets::handle_events");
 
-        let widgets = widgets.read();
         if events
             .iter()
             .any(|event| widgets.is_toggle_terminal_event(event))
@@ -374,6 +382,16 @@ impl WidgetBuffer {
             )?;
         }
         Ok(())
+    }
+
+    fn sys_track_state_changes(
+        step: Res<TimeStep>,
+        window: Res<Window>,
+        mut widgets: ResMut<WidgetBuffer>,
+    ) {
+        widgets
+            .track_state_changes(*step.now(), &window)
+            .expect("Widgets::track_state_changes");
     }
 
     pub fn track_state_changes(&mut self, now: Instant, win: &Window) -> Result<()> {
