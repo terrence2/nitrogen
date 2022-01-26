@@ -21,6 +21,7 @@ use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::RwLock;
+use runtime::{Extension, Runtime, SimStage};
 use std::{f64::consts::PI, sync::Arc};
 
 #[derive(Component)]

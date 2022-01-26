@@ -24,6 +24,7 @@ use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, UnitQuaternion, Vector3
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
 use parking_lot::{RwLock, RwLockReadGuard};
+use runtime::{Extension, Runtime, SimStage};
 use std::sync::Arc;
 use window::DisplayConfig;
 

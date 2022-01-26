@@ -258,12 +258,11 @@ impl GlobalParametersBuffer {
 
     fn sys_track_state_changes(
         query: Query<&CameraComponent>,
-        orrery: Res<Arc<RwLock<Orrery>>>,
+        orrery: Res<Orrery>,
         window: Res<Window>,
         mut globals: ResMut<GlobalParametersBuffer>,
     ) {
         // FIXME: multiple camera support
-        let orrery = orrery.read();
         for (i, camera) in query.iter().enumerate() {
             assert_eq!(i, 0);
             globals.track_state_changes(&camera.camera(), &orrery, &window);

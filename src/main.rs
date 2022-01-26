@@ -335,7 +335,6 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
 
     // Create the game interpreter
     let mut interpreter = Interpreter::default();
-    // runtime.world.insert_resource(interpreter.clone());
 
     runtime
         .insert_resource(opt.catalog_opts)
@@ -356,81 +355,14 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .load_extension::<WidgetBuffer>()?
         .load_extension::<UiRenderPass>()?
         .load_extension::<CompositeRenderPass>()?
+        .load_extension::<Orrery>()?
         .load_extension::<TimeStep>()?;
 
-    // We don't technically need the window here, just the graphics configuration, and we could
-    // even potentially create blind and expect the resize later. Worth looking into as it would
-    // let us initialize async. The main work to do in parallel is discovering tile trees; this
-    // does not technically depend on the gpu, but does because it lives with terrain creation,
-    // which does need the gpu for resource creation. Probably worth looking to parallelize this
-    // as we could potentially half our startup time.
-    //let mut frame_graph = build_frame_graph(&app_dirs, &mut interpreter, &mut runtime)?;
-
-    // let fullscreen_buffer = FullscreenBuffer::new(runtime.resource::<Gpu>());
-    // runtime.insert_resource(fullscreen_buffer.clone());
-
-    // let globals = GlobalParametersBuffer::new(runtime.resource::<Gpu>().device(), &mut interpreter);
-    // runtime.insert_resource(globals.clone());
-
-    // let stars_buffer = Arc::new(RwLock::new(StarsBuffer::new(runtime.resource::<Gpu>())?));
-    // runtime.insert_resource(stars_buffer.clone());
-
-    // let terrain = {
-    //     let catalog_ref = runtime.resource::<Arc<RwLock<Catalog>>>().clone();
-    //     let catalog = &catalog_ref.read();
-    //     let cpu_detail_level = *runtime.resource::<CpuDetailLevel>();
-    //     let gpu_detail_level = *runtime.resource::<GpuDetailLevel>();
-    //     let terrain_buffer = TerrainBuffer::new(
-    //         catalog,
-    //         cpu_detail_level,
-    //         gpu_detail_level,
-    //         runtime.resource::<GlobalParametersBuffer>(),
-    //         &runtime.resource::<Gpu>(),
-    //         &mut interpreter,
-    //     )?;
-    //     runtime.insert_resource(terrain_buffer.clone());
-    //     terrain_buffer
-    // };
-
-    // let world_gfx = WorldRenderPass::new(
-    //     &runtime.resource::<TerrainBuffer>(),
-    //     runtime.resource::<AtmosphereBuffer>(),
-    //     runtime.resource::<StarsBuffer>(),
-    //     runtime.resource::<GlobalParametersBuffer>(),
-    //     runtime.resource::<Gpu>(),
-    //     &mut interpreter,
-    // )?;
-    // runtime.insert_resource(world_gfx.clone());
-    // world_gfx.write().add_debug_bindings(interpreter)?;
-
-    // let widgets = WidgetBuffer::new(
-    //     &mut runtime.resource_mut::<Gpu>(),
-    //     &mut interpreter,
-    //     &app_dirs.state_dir,
-    // )?;
-    // runtime.insert_resource(widgets.clone());
-
-    // This is just rendering for widgets, so should be merged.
-    // let ui = UiRenderPass::new(
-    //     runtime.resource::<WidgetBuffer>(),
-    //     runtime.resource::<WorldRenderPass>(),
-    //     runtime.resource::<GlobalParametersBuffer>(),
-    //     runtime.resource::<Gpu>(),
-    // )?;
-    // runtime.insert_resource(ui.clone());
-
-    // let composite = Arc::new(RwLock::new(CompositeRenderPass::new(
-    //     runtime.resource::<UiRenderPass>(),
-    //     runtime.resource::<WorldRenderPass>(),
-    //     runtime.resource::<GlobalParametersBuffer>(),
-    //     runtime.resource::<Gpu>(),
-    // )?));
-    // runtime.insert_resource(composite.clone());
-
     // Create rest of game resources
-    let initial_utc = Utc.ymd(1964, 2, 24).and_hms(12, 0, 0);
-    let orrery = Orrery::new(initial_utc, &mut interpreter)?;
-    runtime.world.insert_resource(orrery.clone());
+    // let initial_utc = Utc.ymd(1964, 2, 24).and_hms(12, 0, 0);
+    // let orrery = Orrery::new(initial_utc, &mut interpreter)?;
+    // runtime.world.insert_resource(orrery.clone());
+
     let timeline = Timeline::new(&mut interpreter);
     runtime.world.insert_resource(timeline);
 
@@ -460,10 +392,6 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     // a handful of game related resources, rather than communicating with the GPU. This generally
     // splits into two phases: per-fixed-tick resource updates and entity updates from resources.
     let mut sim_schedule = Schedule::default();
-    sim_schedule.add_stage(
-        "time",
-        SystemStage::single_threaded().with_system(Orrery::sys_step_time.system()),
-    );
     sim_schedule.add_stage(
         "interpret_input_events",
         SystemStage::parallel().with_system(Timeline::sys_animate.system()),
@@ -694,7 +622,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
 
         system.write().track_visible_state(
             frame_start, // compute frame times from actual elapsed time
-            &orrery.read(),
+            runtime.resource::<Orrery>(),
             &arcball.read(),
             &camera.read(),
         )?;
