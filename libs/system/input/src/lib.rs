@@ -26,6 +26,8 @@ use smallvec::SmallVec;
 use std::{
     collections::HashMap,
     fmt::Debug,
+    hash::Hash,
+    str::FromStr,
     sync::{
         mpsc::{channel, Receiver, TryRecvError},
         Arc,
@@ -43,7 +45,10 @@ use winit::{
 pub type InputEventVec = SmallVec<[InputEvent; 8]>;
 pub type SystemEventVec = SmallVec<[SystemEvent; 8]>;
 
-pub trait InputFocus: Clone + Copy + Debug + Send + Sync + 'static {
+pub trait InputFocus:
+    Clone + Copy + Debug + Default + Eq + PartialEq + FromStr + Hash + Send + Sync + 'static
+{
+    fn name(&self) -> &'static str;
     fn is_terminal_focused(&self) -> bool;
     fn toggle_terminal(&mut self);
 }

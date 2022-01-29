@@ -314,7 +314,6 @@ impl Extension for Orrery {
             .add_system(Self::sys_step_time);
         runtime.resource_mut::<ScriptHerder>().run_string(
             r#"
-                let bindings := mapper.create_bindings("orrery");
                 bindings.bind("mouse2", "orrery.move_sun(pressed)");
                 bindings.bind("mouseMotion", "orrery.handle_mousemove(dx)");
             "#,

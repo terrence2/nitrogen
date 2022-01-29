@@ -16,7 +16,7 @@ use crate::{
     bindings::Bindings,
     input::{Input, InputSet},
 };
-use anyhow::{ensure, Result};
+use anyhow::{bail, ensure, Result};
 use bevy_ecs::prelude::*;
 use input::{ElementState, InputEvent, InputEventVec, InputFocus, ModifiersState};
 use nitrous::Value;
@@ -25,8 +25,11 @@ use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
 use runtime::{Extension, Runtime, ScriptHerder, SimStage};
 use std::{
+    any::type_name,
     collections::{HashMap, HashSet},
+    fmt::Debug,
     marker::PhantomData,
+    str::FromStr,
     sync::Arc,
 };
 
@@ -41,8 +44,9 @@ pub struct State {
 pub struct EventMapper<T>
 where
     T: InputFocus,
+    <T as FromStr>::Err: Debug,
 {
-    bindings: HashMap<String, Arc<RwLock<Bindings>>>,
+    bindings: HashMap<T, Bindings>,
     state: State,
     phantom_data: PhantomData<T>,
 }
@@ -50,9 +54,10 @@ where
 impl<T> Extension for EventMapper<T>
 where
     T: InputFocus,
+    <T as FromStr>::Err: Debug,
 {
     fn init(runtime: &mut Runtime) -> Result<()> {
-        runtime.insert_module("mapper", EventMapper::<T>::new());
+        runtime.insert_module("bindings", EventMapper::<T>::new());
         runtime
             .sim_stage_mut(SimStage::HandleInput)
             .add_system(Self::sys_handle_input_events);
@@ -64,6 +69,7 @@ where
 impl<T> EventMapper<T>
 where
     T: InputFocus,
+    <T as FromStr>::Err: Debug,
 {
     pub fn new() -> Self {
         Self {
@@ -73,17 +79,27 @@ where
         }
     }
 
+    pub fn bind_in_focus(&mut self, focus: T, event_name: &str, script_raw: &str) -> Result<()> {
+        let bindings = self
+            .bindings
+            .entry(focus)
+            .or_insert(Bindings::new(focus.name()));
+        bindings.bind(event_name, script_raw)?;
+        Ok(())
+    }
+
     #[method]
-    pub fn create_bindings(&mut self, name: &str) -> Result<Value> {
-        ensure!(
-            !self.bindings.contains_key(name),
-            format!("already have a bindings set named {}", name)
-        );
-        let bindings = Arc::new(RwLock::new(Bindings::new(name)));
-        self.bindings.insert(name.to_owned(), bindings.clone());
-        // FIXME: re-orient bindings to work against GameState input
-        // Ok(Value::Module(bindings))
-        Ok(Value::True())
+    pub fn bind_in(&mut self, focus_name: &str, event_name: &str, script_raw: &str) -> Result<()> {
+        let focus = match T::from_str(focus_name) {
+            Ok(focus) => focus,
+            Err(e) => bail!("{:?}", e),
+        };
+        self.bind_in_focus(focus, event_name, script_raw)
+    }
+
+    #[method]
+    pub fn bind(&mut self, event_name: &str, script_raw: &str) -> Result<()> {
+        self.bind_in_focus(T::default(), event_name, script_raw)
     }
 
     pub fn sys_handle_input_events(
@@ -179,13 +195,7 @@ where
 
         let locals = variables.into();
         for bindings in self.bindings.values() {
-            bindings.read().match_input(
-                input,
-                event.press_state(),
-                &mut self.state,
-                &locals,
-                herder,
-            )?
+            bindings.match_input(input, event.press_state(), &mut self.state, &locals, herder)?
         }
 
         Ok(())

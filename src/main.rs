@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{degrees, meters, radians};
 use animate::{TimeStep, Timeline};
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use atmosphere::AtmosphereBuffer;
 use bevy_ecs::prelude::*;
 use camera::{ArcBallCamera, ArcBallController, Camera, CameraComponent};
@@ -34,7 +34,7 @@ use parking_lot::RwLock;
 use platform_dirs::AppDirs;
 use runtime::{Extension, Runtime, ScriptHerder, StartupOpts};
 use stars::StarsBuffer;
-use std::{f32::consts::PI, fs::create_dir_all, sync::Arc, time::Instant};
+use std::{f32::consts::PI, fs::create_dir_all, str::FromStr, sync::Arc, time::Instant};
 use structopt::StructOpt;
 use terminal_size::{terminal_size, Width};
 use terrain::TerrainBuffer;
@@ -89,7 +89,6 @@ impl Extension for System {
         runtime.insert_module("system", system);
         runtime.resource_mut::<ScriptHerder>().run_string(
             r#"
-                let bindings := mapper.create_bindings("system");
                 bindings.bind("Escape", "system.exit()");
                 bindings.bind("q", "system.exit()");
                 bindings.bind("p", "system.toggle_pin_camera(pressed)");
@@ -293,23 +292,50 @@ make_frame_graph!(
 );
 */
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum SimState {
     Demo,
     Terminal,
 }
 
+impl Default for SimState {
+    fn default() -> Self {
+        Self::Demo
+    }
+}
+
+impl FromStr for SimState {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> std::prelude::rust_2015::Result<Self, Self::Err> {
+        Ok(match s {
+            "demo" => Self::Demo,
+            "terminal" => Self::Terminal,
+            _ => bail!(
+                "unknown focus to bind in {}; expected \"demo\" or \"terminal\"",
+                s
+            ),
+        })
+    }
+}
+
 impl InputFocus for SimState {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Demo => "demo",
+            Self::Terminal => "terminal",
+        }
+    }
+
     fn is_terminal_focused(&self) -> bool {
         *self == Self::Terminal
     }
 
     fn toggle_terminal(&mut self) {
-        if *self == SimState::Terminal {
-            *self = SimState::Demo;
-        } else {
-            *self = SimState::Terminal;
-        }
+        *self = match self {
+            Self::Terminal => Self::Demo,
+            Self::Demo => Self::Terminal,
+        };
     }
 }
 

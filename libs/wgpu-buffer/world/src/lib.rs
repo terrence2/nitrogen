@@ -93,7 +93,6 @@ impl Extension for WorldRenderPass {
         // TODO: figure out debug bindings
         runtime.resource_mut::<ScriptHerder>().run_string(
             r#"
-                let bindings := mapper.create_bindings("world");
                 bindings.bind("w", "world.toggle_wireframe_mode(pressed)");
                 bindings.bind("r", "world.change_debug_mode(pressed)");
             "#,

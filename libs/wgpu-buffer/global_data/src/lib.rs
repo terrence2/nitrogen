@@ -163,7 +163,6 @@ impl Extension for GlobalParametersBuffer {
         // TODO:  move to configuration, once that's a thing
         runtime.resource_mut::<ScriptHerder>().run_string(
             r#"
-                let bindings := mapper.create_bindings("globals");
                 bindings.bind("LBracket", "globals.decrease_gamma(pressed)");
                 bindings.bind("RBracket", "globals.increase_gamma(pressed)");
             "#,
