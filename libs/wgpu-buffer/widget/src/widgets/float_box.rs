@@ -17,13 +17,13 @@ use crate::{
     font_context::FontContext,
     paint_context::PaintContext,
     region::{Extent, Position, Region},
-    widget::Widget,
+    widget::{Widget, WidgetFocus},
 };
 use anyhow::{anyhow, Result};
 use gpu::Gpu;
-use input::{InputEvent, InputFocus};
+use input::InputEvent;
 use nitrous::Value;
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use nitrous_injector::{inject_nitrous, method, NitrousResource};
 use parking_lot::RwLock;
 use runtime::ScriptHerder;
 use std::{collections::HashMap, sync::Arc, time::Instant};
@@ -83,7 +83,7 @@ impl FloatPacking {
 }
 
 // Items packed from top to bottom.
-#[derive(Debug, NitrousModule)]
+#[derive(Debug, NitrousResource)]
 pub struct FloatBox {
     children: HashMap<String, FloatPacking>,
 
@@ -91,7 +91,7 @@ pub struct FloatBox {
     extent: Extent<RelSize>,
 }
 
-#[inject_nitrous_module]
+#[inject_nitrous]
 impl FloatBox {
     pub fn new() -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(Self {
@@ -247,7 +247,7 @@ impl Widget for FloatBox {
     fn handle_event(
         &mut self,
         event: &InputEvent,
-        focus: InputFocus,
+        focus: WidgetFocus,
         cursor_position: Position<AbsSize>,
         herder: &mut ScriptHerder,
     ) -> Result<()> {

@@ -627,6 +627,7 @@ dependencies = [
  "fullscreen",
  "global_data",
  "gpu",
+ "input",
  "log",
  "runtime",
  "shader_shared",
@@ -1396,7 +1397,6 @@ dependencies = [
  "nitrous_injector",
  "ordered-float",
  "orrery",
- "parking_lot",
  "runtime",
  "wgpu",
  "window",
@@ -2019,8 +2019,6 @@ dependencies = [
  "parking_lot",
  "rayon",
  "regex",
- "smallvec",
- "structopt",
 ]
 
 [[package]]
@@ -2255,7 +2253,6 @@ dependencies = [
  "nitrous",
  "nitrous_injector",
  "ordered-float",
- "parking_lot",
  "runtime",
 ]
 
@@ -2624,6 +2621,7 @@ dependencies = [
  "bevy_ecs",
  "log",
  "nitrous",
+ "structopt",
 ]
 
 [[package]]
@@ -3156,8 +3154,8 @@ dependencies = [
  "build_shaders",
  "global_data",
  "gpu",
+ "input",
  "log",
- "parking_lot",
  "runtime",
  "shader_shared",
  "wgpu",

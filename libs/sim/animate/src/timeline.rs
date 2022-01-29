@@ -20,10 +20,10 @@ use futures::future::{ready, FutureExt};
 use geodesy::Graticule;
 use log::error;
 use lyon_geom::{cubic_bezier::CubicBezierSegment, Point};
-use nitrous::{Interpreter, Value};
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use nitrous::Value;
+use nitrous_injector::{inject_nitrous, method, NitrousResource};
 use parking_lot::RwLock;
-use runtime::{Extension, FrameStage, Runtime, SimStage};
+use runtime::{Extension, Runtime, SimStage};
 use std::{
     sync::Arc,
     time::{Duration, Instant},
@@ -150,9 +150,8 @@ impl ScriptableAnimation {
             self.state = AnimationState::Running;
             (self.start.clone(), false)
         };
-        if let Some(callable) = &self.callable {
-            // FIXME: dispatch for resources...
-            //callable.spawn_method(&[current]);
+        if let Some(callable) = &mut self.callable {
+            callable.call_method(&[current])?;
         }
         if ended {
             self.state = AnimationState::Finished;
@@ -167,7 +166,7 @@ impl ScriptableAnimation {
 }
 
 /// Drive scriptable animations.
-#[derive(Default, Debug, NitrousModule)]
+#[derive(Default, Debug, NitrousResource)]
 pub struct Timeline {
     animations: Vec<ScriptableAnimation>,
 }
@@ -182,7 +181,7 @@ impl Extension for Timeline {
     }
 }
 
-#[inject_nitrous_module]
+#[inject_nitrous]
 impl Timeline {
     pub const LINEAR_BEZIER: CubicBezierCurve = CubicBezierCurve::new((0., 0.), (1., 1.));
     pub const EASE_BEZIER: CubicBezierCurve = CubicBezierCurve::new((0.25, 0.1), (0.25, 1.));

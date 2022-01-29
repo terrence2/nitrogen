@@ -12,14 +12,13 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{memory::ResourceTraitObject, Module};
+use crate::{memory::ResourceTraitObject, ScriptResource};
 use anyhow::{bail, Result};
 use futures::Future;
 use geodesy::{GeoSurface, Graticule, Target};
 use log::error;
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
-use smallvec::SmallVec;
 use std::{
     fmt::{self, Debug, Formatter},
     pin::Pin,
@@ -29,6 +28,12 @@ use std::{
 /// Opaque version of our deeply cursed internals for public non-consumption.
 #[derive(Clone)]
 pub struct OpaqueResourceRef(ResourceTraitObject);
+
+impl OpaqueResourceRef {
+    pub(crate) fn call_method(&mut self, method_name: &str, args: &[Value]) -> Result<Value> {
+        self.0.to_resource().call_method(method_name, args)
+    }
+}
 
 pub type FutureValue = Pin<Box<dyn Future<Output = Value> + Send + Sync + Unpin + 'static>>;
 
@@ -40,8 +45,7 @@ pub enum Value {
     String(String),
     Graticule(Graticule<GeoSurface>),
     Resource(OpaqueResourceRef),
-    Module(Arc<RwLock<dyn Module>>),
-    Method(Arc<RwLock<dyn Module>>, String), // TODO: atoms
+    Method(OpaqueResourceRef, String), // TODO: atoms
     Future(Arc<RwLock<FutureValue>>),
 }
 
@@ -63,6 +67,10 @@ impl Value {
     #[allow(non_snake_case)]
     pub fn False() -> Self {
         Self::Boolean(false)
+    }
+
+    pub(crate) fn new_resource(rto: ResourceTraitObject) -> Self {
+        Self::Resource(OpaqueResourceRef(rto))
     }
 
     pub fn to_bool(&self) -> Result<bool> {
@@ -111,11 +119,11 @@ impl Value {
         bail!("not a string value: {}", self)
     }
 
-    pub fn to_method(&self) -> Result<(Arc<RwLock<dyn Module>>, &str)> {
-        if let Self::Method(module, name) = self {
-            return Ok((module.clone(), name));
-        }
-        bail!("not a method value: {}", self)
+    pub fn make_method(resource: &dyn ScriptResource, name: &str) -> Self {
+        Self::Method(
+            OpaqueResourceRef(ResourceTraitObject::from_resource(resource)),
+            name.to_owned(),
+        )
     }
 
     pub fn to_future(&self) -> Result<Arc<RwLock<FutureValue>>> {
@@ -139,27 +147,20 @@ impl Value {
 
     pub fn attr(&self, name: &str) -> Result<Value> {
         if let Value::Resource(resource_ref) = self {
-            // resource_ref.0.to_module().get(name)
-            unimplemented!("rubber, meet road")
+            resource_ref.0.to_resource().get(name)
         } else {
             bail!("attribute base must be a resource");
         }
     }
 
-    // pub fn spawn_method(&self, args: &[Value]) {
-    //     fn inner(callable: Value, args: SmallVec<[Value; 2]>) -> Result<()> {
-    //         let (module, name) = callable.to_method()?;
-    //         module.write().call_method(name, &args)?;
-    //         Ok(())
-    //     }
-    //     let callable = self.to_owned();
-    //     let args = SmallVec::from(args);
-    //     rayon::spawn(move || {
-    //         if let Err(e) = inner(callable, args) {
-    //             error!("spawn_method failed with: {}", e);
-    //         }
-    //     });
-    // }
+    pub fn call_method(&mut self, args: &[Value]) -> Result<Value> {
+        Ok(if let Value::Method(resource, method_name) = self {
+            resource.call_method(method_name, args)?
+        } else {
+            error!("attempting to call non-method value: {}", self);
+            bail!("attempting to call non-method value: {}", self);
+        })
+    }
 }
 
 impl From<f64> for Value {
@@ -194,9 +195,10 @@ impl fmt::Display for Value {
             Self::Float(v) => write!(f, "{}", v),
             Self::String(v) => write!(f, "\"{}\"", v),
             Self::Graticule(v) => write!(f, "{}", v),
-            Self::Resource(v) => write!(f, "{}", v.0.to_module().module_name()),
-            Self::Module(v) => write!(f, "{}", v.read().module_name()),
-            Self::Method(v, name) => write!(f, "{}.{}", v.read().module_name(), name),
+            Self::Resource(v) => write!(f, "{}", v.0.to_resource().resource_type_name()),
+            Self::Method(v, name) => {
+                write!(f, "{}.{}", v.0.to_resource().resource_type_name(), name)
+            }
             Self::Future(_) => write!(f, "Future"),
         }
     }
@@ -226,7 +228,6 @@ impl PartialEq for Value {
                 _ => false,
             },
             Self::Resource(_) => false,
-            Self::Module(_) => false,
             Self::Method(_, _) => false,
             Self::Future(_) => false,
         }

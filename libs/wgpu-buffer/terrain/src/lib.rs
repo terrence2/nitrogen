@@ -31,7 +31,7 @@ use catalog::Catalog;
 use geodesy::{GeoCenter, Graticule};
 use global_data::GlobalParametersBuffer;
 use gpu::{CpuDetailLevel, DisplayConfig, Gpu, GpuDetailLevel, UploadTracker};
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use nitrous_injector::{inject_nitrous, method, NitrousResource};
 use parking_lot::RwLock;
 use runtime::{Extension, FrameStage, Runtime};
 use shader_shared::Group;
@@ -123,7 +123,7 @@ pub struct VisiblePatch {
     edge_length: Length<Meters>,
 }
 
-#[derive(Debug, NitrousModule)]
+#[derive(Debug, NitrousResource)]
 pub struct TerrainBuffer {
     patch_manager: PatchManager,
     tile_manager: TileManager,
@@ -170,7 +170,7 @@ impl Extension for TerrainBuffer {
     }
 }
 
-#[inject_nitrous_module]
+#[inject_nitrous]
 impl TerrainBuffer {
     const DEFERRED_TEXTURE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba32Float;
     const DEFERRED_TEXTURE_DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;

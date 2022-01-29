@@ -18,11 +18,9 @@ use bevy_ecs::prelude::*;
 use chrono::{prelude::*, Duration};
 use lazy_static::lazy_static;
 use nalgebra::{Point3, Unit, UnitQuaternion, Vector3, Vector4};
-use nitrous::{Interpreter, Value};
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
-use parking_lot::RwLock;
+use nitrous_injector::{inject_nitrous, method, NitrousResource};
 use runtime::{Extension, Runtime, ScriptHerder, SimStage};
-use std::{f64::consts::PI, sync::Arc};
+use std::f64::consts::PI;
 
 /**
  * Orbital mechanics works great. Time, however, does not. The time reference for ephimeris is a
@@ -299,7 +297,7 @@ lazy_static! {
     };
 }
 
-#[derive(Debug, NitrousModule)]
+#[derive(Debug, NitrousResource)]
 pub struct Orrery {
     earth_moon_barycenter: KeplerianElements,
 
@@ -325,7 +323,7 @@ impl Extension for Orrery {
     }
 }
 
-#[inject_nitrous_module]
+#[inject_nitrous]
 impl Orrery {
     pub fn new_current_time() -> Result<Self> {
         Self::new(Utc::now())

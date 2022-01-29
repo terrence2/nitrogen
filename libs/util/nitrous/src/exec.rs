@@ -76,23 +76,27 @@ impl<'a> NitrousExecutor<'a> {
     pub fn run_until_yield(&mut self) -> Result<YieldState> {
         for pc in self.state.counter..self.state.script.code().len() {
             let instr = self.state.script.code()[pc].to_owned();
-            println!("AT: {:?}", instr);
             match instr {
                 Instr::Push(value) => self.state.stack.push(value.to_owned()),
-                Instr::LoadLocal(atom) => {
+                Instr::LoadLocalOrResource(atom) => {
                     let name = self.state.script.atom(&atom);
                     if let Some(value) = self.state.locals.get(name) {
                         self.push(value);
                     } else if let Some(resource) = self.modules.lookup(name) {
-                        println!("LOOKED UP RESOURCE: {}", resource.module_name());
-                        bail!("LOOKED UP RESOURCE: {}", resource.module_name());
+                        self.push(resource);
+                    } else {
+                        bail!("unknown local or resource varable: {}", name);
                     }
-                    //.ok_or_else(|| anyhow!("unknown local variable: {}", name))?;
+                }
+                Instr::InitLocal(atom) => {
+                    let value = self.pop("assigned")?;
+                    let target = self.state.script.atom(&atom);
+                    self.state.locals.put(target, value);
                 }
                 Instr::StoreLocal(atom) => {
-                    let name = self.state.script.atom(&atom).to_owned();
-                    let value = self.pop(&name)?;
-                    self.state.locals.put(name, value);
+                    let value = self.pop("assigned")?;
+                    let target = self.state.script.atom(&atom);
+                    self.state.locals.put(target, value);
                 }
 
                 Instr::Multiply => {
@@ -115,7 +119,6 @@ impl<'a> NitrousExecutor<'a> {
                     let lhs = self.pop("lhs")?;
                     self.push(lhs.impl_subtract(rhs)?);
                 }
-
                 Instr::Call(arg_cnt) => {
                     let base = self.pop("call target")?;
                     let mut args = Vec::with_capacity(arg_cnt as usize);
@@ -123,34 +126,22 @@ impl<'a> NitrousExecutor<'a> {
                         args.push(self.pop("arg")?);
                     }
 
-                    // match base {
-                    //     Value::Method(module, method_name) => {
-                    //         module.to_module().call_method(&method_name, &args)?
-                    //     }
-                    //     _ => bail!("call must be on a method value"),
-                    // }
-
-                    /*
-                    let base = self.interpret_expr(base)?;
-                    let mut argvec = Vec::new();
-                    for arg in args {
-                        argvec.push(self.interpret_expr(arg)?);
-                    }
                     match base {
-                        Value::Method(module, method_name) => {
-                            module.write().call_method(&method_name, &argvec)?
+                        Value::Method(mut resource, method_name) => {
+                            let result = resource.call_method(&method_name, &args)?;
+                            self.push(result);
                         }
                         _ => bail!("call must be on a method value"),
                     }
-                     */
                 }
                 Instr::Attr(atom) => {
                     let base = self.pop("attr base")?;
                     let result = base.attr(self.state.script.atom(&atom))?;
                     self.push(result);
                 }
-                // Instr::Await,
-                _ => {}
+                Instr::Await => {
+                    unimplemented!()
+                }
             }
         }
         Ok(YieldState::Finished)

@@ -18,7 +18,7 @@ use anyhow::{bail, Result};
 use bevy_ecs::prelude::*;
 use input::{SystemEvent, SystemEventVec};
 use log::info;
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use nitrous_injector::{inject_nitrous, method, NitrousResource};
 use runtime::{Extension, FrameStage, Runtime};
 use std::{fmt::Debug, str::FromStr, string::ToString};
 use structopt::StructOpt;
@@ -207,7 +207,7 @@ impl DisplayConfig {
     }
 }
 
-#[derive(Debug, NitrousModule)]
+#[derive(Debug, NitrousResource)]
 pub struct Window {
     os_window: OsWindow,
     config: DisplayConfig,
@@ -234,7 +234,7 @@ impl Extension for Window {
     }
 }
 
-#[inject_nitrous_module]
+#[inject_nitrous]
 impl Window {
     pub fn new(os_window: OsWindow, config: DisplayConfig) -> Self {
         Self {

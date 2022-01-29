@@ -16,21 +16,30 @@ use anyhow::Result;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::GlobalParametersBuffer;
 use gpu::Gpu;
+use input::InputFocus;
 use log::trace;
 use runtime::{Extension, Runtime};
 use shader_shared::Group;
+use std::marker::PhantomData;
 use ui::UiRenderPass;
 use world::WorldRenderPass;
 
 #[derive(Debug)]
-pub struct CompositeRenderPass {
+pub struct CompositeRenderPass<T>
+where
+    T: InputFocus,
+{
     pipeline: wgpu::RenderPipeline,
+    widget_type_holder: PhantomData<T>,
 }
 
-impl Extension for CompositeRenderPass {
+impl<T> Extension for CompositeRenderPass<T>
+where
+    T: InputFocus,
+{
     fn init(runtime: &mut Runtime) -> Result<()> {
         let composite = CompositeRenderPass::new(
-            runtime.resource::<UiRenderPass>(),
+            runtime.resource::<UiRenderPass<T>>(),
             runtime.resource::<WorldRenderPass>(),
             runtime.resource::<GlobalParametersBuffer>(),
             runtime.resource::<Gpu>(),
@@ -40,9 +49,12 @@ impl Extension for CompositeRenderPass {
     }
 }
 
-impl CompositeRenderPass {
+impl<T> CompositeRenderPass<T>
+where
+    T: InputFocus,
+{
     pub fn new(
-        ui: &UiRenderPass,
+        ui: &UiRenderPass<T>,
         world: &WorldRenderPass,
         globals: &GlobalParametersBuffer,
         gpu: &Gpu,
@@ -120,7 +132,10 @@ impl CompositeRenderPass {
                 multiview: None,
             });
 
-        Ok(Self { pipeline })
+        Ok(Self {
+            pipeline,
+            widget_type_holder: PhantomData::default(),
+        })
     }
 
     pub fn composite_scene<'a>(
@@ -129,7 +144,7 @@ impl CompositeRenderPass {
         fullscreen: &'a FullscreenBuffer,
         globals: &'a GlobalParametersBuffer,
         world: &'a WorldRenderPass,
-        ui: &'a UiRenderPass,
+        ui: &'a UiRenderPass<T>,
     ) -> Result<wgpu::RenderPass<'a>> {
         rpass.set_pipeline(&self.pipeline);
         rpass.set_bind_group(Group::Globals.index(), globals.bind_group(), &[]);

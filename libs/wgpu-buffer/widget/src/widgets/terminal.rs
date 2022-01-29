@@ -17,15 +17,15 @@ use crate::{
     font_context::FontContext,
     paint_context::PaintContext,
     region::{Extent, Position, Region},
-    widget::Widget,
+    widget::{Widget, WidgetFocus},
     LineEdit, TextEdit, VerticalBox,
 };
 use anyhow::{Context, Result};
 use gpu::Gpu;
-use input::{ElementState, InputEvent, InputFocus, VirtualKeyCode};
+use input::{ElementState, InputEvent, VirtualKeyCode};
 use nitrous::{
     ir::{Expr, Stmt, Term},
-    Interpreter, Module, NitrousAst, NitrousScript, Value,
+    NitrousAst, NitrousScript, Value,
 };
 use parking_lot::RwLock;
 use runtime::ScriptHerder;
@@ -306,12 +306,12 @@ impl Widget for Terminal {
     fn handle_event(
         &mut self,
         event: &InputEvent,
-        focus: InputFocus,
+        focus: WidgetFocus,
         cursor_position: Position<AbsSize>,
         herder: &mut ScriptHerder,
     ) -> Result<()> {
         // FIXME: don't hard-code the name
-        if focus != InputFocus::Terminal {
+        if focus != WidgetFocus::Terminal {
             return Ok(());
         }
 

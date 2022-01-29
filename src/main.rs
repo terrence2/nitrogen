@@ -18,23 +18,23 @@ use anyhow::{anyhow, Result};
 use atmosphere::AtmosphereBuffer;
 use bevy_ecs::prelude::*;
 use camera::{ArcBallCamera, ArcBallController, Camera, CameraComponent};
-use catalog::{Catalog, CatalogOpts, DirectoryDrawer};
+use catalog::{Catalog, CatalogOpts};
 use chrono::{TimeZone, Utc};
 use composite::CompositeRenderPass;
 use event_mapper::EventMapper;
 use fullscreen::FullscreenBuffer;
 use global_data::GlobalParametersBuffer;
-use gpu::{CpuDetailLevel, DetailLevelOpts, Gpu, GpuDetailLevel};
-use input::{InputController, InputSystem};
+use gpu::{DetailLevelOpts, Gpu};
+use input::{InputFocus, InputSystem};
 use measure::WorldSpaceFrame;
-use nitrous::{Interpreter, StartupOpts, Value};
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use nitrous::Value;
+use nitrous_injector::{inject_nitrous, method, NitrousResource};
 use orrery::Orrery;
 use parking_lot::RwLock;
 use platform_dirs::AppDirs;
-use runtime::{Extension, Runtime};
+use runtime::{Extension, Runtime, ScriptHerder, StartupOpts};
 use stars::StarsBuffer;
-use std::{f32::consts::PI, fs::create_dir_all, path::PathBuf, sync::Arc, time::Instant};
+use std::{f32::consts::PI, fs::create_dir_all, sync::Arc, time::Instant};
 use structopt::StructOpt;
 use terminal_size::{terminal_size, Width};
 use terrain::TerrainBuffer;
@@ -44,7 +44,7 @@ use widget::{
 };
 use window::{
     size::{LeftBound, Size},
-    DisplayConfig, DisplayOpts, OsWindow, Window, WindowBuilder,
+    DisplayOpts, Window, WindowBuilder,
 };
 use world_render::WorldRenderPass;
 
@@ -74,7 +74,7 @@ struct VisibleWidgets {
     fps_label: Arc<RwLock<Label>>,
 }
 
-#[derive(Debug, NitrousModule)]
+#[derive(Debug, NitrousResource)]
 struct System {
     exit: bool,
     pin_camera: bool,
@@ -82,30 +82,37 @@ struct System {
     visible_widgets: VisibleWidgets,
 }
 
-#[inject_nitrous_module]
+impl Extension for System {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        let widgets = runtime.resource::<WidgetBuffer<SimState>>();
+        let system = System::new(widgets)?;
+        runtime.insert_module("system", system);
+        runtime.resource_mut::<ScriptHerder>().run_string(
+            r#"
+                let bindings := mapper.create_bindings("system");
+                bindings.bind("Escape", "system.exit()");
+                bindings.bind("q", "system.exit()");
+                bindings.bind("p", "system.toggle_pin_camera(pressed)");
+                bindings.bind("g", "widget.dump_glyphs(pressed)");
+            "#,
+        )?;
+        Ok(())
+    }
+}
+
+#[inject_nitrous]
 impl System {
-    pub fn new(widgets: &WidgetBuffer, interpreter: &mut Interpreter) -> Result<Arc<RwLock<Self>>> {
+    pub fn new(widgets: &WidgetBuffer<SimState>) -> Result<Self> {
         let visible_widgets = Self::build_gui(widgets)?;
-        let system = Arc::new(RwLock::new(Self {
+        Ok(Self {
             exit: false,
             pin_camera: false,
             camera: Default::default(),
             visible_widgets,
-        }));
-        interpreter.put_global("system", Value::Module(system.clone()));
-        // interpreter.interpret_once(
-        //     r#"
-        //         let bindings := mapper.create_bindings("system");
-        //         bindings.bind("Escape", "system.exit()");
-        //         bindings.bind("q", "system.exit()");
-        //         bindings.bind("p", "system.toggle_pin_camera(pressed)");
-        //         bindings.bind("g", "widget.dump_glyphs(pressed)");
-        //     "#,
-        // )?;
-        Ok(system)
+        })
     }
 
-    pub fn build_gui(widgets: &WidgetBuffer) -> Result<VisibleWidgets> {
+    pub fn build_gui(widgets: &WidgetBuffer<SimState>) -> Result<VisibleWidgets> {
         let sim_time = Label::new("").with_color(Color::White).wrapped();
         let camera_direction = Label::new("").with_color(Color::White).wrapped();
         let camera_position = Label::new("").with_color(Color::White).wrapped();
@@ -172,7 +179,7 @@ impl System {
     }
 
     pub fn track_visible_state(
-        &mut self,
+        &self,
         now: Instant,
         orrery: &Orrery,
         arcball: &ArcBallCamera,
@@ -286,31 +293,25 @@ make_frame_graph!(
 );
 */
 
-// fn build_frame_graph(
-//     app_dirs: &AppDirs,
-//     interpreter: &mut Interpreter,
-//     runtime: &mut Runtime,
-// ) -> Result<FrameGraph> {
-//     // let atmosphere_buffer = AtmosphereBuffer::new(&mut runtime.resource_mut::<Gpu>())?;
-//     // runtime.insert_resource(atmosphere_buffer.clone());
-//
-//
-//     // Compose the frame graph.
-//     // TODO: should this be dynamic?
-//     let frame_graph = FrameGraph::new(
-//         composite,
-//         ui,
-//         widgets,
-//         world_gfx,
-//         terrain,
-//         atmosphere_buffer,
-//         stars_buffer,
-//         fullscreen_buffer,
-//         globals,
-//     )?;
-//
-//     Ok(frame_graph)
-// }
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum SimState {
+    Demo,
+    Terminal,
+}
+
+impl InputFocus for SimState {
+    fn is_terminal_focused(&self) -> bool {
+        *self == Self::Terminal
+    }
+
+    fn toggle_terminal(&mut self) {
+        if *self == SimState::Terminal {
+            *self = SimState::Demo;
+        } else {
+            *self = SimState::Terminal;
+        }
+    }
+}
 
 fn main() -> Result<()> {
     env_logger::init();
@@ -333,17 +334,15 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         runtime.resource::<TimeStep>()
     }
 
-    // Create the game interpreter
-    let mut interpreter = Interpreter::default();
-
     runtime
         .insert_resource(opt.catalog_opts)
         .insert_resource(opt.display_opts)
         .insert_resource(opt.detail_opts.cpu_detail())
         .insert_resource(opt.detail_opts.gpu_detail())
         .insert_resource(app_dirs)
+        .insert_resource(SimState::Demo)
         .load_extension::<Catalog>()?
-        .load_extension::<EventMapper>()?
+        .load_extension::<EventMapper<SimState>>()?
         .load_extension::<Window>()?
         .load_extension::<Gpu>()?
         .load_extension::<AtmosphereBuffer>()?
@@ -352,32 +351,21 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .load_extension::<StarsBuffer>()?
         .load_extension::<TerrainBuffer>()?
         .load_extension::<WorldRenderPass>()?
-        .load_extension::<WidgetBuffer>()?
-        .load_extension::<UiRenderPass>()?
-        .load_extension::<CompositeRenderPass>()?
+        .load_extension::<WidgetBuffer<SimState>>()?
+        .load_extension::<UiRenderPass<SimState>>()?
+        .load_extension::<CompositeRenderPass<SimState>>()?
+        .load_extension::<System>()?
         .load_extension::<Orrery>()?
         .load_extension::<Timeline>()?
         .load_extension::<TimeStep>()?;
-
-    // Create rest of game resources
-    // let initial_utc = Utc.ymd(1964, 2, 24).and_hms(12, 0, 0);
-    // let orrery = Orrery::new(initial_utc, &mut interpreter)?;
-    // runtime.world.insert_resource(orrery.clone());
-
-    // let timeline = Timeline::new(&mut interpreter);
-    // runtime.world.insert_resource(timeline);
-
-    let system = System::new(runtime.resource::<WidgetBuffer>(), &mut interpreter)?;
-    runtime.world.insert_resource(system.clone());
 
     // But we need at least a camera and controller before the sim is ready to run.
     let camera = Camera::install(
         radians!(PI / 2.0),
         runtime.resource::<Window>().render_aspect_ratio(),
         meters!(0.5),
-        &mut interpreter,
     )?;
-    let arcball = ArcBallCamera::install(&mut interpreter)?;
+    let arcball = ArcBallCamera::install()?;
     let _player_ent = runtime
         .world
         .spawn()
@@ -396,8 +384,8 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     sim_schedule.add_stage(
         "propagate_changes",
         SystemStage::single_threaded()
-            .with_system(ArcBallCamera::sys_apply_input.system())
-            .with_system(CameraComponent::sys_apply_input.system()),
+            .with_system(ArcBallCamera::sys_apply_input)
+            .with_system(CameraComponent::sys_apply_input),
     );
 
     //////////////////////////////////////////////////////////////////
@@ -414,12 +402,6 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     //       We can take as many of these in parallel as we want, iff there is no parallel write
     //       to those same resource (e.g. window). Otherwise we might deadlock.
 
-    let mut frame_schedule = Schedule::default();
-    frame_schedule.add_stage(
-        "input",
-        SystemStage::single_threaded()
-            .with_system(InputController::sys_read_system_events.system()),
-    );
     let mut update_frame_schedule = Schedule::default();
     update_frame_schedule.add_stage(
         "update_frame",
@@ -427,9 +409,10 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     );
 
     // We are now finished and can safely run the startup scripts / configuration.
-    opt.startup_opts.on_startup(&mut interpreter)?;
+    opt.startup_opts
+        .on_startup(&mut runtime.resource_mut::<ScriptHerder>())?;
 
-    while !system.read().exit {
+    while !runtime.resource::<System>().exit {
         // Catch monotonic sim time up to system time.
         let frame_start = Instant::now();
         while timestep(&runtime).next_now() < frame_start {
@@ -453,7 +436,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
             });
         runtime
             .world
-            .resource_scope(|world, mut widget: Mut<WidgetBuffer>| {
+            .resource_scope(|world, mut widget: Mut<WidgetBuffer<SimState>>| {
                 widget
                     .ensure_uploaded(
                         *world.get_resource::<TimeStep>().unwrap().now(),
@@ -463,7 +446,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
                     )
                     .ok();
             });
-        // runtime.resource::<WidgetBuffer>().ensure_uploaded(
+        // runtime.resource::<WidgetBuffer<SimState >().ensure_uploaded(
         //     *timestep(&runtime).now(),
         //     runtime.resource::<Gpu>(),
         //     runtime.resource::<Window>(),
@@ -510,7 +493,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
                 tracker.dispatch_uploads(&mut encoder);
 
                 encoder = runtime
-                    .resource::<WidgetBuffer>()
+                    .resource::<WidgetBuffer<SimState>>()
                     .maintain_font_atlas(encoder)?;
                 encoder = runtime
                     .resource::<TerrainBuffer>()
@@ -521,7 +504,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
                     let cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                         label: Some("compute-pass"),
                     });
-                    let cpass = runtime.resource::<TerrainBuffer>().tessellate(cpass)?;
+                    let _cpass = runtime.resource::<TerrainBuffer>().tessellate(cpass)?;
                 }
                 {
                     let (color_attachments, depth_stencil_attachment) = runtime
@@ -533,7 +516,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
                         depth_stencil_attachment,
                     };
                     let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
-                    let rpass = runtime
+                    let _rpass = runtime
                         .resource::<TerrainBuffer>()
                         .deferred_texture(rpass, runtime.resource::<GlobalParametersBuffer>())?;
                 }
@@ -541,7 +524,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
                     let cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                         label: Some("compute-pass"),
                     });
-                    let cpass = runtime
+                    let _cpass = runtime
                         .resource::<TerrainBuffer>()
                         .accumulate_normal_and_color(
                             cpass,
@@ -560,7 +543,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
                         depth_stencil_attachment,
                     };
                     let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
-                    let rpass = runtime.resource::<WorldRenderPass>().render_world(
+                    let _rpass = runtime.resource::<WorldRenderPass>().render_world(
                         rpass,
                         runtime.resource::<GlobalParametersBuffer>(),
                         runtime.resource::<FullscreenBuffer>(),
@@ -572,18 +555,19 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
 
                 // ui: Draw our widgets onto a buffer with resolution independent of the world.
                 {
-                    let (color_attachments, depth_stencil_attachment) =
-                        runtime.resource::<UiRenderPass>().offscreen_target();
+                    let (color_attachments, depth_stencil_attachment) = runtime
+                        .resource::<UiRenderPass<SimState>>()
+                        .offscreen_target();
                     let render_pass_desc_ref = wgpu::RenderPassDescriptor {
                         label: Some(concat!("non-screen-render-pass-ui-draw-offscreen",)),
                         color_attachments: &color_attachments,
                         depth_stencil_attachment,
                     };
                     let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
-                    let rpass = runtime.resource::<UiRenderPass>().render_ui(
+                    let _rpass = runtime.resource::<UiRenderPass<SimState>>().render_ui(
                         rpass,
                         runtime.resource::<GlobalParametersBuffer>(),
-                        runtime.resource::<WidgetBuffer>(),
+                        runtime.resource::<WidgetBuffer<SimState>>(),
                         runtime.resource::<WorldRenderPass>(),
                     )?;
                 }
@@ -600,13 +584,15 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
                         depth_stencil_attachment: Some(gpu.depth_stencil_attachment()),
                     };
                     let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
-                    let rpass = runtime.resource::<CompositeRenderPass>().composite_scene(
-                        rpass,
-                        runtime.resource::<FullscreenBuffer>(),
-                        runtime.resource::<GlobalParametersBuffer>(),
-                        runtime.resource::<WorldRenderPass>(),
-                        runtime.resource::<UiRenderPass>(),
-                    )?;
+                    let _rpass = runtime
+                        .resource::<CompositeRenderPass<SimState>>()
+                        .composite_scene(
+                            rpass,
+                            runtime.resource::<FullscreenBuffer>(),
+                            runtime.resource::<GlobalParametersBuffer>(),
+                            runtime.resource::<WorldRenderPass>(),
+                            runtime.resource::<UiRenderPass<SimState>>(),
+                        )?;
                 }
             };
 
@@ -617,7 +603,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
             surface_texture.present();
         }
 
-        system.write().track_visible_state(
+        runtime.resource::<System>().track_visible_state(
             frame_start, // compute frame times from actual elapsed time
             runtime.resource::<Orrery>(),
             &arcball.read(),

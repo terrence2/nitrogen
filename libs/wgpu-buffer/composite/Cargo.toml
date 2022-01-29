@@ -11,6 +11,7 @@ wgpu = { version = "^ 0.12", features = ["spirv"] }
 fullscreen = { path = "../../wgpu-buffer/fullscreen" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 gpu = { path = "../../system/gpu" }
+input = { path = "../../system/input" }
 runtime = { path = "../../util/runtime" }
 shader_shared = { path = "../../wgpu-buffer/shader_shared" }
 ui = { path = "../../wgpu-buffer/ui" }

@@ -18,12 +18,12 @@ use crate::{
     paint_context::PaintContext,
     region::{Extent, Position, Region},
     text_run::TextRun,
-    widget::Widget,
+    widget::{Widget, WidgetFocus},
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
 use gpu::Gpu;
-use input::{ElementState, InputEvent, InputFocus, ModifiersState, VirtualKeyCode};
+use input::{ElementState, InputEvent, ModifiersState, VirtualKeyCode};
 use parking_lot::RwLock;
 use runtime::ScriptHerder;
 use std::{ops::Range, sync::Arc, time::Instant};
@@ -156,7 +156,7 @@ impl Widget for LineEdit {
     fn handle_event(
         &mut self,
         event: &InputEvent,
-        _focus: InputFocus,
+        _focus: WidgetFocus,
         _cursor_position: Position<AbsSize>,
         _herder: &mut ScriptHerder,
     ) -> Result<()> {

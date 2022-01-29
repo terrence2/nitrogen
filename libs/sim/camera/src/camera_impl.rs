@@ -21,8 +21,8 @@ use geodesy::{Cartesian, GeoCenter};
 use geometry::Plane;
 use measure::WorldSpaceFrame;
 use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, UnitQuaternion, Vector3};
-use nitrous::{Interpreter, Value};
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use nitrous::Value;
+use nitrous_injector::{inject_nitrous, method, NitrousResource};
 use parking_lot::{RwLock, RwLockReadGuard};
 use runtime::{Extension, Runtime, SimStage};
 use std::sync::Arc;
@@ -80,7 +80,7 @@ struct InputState {
     fov_delta: Angle<Degrees>,
 }
 
-#[derive(Clone, Debug, Default, NitrousModule)]
+#[derive(Clone, Debug, Default)]
 pub struct Camera {
     // Camera parameters
     fov_y: Angle<Radians>,
@@ -97,7 +97,6 @@ pub struct Camera {
     right: Vector3<f64>,
 }
 
-#[inject_nitrous_module]
 impl Camera {
     const INITIAL_EXPOSURE: f64 = 10e-5;
 
@@ -107,10 +106,9 @@ impl Camera {
         fov_y: Angle<AngUnit>,
         aspect_ratio: f64,
         z_near: Length<Meters>,
-        interpreter: &mut Interpreter,
     ) -> Result<Arc<RwLock<Self>>> {
         let camera = Arc::new(RwLock::new(Self::detached(fov_y, aspect_ratio, z_near)));
-        interpreter.put_global("camera", Value::Module(camera.clone()));
+        //interpreter.put_global("camera", Value::Module(camera.clone()));
         // interpreter.interpret_once(
         //     r#"
         //         let bindings := mapper.create_bindings("camera");

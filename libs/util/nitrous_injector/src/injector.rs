@@ -12,243 +12,215 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use std::borrow::Borrow;
 use syn::{
     parse2,
     visit::{self, Visit},
-    Arm, DeriveInput, Expr, FnArg, GenericArgument, Ident, ImplItemMethod, ItemFn, ItemImpl, Pat,
-    PathArguments, ReturnType, Type, TypePath,
+    Arm, Expr, FnArg, GenericArgument, Ident, ImplItemMethod, ItemFn, ItemImpl, Pat, PathArguments,
+    ReturnType, Type, TypePath,
 };
 
-pub(crate) fn make_derive_nitrous_resource(item: DeriveInput) -> TokenStream2 {
-    let ident = item.ident;
-    let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
+pub(crate) type Ast = ItemImpl;
 
-    quote! {
-        impl #impl_generics ::nitrous::NitrousResource for #ident #ty_generics #where_clause {
-            fn resource_type_name(&self) -> String {
-                stringify!(#ident).to_owned()
-            }
-
-            fn call_method(&mut self, name: &str, args: &[::nitrous::Value]) -> ::anyhow::Result<::nitrous::Value> {
-                self.__call_method_inner__(name, args)
-            }
-
-            fn put(&mut self, name: &str, value: ::nitrous::Value) -> ::anyhow::Result<()> {
-                self.__put_inner__(name, value)
-            }
-
-            fn get(&self, name: &str) -> ::anyhow::Result<::nitrous::Value> {
-                self.__get_inner__(name)
-            }
-
-            fn names(&self) -> Vec<&str> {
-                self.__names_inner__()
-            }
-        }
-    }
+pub(crate) fn parse(_args: TokenStream, item: TokenStream) -> Ast {
+    parse2(TokenStream2::from(item)).expect("parse result")
 }
 
-pub(crate) fn make_derive_nitrous_module(item: DeriveInput) -> TokenStream2 {
-    let ident = item.ident;
-    let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
-
-    quote! {
-        impl #impl_generics ::nitrous::Module for #ident #ty_generics #where_clause {
-            fn module_name(&self) -> String {
-                stringify!(#ident).to_owned()
-            }
-
-            fn call_method(&mut self, name: &str, args: &[::nitrous::Value]) -> ::anyhow::Result<::nitrous::Value> {
-                self.__call_method_inner__(name, args)
-            }
-
-            fn put(&mut self, module: ::std::sync::Arc<::parking_lot::RwLock<dyn ::nitrous::Module>>, name: &str, value: ::nitrous::Value) -> ::anyhow::Result<()> {
-                self.__put_inner__(module, name, value)
-            }
-
-            fn get(&self, module: ::std::sync::Arc<::parking_lot::RwLock<dyn ::nitrous::Module>>, name: &str) -> ::anyhow::Result<::nitrous::Value> {
-                self.__get_inner__(module, name)
-            }
-
-            fn names(&self) -> Vec<&str> {
-                self.__names_inner__()
-            }
-        }
-    }
+pub(crate) struct InjectModel {
+    item: ItemImpl,
+    methods: Vec<(Ident, Vec<ArgDef>, RetType)>,
+    _getters: Vec<Ident>,
+    _setters: Vec<Ident>,
 }
 
-pub(crate) fn make_augment_method(item: ItemFn) -> TokenStream2 {
-    quote! {
-        #[allow(clippy::unnecessary_wraps)]
-        #item
-    }
-}
-
-pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
-    let ty = &item.self_ty;
-    let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
-
+pub(crate) fn analyze(ast: Ast) -> InjectModel {
     let mut visitor = CollectorVisitor::new();
-    visitor.visit_item_impl(&item);
-
-    let mut method_arms = Vec::new();
-    let mut get_arms = Vec::new();
-    let mut put_arms = Vec::new();
-    let mut names = Vec::new();
-    let mut help_items = Vec::new();
-
-    // Auto-inject a "help" method.
-    {
-        let call_arm: Arm = parse2(quote! { "help" => { self.__show_help__() } }).unwrap();
-        method_arms.push(call_arm);
-
-        let lookup_arm: Arm = parse2(
-            quote! { "help" => { Ok(::nitrous::Value::Method(module, "help".to_owned())) } },
-        )
-        .unwrap();
-        get_arms.push(lookup_arm);
-
-        help_items.push("help()".to_owned());
+    visitor.visit_item_impl(&ast);
+    InjectModel {
+        item: ast,
+        methods: visitor.methods,
+        _getters: visitor.getters,
+        _setters: visitor.setters,
     }
+}
 
-    for (item, args, ret) in visitor.methods {
-        let name = format!("{}", item);
-        names.push(name.clone());
+pub(crate) struct Ir {
+    item: ItemImpl,
+    method_arms: Vec<Arm>,
+    get_arms: Vec<Arm>,
+    put_arms: Vec<Arm>,
+    names: Vec<String>,
+    help_items: Vec<String>,
+}
 
-        let mut help_item = name.clone();
-        help_item += "(";
-        let mut arg_items = Vec::new();
-        for (i, arg) in args.iter().enumerate() {
-            let expr: Expr = match arg.ty {
-                Scalar::Boolean => {
-                    parse2(quote! { args.get(#i).expect("not enough args").to_bool()? }).unwrap()
-                }
-                Scalar::Integer => {
-                    parse2(quote! { args.get(#i).expect("not enough args").to_int()? }).unwrap()
-                }
-                Scalar::Float => {
-                    parse2(quote! { args.get(#i).expect("not enough args").to_float()? }).unwrap()
-                }
-                Scalar::StrRef => {
-                    parse2(quote! { args.get(#i).expect("not enough args").to_str()? }).unwrap()
-                }
-                Scalar::String => {
-                    parse2(quote! { args.get(#i).expect("not enough args").to_str()?.to_owned() })
-                        .unwrap()
-                }
-                Scalar::GraticuleSurface => {
-                    parse2(quote! { args.get(#i).expect("not enough args").to_grat_surface()? })
-                        .unwrap()
-                }
-                Scalar::GraticuleTarget => {
-                    parse2(quote! { args.get(#i).expect("not enough args").to_grat_target()? })
-                        .unwrap()
-                }
-                Scalar::Value => {
-                    parse2(quote! { args.get(#i).expect("not enough args").clone() }).unwrap()
-                }
-                Scalar::Unit => parse2(quote! { ::nitrous::Value::True() }).unwrap(),
-            };
-            arg_items.push(expr);
-            if i != 0 {
-                help_item += ", ";
-            }
-            help_item += &arg.name.to_string();
+impl Ir {
+    fn new(item: ItemImpl) -> Self {
+        Self {
+            item,
+            method_arms: Vec::new(),
+            get_arms: Vec::new(),
+            put_arms: Vec::new(),
+            names: Vec::new(),
+            help_items: Vec::new(),
         }
-        help_item += ")";
+    }
+}
 
-        let toks = match ret {
-            RetType::Nothing => {
-                quote! { #name => { self.#item( #(#arg_items),* ); Ok(::nitrous::Value::True()) } }
+pub(crate) fn lower(model: InjectModel) -> Ir {
+    let InjectModel {
+        item,
+        methods,
+        // FIXME: generate getter and setter methods
+        ..
+    } = model;
+    let mut ir = Ir::new(item);
+    lower_help(&mut ir);
+    for (ident, args, ret) in methods {
+        let name = format!("{}", ident);
+        ir.names.push(name.clone());
+        ir.help_items.push(format!(
+            "{}({})",
+            name,
+            args.iter()
+                .map(|a| format!("{}", a.name))
+                .collect::<Vec<String>>()
+                .join(", ")
+        ));
+        ir.get_arms.push(
+            parse2(quote! { #name => { Ok(::nitrous::Value::make_method(self, #name)) } }).unwrap(),
+        );
+        let arg_exprs = args
+            .iter()
+            .enumerate()
+            .map(|(i, arg)| lower_arg(i, arg))
+            .collect::<Vec<_>>();
+        ir.method_arms
+            .push(lower_method_call(&name, ident, &arg_exprs, ret));
+    }
+    ir
+}
+
+fn lower_help(ir: &mut Ir) {
+    ir.method_arms
+        .push(parse2(quote! { "help" => { self.__show_help__() } }).unwrap());
+
+    ir.get_arms.push(
+        parse2(quote! { "help" => { Ok(::nitrous::Value::make_method(self, "help")) } }).unwrap(),
+    );
+
+    ir.help_items.push("help()".to_owned());
+}
+
+fn lower_arg(i: usize, arg: &ArgDef) -> Expr {
+    match arg.ty {
+        Scalar::Boolean => {
+            parse2(quote! { args.get(#i).expect("not enough args").to_bool()? }).unwrap()
+        }
+        Scalar::Integer => {
+            parse2(quote! { args.get(#i).expect("not enough args").to_int()? }).unwrap()
+        }
+        Scalar::Float => {
+            parse2(quote! { args.get(#i).expect("not enough args").to_float()? }).unwrap()
+        }
+        Scalar::StrRef => {
+            parse2(quote! { args.get(#i).expect("not enough args").to_str()? }).unwrap()
+        }
+        Scalar::String => {
+            parse2(quote! { args.get(#i).expect("not enough args").to_str()?.to_owned() }).unwrap()
+        }
+        Scalar::GraticuleSurface => {
+            parse2(quote! { args.get(#i).expect("not enough args").to_grat_surface()? }).unwrap()
+        }
+        Scalar::GraticuleTarget => {
+            parse2(quote! { args.get(#i).expect("not enough args").to_grat_target()? }).unwrap()
+        }
+        Scalar::Value => parse2(quote! { args.get(#i).expect("not enough args").clone() }).unwrap(),
+        Scalar::Unit => parse2(quote! { ::nitrous::Value::True() }).unwrap(),
+    }
+}
+
+fn lower_method_call(name: &str, item: Ident, arg_exprs: &[Expr], ret: RetType) -> Arm {
+    parse2(match ret {
+        RetType::Nothing => {
+            quote! { #name => { self.#item( #(#arg_exprs),* ); Ok(::nitrous::Value::True()) } }
+        }
+        RetType::Raw(llty) => match llty {
+            Scalar::Boolean => {
+                quote! { #name => { Ok(::nitrous::Value::Boolean(self.#item( #(#arg_exprs),* ))) } }
             }
-            RetType::Raw(llty) => match llty {
-                Scalar::Boolean => {
-                    quote! { #name => { Ok(::nitrous::Value::Boolean(self.#item( #(#arg_items),* ))) } }
-                }
-                Scalar::Integer => {
-                    quote! { #name => { Ok(::nitrous::Value::Integer(self.#item( #(#arg_items),* ))) } }
-                }
-                Scalar::Float => {
-                    quote! { #name => { Ok(::nitrous::Value::Float(::ordered_float::OrderedFloat(self.#item( #(#arg_items),* )))) } }
-                }
-                Scalar::String => {
-                    quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_items),* ))) } }
-                }
-                Scalar::StrRef => {
-                    quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_items),* ).to_owned())) } }
-                }
-                Scalar::GraticuleSurface => {
-                    quote! { #name => { Ok(::nitrous::Value::Graticule(self.#item( #(#arg_items),* ))) } }
-                }
-                Scalar::GraticuleTarget => {
-                    quote! { #name => { Ok(::nitrous::Value::Graticule(self.#item( #(#arg_items),* ).with_origin::<::geodesy::GeoSurface>())) } }
-                }
-                Scalar::Value => {
-                    quote! { #name => { Ok(self.#item( #(#arg_items),* )) } }
-                }
-                Scalar::Unit => {
-                    quote! { #name => { self.#item( #(#arg_items),* ); Ok(::nitrous::Value::True()) } }
-                }
-            },
-            RetType::ResultRaw(llty) => match llty {
-                Scalar::Boolean => {
-                    quote! { #name => { Ok(::nitrous::Value::Boolean(self.#item( #(#arg_items),* )?)) } }
-                }
-                Scalar::Integer => {
-                    quote! { #name => { Ok(::nitrous::Value::Integer(self.#item( #(#arg_items),* )?)) } }
-                }
-                Scalar::Float => {
-                    quote! { #name => { Ok(::nitrous::Value::Float(::ordered_float::OrderedFloat(self.#item( #(#arg_items),* )?))) } }
-                }
-                Scalar::String => {
-                    quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_items),* )?)) } }
-                }
-                Scalar::StrRef => {
-                    quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_items),* )?.to_owned())) } }
-                }
-                Scalar::GraticuleSurface => {
-                    quote! { #name => { Ok(::nitrous::Value::Graticule(self.#item( #(#arg_items),* )?)) } }
-                }
-                Scalar::GraticuleTarget => {
-                    quote! { #name => { Ok(::nitrous::Value::Graticule(self.#item( #(#arg_items),* )?.with_origin::<::geodesy::GeoSurface>())) } }
-                }
-                Scalar::Value => {
-                    quote! { #name => { self.#item( #(#arg_items),* ) } }
-                }
-                Scalar::Unit => {
-                    quote! { #name => { self.#item( #(#arg_items),* )?; Ok(::nitrous::Value::True()) } }
-                }
-            },
-        };
+            Scalar::Integer => {
+                quote! { #name => { Ok(::nitrous::Value::Integer(self.#item( #(#arg_exprs),* ))) } }
+            }
+            Scalar::Float => {
+                quote! { #name => { Ok(::nitrous::Value::Float(::ordered_float::OrderedFloat(self.#item( #(#arg_exprs),* )))) } }
+            }
+            Scalar::String => {
+                quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_exprs),* ))) } }
+            }
+            Scalar::StrRef => {
+                quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_exprs),* ).to_owned())) } }
+            }
+            Scalar::GraticuleSurface => {
+                quote! { #name => { Ok(::nitrous::Value::Graticule(self.#item( #(#arg_exprs),* ))) } }
+            }
+            Scalar::GraticuleTarget => {
+                quote! { #name => { Ok(::nitrous::Value::Graticule(self.#item( #(#arg_exprs),* ).with_origin::<::geodesy::GeoSurface>())) } }
+            }
+            Scalar::Value => {
+                quote! { #name => { Ok(self.#item( #(#arg_exprs),* )) } }
+            }
+            Scalar::Unit => {
+                quote! { #name => { self.#item( #(#arg_exprs),* ); Ok(::nitrous::Value::True()) } }
+            }
+        },
+        RetType::ResultRaw(llty) => match llty {
+            Scalar::Boolean => {
+                quote! { #name => { Ok(::nitrous::Value::Boolean(self.#item( #(#arg_exprs),* )?)) } }
+            }
+            Scalar::Integer => {
+                quote! { #name => { Ok(::nitrous::Value::Integer(self.#item( #(#arg_exprs),* )?)) } }
+            }
+            Scalar::Float => {
+                quote! { #name => { Ok(::nitrous::Value::Float(::ordered_float::OrderedFloat(self.#item( #(#arg_exprs),* )?))) } }
+            }
+            Scalar::String => {
+                quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_exprs),* )?)) } }
+            }
+            Scalar::StrRef => {
+                quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_exprs),* )?.to_owned())) } }
+            }
+            Scalar::GraticuleSurface => {
+                quote! { #name => { Ok(::nitrous::Value::Graticule(self.#item( #(#arg_exprs),* )?)) } }
+            }
+            Scalar::GraticuleTarget => {
+                quote! { #name => { Ok(::nitrous::Value::Graticule(self.#item( #(#arg_exprs),* )?.with_origin::<::geodesy::GeoSurface>())) } }
+            }
+            Scalar::Value => {
+                quote! { #name => { self.#item( #(#arg_exprs),* ) } }
+            }
+            Scalar::Unit => {
+                quote! { #name => { self.#item( #(#arg_exprs),* )?; Ok(::nitrous::Value::True()) } }
+            }
+        },
+    }).unwrap()
+}
 
-        let call_arm: Arm = parse2(toks).unwrap();
-        method_arms.push(call_arm);
-
-        let lookup_arm: Arm =
-            parse2(quote! { #name => { Ok(::nitrous::Value::Method(module, #name.to_owned())) } })
-                .unwrap();
-        get_arms.push(lookup_arm);
-
-        help_items.push(help_item);
-    }
-
-    for item in visitor.getters {
-        let name = format!("{}", item);
-        let arm: Arm = parse2(quote! { { #name => self.#item() } }).unwrap();
-        get_arms.push(arm);
-    }
-
-    for item in visitor.setters {
-        let name = format!("{}", item);
-        let arm: Arm = parse2(quote! { #name => { self.#item(value) } }).unwrap();
-        put_arms.push(arm);
-    }
-
-    quote! {
-        impl #impl_generics #ty #ty_generics #where_clause {
+pub(crate) fn codegen(ir: Ir) -> TokenStream {
+    let Ir {
+        item,
+        method_arms,
+        get_arms,
+        put_arms,
+        names,
+        help_items,
+    } = ir;
+    let ty = &item.self_ty;
+    let (impl_generics, _ty_generics, where_clause) = item.generics.split_for_impl();
+    let ts2 = quote! {
+        impl #impl_generics #ty #where_clause {
             fn __call_method_inner__(&mut self, name: &str, args: &[::nitrous::Value]) -> ::anyhow::Result<::nitrous::Value> {
                 match name {
                     #(#method_arms)*
@@ -259,7 +231,7 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
                 }
             }
 
-            fn __get_inner__(&self, module: ::std::sync::Arc<::parking_lot::RwLock<dyn ::nitrous::Module>>, name: &str) -> ::anyhow::Result<::nitrous::Value> {
+            fn __get_inner__(&self, name: &str) -> ::anyhow::Result<::nitrous::Value> {
                 match name {
                     #(#get_arms)*
                     _ => {
@@ -269,7 +241,7 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
                 }
             }
 
-            fn __put_inner__(&mut self, module: ::std::sync::Arc<::parking_lot::RwLock<dyn ::nitrous::Module>>, name: &str, value: ::nitrous::Value) -> ::anyhow::Result<()> {
+            fn __put_inner__(&mut self, name: &str, value: ::nitrous::Value) -> ::anyhow::Result<()> {
                 match name {
                     #(#put_arms)*
                     _ => {
@@ -290,6 +262,14 @@ pub(crate) fn make_inject_attribute(item: ItemImpl) -> TokenStream2 {
             }
         }
 
+        #item
+    };
+    TokenStream::from(ts2)
+}
+
+pub(crate) fn make_augment_method(item: ItemFn) -> TokenStream2 {
+    quote! {
+        #[allow(clippy::unnecessary_wraps)]
         #item
     }
 }

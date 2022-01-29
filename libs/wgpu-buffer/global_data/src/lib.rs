@@ -19,9 +19,8 @@ use camera::{Camera, CameraComponent};
 use core::num::NonZeroU64;
 use gpu::{Gpu, UploadTracker};
 use nalgebra::{convert, Matrix3, Matrix4, Point3, Vector3, Vector4};
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use nitrous_injector::{inject_nitrous, method, NitrousResource};
 use orrery::Orrery;
-use parking_lot::RwLock;
 use runtime::{Extension, FrameStage, Runtime, ScriptHerder};
 use std::{mem, sync::Arc};
 use window::Window;
@@ -147,7 +146,7 @@ impl Globals {
     }
 }
 
-#[derive(Debug, NitrousModule)]
+#[derive(Debug, NitrousResource)]
 pub struct GlobalParametersBuffer {
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
@@ -179,7 +178,7 @@ impl Extension for GlobalParametersBuffer {
     }
 }
 
-#[inject_nitrous_module]
+#[inject_nitrous]
 impl GlobalParametersBuffer {
     const INITIAL_GAMMA: f32 = 2.2f32;
 

@@ -85,6 +85,11 @@ LetAssignStmt: Box<Stmt> = {
 }
 
 Expr: Box<Expr> = {
+    AssignExpr
+};
+
+AssignExpr: Box<Expr> = {
+    <tgt:SymbolOrBool> ":=" <expr:AddExpr> => Box::new(Expr::Assign(<>)),
     AddExpr
 };
 

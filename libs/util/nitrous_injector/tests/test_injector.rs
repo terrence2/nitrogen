@@ -14,15 +14,15 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
 use nitrous::{Interpreter, Value};
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use nitrous_injector::{inject_nitrous, method, NitrousResource};
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
 use std::sync::Arc;
 
-#[derive(Debug, NitrousModule)]
+#[derive(Debug, NitrousResource)]
 struct TestInjector {}
 
-#[inject_nitrous_module]
+#[inject_nitrous]
 impl TestInjector {
     #[method]
     fn plain(&self) {

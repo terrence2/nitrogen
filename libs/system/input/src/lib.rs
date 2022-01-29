@@ -25,6 +25,7 @@ use runtime::{FrameStage, Runtime, SimStage};
 use smallvec::SmallVec;
 use std::{
     collections::HashMap,
+    fmt::Debug,
     sync::{
         mpsc::{channel, Receiver, TryRecvError},
         Arc,
@@ -42,20 +43,9 @@ use winit::{
 pub type InputEventVec = SmallVec<[InputEvent; 8]>;
 pub type SystemEventVec = SmallVec<[SystemEvent; 8]>;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum InputFocus {
-    Game,
-    Terminal,
-}
-
-impl InputFocus {
-    pub fn toggle_terminal(&mut self) {
-        if *self == Self::Game {
-            *self = Self::Terminal;
-        } else {
-            *self = Self::Game;
-        }
-    }
+pub trait InputFocus: Clone + Copy + Debug + Send + Sync + 'static {
+    fn is_terminal_focused(&self) -> bool;
+    fn toggle_terminal(&mut self);
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -96,7 +86,6 @@ impl InputController {
         runtime.insert_resource(input_controller.clone());
         runtime.insert_resource(InputEventVec::new());
         runtime.insert_resource(SystemEventVec::new());
-        runtime.insert_resource(InputFocus::Game);
 
         runtime
             .sim_stage_mut(SimStage::ReadInput)
@@ -133,32 +122,6 @@ impl InputController {
             SystemEventVec::new()
         };
     }
-
-    /*
-    pub fn for_test(event_loop: &EventLoop<MetaEvent>) -> Arc<Mutex<Self>> {
-        let mut runtime = Runtime::default();
-        let (_, rx_input_event) = channel();
-        let (_, rx_system_event) = channel();
-        InputController::new(
-            event_loop.create_proxy(),
-            rx_input_event,
-            rx_system_event,
-            &mut runtime,
-        )
-    }
-
-    pub fn for_web(event_loop: &EventLoop<MetaEvent>) -> Arc<Mutex<Self>> {
-        let mut runtime = Runtime::default();
-        let (_, rx_input_event) = channel();
-        let (_, rx_system_event) = channel();
-        InputController::new(
-            event_loop.create_proxy(),
-            rx_input_event,
-            rx_system_event,
-            &mut runtime,
-        )
-    }
-     */
 
     #[cfg(unix)]
     pub fn for_test_unix() -> Result<Runtime> {

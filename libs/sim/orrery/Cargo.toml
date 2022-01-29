@@ -12,7 +12,6 @@ lazy_static = "^ 1"
 log = "^ 0.4"
 nalgebra = "^ 0.29"
 ordered-float = "^ 2"
-parking_lot = "^ 0.11"
 animate = { path = "../../sim/animate" }
 nitrous = { path = "../../util/nitrous" }
 nitrous_injector = { path = "../../util/nitrous_injector" }

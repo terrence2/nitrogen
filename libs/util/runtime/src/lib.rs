@@ -14,8 +14,10 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 mod herder;
 mod runtime;
+mod startup;
 
 pub use crate::{
     herder::ScriptHerder,
     runtime::{Extension, FrameStage, Runtime, SimStage, StartupStage},
+    startup::StartupOpts,
 };

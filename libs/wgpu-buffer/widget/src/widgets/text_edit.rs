@@ -18,12 +18,12 @@ use crate::{
     paint_context::PaintContext,
     region::{Extent, Position, Region},
     text_run::TextRun,
-    widget::Widget,
+    widget::{Widget, WidgetFocus},
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
 use gpu::Gpu;
-use input::{InputEvent, InputFocus};
+use input::InputEvent;
 use parking_lot::RwLock;
 use runtime::ScriptHerder;
 use std::{sync::Arc, time::Instant};
@@ -163,7 +163,7 @@ impl Widget for TextEdit {
     fn handle_event(
         &mut self,
         _event: &InputEvent,
-        _focus: InputFocus,
+        _focus: WidgetFocus,
         _cursor_position: Position<AbsSize>,
         _herder: &mut ScriptHerder,
     ) -> Result<()> {

@@ -8,4 +8,5 @@ edition = "2021"
 anyhow = "^ 1"
 bevy_ecs = "^ 0.6"
 log = "^ 0.4"
+structopt = "^ 0.3"
 nitrous = { path = "../../util/nitrous" }

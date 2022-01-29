@@ -14,19 +14,16 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::value::Value;
 use anyhow::Result;
-use parking_lot::RwLock;
-use std::{collections::HashMap, fmt::Debug, mem::transmute, sync::Arc};
+use std::{collections::HashMap, fmt::Debug, mem::transmute};
 
-/// Implement this interface and store as a module in the Runtime with insert_module
-/// in order for the exposed functionality to be exposed to scripts. The helper macros
-/// in nitrous_injector make this as simple as adding a #[method] attribute, in most cases.
-pub trait Module: Debug + Send + Sync + 'static {
-    // Note: manually passing the module here until Rust has arbitrary self.
-    //       This detail is largely papered over via macros and scripting.
-    fn module_name(&self) -> String;
+/// Use #[derive(NitrousResource)] to implement this module. The derived implementation
+/// will expect the struct to have an impl block annotated with #[inject_nitrous]. This
+/// second macro will use #[method] tags to populate lookups for the various operations.
+pub trait ScriptResource: 'static {
+    fn resource_type_name(&self) -> String;
     fn call_method(&mut self, name: &str, args: &[Value]) -> Result<Value>;
-    fn put(&mut self, module: Arc<RwLock<dyn Module>>, name: &str, value: Value) -> Result<()>;
-    fn get(&self, module: Arc<RwLock<dyn Module>>, name: &str) -> Result<Value>;
+    fn put(&mut self, name: &str, value: Value) -> Result<()>;
+    fn get(&self, name: &str) -> Result<Value>;
     fn names(&self) -> Vec<&str>;
 }
 
@@ -70,12 +67,17 @@ impl LocalNamespace {
     }
 
     #[inline]
+    pub fn contains(&self, name: &str) -> bool {
+        self.memory.contains_key(name)
+    }
+
+    #[inline]
     pub fn remove(&mut self, name: &str) -> Option<Value> {
         self.memory.remove(name)
     }
 }
 
-/// A blank slate that we can cast into and out of a &dyn Module trait object.
+/// A blank slate that we can cast into and out of a &dyn ScriptResource trait object.
 ///
 /// Safety: No, definitely not.
 ///
@@ -107,11 +109,11 @@ pub(crate) struct ResourceTraitObject {
 }
 
 impl ResourceTraitObject {
-    pub fn from_module(module: &dyn Module) -> Self {
-        unsafe { transmute(module) }
+    pub fn from_resource(resource: &dyn ScriptResource) -> Self {
+        unsafe { transmute(resource) }
     }
 
-    pub fn to_module(self) -> &'static dyn Module {
+    pub fn to_resource(self) -> &'static mut dyn ScriptResource {
         unsafe { transmute(self) }
     }
 }
@@ -128,23 +130,28 @@ impl ResourceNamespace {
         }
     }
 
-    pub fn insert_named_resource<S: Into<String>>(&mut self, name: S, resource: &dyn Module) {
+    pub fn insert_named_resource<S: Into<String>>(
+        &mut self,
+        name: S,
+        resource: &dyn ScriptResource,
+    ) {
         // Safety:
         // The resource of type T is stored as the first value in a unique_component Column,
         // represented as a BlobVec, where it is the first and only allocation. The allocation
         // was made with std::alloc::alloc, and will only be reallocated if the BlobVec Grows.
         // It will not grow, since this is a unique_component.
         //
-        // As such, we can cast it to the &dyn Module above, then transmute to and from TraitObject
-        // safely, as long as the underlying allocation never changes. Since modules are permanent
-        // and tied to the world and runtime, we will stop running scripts (via the runtime's
-        // scheduler) before deallocating the Runtime's World, and thus the storage.
-        // let module_trait_obj = resource as &dyn Module;
+        // As such, we can cast it to the &dyn ScriptResource above, then transmute to and from
+        // TraitObject safely, as long as the underlying allocation never changes. Since modules are
+        // permanent and tied to the world and runtime, we will stop running scripts (via the
+        // runtime's scheduler) before deallocating the Runtime's World, and thus the storage.
         self.resource_ptrs
-            .insert(name.into(), ResourceTraitObject::from_module(resource));
+            .insert(name.into(), ResourceTraitObject::from_resource(resource));
     }
 
-    pub fn lookup(&self, name: &str) -> Option<&dyn Module> {
-        self.resource_ptrs.get(name).map(|v| v.to_module())
+    pub fn lookup(&self, name: &str) -> Option<Value> {
+        self.resource_ptrs
+            .get(name)
+            .map(|rto| Value::new_resource(*rto))
     }
 }

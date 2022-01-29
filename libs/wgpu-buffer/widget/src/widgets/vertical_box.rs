@@ -18,13 +18,13 @@ use crate::{
     font_context::FontContext,
     paint_context::PaintContext,
     region::{Border, Extent, Position, Region},
-    widget::Widget,
+    widget::{Widget, WidgetFocus},
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
 };
 use anyhow::Result;
 use gpu::Gpu;
-use input::{InputEvent, InputFocus};
+use input::InputEvent;
 use parking_lot::RwLock;
 use runtime::ScriptHerder;
 use std::{sync::Arc, time::Instant};
@@ -211,7 +211,7 @@ impl Widget for VerticalBox {
     fn handle_event(
         &mut self,
         event: &InputEvent,
-        focus: InputFocus,
+        focus: WidgetFocus,
         cursor_position: Position<AbsSize>,
         herder: &mut ScriptHerder,
     ) -> Result<()> {

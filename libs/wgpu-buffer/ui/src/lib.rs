@@ -16,16 +16,19 @@ use anyhow::Result;
 use bevy_ecs::prelude::*;
 use global_data::GlobalParametersBuffer;
 use gpu::{DisplayConfig, Gpu};
+use input::InputFocus;
 use log::trace;
-use parking_lot::RwLock;
 use runtime::{Extension, FrameStage, Runtime};
 use shader_shared::Group;
-use std::sync::Arc;
+use std::marker::PhantomData;
 use widget::{WidgetBuffer, WidgetVertex};
 use world::WorldRenderPass;
 
 #[derive(Debug)]
-pub struct UiRenderPass {
+pub struct UiRenderPass<T>
+where
+    T: InputFocus,
+{
     // Offscreen render targets
     deferred_texture: (wgpu::Texture, wgpu::TextureView),
     deferred_depth: (wgpu::Texture, wgpu::TextureView),
@@ -36,12 +39,17 @@ pub struct UiRenderPass {
     background_pipeline: wgpu::RenderPipeline,
     // image_pipeline: wgpu::RenderPipeline,
     text_pipeline: wgpu::RenderPipeline,
+
+    widget_type_holder: PhantomData<T>,
 }
 
-impl Extension for UiRenderPass {
+impl<T> Extension for UiRenderPass<T>
+where
+    T: InputFocus,
+{
     fn init(runtime: &mut Runtime) -> Result<()> {
         let ui = UiRenderPass::new(
-            runtime.resource::<WidgetBuffer>(),
+            runtime.resource::<WidgetBuffer<T>>(),
             runtime.resource::<WorldRenderPass>(),
             runtime.resource::<GlobalParametersBuffer>(),
             runtime.resource::<Gpu>(),
@@ -54,9 +62,12 @@ impl Extension for UiRenderPass {
     }
 }
 
-impl UiRenderPass {
+impl<T> UiRenderPass<T>
+where
+    T: InputFocus,
+{
     pub fn new(
-        widget_buffer: &WidgetBuffer,
+        widget_buffer: &WidgetBuffer<T>,
         world_render_pass: &WorldRenderPass,
         global_data: &GlobalParametersBuffer,
         gpu: &Gpu,
@@ -268,6 +279,8 @@ impl UiRenderPass {
 
             background_pipeline,
             text_pipeline,
+
+            widget_type_holder: PhantomData::default(),
         })
     }
 
@@ -348,7 +361,7 @@ impl UiRenderPass {
     pub fn sys_handle_display_config_change(
         updated_config: Res<Option<DisplayConfig>>,
         gpu: Res<Gpu>,
-        mut ui: ResMut<UiRenderPass>,
+        mut ui: ResMut<UiRenderPass<T>>,
     ) {
         if updated_config.is_some() {
             ui.handle_render_extent_changed(&gpu)
@@ -406,7 +419,7 @@ impl UiRenderPass {
         &'a self,
         mut rpass: wgpu::RenderPass<'a>,
         global_data: &'a GlobalParametersBuffer,
-        widget_buffer: &'a WidgetBuffer,
+        widget_buffer: &'a WidgetBuffer<T>,
         world: &'a WorldRenderPass,
     ) -> Result<wgpu::RenderPass<'a>> {
         // Background

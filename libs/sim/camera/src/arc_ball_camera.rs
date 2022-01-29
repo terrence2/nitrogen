@@ -18,8 +18,8 @@ use bevy_ecs::prelude::*;
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
 use measure::WorldSpaceFrame;
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
-use nitrous::{Interpreter, Value};
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use nitrous::Value;
+use nitrous_injector::{inject_nitrous, method, NitrousResource};
 use parking_lot::RwLock;
 use runtime::{Extension, Runtime, SimStage};
 use std::{f64::consts::PI, sync::Arc};
@@ -50,7 +50,7 @@ struct InputState {
     target_height_delta: Length<Meters>,
 }
 
-#[derive(Debug, NitrousModule)]
+#[derive(Debug)]
 pub struct ArcBallCamera {
     input: InputState,
 
@@ -58,11 +58,10 @@ pub struct ArcBallCamera {
     eye: Graticule<Target>,
 }
 
-#[inject_nitrous_module]
 impl ArcBallCamera {
-    pub fn install(interpreter: &mut Interpreter) -> Result<Arc<RwLock<Self>>> {
+    pub fn install() -> Result<Arc<RwLock<Self>>> {
         let arcball = Arc::new(RwLock::new(Self::detached()));
-        interpreter.put_global("arcball", Value::Module(arcball.clone()));
+        // interpreter.put_global("arcball", Value::Module(arcball.clone()));
         // interpreter.interpret_once(
         //     r#"
         //         let bindings := mapper.create_bindings("arc_ball_controller");

@@ -17,14 +17,14 @@ use crate::{
     font_context::{FontContext, FontId},
     paint_context::PaintContext,
     region::{Border, Extent, Position, Region},
-    widget::{Labeled, Widget},
+    widget::{Labeled, Widget, WidgetFocus},
     widget_vertex::WidgetVertex,
     widgets::label::Label,
     WidgetInfo,
 };
 use anyhow::Result;
 use gpu::Gpu;
-use input::{InputEvent, InputFocus};
+use input::InputEvent;
 use parking_lot::RwLock;
 use runtime::ScriptHerder;
 use std::{sync::Arc, time::Instant};
@@ -222,7 +222,7 @@ impl Widget for Expander {
     fn handle_event(
         &mut self,
         event: &InputEvent,
-        _focus: InputFocus,
+        _focus: WidgetFocus,
         cursor_position: Position<AbsSize>,
         _herder: &mut ScriptHerder,
     ) -> Result<()> {

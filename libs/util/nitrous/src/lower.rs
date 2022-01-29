@@ -28,7 +28,8 @@ pub struct Atom(u32);
 #[derive(Clone, Debug)]
 pub enum Instr {
     Push(Value),
-    LoadLocal(Atom),
+    LoadLocalOrResource(Atom),
+    InitLocal(Atom),
     StoreLocal(Atom),
 
     Multiply,
@@ -84,7 +85,7 @@ impl NitrousCode {
                 self.lower_expr(expr)?;
                 if let Term::Symbol(name) = target {
                     let atom = self.upsert_atom(name);
-                    self.code.push(Instr::StoreLocal(atom));
+                    self.code.push(Instr::InitLocal(atom));
                 } else {
                     bail!("don't know how to assign to a target of {}", target);
                 }
@@ -105,24 +106,18 @@ impl NitrousCode {
                 Term::String(s) => self.code.push(Instr::Push(Value::String(s.to_owned()))),
                 Term::Symbol(sym) => {
                     let atom = self.upsert_atom(sym);
-                    self.code.push(Instr::LoadLocal(atom));
-                    // if let Some(v) = self.locals.get(sym) {
-                    //     v
-                    // } else if let Some(&module_to) = self.modules.get(sym) {
-                    //     // let any_module: &mut dyn Any =
-                    //     //     world.get_resource_by_type_id_mut(typeid).unwrap();
-                    //     // let module = any_module.downcast_ref::<dyn Module>().expect("non-module in the modules list");
-                    //     // let failure = any_module.downcast_ref::<i32>().expect("this will fail");
-                    //     // let module_ptr: *const dyn Module = unsafe { transmute(*trait_obj) };
-                    //     //let module: &dyn Module = unsafe { transmute(module_ptr) };
-                    //     let module = module_to.to_module();
-                    //
-                    //     bail!("found module: {}", module.module_name());
-                    // } else {
-                    //     bail!("Unknown symbol '{}'", sym)
-                    // }
+                    self.code.push(Instr::LoadLocalOrResource(atom));
                 }
             },
+            Expr::Assign(target, expr) => {
+                self.lower_expr(expr)?;
+                if let Term::Symbol(sym) = target {
+                    let atom = self.upsert_atom(sym);
+                    self.code.push(Instr::StoreLocal(atom));
+                } else {
+                    bail!("assignment must target a symbol");
+                };
+            }
             Expr::BinOp(lhs, op, rhs) => {
                 self.lower_expr(lhs)?;
                 self.lower_expr(rhs)?;

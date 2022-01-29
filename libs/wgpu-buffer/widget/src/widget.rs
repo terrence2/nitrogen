@@ -20,7 +20,7 @@ use crate::{
 };
 use anyhow::Result;
 use gpu::Gpu;
-use input::{InputEvent, InputFocus};
+use input::InputEvent;
 use runtime::ScriptHerder;
 use std::{fmt::Debug, time::Instant};
 use window::{
@@ -62,6 +62,12 @@ pub trait Labeled: Debug + Sized + Send + Sync + 'static {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WidgetFocus {
+    Terminal,
+    Game,
+}
+
 pub trait Widget: Debug + Send + Sync + 'static {
     /// Return the minimum required size for displaying this widget.
     fn measure(&mut self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>>;
@@ -91,7 +97,7 @@ pub trait Widget: Debug + Send + Sync + 'static {
     fn handle_event(
         &mut self,
         _event: &InputEvent,
-        _focus: InputFocus,
+        _focus: WidgetFocus,
         _cursor_position: Position<AbsSize>,
         _herder: &mut ScriptHerder,
     ) -> Result<()> {

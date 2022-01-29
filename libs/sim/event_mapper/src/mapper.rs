@@ -20,12 +20,13 @@ use anyhow::{ensure, Result};
 use bevy_ecs::prelude::*;
 use input::{ElementState, InputEvent, InputEventVec, InputFocus, ModifiersState};
 use nitrous::Value;
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use nitrous_injector::{inject_nitrous, method, NitrousResource};
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
 use runtime::{Extension, Runtime, ScriptHerder, SimStage};
 use std::{
     collections::{HashMap, HashSet},
+    marker::PhantomData,
     sync::Arc,
 };
 
@@ -36,15 +37,22 @@ pub struct State {
     pub active_chords: HashSet<InputSet>,
 }
 
-#[derive(Default, Debug, NitrousModule)]
-pub struct EventMapper {
+#[derive(Default, Debug, NitrousResource)]
+pub struct EventMapper<T>
+where
+    T: InputFocus,
+{
     bindings: HashMap<String, Arc<RwLock<Bindings>>>,
     state: State,
+    phantom_data: PhantomData<T>,
 }
 
-impl Extension for EventMapper {
+impl<T> Extension for EventMapper<T>
+where
+    T: InputFocus,
+{
     fn init(runtime: &mut Runtime) -> Result<()> {
-        runtime.insert_module("mapper", EventMapper::new());
+        runtime.insert_module("mapper", EventMapper::<T>::new());
         runtime
             .sim_stage_mut(SimStage::HandleInput)
             .add_system(Self::sys_handle_input_events);
@@ -52,12 +60,16 @@ impl Extension for EventMapper {
     }
 }
 
-#[inject_nitrous_module]
-impl EventMapper {
+#[inject_nitrous]
+impl<T> EventMapper<T>
+where
+    T: InputFocus,
+{
     pub fn new() -> Self {
         Self {
             bindings: HashMap::new(),
             state: State::default(),
+            phantom_data: Default::default(),
         }
     }
 
@@ -69,14 +81,16 @@ impl EventMapper {
         );
         let bindings = Arc::new(RwLock::new(Bindings::new(name)));
         self.bindings.insert(name.to_owned(), bindings.clone());
-        Ok(Value::Module(bindings))
+        // FIXME: re-orient bindings to work against GameState input
+        // Ok(Value::Module(bindings))
+        Ok(Value::True())
     }
 
     pub fn sys_handle_input_events(
         events: Res<InputEventVec>,
-        input_focus: Res<InputFocus>,
+        input_focus: Res<T>,
         mut herder: ResMut<ScriptHerder>,
-        mut mapper: ResMut<EventMapper>,
+        mut mapper: ResMut<EventMapper<T>>,
     ) {
         mapper
             .handle_events(&events, *input_focus, &mut herder)
@@ -86,7 +100,7 @@ impl EventMapper {
     pub fn handle_events(
         &mut self,
         events: &[InputEvent],
-        focus: InputFocus,
+        focus: T,
         herder: &mut ScriptHerder,
     ) -> Result<()> {
         for event in events {
@@ -98,7 +112,7 @@ impl EventMapper {
     fn handle_event(
         &mut self,
         event: &InputEvent,
-        focus: InputFocus,
+        focus: T,
         herder: &mut ScriptHerder,
     ) -> Result<()> {
         let input = Input::from_event(event);
@@ -124,7 +138,7 @@ impl EventMapper {
         }
 
         // Break *after* maintaining state.
-        if focus != InputFocus::Game {
+        if focus.is_terminal_focused() {
             return Ok(());
         }
 

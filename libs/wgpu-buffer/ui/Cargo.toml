@@ -8,10 +8,10 @@ edition = "2021"
 anyhow = { version = "^ 1", features = ["backtrace"] }
 bevy_ecs = "^ 0.6"
 log = "^ 0.4"
-parking_lot =  "^ 0.11"
 wgpu = { version = "^ 0.12", features = ["spirv"] }
 global_data = { path = "../../wgpu-buffer/global_data" }
 gpu = { path = "../../system/gpu" }
+input = { path = "../../system/input" }
 runtime = { path = "../../util/runtime" }
 shader_shared = { path = "../../wgpu-buffer/shader_shared" }
 widget = { path = "../../wgpu-buffer/widget" }

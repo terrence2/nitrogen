@@ -52,11 +52,14 @@ impl fmt::Display for NitrousScript {
         for (i, instr) in self.code.iter().enumerate() {
             match instr {
                 Instr::Push(v) => writeln!(f, "{:03} <-- {}", i, v)?,
-                Instr::LoadLocal(atom) => {
+                Instr::LoadLocalOrResource(atom) => {
                     writeln!(f, "{:03} ==> {}", i, self.atoms.get(atom).unwrap())?
                 }
-                Instr::StoreLocal(atom) => {
+                Instr::InitLocal(atom) => {
                     writeln!(f, "{:03} <== {}", i, &self.atoms.get(atom).unwrap())?
+                }
+                Instr::StoreLocal(atom) => {
+                    writeln!(f, "{:03} <-- {}", i, &self.atoms.get(atom).unwrap())?
                 }
                 Instr::Multiply => writeln!(f, "{:03} <-> Multiply", i)?,
                 Instr::Divide => writeln!(f, "{:03} <-> Divide", i)?,

@@ -16,8 +16,8 @@ use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource};
 use log::error;
 use nitrous::{
-    ExecutionContext, LocalNamespace, Module, NitrousExecutor, NitrousScript, ResourceNamespace,
-    YieldState,
+    ExecutionContext, LocalNamespace, NitrousExecutor, NitrousScript, ResourceNamespace,
+    ScriptResource, YieldState,
 };
 
 /// Manage script execution state.
@@ -37,6 +37,7 @@ impl Default for ScriptHerder {
 
 impl ScriptHerder {
     pub fn run_string(&mut self, script_text: &str) -> Result<()> {
+        println!("RUN STRING: {}", script_text);
         self.run(NitrousScript::compile(script_text)?);
         Ok(())
     }
@@ -51,7 +52,11 @@ impl ScriptHerder {
     }
 
     #[inline]
-    pub(crate) fn insert_module<T: Resource + Module>(&mut self, name: String, resource: &T) {
+    pub(crate) fn insert_module<T: Resource + ScriptResource>(
+        &mut self,
+        name: String,
+        resource: &T,
+    ) {
         self.resource_namespace
             .insert_named_resource(name, resource);
     }

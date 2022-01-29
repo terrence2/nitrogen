@@ -15,7 +15,7 @@
 use crate::herder::ScriptHerder;
 use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource};
-use nitrous::Module;
+use nitrous::ScriptResource;
 
 /// Interface for extending the Runtime.
 pub trait Extension {
@@ -130,7 +130,7 @@ impl Runtime {
     pub fn insert_module<S, T>(&mut self, name: S, value: T)
     where
         S: Into<String>,
-        T: Resource + Module + 'static,
+        T: Resource + ScriptResource + 'static,
     {
         self.world.insert_resource(value);
         let name = name.into();

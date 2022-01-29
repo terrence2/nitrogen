@@ -28,7 +28,7 @@ pub use crate::{
     color::Color,
     paint_context::PaintContext,
     region::{Border, Extent, Position, Region},
-    widget::{Labeled, Widget},
+    widget::{Labeled, Widget, WidgetFocus},
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
     widgets::{
@@ -46,13 +46,16 @@ use font_ttf::TtfFont;
 use gpu::{Gpu, UploadTracker};
 use input::{ElementState, InputEvent, InputEventVec, InputFocus, ModifiersState, VirtualKeyCode};
 use log::trace;
-use nitrous::{Interpreter, Value};
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use nitrous::Value;
+use nitrous_injector::{inject_nitrous, method, NitrousResource};
 use parking_lot::RwLock;
 use platform_dirs::AppDirs;
 use runtime::{Extension, Runtime, SimStage};
 use runtime::{FrameStage, ScriptHerder};
-use std::{borrow::Borrow, mem, num::NonZeroU64, ops::Range, path::Path, sync::Arc, time::Instant};
+use std::{
+    borrow::Borrow, marker::PhantomData, mem, num::NonZeroU64, ops::Range, path::Path, sync::Arc,
+    time::Instant,
+};
 use window::{
     size::{AbsSize, Size},
     Window,
@@ -83,8 +86,11 @@ const FIRA_SANS_REGULAR_TTF_DATA: &[u8] =
 const FIRA_MONO_REGULAR_TTF_DATA: &[u8] =
     include_bytes!("../../../../assets/font/FiraMono-Regular.ttf");
 
-#[derive(Debug, NitrousModule)]
-pub struct WidgetBuffer {
+#[derive(Debug, NitrousResource)]
+pub struct WidgetBuffer<T>
+where
+    T: InputFocus,
+{
     // Widget state.
     root: Arc<RwLock<FloatBox>>,
     paint_context: PaintContext,
@@ -103,12 +109,17 @@ pub struct WidgetBuffer {
     // The accumulated bind group for all widget rendering, encompassing everything we uploaded above.
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: Option<wgpu::BindGroup>,
+
+    phantom: PhantomData<T>,
 }
 
-impl Extension for WidgetBuffer {
+impl<T> Extension for WidgetBuffer<T>
+where
+    T: InputFocus,
+{
     fn init(runtime: &mut Runtime) -> Result<()> {
         let state_dir = runtime.resource::<AppDirs>().state_dir.clone();
-        let widget = WidgetBuffer::new(&mut runtime.resource_mut::<Gpu>(), &state_dir)?;
+        let widget = WidgetBuffer::<T>::new(&mut runtime.resource_mut::<Gpu>(), &state_dir)?;
         runtime.insert_module("widget", widget);
         runtime
             .sim_stage_mut(SimStage::HandleInput)
@@ -120,8 +131,11 @@ impl Extension for WidgetBuffer {
     }
 }
 
-#[inject_nitrous_module]
-impl WidgetBuffer {
+#[inject_nitrous]
+impl<T> WidgetBuffer<T>
+where
+    T: InputFocus,
+{
     const MAX_WIDGETS: usize = 512;
     const MAX_TEXT_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6;
     const MAX_BACKGROUND_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6; // note: rounded corners
@@ -231,6 +245,8 @@ impl WidgetBuffer {
 
             bind_group_layout,
             bind_group: None,
+
+            phantom: PhantomData::default(),
         })
     }
 
@@ -238,10 +254,10 @@ impl WidgetBuffer {
         self.root.clone()
     }
 
-    #[method]
-    pub fn root(&self) -> Value {
-        Value::Module(self.root.clone())
-    }
+    // #[method]
+    // pub fn root(&self) -> Value {
+    //     Value::Module(self.root.clone())
+    // }
 
     pub fn add_font<S: Borrow<str> + Into<String>>(
         &mut self,
@@ -338,10 +354,10 @@ impl WidgetBuffer {
 
     pub fn sys_handle_input_events(
         events: Res<InputEventVec>,
-        mut input_focus: ResMut<InputFocus>,
+        mut input_focus: ResMut<T>,
         window: Res<Window>,
         mut herder: ResMut<ScriptHerder>,
-        mut widgets: ResMut<WidgetBuffer>,
+        mut widgets: ResMut<WidgetBuffer<T>>,
     ) {
         widgets
             .handle_events(&events, *input_focus, &mut herder, &window)
@@ -358,7 +374,7 @@ impl WidgetBuffer {
     pub fn handle_events(
         &mut self,
         events: &[InputEvent],
-        focus: InputFocus,
+        focus: T,
         herder: &mut ScriptHerder,
         win: &Window,
     ) -> Result<()> {
@@ -376,7 +392,11 @@ impl WidgetBuffer {
             }
             self.root_container().write().handle_event(
                 event,
-                focus,
+                if focus.is_terminal_focused() {
+                    WidgetFocus::Terminal
+                } else {
+                    WidgetFocus::Game
+                },
                 self.cursor_position,
                 herder,
             )?;
@@ -387,7 +407,7 @@ impl WidgetBuffer {
     fn sys_track_state_changes(
         step: Res<TimeStep>,
         window: Res<Window>,
-        mut widgets: ResMut<WidgetBuffer>,
+        mut widgets: ResMut<WidgetBuffer<T>>,
     ) {
         widgets
             .track_state_changes(*step.now(), &window)

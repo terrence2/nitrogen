@@ -19,7 +19,7 @@ use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::GlobalParametersBuffer;
 use gpu::{DisplayConfig, Gpu};
 use log::trace;
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use nitrous_injector::{inject_nitrous, method, NitrousResource};
 use runtime::{Extension, FrameStage, Runtime, ScriptHerder};
 use shader_shared::Group;
 use stars::StarsBuffer;
@@ -48,7 +48,7 @@ impl DebugMode {
     }
 }
 
-#[derive(Debug, NitrousModule)]
+#[derive(Debug, NitrousResource)]
 pub struct WorldRenderPass {
     // Offscreen render targets
     deferred_texture: (wgpu::Texture, wgpu::TextureView),
@@ -103,7 +103,7 @@ impl Extension for WorldRenderPass {
     }
 }
 
-#[inject_nitrous_module]
+#[inject_nitrous]
 impl WorldRenderPass {
     pub fn new(
         terrain_buffer: &TerrainBuffer,

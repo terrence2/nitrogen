@@ -20,20 +20,20 @@ use anyhow::Result;
 use input::ElementState;
 use log::{debug, trace};
 use nitrous::{LocalNamespace, NitrousScript, Value};
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use nitrous_injector::{inject_nitrous, method, NitrousResource};
 use runtime::ScriptHerder;
 use smallvec::{smallvec, SmallVec};
 use std::collections::HashMap;
 
 // Map from key, buttons, and axes to commands.
-#[derive(Debug, NitrousModule)]
+#[derive(Debug, NitrousResource)]
 pub struct Bindings {
     pub name: String,
     press_chords: HashMap<Input, Vec<InputSet>>,
     script_map: HashMap<InputSet, NitrousScript>,
 }
 
-#[inject_nitrous_module]
+#[inject_nitrous]
 impl Bindings {
     pub fn new(name: &str) -> Self {
         Self {

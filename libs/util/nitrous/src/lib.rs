@@ -24,212 +24,12 @@ pub use crate::{
     ast::NitrousAst,
     exec::{ExecutionContext, NitrousExecutor, YieldState},
     lower::{Instr, NitrousCode},
-    memory::{LocalNamespace, Module, ResourceNamespace},
+    memory::{LocalNamespace, ResourceNamespace, ScriptResource},
     script::NitrousScript,
     value::Value,
 };
 
-use anyhow::{bail, ensure, Result};
-use log::debug;
-use parking_lot::RwLock;
-use std::{collections::HashMap, fmt::Debug, path::PathBuf, sync::Arc};
-use structopt::StructOpt;
-
-#[derive(Debug, StructOpt)]
-pub struct StartupOpts {
-    /// Run a command after startup
-    #[structopt(short = "C", long)]
-    command: Option<String>,
-
-    /// Run given file after startup
-    #[structopt(short = "x", long)]
-    execute: Option<PathBuf>,
-}
-
-impl StartupOpts {
-    pub fn on_startup(&self, interpreter: &mut Interpreter) -> Result<()> {
-        if let Ok(code) = std::fs::read_to_string("autoexec.n2o") {
-            let rv = interpreter.interpret_once(&code);
-            println!("autoexec.n2o completed: {:?}", rv);
-        }
-
-        if let Some(command) = self.command.as_ref() {
-            let rv = interpreter.interpret_once(command)?;
-            println!("startup commmand completed: {}", rv);
-        }
-
-        if let Some(exec_file) = self.execute.as_ref() {
-            match std::fs::read_to_string(exec_file) {
-                Ok(code) => {
-                    interpreter.interpret_once(&code)?;
-                }
-                Err(e) => {
-                    println!("Read file for {:?}: {}", exec_file, e);
-                }
-            }
-        }
-
-        Ok(())
-    }
-}
-
-/// Evaluate Nitrous (n2o) scripts.
-#[derive(Debug)]
-pub struct Interpreter {
-    locals: LocalNamespace,
-    // modules: HashMap<String, ModuleTraitObject>,
-    globals: Arc<RwLock<GlobalNamespace>>,
-}
-
-impl Default for Interpreter {
-    fn default() -> Self {
-        Self {
-            locals: LocalNamespace::empty(),
-            // modules: HashMap::new(),
-            globals: GlobalNamespace::new(),
-        }
-    }
-}
-
-impl Interpreter {
-    pub fn with_locals<F>(&mut self, locals: &[(&str, Value)], mut callback: F) -> Result<Value>
-    where
-        F: FnMut(&mut Interpreter) -> Result<Value>,
-    {
-        for (name, value) in locals {
-            self.locals.put(*name, value.to_owned());
-        }
-        let result = callback(self);
-        for (name, _) in locals {
-            self.locals.remove(*name);
-        }
-        result
-    }
-
-    // pub fn set_modules(&mut self, modules: HashMap<String, ModuleTraitObject>) {
-    //     self.modules = modules;
-    // }
-
-    pub fn put_global(&mut self, name: &str, value: Value) {
-        self.globals.write().put_global(name, value);
-    }
-
-    pub fn get_global(&self, name: &str) -> Option<Value> {
-        self.globals.write().get_global(name)
-    }
-
-    pub fn globals(&self) -> Arc<RwLock<GlobalNamespace>> {
-        self.globals.clone()
-    }
-
-    pub fn interpret_once(&mut self, raw_script: &str) -> Result<Value> {
-        self.interpret(&NitrousScript::compile(raw_script)?)
-    }
-
-    // pub fn interpret_async(&mut self, raw_script: String) -> Result<()> {
-    //     // Note: all of our memory are behind arcs, so clone of the interpreter is very fast.
-    //     let mut interp = self.clone();
-    //     let script = Script::compile(&raw_script)?;
-    //     std::thread::spawn(move || match interp.interpret(&script) {
-    //         Ok(_) => {}
-    //         Err(e) => {
-    //             println!("Async script execution failed: {}", e);
-    //         }
-    //     });
-    //     Ok(())
-    // }
-
-    pub fn interpret(&mut self, script: &NitrousScript) -> Result<Value> {
-        debug!("Interpret: {}", script);
-        let mut out = Value::True();
-        /*
-        for stmt in script.statements() {
-            match stmt.borrow() {
-                Stmt::LetAssign(target, expr) => {
-                    let result = self.interpret_expr(expr)?;
-                    if let Term::Symbol(name) = target {
-                        self.locals.put(&name, result);
-                    }
-                }
-                Stmt::Expr(expr) => {
-                    out = self.interpret_expr(expr)?;
-                }
-            }
-        }
-         */
-        Ok(out)
-    }
-
-    /*
-    fn interpret_expr(&self, expr: &Expr) -> Result<Value> {
-        Ok(match expr {
-            Expr::Term(term) => match term {
-                Term::Boolean(b) => Value::Boolean(*b),
-                Term::Float(f) => Value::Float(*f),
-                Term::Integer(i) => Value::Integer(*i),
-                Term::String(s) => Value::String(s.to_owned()),
-                Term::Symbol(sym) => {
-                    if let Some(v) = self.locals.get(sym) {
-                        v
-                    // } else if let Some(&module_to) = self.modules.get(sym) {
-                    //     // let any_module: &mut dyn Any =
-                    //     //     world.get_resource_by_type_id_mut(typeid).unwrap();
-                    //     // let module = any_module.downcast_ref::<dyn Module>().expect("non-module in the modules list");
-                    //     // let failure = any_module.downcast_ref::<i32>().expect("this will fail");
-                    //     // let module_ptr: *const dyn Module = unsafe { transmute(*trait_obj) };
-                    //     //let module: &dyn Module = unsafe { transmute(module_ptr) };
-                    //     let module = module_to.to_module();
-                    //
-                    //     bail!("found module: {}", module.module_name());
-                    } else {
-                        bail!("Unknown symbol '{}'", sym)
-                    }
-                }
-            },
-            Expr::BinOp(lhs, op, rhs) => {
-                let t0 = self.interpret_expr(lhs)?;
-                let t1 = self.interpret_expr(rhs)?;
-                match op {
-                    Operator::Multiply => t0.impl_multiply(t1)?,
-                    Operator::Divide => t0.impl_divide(t1)?,
-                    Operator::Add => t0.impl_add(t1)?,
-                    Operator::Subtract => t0.impl_subtract(t1)?,
-                }
-            }
-            Expr::Attr(base, member) => match self.interpret_expr(base)? {
-                Value::Module(ns) => match member {
-                    Term::Symbol(sym) => ns.to_module().get(ns.clone(), sym)?,
-                    _ => bail!("attribute expr member is not a symbol"),
-                },
-                _ => bail!("attribute expr base did not evaluate to a module"),
-            },
-            Expr::Await(expr) => {
-                let result = self.interpret_expr(expr)?;
-                block_on(result.to_future()?.write().as_mut())
-            }
-            Expr::Call(base, args) => {
-                let base = self.interpret_expr(base)?;
-                let mut argvec = Vec::new();
-                for arg in args {
-                    argvec.push(self.interpret_expr(arg)?);
-                }
-                match base {
-                    Value::Method(module, method_name) => {
-                        module.write().call_method(&method_name, &argvec)?
-                    }
-                    _ => bail!("call must be on a method value"),
-                }
-            }
-        })
-    }
-    */
-}
-
-#[derive(Debug)]
-pub struct GlobalNamespace {
-    memory: HashMap<String, Value>,
-}
-
+/*
 impl GlobalNamespace {
     pub fn new() -> Arc<RwLock<Self>> {
         let obj = Arc::new(RwLock::new(Self {
@@ -251,7 +51,6 @@ impl GlobalNamespace {
     }
 
     pub fn format_help(&self) -> Value {
-        /*
         let mut records = self
             .memory
             .iter()
@@ -286,8 +85,6 @@ impl GlobalNamespace {
             out += &format!("{:0width$} - {}\n", k, v, width = width);
         }
         Value::String(out)
-         */
-        Value::True()
     }
 }
 
@@ -324,29 +121,4 @@ impl Module for GlobalNamespace {
         self.memory.keys().map(|v| v.as_str()).collect()
     }
 }
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_interpret_basic() -> Result<()> {
-        let mut interpreter = Interpreter::default();
-        let script = NitrousScript::compile("2 + 2")?;
-        assert_eq!(interpreter.interpret(&script)?, Value::Integer(4));
-        Ok(())
-    }
-
-    #[test]
-    fn test_precedence() -> Result<()> {
-        let mut interpreter = Interpreter::default();
-
-        let script = NitrousScript::compile("2 + 3 * 2")?;
-        assert_eq!(interpreter.interpret(&script)?, Value::Integer(8));
-
-        let script = NitrousScript::compile("(2 + 3) * 2")?;
-        assert_eq!(interpreter.interpret(&script)?, Value::Integer(10));
-
-        Ok(())
-    }
-}
+ */
