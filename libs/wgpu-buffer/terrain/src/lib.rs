@@ -158,7 +158,7 @@ impl Extension for TerrainBuffer {
             runtime.resource::<GlobalParametersBuffer>(),
             &runtime.resource::<Gpu>(),
         )?;
-        runtime.insert_module("terrain", terrain);
+        runtime.insert_named_resource("terrain", terrain);
         runtime
             .frame_stage_mut(FrameStage::HandleDisplayChange)
             .add_system(Self::sys_handle_display_config_change);

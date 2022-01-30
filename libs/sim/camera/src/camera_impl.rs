@@ -21,18 +21,19 @@ use geodesy::{Cartesian, GeoCenter};
 use geometry::Plane;
 use measure::WorldSpaceFrame;
 use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, UnitQuaternion, Vector3};
-use nitrous::Value;
-use nitrous_injector::{inject_nitrous, method, NitrousResource};
+use nitrous::{inject_nitrous, method, NitrousComponent, Value};
 use parking_lot::{RwLock, RwLockReadGuard};
 use runtime::{Extension, Runtime, SimStage};
 use std::sync::Arc;
 use window::DisplayConfig;
 
-#[derive(Component)]
+#[derive(Component, NitrousComponent)]
+#[Name = "camera"]
 pub struct CameraComponent {
     inner: Arc<RwLock<Camera>>,
 }
 
+#[inject_nitrous]
 impl CameraComponent {
     pub fn new(camera: Arc<RwLock<Camera>>) -> Self {
         Self { inner: camera }

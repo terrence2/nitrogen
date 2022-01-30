@@ -86,7 +86,7 @@ impl Extension for System {
     fn init(runtime: &mut Runtime) -> Result<()> {
         let widgets = runtime.resource::<WidgetBuffer<SimState>>();
         let system = System::new(widgets)?;
-        runtime.insert_module("system", system);
+        runtime.insert_named_resource("system", system);
         runtime.resource_mut::<ScriptHerder>().run_string(
             r#"
                 bindings.bind("Escape", "system.exit()");
@@ -393,11 +393,10 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     )?;
     let arcball = ArcBallCamera::install()?;
     let _player_ent = runtime
-        .world
-        .spawn()
+        .spawn_named("player")
         .insert(WorldSpaceFrame::default())
-        .insert(ArcBallController::new(arcball.clone()))
-        .insert(CameraComponent::new(camera.clone()))
+        .insert_scriptable(ArcBallController::new(arcball.clone()))
+        .insert_scriptable(CameraComponent::new(camera.clone()))
         .id();
 
     //////////////////////////////////////////////////////////////////
@@ -472,30 +471,17 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
                     )
                     .ok();
             });
-        // runtime.resource::<WidgetBuffer<SimState >().ensure_uploaded(
-        //     *timestep(&runtime).now(),
-        //     runtime.resource::<Gpu>(),
-        //     runtime.resource::<Window>(),
-        //     &mut tracker,
-        // )?;
+        // runtime
+        //     .resource::<WidgetBuffer<SimState>>()
+        //     .ensure_uploaded(
+        //         *timestep(&runtime).now(),
+        //         runtime.resource::<Gpu>(),
+        //         runtime.resource::<Window>(),
+        //         &mut tracker,
+        //     )?;
 
         {
-            // if !frame_graph.run(&mut runtime.resource_mut::<Gpu>(), tracker)? {
-            //     let config = runtime.resource::<Window>().config().to_owned();
-            //     runtime
-            //         .resource_mut::<Gpu>()
-            //         .on_display_config_changed(&config)?;
-            // }
             let config = runtime.resource::<Window>().config().to_owned();
-            //let gpu = &mut runtime.resource_mut::<Gpu>();
-            // let composite = composite.read();
-            // let ui = ui.read();
-            // let widgets = widgets.read();
-            // let world = world_gfx.read();
-            // let terrain = terrain.read();
-            // let stars = stars_buffer.read();
-            // let fullscreen = fullscreen_buffer.read();
-            // let globals = globals.read();
 
             let mut encoder = runtime
                 .resource_mut::<Gpu>()

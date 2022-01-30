@@ -168,7 +168,7 @@ impl Extension for GlobalParametersBuffer {
             "#,
         )?;
 
-        runtime.insert_module("globals", globals);
+        runtime.insert_named_resource("globals", globals);
         runtime
             .frame_stage_mut(FrameStage::TrackStateChanges)
             .add_system(Self::sys_track_state_changes);

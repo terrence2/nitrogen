@@ -277,8 +277,8 @@ mod test {
 
         fn get(&self, module: Arc<RwLock<dyn Module>>, name: &str) -> Result<Value> {
             Ok(match name {
-                "walk" => Value::Method(module, name.to_owned()),
-                "run" => Value::Method(module, name.to_owned()),
+                "walk" => Value::ResourceMethod(module, name.to_owned()),
+                "run" => Value::ResourceMethod(module, name.to_owned()),
                 _ => bail!("get unknown '{}'", name),
             })
         }

@@ -12,6 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+mod component;
 mod injector;
 mod resource;
 
@@ -21,8 +22,9 @@ use proc_macro::TokenStream;
 use syn::{parse2, ItemFn};
 
 /// Adds a derivation of the nitrous::ScriptResource trait and associated methods.
-/// These methods proxy to various _inner versions, which are built
-/// using #[method], #[getter], and #[setter] attributes on the impl block.
+/// These methods proxy to various _inner versions, which are built using #[method],
+/// #[getter], and #[setter] attributes on the impl block, built by using
+/// #[inject_nitrous] on an impl.
 #[proc_macro_derive(NitrousResource)]
 pub fn derive_nitrous_resource(input: TokenStream) -> TokenStream {
     let ast = resource::parse(input);
@@ -32,9 +34,22 @@ pub fn derive_nitrous_resource(input: TokenStream) -> TokenStream {
     rust
 }
 
+/// Adds a derivation of the nitrous::ScriptComponent trait and associated methods.
+/// These methods proxy to various _inner versions, which are built using #[method],
+/// #[getter], and #[setter] attributes on the impl block, built by using
+/// #[inject_nitrous] on an impl.
+#[proc_macro_derive(NitrousComponent, attributes(Name))]
+pub fn derive_nitrous_component(input: TokenStream) -> TokenStream {
+    let ast = component::parse(input);
+    let model = component::analyze(ast);
+    let ir = component::lower(model);
+    let rust = component::codegen(ir);
+    rust
+}
+
 /// Add to the top of an impl block to collect all tagged methods and build
-/// call and attributes for Nitrous. Note that this is not the
-/// external trait, which is built from #[derive(NitrousResource)] above the struct.
+/// call and attributes for Nitrous. Note that this is not the external trait,
+/// which is built from #[derive(Nitrous___)] above the struct.
 #[proc_macro_attribute]
 pub fn inject_nitrous(
     args: proc_macro::TokenStream,
@@ -47,7 +62,7 @@ pub fn inject_nitrous(
     rust
 }
 
-/// Just a tag for the injector.
+/// A tag for #[nitrous_injector] indicating to include this function as a method.
 #[proc_macro_attribute]
 pub fn method(
     _attr: proc_macro::TokenStream,

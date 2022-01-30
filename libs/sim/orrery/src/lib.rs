@@ -308,7 +308,7 @@ pub struct Orrery {
 impl Extension for Orrery {
     fn init(runtime: &mut Runtime) -> Result<()> {
         let orrery = Orrery::new_current_time()?;
-        runtime.insert_module("orrery", orrery);
+        runtime.insert_named_resource("orrery", orrery);
         runtime
             .sim_stage_mut(SimStage::TimeStep)
             .add_system(Self::sys_step_time);

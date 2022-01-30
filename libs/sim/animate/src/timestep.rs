@@ -26,7 +26,7 @@ pub struct TimeStep {
 
 impl Extension for TimeStep {
     fn init(runtime: &mut Runtime) -> Result<()> {
-        runtime.insert_module("time", TimeStep::new_60fps());
+        runtime.insert_named_resource("time", TimeStep::new_60fps());
         runtime
             .sim_stage_mut(SimStage::TimeStep)
             .add_system(Self::sys_tick_time);

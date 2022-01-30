@@ -24,9 +24,12 @@ pub use crate::{
     ast::NitrousAst,
     exec::{ExecutionContext, NitrousExecutor, YieldState},
     lower::{Instr, NitrousCode},
-    memory::{LocalNamespace, ResourceNamespace, ScriptResource},
+    memory::{ComponentLookupFunc, LocalNamespace, ScriptComponent, ScriptResource, WorldIndex},
     script::NitrousScript,
     value::Value,
+};
+pub use nitrous_injector::{
+    getter, inject_nitrous, method, setter, NitrousComponent, NitrousResource,
 };
 
 /*

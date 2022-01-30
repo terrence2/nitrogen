@@ -151,7 +151,7 @@ impl ScriptableAnimation {
             (self.start.clone(), false)
         };
         if let Some(callable) = &mut self.callable {
-            callable.call_method(&[current])?;
+            callable.call_resource_method(&[current])?;
         }
         if ended {
             self.state = AnimationState::Finished;
@@ -173,7 +173,7 @@ pub struct Timeline {
 
 impl Extension for Timeline {
     fn init(runtime: &mut Runtime) -> Result<()> {
-        runtime.insert_module("timeline", Timeline::default());
+        runtime.insert_named_resource("timeline", Timeline::default());
         runtime
             .sim_stage_mut(SimStage::TimeStep)
             .add_system(Self::sys_animate);

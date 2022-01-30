@@ -85,6 +85,7 @@ impl fmt::Display for Operator {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Term {
+    AtSymbol(String),
     Symbol(String),
     Boolean(bool),
     Integer(i64),
@@ -95,6 +96,7 @@ pub enum Term {
 impl fmt::Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::AtSymbol(v) => write!(f, "@{}", v),
             Self::Symbol(v) => write!(f, "{}", v),
             Self::Boolean(b) => {
                 if *b {

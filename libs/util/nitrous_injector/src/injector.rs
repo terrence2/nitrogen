@@ -89,9 +89,9 @@ pub(crate) fn lower(model: InjectModel) -> Ir {
                 .collect::<Vec<String>>()
                 .join(", ")
         ));
-        ir.get_arms.push(
-            parse2(quote! { #name => { Ok(::nitrous::Value::make_method(self, #name)) } }).unwrap(),
-        );
+        // ir.get_arms.push(
+        //     parse2(quote! { #name => { Ok(::nitrous::Value::make_method(self, #name)) } }).unwrap(),
+        // );
         let arg_exprs = args
             .iter()
             .enumerate()
@@ -107,9 +107,9 @@ fn lower_help(ir: &mut Ir) {
     ir.method_arms
         .push(parse2(quote! { "help" => { self.__show_help__() } }).unwrap());
 
-    ir.get_arms.push(
-        parse2(quote! { "help" => { Ok(::nitrous::Value::make_method(self, "help")) } }).unwrap(),
-    );
+    // ir.get_arms.push(
+    //     parse2(quote! { "help" => { Ok(::nitrous::Value::make_method(self, "help")) } }).unwrap(),
+    // );
 
     ir.help_items.push("help()".to_owned());
 }

@@ -39,6 +39,10 @@ impl NitrousScript {
     pub fn atom(&self, atom: &Atom) -> &str {
         &self.atoms[atom]
     }
+
+    pub fn atoms(&self) -> &HashMap<Atom, String> {
+        &self.atoms
+    }
 }
 
 impl From<&NitrousScript> for NitrousScript {
@@ -54,6 +58,9 @@ impl fmt::Display for NitrousScript {
                 Instr::Push(v) => writeln!(f, "{:03} <-- {}", i, v)?,
                 Instr::LoadLocalOrResource(atom) => {
                     writeln!(f, "{:03} ==> {}", i, self.atoms.get(atom).unwrap())?
+                }
+                Instr::LoadEntity(atom) => {
+                    writeln!(f, "{:03} ==> @{}", i, self.atoms.get(atom).unwrap())?
                 }
                 Instr::InitLocal(atom) => {
                     writeln!(f, "{:03} <== {}", i, &self.atoms.get(atom).unwrap())?

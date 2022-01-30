@@ -120,7 +120,7 @@ where
     fn init(runtime: &mut Runtime) -> Result<()> {
         let state_dir = runtime.resource::<AppDirs>().state_dir.clone();
         let widget = WidgetBuffer::<T>::new(&mut runtime.resource_mut::<Gpu>(), &state_dir)?;
-        runtime.insert_module("widget", widget);
+        runtime.insert_named_resource("widget", widget);
         runtime
             .sim_stage_mut(SimStage::HandleInput)
             .add_system(Self::sys_handle_input_events);

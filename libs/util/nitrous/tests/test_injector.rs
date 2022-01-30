@@ -12,6 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+/*
 use anyhow::Result;
 use nitrous::{Interpreter, Value};
 use nitrous_injector::{inject_nitrous, method, NitrousResource};
@@ -134,3 +135,4 @@ fn test_it_works() -> Result<()> {
 
     Ok(())
 }
+*/

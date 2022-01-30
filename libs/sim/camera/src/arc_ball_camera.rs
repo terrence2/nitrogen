@@ -18,17 +18,18 @@ use bevy_ecs::prelude::*;
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
 use measure::WorldSpaceFrame;
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
-use nitrous::Value;
-use nitrous_injector::{inject_nitrous, method, NitrousResource};
+use nitrous::{inject_nitrous, method, NitrousComponent, Value};
 use parking_lot::RwLock;
 use runtime::{Extension, Runtime, SimStage};
 use std::{f64::consts::PI, sync::Arc};
 
-#[derive(Component)]
+#[derive(Component, NitrousComponent)]
+#[Name = "arcball"]
 pub struct ArcBallController {
     inner: Arc<RwLock<ArcBallCamera>>,
 }
 
+#[inject_nitrous]
 impl ArcBallController {
     pub fn new(arcball: Arc<RwLock<ArcBallCamera>>) -> Self {
         Self { inner: arcball }

@@ -85,7 +85,7 @@ impl Extension for WorldRenderPass {
             runtime.resource::<GlobalParametersBuffer>(),
             runtime.resource::<Gpu>(),
         )?;
-        runtime.insert_module("world", world);
+        runtime.insert_named_resource("world", world);
         runtime
             .frame_stage_mut(FrameStage::HandleSystem)
             .add_system(Self::sys_handle_display_config_change);

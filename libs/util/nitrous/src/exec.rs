@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{lower::Instr, LocalNamespace, NitrousScript, ResourceNamespace, Value};
+use crate::{lower::Instr, LocalNamespace, NitrousScript, Value, WorldIndex};
 use anyhow::{anyhow, bail, Result};
 use bevy_ecs::prelude::*;
 
@@ -36,28 +36,28 @@ impl ExecutionContext {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum YieldState {
     Yielded,
-    Finished,
+    Finished(Value),
 }
 
 /// Executing scripts requires some state and some
 pub struct NitrousExecutor<'a> {
     state: &'a mut ExecutionContext,
-    modules: &'a mut ResourceNamespace,
+    index: &'a mut WorldIndex,
     world: &'a mut World,
 }
 
 impl<'a> NitrousExecutor<'a> {
     pub fn new(
         state: &'a mut ExecutionContext,
-        modules: &'a mut ResourceNamespace,
+        index: &'a mut WorldIndex,
         world: &'a mut World,
     ) -> Self {
         Self {
             state,
-            modules,
+            index,
             world,
         }
     }
@@ -76,17 +76,26 @@ impl<'a> NitrousExecutor<'a> {
     pub fn run_until_yield(&mut self) -> Result<YieldState> {
         for pc in self.state.counter..self.state.script.code().len() {
             let instr = self.state.script.code()[pc].to_owned();
+            println!("AT: {:?}", instr);
             match instr {
                 Instr::Push(value) => self.state.stack.push(value.to_owned()),
                 Instr::LoadLocalOrResource(atom) => {
                     let name = self.state.script.atom(&atom);
                     if let Some(value) = self.state.locals.get(name) {
                         self.push(value);
-                    } else if let Some(resource) = self.modules.lookup(name) {
+                    } else if let Some(resource) = self.index.lookup_resource(name) {
                         self.push(resource);
                     } else {
                         bail!("unknown local or resource varable: {}", name);
                     }
+                }
+                Instr::LoadEntity(atom) => {
+                    let name = self.state.script.atom(&atom);
+                    let entity = self
+                        .index
+                        .lookup_entity(name)
+                        .ok_or_else(|| anyhow!("no such entity: @{}", name))?;
+                    self.push(entity);
                 }
                 Instr::InitLocal(atom) => {
                     let value = self.pop("assigned")?;
@@ -127,7 +136,7 @@ impl<'a> NitrousExecutor<'a> {
                     }
 
                     match base {
-                        Value::Method(mut resource, method_name) => {
+                        Value::ResourceMethod(mut resource, method_name) => {
                             let result = resource.call_method(&method_name, &args)?;
                             self.push(result);
                         }
@@ -144,6 +153,7 @@ impl<'a> NitrousExecutor<'a> {
                 }
             }
         }
-        Ok(YieldState::Finished)
+        println!("STACK AT EXIT: {:#?}", self.state.stack);
+        Ok(YieldState::Finished(self.pop("return value")?))
     }
 }

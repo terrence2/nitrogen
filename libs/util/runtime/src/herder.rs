@@ -14,23 +14,24 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource};
-use log::error;
+use log::{error, info};
 use nitrous::{
-    ExecutionContext, LocalNamespace, NitrousExecutor, NitrousScript, ResourceNamespace,
-    ScriptResource, YieldState,
+    ComponentLookupFunc, ExecutionContext, LocalNamespace, NitrousExecutor, NitrousScript,
+    ScriptComponent, ScriptResource, WorldIndex, YieldState,
 };
+use std::{borrow::Borrow, hash::Hash};
 
 /// Manage script execution state.
 pub struct ScriptHerder {
     gthread: Vec<ExecutionContext>,
-    resource_namespace: ResourceNamespace,
+    index: WorldIndex,
 }
 
 impl Default for ScriptHerder {
     fn default() -> Self {
         Self {
             gthread: Vec::new(),
-            resource_namespace: ResourceNamespace::empty(),
+            index: WorldIndex::empty(),
         }
     }
 }
@@ -52,13 +53,32 @@ impl ScriptHerder {
     }
 
     #[inline]
-    pub(crate) fn insert_module<T: Resource + ScriptResource>(
+    pub(crate) fn insert_named_resource<T>(&mut self, name: String, resource: &T) -> Result<()>
+    where
+        T: Resource + ScriptResource + 'static,
+    {
+        self.index.insert_named_resource(name, resource)?;
+        Ok(())
+    }
+
+    // #[inline]
+    // pub(crate) fn insert_named_entity<S>(&mut self, name: S, entity: Entity)
+    // where
+    //     S: Into<String>,
+    // {
+    //     self.index.insert_named_entity(name, entity);
+    // }
+
+    #[inline]
+    pub(crate) fn upsert_named_component(
         &mut self,
-        name: String,
-        resource: &T,
-    ) {
-        self.resource_namespace
-            .insert_named_resource(name, resource);
+        entity_name: &str,
+        entity: Entity,
+        component_name: &str,
+        lookup: Box<ComponentLookupFunc>,
+    ) -> Result<()> {
+        self.index
+            .upsert_named_component(entity_name, entity, component_name, lookup)
     }
 
     pub(crate) fn sys_run_scripts(world: &mut World) {
@@ -70,12 +90,13 @@ impl ScriptHerder {
     fn run_scripts(&mut self, world: &mut World) {
         let mut next_gthreads = Vec::with_capacity(self.gthread.capacity());
         for mut script_context in self.gthread.drain(..) {
-            let mut executor =
-                NitrousExecutor::new(&mut script_context, &mut self.resource_namespace, world);
+            let mut executor = NitrousExecutor::new(&mut script_context, &mut self.index, world);
             match executor.run_until_yield() {
                 Ok(yield_state) => match yield_state {
                     YieldState::Yielded => next_gthreads.push(script_context),
-                    YieldState::Finished => {}
+                    YieldState::Finished(v) => {
+                        info!("script finish: {}", v);
+                    }
                 },
                 Err(err) => {
                     error!("script failed with: {}", err);

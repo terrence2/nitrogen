@@ -115,6 +115,12 @@ mod test {
                 "asdf".into()
             )))))]
         );
+        assert_eq!(
+            StatementsParser::new().parse("@asdf")?,
+            vec![Box::new(Stmt::Expr(Box::new(Expr::Term(Term::AtSymbol(
+                "asdf".into()
+            )))))]
+        );
         Ok(())
     }
 

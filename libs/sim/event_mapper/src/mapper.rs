@@ -16,21 +16,18 @@ use crate::{
     bindings::Bindings,
     input::{Input, InputSet},
 };
-use anyhow::{bail, ensure, Result};
+use anyhow::{bail, Result};
 use bevy_ecs::prelude::*;
 use input::{ElementState, InputEvent, InputEventVec, InputFocus, ModifiersState};
 use nitrous::Value;
 use nitrous_injector::{inject_nitrous, method, NitrousResource};
 use ordered_float::OrderedFloat;
-use parking_lot::RwLock;
 use runtime::{Extension, Runtime, ScriptHerder, SimStage};
 use std::{
-    any::type_name,
     collections::{HashMap, HashSet},
     fmt::Debug,
     marker::PhantomData,
     str::FromStr,
-    sync::Arc,
 };
 
 #[derive(Debug, Default)]
@@ -57,7 +54,7 @@ where
     <T as FromStr>::Err: Debug,
 {
     fn init(runtime: &mut Runtime) -> Result<()> {
-        runtime.insert_module("bindings", EventMapper::<T>::new());
+        runtime.insert_named_resource("bindings", EventMapper::<T>::new());
         runtime
             .sim_stage_mut(SimStage::HandleInput)
             .add_system(Self::sys_handle_input_events);

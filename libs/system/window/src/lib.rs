@@ -225,7 +225,7 @@ impl Extension for Window {
         let os_window = runtime.remove_resource::<OsWindow>().unwrap();
 
         let window = Window::new(os_window, display_config);
-        runtime.insert_module("window", window);
+        runtime.insert_named_resource("window", window);
         runtime.insert_resource(None as Option<DisplayConfig>);
         runtime
             .frame_stage_mut(FrameStage::HandleSystem)

@@ -79,7 +79,7 @@ pub struct Gpu {
 impl Extension for Gpu {
     fn init(runtime: &mut Runtime) -> Result<()> {
         let gpu = Self::new(runtime.resource::<Window>(), Default::default())?;
-        runtime.insert_module("gpu", gpu);
+        runtime.insert_named_resource("gpu", gpu);
         runtime
             .frame_stage_mut(FrameStage::HandleDisplayChange)
             .add_system(Self::sys_handle_display_config_change);

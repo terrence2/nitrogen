@@ -14,8 +14,9 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::herder::ScriptHerder;
 use anyhow::Result;
-use bevy_ecs::{prelude::*, system::Resource};
-use nitrous::ScriptResource;
+use bevy_ecs::{prelude::*, system::Resource, world::EntityMut};
+use log::error;
+use nitrous::{ComponentLookupFunc, ScriptComponent, ScriptResource};
 
 /// Interface for extending the Runtime.
 pub trait Extension {
@@ -53,6 +54,62 @@ pub enum FrameStage {
     TrackStateChanges,
     EnsureGpuUpdated,
     Render,
+}
+
+pub struct NamedEntityMut<'w> {
+    name: String,
+    entity: EntityMut<'w>,
+}
+
+impl<'w> NamedEntityMut<'w> {
+    pub fn id(&self) -> Entity {
+        self.entity.id()
+    }
+
+    pub fn insert<T>(&mut self, value: T) -> &mut Self
+    where
+        T: Component,
+    {
+        self.entity.insert(value);
+        self
+    }
+
+    pub fn insert_scriptable<T>(&mut self, value: T) -> &mut Self
+    where
+        T: Component + ScriptComponent + 'static,
+    {
+        let component_name = value.component_name();
+
+        // Record the component in the store.
+        self.entity.insert(value);
+
+        // Get a pointer to the trait object; we mostly care about the vtable here. We'll re-grab
+        // the component data pointer when we need it using the wrapper function.
+        let inner_entity = self.entity.id();
+        let lookup: Box<ComponentLookupFunc> = Box::new(move |world: &mut World| {
+            let ptr = world.get::<T>(inner_entity).unwrap();
+            let cto: &(dyn ScriptComponent + 'static) = ptr;
+            cto
+        });
+
+        // Index the component in the script engine.
+        // Safety: this is safe because you cannot get to an RtEntity from just the world, so we
+        //         cannot be entering here through some world-related path, such as a system.
+        let entity_name = self.name.as_str();
+        let entity = self.entity.id();
+        unsafe {
+            self.entity
+                .world_mut()
+                .resource_scope(|world, mut herder: Mut<ScriptHerder>| {
+                    match herder.upsert_named_component(entity_name, entity, component_name, lookup)
+                    {
+                        Ok(_) => {}
+                        Err(e) => error!("{}", e),
+                    }
+                });
+        }
+        self
+    }
 }
 
 pub struct Runtime {
@@ -127,7 +184,32 @@ impl Runtime {
     }
 
     #[inline]
-    pub fn insert_module<S, T>(&mut self, name: S, value: T)
+    pub fn spawn(&mut self) -> EntityMut {
+        self.world.spawn()
+    }
+
+    #[inline]
+    pub fn spawn_named<S>(&mut self, name: S) -> NamedEntityMut
+    where
+        S: Into<String>,
+    {
+        NamedEntityMut {
+            name: name.into(),
+            entity: self.world.spawn(),
+        }
+
+        // let entity = self
+        //     .world
+        //     .resource_scope(|world, mut herder: Mut<ScriptHerder>| {
+        //         let entity = world.spawn();
+        //         herder.insert_named_entity(name, entity.id());
+        //         entity
+        //     });
+        // unimplemented!()
+    }
+
+    #[inline]
+    pub fn insert_named_resource<S, T>(&mut self, name: S, value: T)
     where
         S: Into<String>,
         T: Resource + ScriptResource + 'static,
@@ -137,7 +219,10 @@ impl Runtime {
         self.world
             .resource_scope(|world, mut herder: Mut<ScriptHerder>| {
                 let resource = world.get_resource::<T>().unwrap();
-                herder.insert_module::<T>(name, resource);
+                match herder.insert_named_resource::<T>(name, resource) {
+                    Ok(_) => {}
+                    Err(e) => error!("{}", e),
+                }
             });
     }
 

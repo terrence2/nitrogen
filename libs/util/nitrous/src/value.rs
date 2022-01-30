@@ -14,6 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{memory::ResourceTraitObject, ScriptResource};
 use anyhow::{bail, Result};
+use bevy_ecs::prelude::*;
 use futures::Future;
 use geodesy::{GeoSurface, Graticule, Target};
 use log::error;
@@ -45,7 +46,9 @@ pub enum Value {
     String(String),
     Graticule(Graticule<GeoSurface>),
     Resource(OpaqueResourceRef),
-    Method(OpaqueResourceRef, String), // TODO: atoms
+    ResourceMethod(OpaqueResourceRef, String), // TODO: atoms?
+    Entity(Entity),
+    // ComponentMethod(Entity, String), // TODO: atoms?
     Future(Arc<RwLock<FutureValue>>),
 }
 
@@ -71,6 +74,10 @@ impl Value {
 
     pub(crate) fn new_resource(rto: ResourceTraitObject) -> Self {
         Self::Resource(OpaqueResourceRef(rto))
+    }
+
+    pub(crate) fn new_entity(entity: Entity) -> Self {
+        Self::Entity(entity)
     }
 
     pub fn to_bool(&self) -> Result<bool> {
@@ -120,7 +127,7 @@ impl Value {
     }
 
     pub fn make_method(resource: &dyn ScriptResource, name: &str) -> Self {
-        Self::Method(
+        Self::ResourceMethod(
             OpaqueResourceRef(ResourceTraitObject::from_resource(resource)),
             name.to_owned(),
         )
@@ -153,8 +160,8 @@ impl Value {
         }
     }
 
-    pub fn call_method(&mut self, args: &[Value]) -> Result<Value> {
-        Ok(if let Value::Method(resource, method_name) = self {
+    pub fn call_resource_method(&mut self, args: &[Value]) -> Result<Value> {
+        Ok(if let Value::ResourceMethod(resource, method_name) = self {
             resource.call_method(method_name, args)?
         } else {
             error!("attempting to call non-method value: {}", self);
@@ -196,9 +203,10 @@ impl fmt::Display for Value {
             Self::String(v) => write!(f, "\"{}\"", v),
             Self::Graticule(v) => write!(f, "{}", v),
             Self::Resource(v) => write!(f, "{}", v.0.to_resource().resource_type_name()),
-            Self::Method(v, name) => {
+            Self::ResourceMethod(v, name) => {
                 write!(f, "{}.{}", v.0.to_resource().resource_type_name(), name)
             }
+            Self::Entity(v) => write!(f, "@{:?}", v),
             Self::Future(_) => write!(f, "Future"),
         }
     }
@@ -227,8 +235,15 @@ impl PartialEq for Value {
                 Self::Graticule(b) => a == b,
                 _ => false,
             },
-            Self::Resource(_) => false,
-            Self::Method(_, _) => false,
+            Self::Resource(a) => match other {
+                Self::Resource(b) => a.0 == b.0,
+                _ => false,
+            },
+            Self::Entity(a) => match other {
+                Self::Entity(b) => a == b,
+                _ => false,
+            },
+            Self::ResourceMethod(_, _) => false,
             Self::Future(_) => false,
         }
     }

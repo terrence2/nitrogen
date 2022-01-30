@@ -29,6 +29,7 @@ pub struct Atom(u32);
 pub enum Instr {
     Push(Value),
     LoadLocalOrResource(Atom),
+    LoadEntity(Atom),
     InitLocal(Atom),
     StoreLocal(Atom),
 
@@ -71,12 +72,14 @@ impl NitrousCode {
     }
 
     fn upsert_atom(&mut self, symbol: &str) -> Atom {
-        let atom = *self
-            .atoms_matcher
-            .entry(symbol.to_owned())
-            .or_insert(Atom(self.next_atom));
-        self.next_atom = atom.0.checked_add(1).expect("no overflow");
-        atom
+        if let Some(atom) = self.atoms_matcher.get(symbol) {
+            *atom
+        } else {
+            let atom = Atom(self.next_atom);
+            self.next_atom += 1;
+            self.atoms_matcher.insert(symbol.to_owned(), atom);
+            atom
+        }
     }
 
     fn lower_stmt(&mut self, stmt: &Stmt) -> Result<()> {
@@ -107,6 +110,10 @@ impl NitrousCode {
                 Term::Symbol(sym) => {
                     let atom = self.upsert_atom(sym);
                     self.code.push(Instr::LoadLocalOrResource(atom));
+                }
+                Term::AtSymbol(sym) => {
+                    let atom = self.upsert_atom(sym);
+                    self.code.push(Instr::LoadEntity(atom));
                 }
             },
             Expr::Assign(target, expr) => {
@@ -144,6 +151,7 @@ impl NitrousCode {
                 self.lower_expr(expr)?;
                 self.code.push(Instr::Await);
                 //block_on(result.to_future()?.write().as_mut())
+                unimplemented!()
             }
             Expr::Call(base, args) => {
                 for arg in args.iter().rev() {
