@@ -15,7 +15,7 @@
 use crate::value::Value;
 use anyhow::{anyhow, ensure, Result};
 use bevy_ecs::prelude::*;
-use std::{collections::HashMap, fmt::Debug, mem::transmute};
+use std::{collections::HashMap, fmt::Debug, mem::transmute, sync::Arc};
 
 /// Use #[derive(NitrousResource)] to implement this trait. The derived implementation
 /// will expect the struct to have an impl block annotated with #[inject_nitrous]. This
@@ -95,7 +95,7 @@ pub type ComponentLookupFunc =
 
 #[derive(Default)]
 struct EntityMetadata {
-    components: HashMap<String, Box<ComponentLookupFunc>>,
+    components: HashMap<String, Arc<ComponentLookupFunc>>,
 }
 
 /// A map from names to pointers into World.
@@ -155,12 +155,13 @@ impl WorldIndex {
         entity_name: &str,
         entity: Entity,
         component_name: &str,
-        lookup: Box<ComponentLookupFunc>,
+        lookup: Arc<ComponentLookupFunc>,
     ) -> Result<()> {
         if !self.named_entities.contains_key(entity_name) {
             self.named_entities.insert(entity_name.to_owned(), entity);
+            self.entity_metadata
+                .insert(entity, EntityMetadata::default());
         }
-        // let component_name = component_name.into();
         let meta = self
             .entity_metadata
             .get_mut(&entity)
@@ -172,10 +173,23 @@ impl WorldIndex {
 
     /// Look up a named entity in the index.
     pub fn lookup_entity(&self, name: &str) -> Option<Value> {
-        println!("LOOKUP {} in {:#?}", name, self.named_entities.keys());
+        println!("LOOKUP ENT {} in {:#?}", name, self.named_entities.keys());
         self.named_entities
             .get(name)
             .map(|entity| Value::new_entity(*entity))
+    }
+
+    /// Look up a named component within an entity.
+    pub fn lookup_component(&self, entity: &Entity, name: &str) -> Option<Value> {
+        self.entity_metadata
+            .get(entity)
+            .map(|comps| {
+                comps
+                    .components
+                    .get(name)
+                    .map(|lookup| Value::new_component(lookup.to_owned()))
+            })
+            .flatten()
     }
 }
 

@@ -12,14 +12,18 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{memory::ResourceTraitObject, ScriptResource};
-use anyhow::{bail, Result};
+use crate::{
+    memory::{ComponentLookupFunc, ResourceTraitObject, WorldIndex},
+    ScriptResource,
+};
+use anyhow::{anyhow, bail, Result};
 use bevy_ecs::prelude::*;
 use futures::Future;
 use geodesy::{GeoSurface, Graticule, Target};
 use log::error;
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
+use std::borrow::BorrowMut;
 use std::{
     fmt::{self, Debug, Formatter},
     pin::Pin,
@@ -48,7 +52,8 @@ pub enum Value {
     Resource(OpaqueResourceRef),
     ResourceMethod(OpaqueResourceRef, String), // TODO: atoms?
     Entity(Entity),
-    // ComponentMethod(Entity, String), // TODO: atoms?
+    Component(Arc<ComponentLookupFunc>),
+    ComponentMethod(Arc<ComponentLookupFunc>, String), // TODO: atoms?
     Future(Arc<RwLock<FutureValue>>),
 }
 
@@ -78,6 +83,10 @@ impl Value {
 
     pub(crate) fn new_entity(entity: Entity) -> Self {
         Self::Entity(entity)
+    }
+
+    pub(crate) fn new_component(lookup: Arc<ComponentLookupFunc>) -> Self {
+        Value::Component(lookup)
     }
 
     pub fn to_bool(&self) -> Result<bool> {
@@ -152,20 +161,36 @@ impl Value {
         })
     }
 
-    pub fn attr(&self, name: &str) -> Result<Value> {
-        if let Value::Resource(resource_ref) = self {
-            resource_ref.0.to_resource().get(name)
-        } else {
-            bail!("attribute base must be a resource");
-        }
+    pub fn attr(&self, name: &str, index: &WorldIndex) -> Result<Value> {
+        Ok(match self {
+            Value::Resource(resource_ref) => resource_ref.0.to_resource().get(name)?,
+            Value::Entity(entity) => index
+                .lookup_component(entity, name)
+                .ok_or_else(|| anyhow!("no such component {} on entity {:?}", name, entity))?,
+            Value::Component(lookup) => Value::ComponentMethod(lookup.to_owned(), name.to_owned()),
+            _ => bail!(
+                "attribute base must be a resource, entity, or component, not {:?}",
+                self
+            ),
+        })
     }
 
-    pub fn call_resource_method(&mut self, args: &[Value]) -> Result<Value> {
-        Ok(if let Value::ResourceMethod(resource, method_name) = self {
-            resource.call_method(method_name, args)?
-        } else {
-            error!("attempting to call non-method value: {}", self);
-            bail!("attempting to call non-method value: {}", self);
+    pub fn call_resource_method(&mut self, args: &[Value], world: &mut World) -> Result<Value> {
+        Ok(match self {
+            Value::ResourceMethod(resource, method_name) => {
+                resource.call_method(method_name, args)?
+            }
+            Value::ComponentMethod(lookup, method_name) => {
+                let foo = lookup.borrow_mut();
+                let mut bar = foo(world);
+                let rv = bar.call_method(method_name, args)?;
+                rv
+                // lookup.call_mut((world,)).call_method(method_name, args)?
+            }
+            _ => {
+                error!("attempting to call non-method value: {}", self);
+                bail!("attempting to call non-method value: {}", self);
+            }
         })
     }
 }
@@ -206,7 +231,9 @@ impl fmt::Display for Value {
             Self::ResourceMethod(v, name) => {
                 write!(f, "{}.{}", v.0.to_resource().resource_type_name(), name)
             }
-            Self::Entity(v) => write!(f, "@{:?}", v),
+            Self::Entity(ent) => write!(f, "@{:?}", ent),
+            Self::Component(_) => write!(f, "@<ent>.<lookup>"),
+            Self::ComponentMethod(_, name) => write!(f, "@<ent>.<lookup>.{}", name),
             Self::Future(_) => write!(f, "Future"),
         }
     }
@@ -243,6 +270,8 @@ impl PartialEq for Value {
                 Self::Entity(b) => a == b,
                 _ => false,
             },
+            Self::Component(_) => false,
+            Self::ComponentMethod(_, _) => false,
             Self::ResourceMethod(_, _) => false,
             Self::Future(_) => false,
         }

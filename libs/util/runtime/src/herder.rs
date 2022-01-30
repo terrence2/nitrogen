@@ -19,7 +19,7 @@ use nitrous::{
     ComponentLookupFunc, ExecutionContext, LocalNamespace, NitrousExecutor, NitrousScript,
     ScriptComponent, ScriptResource, WorldIndex, YieldState,
 };
-use std::{borrow::Borrow, hash::Hash};
+use std::{borrow::Borrow, hash::Hash, sync::Arc};
 
 /// Manage script execution state.
 pub struct ScriptHerder {
@@ -75,7 +75,7 @@ impl ScriptHerder {
         entity_name: &str,
         entity: Entity,
         component_name: &str,
-        lookup: Box<ComponentLookupFunc>,
+        lookup: Arc<ComponentLookupFunc>,
     ) -> Result<()> {
         self.index
             .upsert_named_component(entity_name, entity, component_name, lookup)

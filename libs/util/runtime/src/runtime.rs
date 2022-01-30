@@ -17,6 +17,7 @@ use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource, world::EntityMut};
 use log::error;
 use nitrous::{ComponentLookupFunc, ScriptComponent, ScriptResource};
+use std::sync::Arc;
 
 /// Interface for extending the Runtime.
 pub trait Extension {
@@ -86,7 +87,7 @@ impl<'w> NamedEntityMut<'w> {
         // Get a pointer to the trait object; we mostly care about the vtable here. We'll re-grab
         // the component data pointer when we need it using the wrapper function.
         let inner_entity = self.entity.id();
-        let lookup: Box<ComponentLookupFunc> = Box::new(move |world: &mut World| {
+        let lookup: Arc<ComponentLookupFunc> = Arc::new(move |world: &mut World| {
             let ptr = world.get::<T>(inner_entity).unwrap();
             let cto: &(dyn ScriptComponent + 'static) = ptr;
             cto
