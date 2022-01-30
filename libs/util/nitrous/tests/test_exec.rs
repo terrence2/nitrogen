@@ -15,8 +15,8 @@
 use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource};
 use nitrous::{
-    inject_nitrous, method, ExecutionContext, LocalNamespace, NitrousExecutor, NitrousResource,
-    NitrousScript, ScriptResource, Value, WorldIndex, YieldState,
+    inject_nitrous_resource, method, ExecutionContext, LocalNamespace, NitrousExecutor,
+    NitrousResource, NitrousScript, ScriptResource, Value, WorldIndex, YieldState,
 };
 
 struct Test {
@@ -82,7 +82,7 @@ struct TestResource {
     count: i64,
 }
 
-#[inject_nitrous]
+#[inject_nitrous_resource]
 impl TestResource {
     #[method]
     fn increment(&mut self) {
@@ -108,7 +108,7 @@ struct MyPosition {
     x: i64,
 }
 
-#[inject_nitrous]
+#[inject_nitrous_resource]
 impl MyPosition {
     #[method]
     fn move_right(&mut self) {

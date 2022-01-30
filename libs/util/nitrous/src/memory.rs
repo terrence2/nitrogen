@@ -74,9 +74,9 @@ impl ResourceTraitObject {
 /// second macro will use #[method] tags to populate lookups for the various operations.
 pub trait ScriptComponent: Send + Sync + 'static {
     fn component_name(&self) -> &'static str;
-    fn call_method(&mut self, name: &str, args: &[Value]) -> Result<Value>;
-    fn put(&mut self, name: &str, value: Value) -> Result<()>;
-    fn get(&self, name: &str) -> Result<Value>;
+    fn call_method(&mut self, entity: Entity, name: &str, args: &[Value]) -> Result<Value>;
+    fn put(&mut self, entity: Entity, name: &str, value: Value) -> Result<()>;
+    fn get(&self, entity: Entity, name: &str) -> Result<Value>;
     fn names(&self) -> Vec<&str>;
 }
 
@@ -173,7 +173,6 @@ impl WorldIndex {
 
     /// Look up a named entity in the index.
     pub fn lookup_entity(&self, name: &str) -> Option<Value> {
-        println!("LOOKUP ENT {} in {:#?}", name, self.named_entities.keys());
         self.named_entities
             .get(name)
             .map(|entity| Value::new_entity(*entity))
@@ -187,7 +186,7 @@ impl WorldIndex {
                 comps
                     .components
                     .get(name)
-                    .map(|lookup| Value::new_component(lookup.to_owned()))
+                    .map(|lookup| Value::new_component(*entity, lookup.to_owned()))
             })
             .flatten()
     }

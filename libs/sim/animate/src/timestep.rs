@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
 use bevy_ecs::prelude::*;
-use nitrous_injector::{inject_nitrous, NitrousResource};
+use nitrous_injector::{inject_nitrous_resource, NitrousResource};
 use runtime::{Extension, Runtime, SimStage};
 use std::time::{Duration, Instant};
 
@@ -34,7 +34,7 @@ impl Extension for TimeStep {
     }
 }
 
-#[inject_nitrous]
+#[inject_nitrous_resource]
 impl TimeStep {
     pub fn new_60fps() -> Self {
         Self {

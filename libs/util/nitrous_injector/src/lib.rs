@@ -13,10 +13,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 mod component;
-mod injector;
+mod component_injector;
+mod injector_common;
 mod resource;
+mod resource_injector;
 
-use crate::injector::make_augment_method;
+use crate::injector_common::make_augment_method;
 
 use proc_macro::TokenStream;
 use syn::{parse2, ItemFn};
@@ -47,18 +49,33 @@ pub fn derive_nitrous_component(input: TokenStream) -> TokenStream {
     rust
 }
 
-/// Add to the top of an impl block to collect all tagged methods and build
+/// Add to the top of a Resource impl block to collect all tagged methods and build
 /// call and attributes for Nitrous. Note that this is not the external trait,
-/// which is built from #[derive(Nitrous___)] above the struct.
+/// which is built from #[derive(NitrousResource)] above the struct.
 #[proc_macro_attribute]
-pub fn inject_nitrous(
+pub fn inject_nitrous_resource(
     args: proc_macro::TokenStream,
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
-    let ast = injector::parse(args, item);
-    let model = injector::analyze(ast);
-    let ir = injector::lower(model);
-    let rust = injector::codegen(ir);
+    let ast = resource_injector::parse(args, item);
+    let model = resource_injector::analyze(ast);
+    let ir = resource_injector::lower(model);
+    let rust = resource_injector::codegen(ir);
+    rust
+}
+
+/// Add to the top of a Component impl block to collect all tagged methods and build
+/// call and attributes for Nitrous. Note that this is not the external trait,
+/// which is built from #[derive(NitrousComponent)] above the struct.
+#[proc_macro_attribute]
+pub fn inject_nitrous_component(
+    args: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let ast = component_injector::parse(args, item);
+    let model = component_injector::analyze(ast);
+    let ir = component_injector::lower(model);
+    let rust = component_injector::codegen(ir);
     rust
 }
 

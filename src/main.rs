@@ -28,7 +28,7 @@ use gpu::{DetailLevelOpts, Gpu};
 use input::{InputFocus, InputSystem};
 use measure::WorldSpaceFrame;
 use nitrous::Value;
-use nitrous_injector::{inject_nitrous, method, NitrousResource};
+use nitrous_injector::{inject_nitrous_resource, method, NitrousResource};
 use orrery::Orrery;
 use parking_lot::RwLock;
 use platform_dirs::AppDirs;
@@ -99,7 +99,7 @@ impl Extension for System {
     }
 }
 
-#[inject_nitrous]
+#[inject_nitrous_resource]
 impl System {
     pub fn new(widgets: &WidgetBuffer<SimState>) -> Result<Self> {
         let visible_widgets = Self::build_gui(widgets)?;

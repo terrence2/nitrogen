@@ -142,7 +142,7 @@ impl Value {
         )
     }
 
-    pub fn make_component_method<T>(name: &str) -> Self
+    pub fn make_component_method<T>(entity: Entity, name: &str) -> Self
     where
         T: Component + ScriptComponent + 'static,
     {
@@ -152,7 +152,8 @@ impl Value {
                 let cto: &mut (dyn ScriptComponent + 'static) = ptr;
                 cto
             });
-        Self::ComponentMethod(0, lookup, name.to_owned())
+        unimplemented!()
+        // Self::ComponentMethod(0, lookup, name.to_owned())
     }
 
     pub fn to_future(&self) -> Result<Arc<RwLock<FutureValue>>> {
@@ -196,7 +197,7 @@ impl Value {
                 resource.call_method(method_name, args)?
             }
             Value::ComponentMethod(entity, lookup, method_name) => {
-                lookup.borrow_mut()(*entity, world).call_method(method_name, args)?
+                lookup.borrow_mut()(*entity, world).call_method(*entity, method_name, args)?
             }
             _ => {
                 error!("attempting to call non-method value: {}", self);

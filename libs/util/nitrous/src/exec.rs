@@ -76,7 +76,6 @@ impl<'a> NitrousExecutor<'a> {
     pub fn run_until_yield(&mut self) -> Result<YieldState> {
         for pc in self.state.counter..self.state.script.code().len() {
             let instr = self.state.script.code()[pc].to_owned();
-            println!("AT: {:?}", instr);
             match instr {
                 Instr::Push(value) => self.state.stack.push(value.to_owned()),
                 Instr::LoadLocalOrResource(atom) => {
@@ -136,13 +135,6 @@ impl<'a> NitrousExecutor<'a> {
                         args.push(self.pop("arg")?);
                     }
                     base.call_method(&args, self.world)?;
-                    // match base {
-                    //     Value::ResourceMethod(mut resource, method_name) => {
-                    //         let result = resource.call_method(&method_name, &args)?;
-                    //         self.push(result);
-                    //     }
-                    //     _ => bail!("call must be on a method value"),
-                    // }
                 }
                 Instr::Attr(atom) => {
                     let base = self.pop("attr base")?;
@@ -154,7 +146,10 @@ impl<'a> NitrousExecutor<'a> {
                 }
             }
         }
-        println!("STACK AT EXIT: {:#?}", self.state.stack);
-        Ok(YieldState::Finished(self.pop("return value")?))
+        Ok(YieldState::Finished(if self.state.stack.is_empty() {
+            Value::True()
+        } else {
+            self.pop("return value")?
+        }))
     }
 }

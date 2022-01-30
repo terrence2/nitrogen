@@ -23,7 +23,7 @@ use anyhow::{anyhow, Result};
 use gpu::Gpu;
 use input::InputEvent;
 use nitrous::Value;
-use nitrous_injector::{inject_nitrous, method, NitrousResource};
+use nitrous_injector::{inject_nitrous_resource, method, NitrousResource};
 use parking_lot::RwLock;
 use runtime::ScriptHerder;
 use std::{collections::HashMap, sync::Arc, time::Instant};
@@ -91,7 +91,7 @@ pub struct FloatBox {
     extent: Extent<RelSize>,
 }
 
-#[inject_nitrous]
+#[inject_nitrous_resource]
 impl FloatBox {
     pub fn new() -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(Self {

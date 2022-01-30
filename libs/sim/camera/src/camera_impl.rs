@@ -21,7 +21,7 @@ use geodesy::{Cartesian, GeoCenter};
 use geometry::Plane;
 use measure::WorldSpaceFrame;
 use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, UnitQuaternion, Vector3};
-use nitrous::{inject_nitrous, method, NitrousComponent, Value};
+use nitrous::{inject_nitrous_component, method, NitrousComponent, Value};
 use parking_lot::{RwLock, RwLockReadGuard};
 use runtime::{Extension, Runtime, SimStage};
 use std::sync::Arc;
@@ -33,7 +33,7 @@ pub struct CameraComponent {
     inner: Arc<RwLock<Camera>>,
 }
 
-#[inject_nitrous]
+#[inject_nitrous_component]
 impl CameraComponent {
     pub fn new(camera: Arc<RwLock<Camera>>) -> Self {
         Self { inner: camera }

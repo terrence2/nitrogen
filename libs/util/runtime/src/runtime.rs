@@ -86,12 +86,12 @@ impl<'w> NamedEntityMut<'w> {
 
         // Get a pointer to the trait object; we mostly care about the vtable here. We'll re-grab
         // the component data pointer when we need it using the wrapper function.
-        let inner_entity = self.entity.id();
-        let lookup: Arc<ComponentLookupFunc> = Arc::new(move |world: &mut World| {
-            let ptr = world.get_mut::<T>(inner_entity).unwrap().into_inner();
-            let cto: &mut (dyn ScriptComponent + 'static) = ptr;
-            cto
-        });
+        let lookup: Arc<ComponentLookupFunc> =
+            Arc::new(move |entity: Entity, world: &mut World| {
+                let ptr = world.get_mut::<T>(entity).unwrap().into_inner();
+                let cto: &mut (dyn ScriptComponent + 'static) = ptr;
+                cto
+            });
 
         // Index the component in the script engine.
         // Safety: this is safe because you cannot get to an RtEntity from just the world, so we

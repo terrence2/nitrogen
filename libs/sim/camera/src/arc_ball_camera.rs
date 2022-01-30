@@ -18,7 +18,7 @@ use bevy_ecs::prelude::*;
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
 use measure::WorldSpaceFrame;
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
-use nitrous::{inject_nitrous, method, NitrousComponent, Value};
+use nitrous::{inject_nitrous_component, method, NitrousComponent, Value};
 use parking_lot::RwLock;
 use runtime::{Extension, Runtime, ScriptHerder, SimStage};
 use std::{f64::consts::PI, sync::Arc};
@@ -87,7 +87,7 @@ pub struct ArcBallController {
     eye: Graticule<Target>,
 }
 
-#[inject_nitrous]
+#[inject_nitrous_component]
 impl ArcBallController {
     pub fn new() -> Self {
         Self {

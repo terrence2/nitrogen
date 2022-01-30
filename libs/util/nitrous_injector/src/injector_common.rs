@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
-use quote::quote;
+use quote::{quote, ToTokens};
 use std::borrow::Borrow;
 use syn::{
     parse2,
@@ -23,41 +23,44 @@ use syn::{
     ReturnType, Type, TypePath,
 };
 
+pub(crate) fn make_augment_method(item: ItemFn) -> TokenStream2 {
+    quote! {
+        #[allow(clippy::unnecessary_wraps)]
+        #item
+    }
+}
+
 pub(crate) type Ast = ItemImpl;
 
-pub(crate) fn parse(_args: TokenStream, item: TokenStream) -> Ast {
-    parse2(TokenStream2::from(item)).expect("parse result")
-}
-
 pub(crate) struct InjectModel {
-    item: ItemImpl,
-    methods: Vec<(Ident, Vec<ArgDef>, RetType)>,
-    _getters: Vec<Ident>,
-    _setters: Vec<Ident>,
+    pub(crate) item: ItemImpl,
+    pub(crate) methods: Vec<(Ident, Vec<ArgDef>, RetType)>,
+    pub(crate) _getters: Vec<Ident>,
+    pub(crate) _setters: Vec<Ident>,
 }
 
-pub(crate) fn analyze(ast: Ast) -> InjectModel {
-    let mut visitor = CollectorVisitor::new();
-    visitor.visit_item_impl(&ast);
-    InjectModel {
-        item: ast,
-        methods: visitor.methods,
-        _getters: visitor.getters,
-        _setters: visitor.setters,
+impl InjectModel {
+    pub fn new(ast: Ast, visitor: CollectorVisitor) -> Self {
+        Self {
+            item: ast,
+            methods: visitor.methods,
+            _getters: visitor.getters,
+            _setters: visitor.setters,
+        }
     }
 }
 
 pub(crate) struct Ir {
-    item: ItemImpl,
-    method_arms: Vec<Arm>,
-    get_arms: Vec<Arm>,
-    put_arms: Vec<Arm>,
-    names: Vec<String>,
-    help_items: Vec<String>,
+    pub(crate) item: ItemImpl,
+    pub(crate) method_arms: Vec<Arm>,
+    pub(crate) get_arms: Vec<Arm>,
+    pub(crate) put_arms: Vec<Arm>,
+    pub(crate) names: Vec<String>,
+    pub(crate) help_items: Vec<String>,
 }
 
 impl Ir {
-    fn new(item: ItemImpl) -> Self {
+    pub(crate) fn new(item: ItemImpl) -> Self {
         Self {
             item,
             method_arms: Vec::new(),
@@ -69,15 +72,14 @@ impl Ir {
     }
 }
 
-pub(crate) fn lower(model: InjectModel) -> Ir {
-    let InjectModel {
-        item,
-        methods,
-        // FIXME: generate getter and setter methods
-        ..
-    } = model;
-    let mut ir = Ir::new(item);
-    lower_help(&mut ir);
+pub(crate) fn lower_methods<F>(
+    methods: Vec<(Ident, Vec<ArgDef>, RetType)>,
+    ir: &mut Ir,
+    make_get_arm: F,
+) where
+    F: Fn(&str, &str) -> Arm,
+{
+    let type_name = ir.item.self_ty.clone().into_token_stream().to_string();
     for (ident, args, ret) in methods {
         let name = format!("{}", ident);
         ir.names.push(name.clone());
@@ -89,9 +91,7 @@ pub(crate) fn lower(model: InjectModel) -> Ir {
                 .collect::<Vec<String>>()
                 .join(", ")
         ));
-        // ir.get_arms.push(
-        //     parse2(quote! { #name => { Ok(::nitrous::Value::make_method(self, #name)) } }).unwrap(),
-        // );
+        ir.get_arms.push(make_get_arm(&type_name, &name));
         let arg_exprs = args
             .iter()
             .enumerate()
@@ -100,17 +100,16 @@ pub(crate) fn lower(model: InjectModel) -> Ir {
         ir.method_arms
             .push(lower_method_call(&name, ident, &arg_exprs, ret));
     }
-    ir
 }
 
-fn lower_help(ir: &mut Ir) {
+pub(crate) fn lower_help<F>(ir: &mut Ir, make_get_arm: F)
+where
+    F: Fn(&str, &str) -> Arm,
+{
+    let type_name = ir.item.self_ty.clone().into_token_stream().to_string();
     ir.method_arms
         .push(parse2(quote! { "help" => { self.__show_help__() } }).unwrap());
-
-    // ir.get_arms.push(
-    //     parse2(quote! { "help" => { Ok(::nitrous::Value::make_method(self, "help")) } }).unwrap(),
-    // );
-
+    ir.get_arms.push(make_get_arm(&type_name, "help"));
     ir.help_items.push("help()".to_owned());
 }
 
@@ -208,210 +207,20 @@ fn lower_method_call(name: &str, item: Ident, arg_exprs: &[Expr], ret: RetType) 
     }).unwrap()
 }
 
-pub(crate) fn codegen(ir: Ir) -> TokenStream {
-    let Ir {
-        item,
-        method_arms,
-        get_arms,
-        put_arms,
-        names,
-        help_items,
-    } = ir;
-    let ty = &item.self_ty;
-    let (impl_generics, _ty_generics, where_clause) = item.generics.split_for_impl();
-    let ts2 = quote! {
-        impl #impl_generics #ty #where_clause {
-            fn __call_method_inner__(&mut self, name: &str, args: &[::nitrous::Value]) -> ::anyhow::Result<::nitrous::Value> {
-                match name {
-                    #(#method_arms)*
-                    _ => {
-                        log::warn!("Unknown call_method '{}' passed to {}", name, stringify!(#ty));
-                        ::anyhow::bail!("Unknown call_method '{}' passed to {}", name, stringify!(#ty))
-                    }
-                }
-            }
-
-            fn __get_inner__(&self, name: &str) -> ::anyhow::Result<::nitrous::Value> {
-                match name {
-                    #(#get_arms)*
-                    _ => {
-                        log::warn!("Unknown get '{}' passed to {}", name, stringify!(#ty));
-                        ::anyhow::bail!("Unknown get '{}' passed to {}", name, stringify!(#ty));
-                    }
-                }
-            }
-
-            fn __put_inner__(&mut self, name: &str, value: ::nitrous::Value) -> ::anyhow::Result<()> {
-                match name {
-                    #(#put_arms)*
-                    _ => {
-                        log::warn!("Unknown put '{}' passed to {}", name, stringify!(#ty));
-                        ::anyhow::bail!("Unknown put '{}' passed to {}", name, stringify!(#ty));
-                    }
-                }
-            }
-
-            fn __names_inner__(&self) -> Vec<&str> {
-                vec![#(#names),*]
-            }
-
-            fn __show_help__(&self) -> ::anyhow::Result<::nitrous::Value> {
-                let items = vec![#(#help_items),*];
-                let out = items.join("\n");
-                Ok(::nitrous::Value::String(out))
-            }
-        }
-
-        #item
-    };
-    TokenStream::from(ts2)
-}
-
-pub(crate) fn make_augment_method(item: ItemFn) -> TokenStream2 {
-    quote! {
-        #[allow(clippy::unnecessary_wraps)]
-        #item
-    }
-}
-
 #[derive(Debug)]
-enum Scalar {
-    Boolean,
-    Integer,
-    Float,
-    String,
-    StrRef,
-    GraticuleSurface,
-    GraticuleTarget,
-    Value,
-    Unit,
+pub(crate) struct ArgDef {
+    pub(crate) name: Ident,
+    pub(crate) ty: Scalar,
 }
 
-impl Scalar {
-    fn from_type(ty: &Type) -> Self {
-        if let Type::Path(p) = ty {
-            Self::from_type_path(p)
-        } else if let Type::Reference(r) = ty {
-            match Self::from_type(&r.elem) {
-                Scalar::StrRef => Scalar::StrRef,
-                v => panic!(
-                    "nitrous Scalar only support references to str, not: {:#?}",
-                    v
-                ),
-            }
-        } else if let Type::Tuple(tt) = ty {
-            if tt.elems.is_empty() {
-                Scalar::Unit
-            } else {
-                panic!("nitrous Scalar only supports the unit tuple type")
-            }
-        } else {
-            panic!(
-                "nitrous Scalar only supports path and ref types, not: {:#?}",
-                ty
-            );
-        }
-    }
-
-    fn type_path_name(p: &TypePath) -> String {
-        assert_eq!(
-            p.path.segments.len(),
-            1,
-            "nitrous Scalar paths must have length 1 (e.g. builtins)"
-        );
-        p.path.segments.first().unwrap().ident.to_string()
-    }
-
-    fn from_type_path(p: &TypePath) -> Self {
-        match Self::type_path_name(p).as_str() {
-            "bool" => Scalar::Boolean,
-            "i64" => Scalar::Integer,
-            "f64" => Scalar::Float,
-            "str" => Scalar::StrRef,
-            "String" => Scalar::String,
-            "Value" => Scalar::Value,
-            "Graticule" => {
-                if let PathArguments::AngleBracketed(args) =
-                    &p.path.segments.first().unwrap().arguments
-                {
-                    let grat_arg = args.args.first().unwrap();
-                    if let GenericArgument::Type(ty_inner) = grat_arg {
-                        if let Type::Path(p_inner) = ty_inner {
-                            match Self::type_path_name(p_inner).as_str() {
-                                "GeoSurface" => Scalar::GraticuleSurface,
-                                "Target" => Scalar::GraticuleTarget,
-                                _ => panic!("nitrous scale Graticule does not know {:#?}", p_inner),
-                            }
-                        } else {
-                            panic!("nitrous scalar Graticule expected one type path argument")
-                        }
-                    } else {
-                        panic!("Result parameter must be a type");
-                    }
-                } else {
-                    panic!("nitrous scalar Graticule expected one type argument")
-                }
-            }
-            _ => panic!(
-                "nitrous Scalar only supports basic types, not: {:#?}",
-                p.path.segments.first().unwrap()
-            ),
-        }
-    }
-}
-
-#[derive(Debug)]
-enum RetType {
-    Nothing,
-    Raw(Scalar),
-    ResultRaw(Scalar),
-}
-
-impl RetType {
-    fn from_return_type(ret_ty: &ReturnType) -> Self {
-        match ret_ty {
-            ReturnType::Default => RetType::Nothing,
-            ReturnType::Type(_, ref ty) => {
-                if let Type::Path(p) = ty.borrow() {
-                    match Scalar::type_path_name(p).as_str() {
-                        "Result" => {
-                            if let PathArguments::AngleBracketed(ab_generic_args) =
-                                &p.path.segments.first().unwrap().arguments
-                            {
-                                let fallible_arg = ab_generic_args.args.first().unwrap();
-                                if let GenericArgument::Type(ty_inner) = fallible_arg {
-                                    RetType::ResultRaw(Scalar::from_type(ty_inner))
-                                } else {
-                                    panic!("Result parameter must be a type");
-                                }
-                            } else {
-                                panic!("Result must have an angle bracketed argument");
-                            }
-                        }
-                        _ => Self::Raw(Scalar::from_type(ty.borrow())),
-                    }
-                } else {
-                    panic!("nitrous RetType only supports Result, None, Value, and basic types")
-                }
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
-struct ArgDef {
-    name: Ident,
-    ty: Scalar,
-}
-
-struct CollectorVisitor {
-    methods: Vec<(Ident, Vec<ArgDef>, RetType)>,
-    getters: Vec<Ident>,
-    setters: Vec<Ident>,
+pub(crate) struct CollectorVisitor {
+    pub(crate) methods: Vec<(Ident, Vec<ArgDef>, RetType)>,
+    pub(crate) getters: Vec<Ident>,
+    pub(crate) setters: Vec<Ident>,
 }
 
 impl CollectorVisitor {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             methods: Vec::new(),
             getters: Vec::new(),
@@ -455,5 +264,129 @@ impl<'ast> Visit<'ast> for CollectorVisitor {
             }
         }
         visit::visit_impl_item_method(self, node);
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum Scalar {
+    Boolean,
+    Integer,
+    Float,
+    String,
+    StrRef,
+    GraticuleSurface,
+    GraticuleTarget,
+    Value,
+    Unit,
+}
+
+impl Scalar {
+    pub(crate) fn from_type(ty: &Type) -> Self {
+        if let Type::Path(p) = ty {
+            Self::from_type_path(p)
+        } else if let Type::Reference(r) = ty {
+            match Self::from_type(&r.elem) {
+                Scalar::StrRef => Scalar::StrRef,
+                v => panic!(
+                    "nitrous Scalar only support references to str, not: {:#?}",
+                    v
+                ),
+            }
+        } else if let Type::Tuple(tt) = ty {
+            if tt.elems.is_empty() {
+                Scalar::Unit
+            } else {
+                panic!("nitrous Scalar only supports the unit tuple type")
+            }
+        } else {
+            panic!(
+                "nitrous Scalar only supports path and ref types, not: {:#?}",
+                ty
+            );
+        }
+    }
+
+    pub(crate) fn type_path_name(p: &TypePath) -> String {
+        assert_eq!(
+            p.path.segments.len(),
+            1,
+            "nitrous Scalar paths must have length 1 (e.g. builtins)"
+        );
+        p.path.segments.first().unwrap().ident.to_string()
+    }
+
+    pub(crate) fn from_type_path(p: &TypePath) -> Self {
+        match Self::type_path_name(p).as_str() {
+            "bool" => Scalar::Boolean,
+            "i64" => Scalar::Integer,
+            "f64" => Scalar::Float,
+            "str" => Scalar::StrRef,
+            "String" => Scalar::String,
+            "Value" => Scalar::Value,
+            "Graticule" => {
+                if let PathArguments::AngleBracketed(args) =
+                    &p.path.segments.first().unwrap().arguments
+                {
+                    let grat_arg = args.args.first().unwrap();
+                    if let GenericArgument::Type(ty_inner) = grat_arg {
+                        if let Type::Path(p_inner) = ty_inner {
+                            match Self::type_path_name(p_inner).as_str() {
+                                "GeoSurface" => Scalar::GraticuleSurface,
+                                "Target" => Scalar::GraticuleTarget,
+                                _ => panic!("nitrous scale Graticule does not know {:#?}", p_inner),
+                            }
+                        } else {
+                            panic!("nitrous scalar Graticule expected one type path argument")
+                        }
+                    } else {
+                        panic!("Result parameter must be a type");
+                    }
+                } else {
+                    panic!("nitrous scalar Graticule expected one type argument")
+                }
+            }
+            _ => panic!(
+                "nitrous Scalar only supports basic types, not: {:#?}",
+                p.path.segments.first().unwrap()
+            ),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum RetType {
+    Nothing,
+    Raw(Scalar),
+    ResultRaw(Scalar),
+}
+
+impl RetType {
+    pub(crate) fn from_return_type(ret_ty: &ReturnType) -> Self {
+        match ret_ty {
+            ReturnType::Default => RetType::Nothing,
+            ReturnType::Type(_, ref ty) => {
+                if let Type::Path(p) = ty.borrow() {
+                    match Scalar::type_path_name(p).as_str() {
+                        "Result" => {
+                            if let PathArguments::AngleBracketed(ab_generic_args) =
+                                &p.path.segments.first().unwrap().arguments
+                            {
+                                let fallible_arg = ab_generic_args.args.first().unwrap();
+                                if let GenericArgument::Type(ty_inner) = fallible_arg {
+                                    RetType::ResultRaw(Scalar::from_type(ty_inner))
+                                } else {
+                                    panic!("Result parameter must be a type");
+                                }
+                            } else {
+                                panic!("Result must have an angle bracketed argument");
+                            }
+                        }
+                        _ => Self::Raw(Scalar::from_type(ty.borrow())),
+                    }
+                } else {
+                    panic!("nitrous RetType only supports Result, None, Value, and basic types")
+                }
+            }
+        }
     }
 }

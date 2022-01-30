@@ -47,7 +47,7 @@ use gpu::{Gpu, UploadTracker};
 use input::{ElementState, InputEvent, InputEventVec, InputFocus, ModifiersState, VirtualKeyCode};
 use log::trace;
 use nitrous::Value;
-use nitrous_injector::{inject_nitrous, method, NitrousResource};
+use nitrous_injector::{inject_nitrous_resource, method, NitrousResource};
 use parking_lot::RwLock;
 use platform_dirs::AppDirs;
 use runtime::{Extension, Runtime, SimStage};
@@ -131,7 +131,7 @@ where
     }
 }
 
-#[inject_nitrous]
+#[inject_nitrous_resource]
 impl<T> WidgetBuffer<T>
 where
     T: InputFocus,

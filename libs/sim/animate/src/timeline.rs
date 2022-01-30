@@ -20,8 +20,7 @@ use futures::future::{ready, FutureExt};
 use geodesy::Graticule;
 use log::error;
 use lyon_geom::{cubic_bezier::CubicBezierSegment, Point};
-use nitrous::Value;
-use nitrous_injector::{inject_nitrous, method, NitrousResource};
+use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
 use parking_lot::RwLock;
 use runtime::{Extension, Runtime, SimStage};
 use std::{
@@ -181,7 +180,7 @@ impl Extension for Timeline {
     }
 }
 
-#[inject_nitrous]
+#[inject_nitrous_resource]
 impl Timeline {
     pub const LINEAR_BEZIER: CubicBezierCurve = CubicBezierCurve::new((0., 0.), (1., 1.));
     pub const EASE_BEZIER: CubicBezierCurve = CubicBezierCurve::new((0.25, 0.1), (0.25, 1.));

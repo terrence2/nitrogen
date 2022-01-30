@@ -29,7 +29,8 @@ pub use crate::{
     value::Value,
 };
 pub use nitrous_injector::{
-    getter, inject_nitrous, method, setter, NitrousComponent, NitrousResource,
+    getter, inject_nitrous_component, inject_nitrous_resource, method, setter, NitrousComponent,
+    NitrousResource,
 };
 
 /*
