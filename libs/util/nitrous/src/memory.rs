@@ -91,7 +91,7 @@ pub(crate) struct ComponentTraitObject {
 }
 
 pub type ComponentLookupFunc =
-    dyn Fn(&mut World) -> &(dyn ScriptComponent + 'static) + Send + Sync + 'static;
+    dyn Fn(Entity, &mut World) -> &mut (dyn ScriptComponent + 'static) + Send + Sync + 'static;
 
 #[derive(Default)]
 struct EntityMetadata {

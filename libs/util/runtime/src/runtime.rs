@@ -88,8 +88,8 @@ impl<'w> NamedEntityMut<'w> {
         // the component data pointer when we need it using the wrapper function.
         let inner_entity = self.entity.id();
         let lookup: Arc<ComponentLookupFunc> = Arc::new(move |world: &mut World| {
-            let ptr = world.get::<T>(inner_entity).unwrap();
-            let cto: &(dyn ScriptComponent + 'static) = ptr;
+            let ptr = world.get_mut::<T>(inner_entity).unwrap().into_inner();
+            let cto: &mut (dyn ScriptComponent + 'static) = ptr;
             cto
         });
 

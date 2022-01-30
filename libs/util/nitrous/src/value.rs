@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     memory::{ComponentLookupFunc, ResourceTraitObject, WorldIndex},
-    ScriptResource,
+    ScriptComponent, ScriptResource,
 };
 use anyhow::{anyhow, bail, Result};
 use bevy_ecs::prelude::*;
@@ -52,8 +52,8 @@ pub enum Value {
     Resource(OpaqueResourceRef),
     ResourceMethod(OpaqueResourceRef, String), // TODO: atoms?
     Entity(Entity),
-    Component(Arc<ComponentLookupFunc>),
-    ComponentMethod(Arc<ComponentLookupFunc>, String), // TODO: atoms?
+    Component(Entity, Arc<ComponentLookupFunc>),
+    ComponentMethod(Entity, Arc<ComponentLookupFunc>, String), // TODO: atoms?
     Future(Arc<RwLock<FutureValue>>),
 }
 
@@ -85,8 +85,8 @@ impl Value {
         Self::Entity(entity)
     }
 
-    pub(crate) fn new_component(lookup: Arc<ComponentLookupFunc>) -> Self {
-        Value::Component(lookup)
+    pub(crate) fn new_component(entity: Entity, lookup: Arc<ComponentLookupFunc>) -> Self {
+        Value::Component(entity, lookup)
     }
 
     pub fn to_bool(&self) -> Result<bool> {
@@ -135,11 +135,24 @@ impl Value {
         bail!("not a string value: {}", self)
     }
 
-    pub fn make_method(resource: &dyn ScriptResource, name: &str) -> Self {
+    pub fn make_resource_method(resource: &dyn ScriptResource, name: &str) -> Self {
         Self::ResourceMethod(
             OpaqueResourceRef(ResourceTraitObject::from_resource(resource)),
             name.to_owned(),
         )
+    }
+
+    pub fn make_component_method<T>(name: &str) -> Self
+    where
+        T: Component + ScriptComponent + 'static,
+    {
+        let lookup: Arc<ComponentLookupFunc> =
+            Arc::new(move |entity: Entity, world: &mut World| {
+                let ptr = world.get_mut::<T>(entity).unwrap().into_inner();
+                let cto: &mut (dyn ScriptComponent + 'static) = ptr;
+                cto
+            });
+        Self::ComponentMethod(0, lookup, name.to_owned())
     }
 
     pub fn to_future(&self) -> Result<Arc<RwLock<FutureValue>>> {
@@ -167,7 +180,9 @@ impl Value {
             Value::Entity(entity) => index
                 .lookup_component(entity, name)
                 .ok_or_else(|| anyhow!("no such component {} on entity {:?}", name, entity))?,
-            Value::Component(lookup) => Value::ComponentMethod(lookup.to_owned(), name.to_owned()),
+            Value::Component(entity, lookup) => {
+                Value::ComponentMethod(*entity, lookup.to_owned(), name.to_owned())
+            }
             _ => bail!(
                 "attribute base must be a resource, entity, or component, not {:?}",
                 self
@@ -175,17 +190,13 @@ impl Value {
         })
     }
 
-    pub fn call_resource_method(&mut self, args: &[Value], world: &mut World) -> Result<Value> {
+    pub fn call_method(&mut self, args: &[Value], world: &mut World) -> Result<Value> {
         Ok(match self {
             Value::ResourceMethod(resource, method_name) => {
                 resource.call_method(method_name, args)?
             }
-            Value::ComponentMethod(lookup, method_name) => {
-                let foo = lookup.borrow_mut();
-                let mut bar = foo(world);
-                let rv = bar.call_method(method_name, args)?;
-                rv
-                // lookup.call_mut((world,)).call_method(method_name, args)?
+            Value::ComponentMethod(entity, lookup, method_name) => {
+                lookup.borrow_mut()(*entity, world).call_method(method_name, args)?
             }
             _ => {
                 error!("attempting to call non-method value: {}", self);
@@ -232,8 +243,8 @@ impl fmt::Display for Value {
                 write!(f, "{}.{}", v.0.to_resource().resource_type_name(), name)
             }
             Self::Entity(ent) => write!(f, "@{:?}", ent),
-            Self::Component(_) => write!(f, "@<ent>.<lookup>"),
-            Self::ComponentMethod(_, name) => write!(f, "@<ent>.<lookup>.{}", name),
+            Self::Component(ent, _) => write!(f, "@[{:?}].<lookup>", ent),
+            Self::ComponentMethod(ent, _, name) => write!(f, "@[{:?}].<lookup>.{}", ent, name),
             Self::Future(_) => write!(f, "Future"),
         }
     }
@@ -270,8 +281,8 @@ impl PartialEq for Value {
                 Self::Entity(b) => a == b,
                 _ => false,
             },
-            Self::Component(_) => false,
-            Self::ComponentMethod(_, _) => false,
+            Self::Component(_, _) => false,
+            Self::ComponentMethod(_, _, _) => false,
             Self::ResourceMethod(_, _) => false,
             Self::Future(_) => false,
         }

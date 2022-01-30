@@ -17,7 +17,7 @@ use animate::{TimeStep, Timeline};
 use anyhow::{anyhow, bail, Result};
 use atmosphere::AtmosphereBuffer;
 use bevy_ecs::prelude::*;
-use camera::{ArcBallCamera, ArcBallController, Camera, CameraComponent};
+use camera::{ArcBallController, ArcBallSystem, Camera, CameraComponent};
 use catalog::{Catalog, CatalogOpts};
 use chrono::{TimeZone, Utc};
 use composite::CompositeRenderPass;
@@ -181,7 +181,7 @@ impl System {
         &self,
         now: Instant,
         orrery: &Orrery,
-        arcball: &ArcBallCamera,
+        arcball: &ArcBallController,
         camera: &Camera,
     ) -> Result<()> {
         self.visible_widgets
@@ -383,7 +383,8 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .load_extension::<System>()?
         .load_extension::<Orrery>()?
         .load_extension::<Timeline>()?
-        .load_extension::<TimeStep>()?;
+        .load_extension::<TimeStep>()?
+        .load_extension::<ArcBallSystem>()?;
 
     // But we need at least a camera and controller before the sim is ready to run.
     let camera = Camera::install(
@@ -391,11 +392,10 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         runtime.resource::<Window>().render_aspect_ratio(),
         meters!(0.5),
     )?;
-    let arcball = ArcBallCamera::install()?;
     let _player_ent = runtime
         .spawn_named("player")
         .insert(WorldSpaceFrame::default())
-        .insert_scriptable(ArcBallController::new(arcball.clone()))
+        .insert_scriptable(ArcBallController::new())
         .insert_scriptable(CameraComponent::new(camera.clone()))
         .id();
 
@@ -408,9 +408,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     let mut sim_schedule = Schedule::default();
     sim_schedule.add_stage(
         "propagate_changes",
-        SystemStage::single_threaded()
-            .with_system(ArcBallCamera::sys_apply_input)
-            .with_system(CameraComponent::sys_apply_input),
+        SystemStage::single_threaded().with_system(CameraComponent::sys_apply_input),
     );
 
     //////////////////////////////////////////////////////////////////
@@ -615,12 +613,12 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
             surface_texture.present();
         }
 
-        runtime.resource::<System>().track_visible_state(
-            frame_start, // compute frame times from actual elapsed time
-            runtime.resource::<Orrery>(),
-            &arcball.read(),
-            &camera.read(),
-        )?;
+        // runtime.resource::<System>().track_visible_state(
+        //     frame_start, // compute frame times from actual elapsed time
+        //     runtime.resource::<Orrery>(),
+        //     &arcball.read(),
+        //     &camera.read(),
+        // )?;
     }
 
     Ok(())

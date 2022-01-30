@@ -134,7 +134,7 @@ impl ScriptableAnimation {
         })
     }
 
-    pub fn step_time(&mut self, now: &Instant) -> Result<()> {
+    pub fn step_time(&mut self, now: &Instant, world: &mut World) -> Result<()> {
         assert_ne!(self.state, AnimationState::Finished);
         let (current, ended) = if let Some(start_time) = self.start_time {
             let f0 = (*now - start_time).as_secs_f64() / self.duration_f64;
@@ -151,7 +151,7 @@ impl ScriptableAnimation {
             (self.start.clone(), false)
         };
         if let Some(callable) = &mut self.callable {
-            callable.call_resource_method(&[current])?;
+            callable.call_method(&[current], world)?;
         }
         if ended {
             self.state = AnimationState::Finished;
@@ -176,7 +176,7 @@ impl Extension for Timeline {
         runtime.insert_named_resource("timeline", Timeline::default());
         runtime
             .sim_stage_mut(SimStage::TimeStep)
-            .add_system(Self::sys_animate);
+            .add_system(Self::sys_animate.exclusive_system());
         Ok(())
     }
 }
@@ -189,14 +189,17 @@ impl Timeline {
     pub const EASE_OUT_BEZIER: CubicBezierCurve = CubicBezierCurve::new((0., 0.), (0.58, 1.));
     pub const EASE_IN_OUT_BEZIER: CubicBezierCurve = CubicBezierCurve::new((0.42, 0.), (0.58, 1.));
 
-    pub fn sys_animate(step: Res<TimeStep>, mut timeline: ResMut<Timeline>) {
-        timeline.step_time(step.now());
+    pub fn sys_animate(world: &mut World) {
+        let now = *world.get_resource::<TimeStep>().unwrap().now();
+        world.resource_scope(|world, mut timeline: Mut<Timeline>| {
+            timeline.step_time(&now, world);
+        });
     }
 
-    pub fn step_time(&mut self, now: &Instant) {
+    pub fn step_time(&mut self, now: &Instant, world: &mut World) {
         for animation in &mut self.animations {
             // One animation failing should not propagate to others.
-            if let Err(e) = animation.step_time(now) {
+            if let Err(e) = animation.step_time(now, world) {
                 error!("step_time failed with: {}", e);
             }
         }

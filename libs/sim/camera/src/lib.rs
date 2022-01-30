@@ -15,5 +15,5 @@
 mod arc_ball_camera;
 mod camera_impl;
 
-pub use arc_ball_camera::{ArcBallCamera, ArcBallController};
+pub use arc_ball_camera::{ArcBallController, ArcBallSystem};
 pub use camera_impl::{Camera, CameraComponent};

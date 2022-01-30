@@ -129,19 +129,20 @@ impl<'a> NitrousExecutor<'a> {
                     self.push(lhs.impl_subtract(rhs)?);
                 }
                 Instr::Call(arg_cnt) => {
-                    let base = self.pop("call target")?;
+                    let mut base = self.pop("call target")?;
+                    // TODO: use smallvec<4> here
                     let mut args = Vec::with_capacity(arg_cnt as usize);
                     for _ in 0..arg_cnt {
                         args.push(self.pop("arg")?);
                     }
-
-                    match base {
-                        Value::ResourceMethod(mut resource, method_name) => {
-                            let result = resource.call_method(&method_name, &args)?;
-                            self.push(result);
-                        }
-                        _ => bail!("call must be on a method value"),
-                    }
+                    base.call_method(&args, self.world)?;
+                    // match base {
+                    //     Value::ResourceMethod(mut resource, method_name) => {
+                    //         let result = resource.call_method(&method_name, &args)?;
+                    //         self.push(result);
+                    //     }
+                    //     _ => bail!("call must be on a method value"),
+                    // }
                 }
                 Instr::Attr(atom) => {
                     let base = self.pop("attr base")?;
