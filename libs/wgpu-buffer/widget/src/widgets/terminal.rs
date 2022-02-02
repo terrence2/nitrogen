@@ -159,33 +159,30 @@ impl Terminal {
         }
         if let Stmt::Expr(ref mut e) = partial.statements_mut()[0].as_mut() {
             // FIXME: we need access to world for global access to do matching
-            /*
             if let Expr::Term(Term::Symbol(sym)) = e.as_mut() {
                 let sim = herder
-                    .global_names()
+                    .resource_names()
                     .filter(|&s| s.starts_with(sym.as_str()))
-                    .cloned()
-                    .collect::<Vec<&str>>();
+                    .collect::<Vec<&String>>();
                 if sim.len() == 1 {
-                    return Some(sim[0].to_string());
+                    return Some(sim[0].to_owned());
                 }
             } else if let Expr::Attr(mod_name_term, Term::Symbol(sym)) = e.as_mut() {
                 if let Expr::Term(Term::Symbol(mod_name)) = mod_name_term.as_ref() {
-                    if let Some(Value::Module(pin)) = herder.get_global(mod_name) {
-                        let ns = pin.read();
-                        let sim = ns
-                            .names()
-                            .iter()
-                            .filter(|&s| s.starts_with(sym.as_str()))
-                            .cloned()
-                            .collect::<Vec<&str>>();
-                        if sim.len() == 1 {
-                            return Some(format!("{}.{}", mod_name, sim[0]));
+                    if let Some(value) = herder.lookup_resource(mod_name) {
+                        if let Ok(attr_names) = value.attr_names() {
+                            let sim = attr_names
+                                .iter()
+                                .filter(|&s| s.starts_with(sym.as_str()))
+                                .cloned()
+                                .collect::<Vec<&str>>();
+                            if sim.len() == 1 {
+                                return Some(format!("{}.{}", mod_name, sim[0]));
+                            }
                         }
                     }
                 }
             }
-                 */
         }
         None
     }
@@ -235,7 +232,8 @@ impl Terminal {
 
         herder.run(NitrousScript::compile(&command)?);
 
-        // FIXME: make sure we have logging of errors... entity system?
+        // FIXME: make sure we have logging of errors... event system? entity system?
+
         /*
         let output = self.output.clone();
         let mut interpreter = interpreter.to_owned();

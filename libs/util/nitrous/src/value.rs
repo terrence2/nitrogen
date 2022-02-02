@@ -200,6 +200,28 @@ impl Value {
             }
         })
     }
+
+    pub fn attr_names(&self) -> Result<Vec<&str>> {
+        Ok(match self {
+            Value::Resource(resource_ref) => resource_ref.0.to_resource().names(),
+            Value::Entity(entity) => {
+                // TODO: we should be able to list components
+                // index
+                //     .lookup_component(entity, name)
+                //     .ok_or_else(|| anyhow!("no such component {} on entity {:?}", name, entity))?
+                unimplemented!("list components on entity")
+            }
+            Value::Component(entity, lookup) => {
+                // TODO: we should be able to list attrs on a component
+                // lookup(*entity, world).get(*entity, name)?
+                unimplemented!("list attrs on component")
+            }
+            _ => bail!(
+                "attribute base must be a resource, entity, or component, not {:?}",
+                self
+            ),
+        })
+    }
 }
 
 impl From<f64> for Value {

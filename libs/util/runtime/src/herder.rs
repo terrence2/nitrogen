@@ -17,7 +17,7 @@ use bevy_ecs::{prelude::*, system::Resource};
 use log::{error, info, trace};
 use nitrous::{
     ComponentLookupFunc, ExecutionContext, LocalNamespace, NitrousExecutor, NitrousScript,
-    ScriptResource, WorldIndex, YieldState,
+    ScriptResource, Value, WorldIndex, YieldState,
 };
 use std::sync::Arc;
 
@@ -50,6 +50,14 @@ impl ScriptHerder {
     pub fn run_with_locals<N: Into<NitrousScript>>(&mut self, locals: LocalNamespace, script: N) {
         self.gthread
             .push(ExecutionContext::new(locals, script.into()));
+    }
+
+    pub fn resource_names(&self) -> impl Iterator<Item = &String> {
+        self.index.resource_names()
+    }
+
+    pub fn lookup_resource(&self, name: &str) -> Option<Value> {
+        self.index.lookup_resource(name)
     }
 
     #[inline]

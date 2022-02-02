@@ -154,6 +154,10 @@ impl WorldIndex {
             .map(|rto| Value::new_resource(*rto))
     }
 
+    pub fn resource_names(&self) -> impl Iterator<Item = &String> {
+        self.resource_ptrs.keys()
+    }
+
     pub fn upsert_named_component(
         &mut self,
         entity_name: &str,
