@@ -19,7 +19,7 @@ use camera::Camera;
 use core::num::NonZeroU64;
 use gpu::{Gpu, UploadTracker};
 use nalgebra::{convert, Matrix3, Matrix4, Point3, Vector3, Vector4};
-use nitrous_injector::{inject_nitrous_resource, method, NitrousResource};
+use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use orrery::Orrery;
 use runtime::{Extension, FrameStage, Runtime, ScriptHerder};
 use std::{mem, sync::Arc};

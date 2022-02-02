@@ -22,8 +22,7 @@ use crate::{
 use anyhow::{anyhow, Result};
 use gpu::Gpu;
 use input::InputEvent;
-use nitrous::Value;
-use nitrous_injector::{inject_nitrous_resource, method, NitrousResource};
+use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
 use parking_lot::RwLock;
 use runtime::ScriptHerder;
 use std::{collections::HashMap, sync::Arc, time::Instant};

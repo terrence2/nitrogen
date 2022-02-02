@@ -19,7 +19,7 @@ use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::GlobalParametersBuffer;
 use gpu::{DisplayConfig, Gpu};
 use log::trace;
-use nitrous_injector::{inject_nitrous_resource, method, NitrousResource};
+use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use runtime::{Extension, FrameStage, Runtime, ScriptHerder};
 use shader_shared::Group;
 use stars::StarsBuffer;

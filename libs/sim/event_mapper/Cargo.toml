@@ -14,7 +14,6 @@ strsim = "^ 0.8"
 unicase = "^ 2.6"
 input = { path = "../../system/input" }
 nitrous = { path = "../../util/nitrous" }
-nitrous_injector = { path = "../../util/nitrous_injector" }
 runtime = { path = "../../util/runtime" }
 
 [dev-dependencies]

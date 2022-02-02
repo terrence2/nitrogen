@@ -87,7 +87,6 @@ gpu = { path = "libs/system/gpu" }
 input = { path = "libs/system/input" }
 measure = { path = "libs/sim/measure" }
 nitrous = { path = "libs/util/nitrous" }
-nitrous_injector = { path = "libs/util/nitrous_injector" }
 orrery = { path = "libs/sim/orrery" }
 runtime = { path = "libs/util/runtime" }
 stars = { path = "libs/wgpu-buffer/stars" }

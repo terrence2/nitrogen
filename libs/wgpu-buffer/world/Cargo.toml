@@ -16,7 +16,6 @@ fullscreen = { path = "../../wgpu-buffer/fullscreen" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 gpu = { path = "../../system/gpu" }
 nitrous = { path = "../../util/nitrous" }
-nitrous_injector = { path = "../../util/nitrous_injector" }
 runtime = { path = "../../util/runtime" }
 shader_shared = { path = "../../wgpu-buffer/shader_shared" }
 stars = { path = "../../wgpu-buffer/stars" }

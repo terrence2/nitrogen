@@ -18,7 +18,7 @@ use anyhow::{bail, Result};
 use bevy_ecs::prelude::*;
 use input::{SystemEvent, SystemEventVec};
 use log::info;
-use nitrous_injector::{inject_nitrous_resource, method, NitrousResource};
+use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use runtime::{Extension, FrameStage, Runtime};
 use std::{fmt::Debug, str::FromStr, string::ToString};
 use structopt::StructOpt;

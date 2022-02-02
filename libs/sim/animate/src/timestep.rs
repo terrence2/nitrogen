@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
 use bevy_ecs::prelude::*;
-use nitrous_injector::{inject_nitrous_resource, NitrousResource};
+use nitrous::{inject_nitrous_resource, NitrousResource};
 use runtime::{Extension, Runtime, SimStage};
 use std::time::{Duration, Instant};
 

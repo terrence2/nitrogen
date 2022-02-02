@@ -23,8 +23,7 @@ use crate::{
 };
 use anyhow::Result;
 use gpu::Gpu;
-use nitrous::Value;
-use nitrous_injector::{inject_nitrous_resource, method, NitrousResource};
+use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
 use parking_lot::RwLock;
 use std::{sync::Arc, time::Instant};
 use window::{size::Size, Window};

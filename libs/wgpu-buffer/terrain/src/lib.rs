@@ -31,7 +31,7 @@ use catalog::Catalog;
 use geodesy::{GeoCenter, Graticule};
 use global_data::GlobalParametersBuffer;
 use gpu::{CpuDetailLevel, DisplayConfig, Gpu, GpuDetailLevel, UploadTracker};
-use nitrous_injector::{inject_nitrous_resource, method, NitrousResource};
+use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use parking_lot::RwLock;
 use runtime::{Extension, FrameStage, Runtime};
 use shader_shared::Group;

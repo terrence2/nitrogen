@@ -19,8 +19,7 @@ use crate::{
 use anyhow::{bail, Result};
 use bevy_ecs::prelude::*;
 use input::{ElementState, InputEvent, InputEventVec, InputFocus, ModifiersState};
-use nitrous::Value;
-use nitrous_injector::{inject_nitrous_resource, method, NitrousResource};
+use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
 use ordered_float::OrderedFloat;
 use runtime::{Extension, Runtime, ScriptHerder, SimStage};
 use std::{

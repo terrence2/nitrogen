@@ -33,7 +33,7 @@ use anyhow::{anyhow, bail, Result};
 use bevy_ecs::prelude::*;
 use futures::executor::block_on;
 use log::{info, trace};
-use nitrous_injector::{inject_nitrous_resource, method, NitrousResource};
+use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use runtime::{Extension, FrameStage, Runtime};
 use std::{borrow::Cow, fmt::Debug, fs, mem, num::NonZeroU32, path::PathBuf, ptr, sync::Arc};
 use wgpu::util::DeviceExt;

@@ -18,7 +18,7 @@ use bevy_ecs::prelude::*;
 use chrono::{prelude::*, Duration};
 use lazy_static::lazy_static;
 use nalgebra::{Point3, Unit, UnitQuaternion, Vector3, Vector4};
-use nitrous_injector::{inject_nitrous_resource, method, NitrousResource};
+use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use runtime::{Extension, Runtime, ScriptHerder, SimStage};
 use std::f64::consts::PI;
 
