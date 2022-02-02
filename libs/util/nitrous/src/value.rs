@@ -13,7 +13,10 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    memory::{ComponentLookupFunc, ResourceTraitObject, WorldIndex},
+    memory::{
+        make_component_lookup_mut, ComponentLookupFunc, ComponentLookupMutFunc,
+        ResourceTraitObject, WorldIndex,
+    },
     ScriptComponent, ScriptResource,
 };
 use anyhow::{anyhow, bail, Result};
@@ -53,7 +56,7 @@ pub enum Value {
     ResourceMethod(OpaqueResourceRef, String), // TODO: atoms?
     Entity(Entity),
     Component(Entity, Arc<ComponentLookupFunc>),
-    ComponentMethod(Entity, Arc<ComponentLookupFunc>, String), // TODO: atoms?
+    ComponentMethod(Entity, Arc<ComponentLookupMutFunc>, String), // TODO: atoms?
     Future(Arc<RwLock<FutureValue>>),
 }
 
@@ -146,14 +149,8 @@ impl Value {
     where
         T: Component + ScriptComponent + 'static,
     {
-        let lookup: Arc<ComponentLookupFunc> =
-            Arc::new(move |entity: Entity, world: &mut World| {
-                let ptr = world.get_mut::<T>(entity).unwrap().into_inner();
-                let cto: &mut (dyn ScriptComponent + 'static) = ptr;
-                cto
-            });
-        unimplemented!()
-        // Self::ComponentMethod(0, lookup, name.to_owned())
+        let lookup = make_component_lookup_mut::<T>();
+        Self::ComponentMethod(entity, lookup, name.to_owned())
     }
 
     pub fn to_future(&self) -> Result<Arc<RwLock<FutureValue>>> {
@@ -175,15 +172,13 @@ impl Value {
         })
     }
 
-    pub fn attr(&self, name: &str, index: &WorldIndex) -> Result<Value> {
+    pub fn attr(&self, name: &str, index: &WorldIndex, world: &mut World) -> Result<Value> {
         Ok(match self {
             Value::Resource(resource_ref) => resource_ref.0.to_resource().get(name)?,
             Value::Entity(entity) => index
                 .lookup_component(entity, name)
                 .ok_or_else(|| anyhow!("no such component {} on entity {:?}", name, entity))?,
-            Value::Component(entity, lookup) => {
-                Value::ComponentMethod(*entity, lookup.to_owned(), name.to_owned())
-            }
+            Value::Component(entity, lookup) => lookup(*entity, world).get(*entity, name)?,
             _ => bail!(
                 "attribute base must be a resource, entity, or component, not {:?}",
                 self

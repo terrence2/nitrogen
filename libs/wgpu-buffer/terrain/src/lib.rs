@@ -26,7 +26,7 @@ pub use crate::{
 use absolute_unit::{Length, Meters};
 use anyhow::Result;
 use bevy_ecs::prelude::*;
-use camera::{Camera, CameraComponent};
+use camera::Camera;
 use catalog::Catalog;
 use geodesy::{GeoCenter, Graticule};
 use global_data::GlobalParametersBuffer;
@@ -727,7 +727,7 @@ impl TerrainBuffer {
     }
 
     fn sys_track_state_changes(
-        query: Query<&CameraComponent>,
+        query: Query<&Camera>,
         catalog: Res<Arc<RwLock<Catalog>>>,
         mut terrain: ResMut<TerrainBuffer>,
     ) {
@@ -739,7 +739,7 @@ impl TerrainBuffer {
             assert_eq!(i, 0);
             // let vis_camera = system.current_camera(&camera.camera());
             terrain
-                .track_state_changes(&camera.camera(), &camera.camera(), catalog.clone())
+                .track_state_changes(camera, camera, catalog.clone())
                 .expect("Terrain::track_state_changes");
         }
     }

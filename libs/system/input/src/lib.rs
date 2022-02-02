@@ -45,12 +45,70 @@ use winit::{
 pub type InputEventVec = SmallVec<[InputEvent; 8]>;
 pub type SystemEventVec = SmallVec<[SystemEvent; 8]>;
 
+pub fn test_make_input_events(mut events: Vec<InputEvent>) -> InputEventVec {
+    let mut out = InputEventVec::new();
+    for evt in events.drain(..) {
+        out.push(evt);
+    }
+    out
+}
+
+/// Enable applications to track focus for various purposes, with input focus falling into
+/// large scale classes that affect input processing in major ways.
 pub trait InputFocus:
     Clone + Copy + Debug + Default + Eq + PartialEq + FromStr + Hash + Send + Sync + 'static
 {
     fn name(&self) -> &'static str;
     fn is_terminal_focused(&self) -> bool;
     fn toggle_terminal(&mut self);
+}
+
+/// A simple two-state InputFocus for demo purposes.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub enum DemoFocus {
+    Demo,
+    Terminal,
+}
+
+impl Default for DemoFocus {
+    fn default() -> Self {
+        Self::Demo
+    }
+}
+
+impl FromStr for DemoFocus {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> std::prelude::rust_2015::Result<Self, Self::Err> {
+        Ok(match s {
+            "demo" => Self::Demo,
+            "terminal" => Self::Terminal,
+            _ => bail!(
+                "unknown focus to bind in {}; expected \"demo\" or \"terminal\"",
+                s
+            ),
+        })
+    }
+}
+
+impl InputFocus for DemoFocus {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Demo => "demo",
+            Self::Terminal => "terminal",
+        }
+    }
+
+    fn is_terminal_focused(&self) -> bool {
+        *self == Self::Terminal
+    }
+
+    fn toggle_terminal(&mut self) {
+        *self = match self {
+            Self::Terminal => Self::Demo,
+            Self::Demo => Self::Terminal,
+        };
+    }
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]

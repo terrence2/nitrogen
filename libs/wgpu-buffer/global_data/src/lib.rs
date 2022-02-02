@@ -15,7 +15,7 @@
 use absolute_unit::{Kilometers, Meters};
 use anyhow::Result;
 use bevy_ecs::prelude::*;
-use camera::{Camera, CameraComponent};
+use camera::Camera;
 use core::num::NonZeroU64;
 use gpu::{Gpu, UploadTracker};
 use nalgebra::{convert, Matrix3, Matrix4, Point3, Vector3, Vector4};
@@ -255,7 +255,7 @@ impl GlobalParametersBuffer {
     }
 
     fn sys_track_state_changes(
-        query: Query<&CameraComponent>,
+        query: Query<&Camera>,
         orrery: Res<Orrery>,
         window: Res<Window>,
         mut globals: ResMut<GlobalParametersBuffer>,
@@ -263,7 +263,7 @@ impl GlobalParametersBuffer {
         // FIXME: multiple camera support
         for (i, camera) in query.iter().enumerate() {
             assert_eq!(i, 0);
-            globals.track_state_changes(&camera.camera(), &orrery, &window);
+            globals.track_state_changes(camera, &orrery, &window);
         }
     }
 

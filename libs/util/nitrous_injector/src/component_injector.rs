@@ -16,13 +16,7 @@ use crate::injector_common::*;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use std::borrow::Borrow;
-use syn::{
-    parse2,
-    visit::{self, Visit},
-    Arm, Expr, FnArg, GenericArgument, Ident, ImplItemMethod, ItemFn, ItemImpl, Pat, PathArguments,
-    ReturnType, Type, TypePath,
-};
+use syn::{parse2, visit::Visit, Arm, ItemImpl};
 
 pub(crate) type Ast = ItemImpl;
 
@@ -36,7 +30,7 @@ pub(crate) fn analyze(ast: Ast) -> InjectModel {
     InjectModel::new(ast, visitor)
 }
 
-fn make_component_get_arm(type_name: &str, name: &str) -> Arm {
+fn make_component_get_arm(_type_name: &str, name: &str) -> Arm {
     parse2(
         quote! { #name => { Ok(::nitrous::Value::make_component_method::<Self>(entity, #name)) } },
     )

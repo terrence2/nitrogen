@@ -29,7 +29,7 @@ use std::collections::HashMap;
 pub struct Bindings {
     pub name: String,
     press_chords: HashMap<Input, Vec<InputSet>>,
-    script_map: HashMap<InputSet, NitrousScript>,
+    script_map: HashMap<InputSet, Vec<NitrousScript>>,
 }
 
 impl Bindings {
@@ -50,8 +50,11 @@ impl Bindings {
         let script = NitrousScript::compile(script_raw)?;
 
         for ks in InputSet::from_binding(event_name)?.drain(..) {
-            trace!("binding {} => {}", ks, script);
-            self.script_map.insert(ks.clone(), script.clone());
+            trace!("binding {} to\n{}", ks, script);
+            self.script_map
+                .entry(ks.clone())
+                .or_insert(Vec::new())
+                .push(script.clone());
 
             for key in &ks.keys {
                 let sets = self.press_chords.entry(*key).or_insert_with(Vec::new);
@@ -89,7 +92,10 @@ impl Bindings {
         if let Some(possible_chord_list) = self.press_chords.get(&input) {
             for chord in possible_chord_list {
                 if chord.is_pressed(Some(input), state) {
-                    herder.run_with_locals(locals.to_owned(), self.script_map[chord].clone());
+                    // Note: chord is in possible chord list, so must be present.
+                    for script in &self.script_map[chord] {
+                        herder.run_with_locals(locals.to_owned(), script.to_owned());
+                    }
                 }
             }
         }
@@ -157,8 +163,8 @@ impl Bindings {
         }
         for masked in &masked_chords {
             state.active_chords.remove(masked);
-            if let Some(script) = self.script_map.get(masked) {
-                self.deactiveate_chord(locals, script, herder)?;
+            if let Some(scripts) = self.script_map.get(masked) {
+                self.deactiveate_chord(locals, scripts, herder)?;
             }
         }
 
@@ -181,9 +187,9 @@ impl Bindings {
         for active_chord in &state.active_chords {
             if active_chord.contains_key(&key) {
                 // Note: unlike with press, we do not implicitly filter out keys we don't care about.
-                if let Some(script) = self.script_map.get(active_chord) {
+                if let Some(scripts) = self.script_map.get(active_chord) {
                     released_chords.push(active_chord.to_owned());
-                    self.deactiveate_chord(locals, script, herder)?;
+                    self.deactiveate_chord(locals, scripts, herder)?;
                 }
             }
         }
@@ -194,10 +200,10 @@ impl Bindings {
         // If we removed a chord, then it may have been masking an active command. Re-enable any
         // masked commands that were unmasked by this change.
         for released_chord in &released_chords {
-            for (chord, script) in &self.script_map {
+            for (chord, scripts) in &self.script_map {
                 if chord.is_subset_of(released_chord) && chord.is_pressed(None, state) {
                     state.active_chords.insert(chord.to_owned());
-                    self.activate_chord(locals, script, herder)?;
+                    self.activate_chord(locals, scripts, herder)?;
                 }
             }
         }
@@ -208,239 +214,28 @@ impl Bindings {
     fn activate_chord(
         &self,
         locals: &LocalNamespace,
-        script: &NitrousScript,
+        scripts: &[NitrousScript],
         herder: &mut ScriptHerder,
     ) -> Result<()> {
-        let mut locals = locals.to_owned();
-        locals.put("pressed", Value::True());
-        herder.run_with_locals(locals, script);
+        for script in scripts {
+            let mut locals = locals.to_owned();
+            locals.put("pressed", Value::True());
+            herder.run_with_locals(locals, script);
+        }
         Ok(())
     }
 
     fn deactiveate_chord(
         &self,
         locals: &LocalNamespace,
-        script: &NitrousScript,
+        scripts: &[NitrousScript],
         herder: &mut ScriptHerder,
     ) -> Result<()> {
-        let mut locals = locals.to_owned();
-        locals.put("pressed", Value::False());
-        herder.run_with_locals(locals, script);
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use anyhow::bail;
-    use input::{ModifiersState, VirtualKeyCode};
-    use nitrous::{Module, Value};
-    use parking_lot::RwLock;
-    use runtime::Runtime;
-    use std::sync::Arc;
-
-    #[derive(Debug, Default)]
-    struct Player {
-        walking: bool,
-        running: bool,
-    }
-
-    impl Module for Player {
-        fn module_name(&self) -> String {
-            "Player".to_owned()
+        for script in scripts {
+            let mut locals = locals.to_owned();
+            locals.put("pressed", Value::False());
+            herder.run_with_locals(locals, script);
         }
-
-        fn call_method(&mut self, name: &str, args: &[Value]) -> Result<Value> {
-            println!("Call: {}({})", name, args[0]);
-            Ok(match name {
-                "walk" => {
-                    self.walking = args[0] == Value::True();
-                    Value::Integer(0)
-                }
-                "run" => {
-                    self.running = args[0] == Value::True();
-                    Value::Integer(0)
-                }
-                _ => unimplemented!(),
-            })
-        }
-
-        fn put(
-            &mut self,
-            _module: Arc<RwLock<dyn Module>>,
-            _name: &str,
-            _value: Value,
-        ) -> Result<()> {
-            unimplemented!()
-        }
-
-        fn get(&self, module: Arc<RwLock<dyn Module>>, name: &str) -> Result<Value> {
-            Ok(match name {
-                "walk" => Value::ResourceMethod(module, name.to_owned()),
-                "run" => Value::ResourceMethod(module, name.to_owned()),
-                _ => bail!("get unknown '{}'", name),
-            })
-        }
-
-        fn names(&self) -> Vec<&str> {
-            vec!["walk", "run"]
-        }
-    }
-
-    #[test]
-    fn test_modifier_planes_disable_bare() -> Result<()> {
-        let mut herder = ScriptHerder::default();
-        // let mut interpreter = Interpreter::default();
-        let player = Arc::new(RwLock::new(Player::default()));
-        // interpreter.put_global("player", Value::Module(player.clone()));
-
-        let w_key = Input::KeyboardKey(VirtualKeyCode::W);
-        let shift_key = Input::KeyboardKey(VirtualKeyCode::LShift);
-
-        let mut state: State = Default::default();
-        let bindings = Bindings::new("test").with_bind("w", "player.never_executed()")?;
-
-        state.input_states.insert(shift_key, ElementState::Pressed);
-        state.modifiers_state |= ModifiersState::SHIFT;
-        bindings.match_input(
-            shift_key,
-            Some(ElementState::Pressed),
-            &mut state,
-            &LocalNamespace::empty(),
-            &mut herder,
-        )?;
-        assert!(!player.read().walking);
-
-        state.input_states.insert(w_key, ElementState::Pressed);
-        bindings.match_input(
-            w_key,
-            Some(ElementState::Pressed),
-            &mut state,
-            &LocalNamespace::empty(),
-            &mut herder,
-        )?;
-        assert!(!player.read().walking);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_matches_exact_modifier_plane() -> Result<()> {
-        let mut herder = ScriptHerder::default();
-        // let mut interpreter = Interpreter::default();
-        let player = Arc::new(RwLock::new(Player::default()));
-        // interpreter.put_global("player", Value::Module(player.clone()));
-
-        let w_key = Input::KeyboardKey(VirtualKeyCode::W);
-        let shift_key = Input::KeyboardKey(VirtualKeyCode::LShift);
-        let ctrl_key = Input::KeyboardKey(VirtualKeyCode::RControl);
-
-        let mut state: State = Default::default();
-        let bindings = Bindings::new("test").with_bind("Shift+w", "player.never_executed()")?;
-
-        state.input_states.insert(ctrl_key, ElementState::Pressed);
-        state.input_states.insert(shift_key, ElementState::Pressed);
-        state.modifiers_state |= ModifiersState::CTRL;
-        state.modifiers_state |= ModifiersState::SHIFT;
-        state.input_states.insert(w_key, ElementState::Pressed);
-        bindings.match_input(
-            w_key,
-            Some(ElementState::Pressed),
-            &mut state,
-            &LocalNamespace::empty(),
-            &mut herder,
-        )?;
-        assert!(!player.read().walking);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_masking() -> Result<()> {
-        let mut runtime = Runtime::default();
-        // let mut interpreter = Interpreter::default();
-        let player = Arc::new(RwLock::new(Player::default()));
-        // interpreter.put_global("player", Value::Module(player.clone()));
-
-        let w_key = Input::KeyboardKey(VirtualKeyCode::W);
-        let shift_key = Input::KeyboardKey(VirtualKeyCode::LShift);
-
-        let mut state: State = Default::default();
-        let bindings = Bindings::new("test")
-            .with_bind("w", "player.walk(pressed)")?
-            .with_bind("shift+w", "player.run(pressed)")?;
-
-        state.input_states.insert(w_key, ElementState::Pressed);
-        bindings.match_input(
-            w_key,
-            Some(ElementState::Pressed),
-            &mut state,
-            &LocalNamespace::empty(),
-            &mut runtime.resource_mut::<ScriptHerder>(),
-        )?;
-        runtime.run_sim_once();
-        assert!(player.read().walking);
-        assert!(!player.read().running);
-
-        state.input_states.insert(shift_key, ElementState::Pressed);
-        state.modifiers_state |= ModifiersState::SHIFT;
-        bindings.match_input(
-            shift_key,
-            Some(ElementState::Pressed),
-            &mut state,
-            &LocalNamespace::empty(),
-            &mut runtime.resource_mut::<ScriptHerder>(),
-        )?;
-        assert!(player.read().running);
-        assert!(!player.read().walking);
-
-        state.input_states.insert(shift_key, ElementState::Released);
-        state.modifiers_state -= ModifiersState::SHIFT;
-        bindings.match_input(
-            shift_key,
-            Some(ElementState::Released),
-            &mut state,
-            &LocalNamespace::empty(),
-            &mut runtime.resource_mut::<ScriptHerder>(),
-        )?;
-        assert!(player.read().walking);
-        assert!(!player.read().running);
-
-        state.input_states.insert(shift_key, ElementState::Pressed);
-        state.modifiers_state |= ModifiersState::SHIFT;
-        bindings.match_input(
-            shift_key,
-            Some(ElementState::Pressed),
-            &mut state,
-            &LocalNamespace::empty(),
-            &mut runtime.resource_mut::<ScriptHerder>(),
-        )?;
-        assert!(!player.read().walking);
-        assert!(player.read().running);
-
-        state.input_states.insert(w_key, ElementState::Released);
-        bindings.match_input(
-            w_key,
-            Some(ElementState::Released),
-            &mut state,
-            &LocalNamespace::empty(),
-            &mut runtime.resource_mut::<ScriptHerder>(),
-        )?;
-        assert!(!player.read().walking);
-        assert!(!player.read().running);
-
-        state.input_states.insert(w_key, ElementState::Pressed);
-        bindings.match_input(
-            w_key,
-            Some(ElementState::Pressed),
-            &mut state,
-            &LocalNamespace::empty(),
-            &mut runtime.resource_mut::<ScriptHerder>(),
-        )?;
-        assert!(!player.read().walking);
-        assert!(player.read().running);
-
         Ok(())
     }
 }

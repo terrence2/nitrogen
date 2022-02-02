@@ -14,12 +14,12 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource};
-use log::{error, info};
+use log::{error, info, trace};
 use nitrous::{
     ComponentLookupFunc, ExecutionContext, LocalNamespace, NitrousExecutor, NitrousScript,
-    ScriptComponent, ScriptResource, WorldIndex, YieldState,
+    ScriptResource, WorldIndex, YieldState,
 };
-use std::{borrow::Borrow, hash::Hash, sync::Arc};
+use std::sync::Arc;
 
 /// Manage script execution state.
 pub struct ScriptHerder {
@@ -38,7 +38,7 @@ impl Default for ScriptHerder {
 
 impl ScriptHerder {
     pub fn run_string(&mut self, script_text: &str) -> Result<()> {
-        println!("RUN STRING: {}", script_text);
+        trace!("run_string: {}", script_text);
         self.run(NitrousScript::compile(script_text)?);
         Ok(())
     }
@@ -60,14 +60,6 @@ impl ScriptHerder {
         self.index.insert_named_resource(name, resource)?;
         Ok(())
     }
-
-    // #[inline]
-    // pub(crate) fn insert_named_entity<S>(&mut self, name: S, entity: Entity)
-    // where
-    //     S: Into<String>,
-    // {
-    //     self.index.insert_named_entity(name, entity);
-    // }
 
     #[inline]
     pub(crate) fn upsert_named_component(

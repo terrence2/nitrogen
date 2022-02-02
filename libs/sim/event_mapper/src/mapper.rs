@@ -198,3 +198,260 @@ where
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use input::{
+        test_make_input_events as mkinp, DemoFocus, InputEvent, ModifiersState, VirtualKeyCode,
+        VirtualKeyCode as VKC,
+    };
+    use nitrous::{inject_nitrous_resource, method, NitrousResource};
+    use runtime::Runtime;
+
+    #[derive(Debug, Default, NitrousResource)]
+    struct Player {
+        walking: bool,
+        running: bool,
+    }
+
+    #[inject_nitrous_resource]
+    impl Player {
+        #[method]
+        fn walk(&mut self, pressed: bool) {
+            self.walking = pressed;
+        }
+
+        #[method]
+        fn run(&mut self, pressed: bool) {
+            self.running = pressed;
+        }
+    }
+
+    fn press(key: VirtualKeyCode, ms: &mut ModifiersState) -> InputEvent {
+        match key {
+            VKC::LShift | VKC::RShift => *ms |= ModifiersState::SHIFT,
+            VKC::LAlt | VKC::RAlt => *ms |= ModifiersState::ALT,
+            VKC::LControl | VKC::RControl => *ms |= ModifiersState::CTRL,
+            VKC::LWin | VKC::RWin => *ms |= ModifiersState::LOGO,
+            _ => {}
+        }
+        InputEvent::KeyboardKey {
+            scancode: 0,
+            virtual_keycode: key,
+            press_state: ElementState::Pressed,
+            modifiers_state: *ms,
+            window_focused: true,
+        }
+    }
+
+    fn release(key: VirtualKeyCode, ms: &mut ModifiersState) -> InputEvent {
+        match key {
+            VKC::LShift | VKC::RShift => ms.remove(ModifiersState::SHIFT),
+            VKC::LAlt | VKC::RAlt => ms.remove(ModifiersState::ALT),
+            VKC::LControl | VKC::RControl => ms.remove(ModifiersState::CTRL),
+            VKC::LWin | VKC::RWin => ms.remove(ModifiersState::LOGO),
+            _ => {}
+        }
+        InputEvent::KeyboardKey {
+            scancode: 0,
+            virtual_keycode: key,
+            press_state: ElementState::Released,
+            modifiers_state: *ms,
+            window_focused: true,
+        }
+    }
+
+    fn prepare() -> Result<Runtime> {
+        let mut runtime = Runtime::default();
+        runtime
+            .insert_resource(DemoFocus::default())
+            .insert_named_resource("player", Player::default())
+            .load_extension::<EventMapper<DemoFocus>>()?;
+        runtime.resource_mut::<ScriptHerder>().run_string(
+            r#"
+                bindings.bind("w", "player.walk(pressed)");
+                bindings.bind("shift+w", "player.run(pressed)");
+            "#,
+        )?;
+        runtime.run_startup();
+        Ok(runtime)
+    }
+
+    #[test]
+    fn test_basic() -> Result<()> {
+        let mut runtime = prepare()?;
+        let mut state = ModifiersState::empty();
+        let ms = &mut state;
+
+        runtime.insert_resource(mkinp(vec![press(VKC::W, ms)]));
+        runtime.run_sim_once();
+        assert_eq!(runtime.resource::<Player>().walking, true);
+        runtime.insert_resource(mkinp(vec![release(VKC::W, ms)]));
+        runtime.run_sim_once();
+        assert_eq!(runtime.resource::<Player>().walking, false);
+        runtime.insert_resource(mkinp(vec![press(VKC::LShift, ms), press(VKC::W, ms)]));
+        runtime.run_sim_once();
+        assert_eq!(runtime.resource::<Player>().walking, false);
+        assert_eq!(runtime.resource::<Player>().running, true);
+        runtime.insert_resource(mkinp(vec![release(VKC::LShift, ms), release(VKC::W, ms)]));
+        runtime.run_sim_once();
+        assert_eq!(runtime.resource::<Player>().walking, false);
+        assert_eq!(runtime.resource::<Player>().running, false);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_modifier_planes() -> Result<()> {
+        let mut runtime = prepare()?;
+        let mut state = ModifiersState::empty();
+        let ms = &mut state;
+
+        // modifier planes should mask pressed keys
+        runtime.insert_resource(mkinp(vec![press(VKC::W, ms)]));
+        runtime.run_sim_once();
+        assert_eq!(runtime.resource::<Player>().walking, true);
+        assert_eq!(runtime.resource::<Player>().running, false);
+        runtime.insert_resource(mkinp(vec![press(VKC::LShift, ms)]));
+        runtime.run_sim_once();
+        assert_eq!(runtime.resource::<Player>().walking, false);
+        assert_eq!(runtime.resource::<Player>().running, true);
+        runtime.insert_resource(mkinp(vec![release(VKC::LShift, ms)]));
+        runtime.run_sim_once();
+        assert_eq!(runtime.resource::<Player>().walking, true);
+        assert_eq!(runtime.resource::<Player>().running, false);
+        runtime.insert_resource(mkinp(vec![release(VKC::W, ms)]));
+        runtime.run_sim_once();
+        assert_eq!(runtime.resource::<Player>().walking, false);
+        assert_eq!(runtime.resource::<Player>().running, false);
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore]
+    fn test_exact_modifer_matching() -> Result<()> {
+        env_logger::init();
+        let mut runtime = prepare()?;
+        let mut state = ModifiersState::empty();
+        let ms = &mut state;
+
+        // Match modifier planes exactly
+        // FIXME: the control does not mask properly because we don't visit it because it's not
+        //        part of any binding... which is not quite right.
+        runtime.insert_resource(mkinp(vec![
+            press(VKC::W, ms),
+            press(VKC::LShift, ms),
+            press(VKC::LControl, ms),
+        ]));
+        runtime.run_sim_once();
+        println!("MS: {:?}", ms);
+        assert_eq!(runtime.resource::<Player>().walking, false);
+        assert_eq!(runtime.resource::<Player>().running, false);
+        runtime.insert_resource(mkinp(vec![release(VKC::LControl, ms)]));
+        runtime.run_sim_once();
+        assert_eq!(runtime.resource::<Player>().walking, false);
+        assert_eq!(runtime.resource::<Player>().running, true);
+        runtime.insert_resource(mkinp(vec![release(VKC::LShift, ms)]));
+        runtime.run_sim_once();
+        assert_eq!(runtime.resource::<Player>().walking, true);
+        assert_eq!(runtime.resource::<Player>().running, false);
+        runtime.insert_resource(mkinp(vec![release(VKC::W, ms)]));
+        runtime.run_sim_once();
+        assert_eq!(runtime.resource::<Player>().walking, false);
+        assert_eq!(runtime.resource::<Player>().running, false);
+
+        Ok(())
+    }
+
+    /*
+    #[test]
+    fn test_masking() -> Result<()> {
+        let mut runtime = Runtime::default();
+        // let mut interpreter = Interpreter::default();
+        let player = Arc::new(RwLock::new(Player::default()));
+        // interpreter.put_global("player", Value::Module(player.clone()));
+
+        let w_key = Input::KeyboardKey(VirtualKeyCode::W);
+        let shift_key = Input::KeyboardKey(VirtualKeyCode::LShift);
+
+        let mut state: State = Default::default();
+        let bindings = Bindings::new("test")
+            .with_bind("w", "player.walk(pressed)")?
+            .with_bind("shift+w", "player.run(pressed)")?;
+
+        state.input_states.insert(w_key, ElementState::Pressed);
+        bindings.match_input(
+            w_key,
+            Some(ElementState::Pressed),
+            &mut state,
+            &LocalNamespace::empty(),
+            &mut runtime.resource_mut::<ScriptHerder>(),
+        )?;
+        runtime.run_sim_once();
+        assert!(player.read().walking);
+        assert!(!player.read().running);
+
+        state.input_states.insert(shift_key, ElementState::Pressed);
+        state.modifiers_state |= ModifiersState::SHIFT;
+        bindings.match_input(
+            shift_key,
+            Some(ElementState::Pressed),
+            &mut state,
+            &LocalNamespace::empty(),
+            &mut runtime.resource_mut::<ScriptHerder>(),
+        )?;
+        assert!(player.read().running);
+        assert!(!player.read().walking);
+
+        state.input_states.insert(shift_key, ElementState::Released);
+        state.modifiers_state -= ModifiersState::SHIFT;
+        bindings.match_input(
+            shift_key,
+            Some(ElementState::Released),
+            &mut state,
+            &LocalNamespace::empty(),
+            &mut runtime.resource_mut::<ScriptHerder>(),
+        )?;
+        assert!(player.read().walking);
+        assert!(!player.read().running);
+
+        state.input_states.insert(shift_key, ElementState::Pressed);
+        state.modifiers_state |= ModifiersState::SHIFT;
+        bindings.match_input(
+            shift_key,
+            Some(ElementState::Pressed),
+            &mut state,
+            &LocalNamespace::empty(),
+            &mut runtime.resource_mut::<ScriptHerder>(),
+        )?;
+        assert!(!player.read().walking);
+        assert!(player.read().running);
+
+        state.input_states.insert(w_key, ElementState::Released);
+        bindings.match_input(
+            w_key,
+            Some(ElementState::Released),
+            &mut state,
+            &LocalNamespace::empty(),
+            &mut runtime.resource_mut::<ScriptHerder>(),
+        )?;
+        assert!(!player.read().walking);
+        assert!(!player.read().running);
+
+        state.input_states.insert(w_key, ElementState::Pressed);
+        bindings.match_input(
+            w_key,
+            Some(ElementState::Pressed),
+            &mut state,
+            &LocalNamespace::empty(),
+            &mut runtime.resource_mut::<ScriptHerder>(),
+        )?;
+        assert!(!player.read().walking);
+        assert!(player.read().running);
+
+        Ok(())
+    }
+     */
+}

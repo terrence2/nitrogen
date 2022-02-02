@@ -477,7 +477,6 @@ dependencies = [
  "nitrous_injector",
  "num",
  "ordered-float",
- "parking_lot",
  "physical_constants",
  "runtime",
  "window",
@@ -1097,6 +1096,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bevy_ecs",
+ "env_logger",
  "input",
  "log",
  "nitrous",

@@ -80,18 +80,33 @@ pub trait ScriptComponent: Send + Sync + 'static {
     fn names(&self) -> Vec<&str>;
 }
 
-/// Safety: hahahahahaha.... no
-///
-/// Used to escape world lifetime considerations.
-#[repr(C)]
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub(crate) struct ComponentTraitObject {
-    bad_idea_ptr: usize,
-    bad_idea_meta: usize,
+pub type ComponentLookupFunc =
+    dyn Fn(Entity, &mut World) -> &(dyn ScriptComponent + 'static) + Send + Sync + 'static;
+
+pub type ComponentLookupMutFunc =
+    dyn Fn(Entity, &mut World) -> &mut (dyn ScriptComponent + 'static) + Send + Sync + 'static;
+
+pub fn make_component_lookup_mut<T>() -> Arc<ComponentLookupMutFunc>
+where
+    T: Component + ScriptComponent + 'static,
+{
+    Arc::new(move |entity: Entity, world: &mut World| {
+        let ptr = world.get_mut::<T>(entity).unwrap().into_inner();
+        let cto: &mut (dyn ScriptComponent + 'static) = ptr;
+        cto
+    })
 }
 
-pub type ComponentLookupFunc =
-    dyn Fn(Entity, &mut World) -> &mut (dyn ScriptComponent + 'static) + Send + Sync + 'static;
+pub fn make_component_lookup<T>() -> Arc<ComponentLookupFunc>
+where
+    T: Component + ScriptComponent + 'static,
+{
+    Arc::new(move |entity: Entity, world: &mut World| {
+        let ptr = world.get_mut::<T>(entity).unwrap().into_inner();
+        let cto: &(dyn ScriptComponent + 'static) = ptr;
+        cto
+    })
+}
 
 #[derive(Default)]
 struct EntityMetadata {
@@ -138,17 +153,6 @@ impl WorldIndex {
             .get(name)
             .map(|rto| Value::new_resource(*rto))
     }
-
-    /// Register an entity with the index.
-    // pub fn insert_named_entity<S: Into<String>>(&mut self, name: S, entity: Entity) -> Result<()> {
-    //     let name = name.into();
-    //     println!("INSERTING: {}", name);
-    //     ensure!(!self.named_entities.contains_key(&name));
-    //     self.named_entities.insert(name.into(), entity);
-    //     self.entity_metadata
-    //         .insert(entity, EntityMetadata::default());
-    //     Ok(())
-    // }
 
     pub fn upsert_named_component(
         &mut self,
@@ -222,8 +226,9 @@ impl LocalNamespace {
     }
 
     #[inline]
-    pub fn put<S: Into<String>>(&mut self, name: S, value: Value) {
+    pub fn put<S: Into<String>>(&mut self, name: S, value: Value) -> &mut Self {
         self.memory.insert(name.into(), value);
+        self
     }
 
     #[inline]

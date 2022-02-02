@@ -16,13 +16,7 @@ use crate::injector_common::*;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use std::borrow::Borrow;
-use syn::{
-    parse2,
-    visit::{self, Visit},
-    Arm, Expr, FnArg, GenericArgument, Ident, ImplItemMethod, ItemFn, ItemImpl, Pat, PathArguments,
-    ReturnType, Type, TypePath,
-};
+use syn::{parse2, visit::Visit, Arm};
 
 pub(crate) fn parse(_args: TokenStream, item: TokenStream) -> Ast {
     parse2(TokenStream2::from(item)).expect("parse result")

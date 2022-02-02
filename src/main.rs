@@ -17,7 +17,7 @@ use animate::{TimeStep, Timeline};
 use anyhow::{anyhow, bail, Result};
 use atmosphere::AtmosphereBuffer;
 use bevy_ecs::prelude::*;
-use camera::{ArcBallController, ArcBallSystem, Camera, CameraComponent};
+use camera::{ArcBallController, ArcBallSystem, Camera, CameraSystem};
 use catalog::{Catalog, CatalogOpts};
 use chrono::{TimeZone, Utc};
 use composite::CompositeRenderPass;
@@ -78,7 +78,7 @@ struct VisibleWidgets {
 struct System {
     exit: bool,
     pin_camera: bool,
-    camera: Camera,
+    camera: Option<Camera>,
     visible_widgets: VisibleWidgets,
 }
 
@@ -106,7 +106,7 @@ impl System {
         Ok(Self {
             exit: false,
             pin_camera: false,
-            camera: Default::default(),
+            camera: None,
             visible_widgets,
         })
     }
@@ -227,12 +227,12 @@ impl System {
         }
     }
 
-    pub fn current_camera(&mut self, camera: &Camera) -> &Camera {
-        if !self.pin_camera {
-            self.camera = camera.to_owned();
-        }
-        &self.camera
-    }
+    // pub fn current_camera(&mut self, camera: &Camera) -> &Camera {
+    //     if !self.pin_camera {
+    //         self.camera = camera.to_owned();
+    //     }
+    //     &self.camera
+    // }
 }
 
 /*
@@ -356,10 +356,6 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     create_dir_all(&app_dirs.config_dir)?;
     create_dir_all(&app_dirs.state_dir)?;
 
-    fn timestep(runtime: &Runtime) -> &TimeStep {
-        runtime.resource::<TimeStep>()
-    }
-
     runtime
         .insert_resource(opt.catalog_opts)
         .insert_resource(opt.display_opts)
@@ -384,52 +380,21 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .load_extension::<Orrery>()?
         .load_extension::<Timeline>()?
         .load_extension::<TimeStep>()?
+        .load_extension::<CameraSystem>()?
         .load_extension::<ArcBallSystem>()?;
 
     // But we need at least a camera and controller before the sim is ready to run.
-    let camera = Camera::install(
+    let camera = Camera::new(
         radians!(PI / 2.0),
         runtime.resource::<Window>().render_aspect_ratio(),
         meters!(0.5),
-    )?;
+    );
     let _player_ent = runtime
         .spawn_named("player")
         .insert(WorldSpaceFrame::default())
         .insert_scriptable(ArcBallController::new())
-        .insert_scriptable(CameraComponent::new(camera.clone()))
+        .insert_scriptable(camera)
         .id();
-
-    //////////////////////////////////////////////////////////////////
-    // Sim Schedule
-    //
-    // The simulation schedule should be used for "pure" entity to entity work and update of
-    // a handful of game related resources, rather than communicating with the GPU. This generally
-    // splits into two phases: per-fixed-tick resource updates and entity updates from resources.
-    let mut sim_schedule = Schedule::default();
-    sim_schedule.add_stage(
-        "propagate_changes",
-        SystemStage::single_threaded().with_system(CameraComponent::sys_apply_input),
-    );
-
-    //////////////////////////////////////////////////////////////////
-    // Track State Changes (from entities and game resources [into graphics systems])
-    //
-    // Copy from entities into buffers more suitable for upload to the GPU. Also, do heavier
-    // CPU-side graphics work that can be parallelized efficiently, like updating the terrain
-    // from the current cameras. Not generally for writing to the GPU.
-    //
-    // TODO: how much can we parallelize for writing to the GPU? Anything at all?
-    //       UploadTracker is shared state. Can we do anything with frame graph?
-    //
-    // Note: We have to take resources as non-mutable references, so that we can run in parallel.
-    //       We can take as many of these in parallel as we want, iff there is no parallel write
-    //       to those same resource (e.g. window). Otherwise we might deadlock.
-
-    let mut update_frame_schedule = Schedule::default();
-    update_frame_schedule.add_stage(
-        "update_frame",
-        SystemStage::single_threaded().with_system(CameraComponent::sys_apply_display_changes), // .with_system(update_terrain_track_state_changes), // .with_wystem(update_widgets_ensure_uploaded),
-    );
 
     // We are now finished and can safely run the startup scripts / configuration.
     opt.startup_opts
@@ -438,13 +403,11 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     while !runtime.resource::<System>().exit {
         // Catch monotonic sim time up to system time.
         let frame_start = Instant::now();
-        while timestep(&runtime).next_now() < frame_start {
+        while runtime.resource::<TimeStep>().next_now() < frame_start {
             runtime.run_sim_once();
-            sim_schedule.run_once(&mut runtime.world);
         }
 
         runtime.run_frame_once();
-        update_frame_schedule.run_once(&mut runtime.world);
 
         let mut tracker = Default::default();
         runtime
@@ -469,14 +432,6 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
                     )
                     .ok();
             });
-        // runtime
-        //     .resource::<WidgetBuffer<SimState>>()
-        //     .ensure_uploaded(
-        //         *timestep(&runtime).now(),
-        //         runtime.resource::<Gpu>(),
-        //         runtime.resource::<Window>(),
-        //         &mut tracker,
-        //     )?;
 
         {
             let config = runtime.resource::<Window>().config().to_owned();

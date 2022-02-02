@@ -21,58 +21,28 @@ use geodesy::{Cartesian, GeoCenter};
 use geometry::Plane;
 use measure::WorldSpaceFrame;
 use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, UnitQuaternion, Vector3};
-use nitrous::{inject_nitrous_component, method, NitrousComponent, Value};
-use parking_lot::{RwLock, RwLockReadGuard};
-use runtime::{Extension, Runtime, SimStage};
-use std::sync::Arc;
+use nitrous::{inject_nitrous_component, method, NitrousComponent};
+use runtime::{Extension, FrameStage, Runtime, ScriptHerder, SimStage};
 use window::DisplayConfig;
 
-#[derive(Component, NitrousComponent)]
-#[Name = "camera"]
-pub struct CameraComponent {
-    inner: Arc<RwLock<Camera>>,
-}
-
-#[inject_nitrous_component]
-impl CameraComponent {
-    pub fn new(camera: Arc<RwLock<Camera>>) -> Self {
-        Self { inner: camera }
-    }
-
-    pub fn camera(&self) -> RwLockReadGuard<Camera> {
-        self.inner.read()
-    }
-
-    pub fn apply_input_state(&mut self) {
-        self.inner.write().apply_input_state();
-    }
-
-    pub fn update_frame(&mut self, frame: &WorldSpaceFrame) {
-        self.inner.write().update_frame(frame);
-    }
-
-    pub fn on_display_config_updated(&mut self, config: &DisplayConfig) {
-        self.inner.write().on_display_config_updated(config);
-    }
-
-    // Apply interpreted inputs from prior stage; apply new world position.
-    pub fn sys_apply_input(mut query: Query<(&WorldSpaceFrame, &mut CameraComponent)>) {
-        for (frame, mut camera) in query.iter_mut() {
-            camera.apply_input_state();
-            camera.update_frame(frame);
-        }
-    }
-
-    // Apply updated system config, e.g. aspect
-    pub fn sys_apply_display_changes(
-        mut query: Query<&mut CameraComponent>,
-        updated_config: Res<Option<DisplayConfig>>,
-    ) {
-        for mut camera in query.iter_mut() {
-            if let Some(config) = updated_config.as_ref() {
-                camera.on_display_config_updated(config);
-            }
-        }
+pub struct CameraSystem;
+impl Extension for CameraSystem {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        runtime.resource_mut::<ScriptHerder>().run_string(
+            r#"
+                bindings.bind("PageUp", "@player.camera.increase_fov(pressed)");
+                bindings.bind("PageDown", "@player.camera.decrease_fov(pressed)");
+                bindings.bind("Shift+LBracket", "@player.camera.decrease_exposure(pressed)");
+                bindings.bind("Shift+RBracket", "@player.camera.increase_exposure(pressed)");
+            "#,
+        )?;
+        runtime
+            .sim_stage_mut(SimStage::PostInput)
+            .add_system(Camera::sys_apply_input);
+        runtime
+            .frame_stage_mut(FrameStage::HandleDisplayChange)
+            .add_system(Camera::sys_apply_display_changes);
+        Ok(())
     }
 }
 
@@ -81,7 +51,8 @@ struct InputState {
     fov_delta: Angle<Degrees>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Component, NitrousComponent)]
+#[Name = "camera"]
 pub struct Camera {
     // Camera parameters
     fov_y: Angle<Radians>,
@@ -98,31 +69,13 @@ pub struct Camera {
     right: Vector3<f64>,
 }
 
+#[inject_nitrous_component]
 impl Camera {
     const INITIAL_EXPOSURE: f64 = 10e-5;
 
     // FIXME: aspect ratio is wrong. Should be 16:9 and not 9:16.
     // aspect ratio is rise over run: h / w
-    pub fn install<AngUnit: AngleUnit>(
-        fov_y: Angle<AngUnit>,
-        aspect_ratio: f64,
-        z_near: Length<Meters>,
-    ) -> Result<Arc<RwLock<Self>>> {
-        let camera = Arc::new(RwLock::new(Self::detached(fov_y, aspect_ratio, z_near)));
-        //interpreter.put_global("camera", Value::Module(camera.clone()));
-        // interpreter.interpret_once(
-        //     r#"
-        //         let bindings := mapper.create_bindings("camera");
-        //         bindings.bind("PageUp", "camera.increase_fov(pressed)");
-        //         bindings.bind("PageDown", "camera.decrease_fov(pressed)");
-        //         bindings.bind("Shift+LBracket", "camera.decrease_exposure(pressed)");
-        //         bindings.bind("Shift+RBracket", "camera.increase_exposure(pressed)");
-        //     "#,
-        // )?;
-        Ok(camera)
-    }
-
-    pub fn detached<AngUnit: AngleUnit>(
+    pub fn new<AngUnit: AngleUnit>(
         fov_y: Angle<AngUnit>,
         aspect_ratio: f64,
         z_near: Length<Meters>,
@@ -321,12 +274,32 @@ impl Camera {
         self.right = *frame.right();
         self.up = *frame.up();
     }
+
+    // Apply interpreted inputs from prior stage; apply new world position.
+    pub fn sys_apply_input(mut query: Query<(&WorldSpaceFrame, &mut Camera)>) {
+        for (frame, mut camera) in query.iter_mut() {
+            camera.apply_input_state();
+            camera.update_frame(frame);
+        }
+    }
+
+    // Apply updated system config, e.g. aspect
+    pub fn sys_apply_display_changes(
+        mut query: Query<&mut Camera>,
+        updated_config: Res<Option<DisplayConfig>>,
+    ) {
+        for mut camera in query.iter_mut() {
+            if let Some(config) = updated_config.as_ref() {
+                camera.on_display_config_updated(config);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::arc_ball_camera::ArcBallCamera;
+    use crate::arc_ball_camera::ArcBallController;
     use absolute_unit::{degrees, meters};
     use anyhow::Result;
     use approx::assert_relative_eq;
@@ -335,7 +308,7 @@ mod test {
 
     #[test]
     fn test_perspective() {
-        let camera = Camera::detached(degrees!(90), 9.0 / 11.0, meters!(0.3));
+        let camera = Camera::new(degrees!(90), 9.0 / 11.0, meters!(0.3));
         let p = camera.perspective::<Meters>().to_homogeneous();
         let wrld = Vector4::new(0000.0, 0.0, -10000.0, 1.0);
         let eye = camera.view::<Meters>().to_homogeneous() * wrld;
@@ -358,8 +331,8 @@ mod test {
     #[test]
     fn test_depth_restore() -> Result<()> {
         let aspect_ratio = 0.9488875526157546;
-        let mut camera = Camera::detached(degrees!(90), aspect_ratio, meters!(0.5));
-        let mut arcball = ArcBallCamera::detached();
+        let mut camera = Camera::new(degrees!(90), aspect_ratio, meters!(0.5));
+        let mut arcball = ArcBallController::new();
         arcball.set_target(Graticule::<GeoSurface>::new(
             degrees!(0),
             degrees!(0),

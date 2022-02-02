@@ -134,11 +134,13 @@ impl<'a> NitrousExecutor<'a> {
                     for _ in 0..arg_cnt {
                         args.push(self.pop("arg")?);
                     }
-                    base.call_method(&args, self.world)?;
+                    let result = base.call_method(&args, self.world)?;
+                    self.push(result);
                 }
                 Instr::Attr(atom) => {
                     let base = self.pop("attr base")?;
-                    let result = base.attr(self.state.script.atom(&atom), &self.index)?;
+                    let result =
+                        base.attr(self.state.script.atom(&atom), &self.index, &mut self.world)?;
                     self.push(result);
                 }
                 Instr::Await => {

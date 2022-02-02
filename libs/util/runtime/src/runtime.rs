@@ -16,8 +16,7 @@ use crate::herder::ScriptHerder;
 use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource, world::EntityMut};
 use log::error;
-use nitrous::{ComponentLookupFunc, ScriptComponent, ScriptResource};
-use std::sync::Arc;
+use nitrous::{make_component_lookup, ScriptComponent, ScriptResource};
 
 /// Interface for extending the Runtime.
 pub trait Extension {
@@ -33,18 +32,31 @@ pub enum StartupStage {
     PostScript,
 }
 
+/// The simulation schedule should be used for "pure" entity to entity work and update of
+/// a handful of game related resources, rather than communicating with the GPU.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, StageLabel)]
 pub enum SimStage {
+    /// Apply delta-t from TimeStep to whatever systems want to track time.
     TimeStep,
-    PreInput,
+    /// Consume any input that has accumulated.
     ReadInput,
+    /// Run anything that should run with last frame's inputs. TODO: necessary?
+    PreInput,
+    /// Use the input event vec in any systems that need to.
     HandleInput,
+    /// Runs after input is processed, with new values.
     PostInput,
+    /// Runs before the serial scripting phase.
     PreScript,
+    /// Fully serial phase where scripts run.
     RunScript,
+    /// Runs after scripts have processed.
     PostScript,
 }
 
+// Copy from entities into buffers more suitable for upload to the GPU. Also, do heavier
+// CPU-side graphics work that can be parallelized efficiently, like updating the terrain
+// from the current cameras. Not generally for actually writing to the GPU.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, StageLabel)]
 pub enum FrameStage {
     PreInput,
@@ -84,30 +96,22 @@ impl<'w> NamedEntityMut<'w> {
         // Record the component in the store.
         self.entity.insert(value);
 
-        // Get a pointer to the trait object; we mostly care about the vtable here. We'll re-grab
-        // the component data pointer when we need it using the wrapper function.
-        let lookup: Arc<ComponentLookupFunc> =
-            Arc::new(move |entity: Entity, world: &mut World| {
-                let ptr = world.get_mut::<T>(entity).unwrap().into_inner();
-                let cto: &mut (dyn ScriptComponent + 'static) = ptr;
-                cto
-            });
-
         // Index the component in the script engine.
         // Safety: this is safe because you cannot get to an RtEntity from just the world, so we
         //         cannot be entering here through some world-related path, such as a system.
         let entity_name = self.name.as_str();
         let entity = self.entity.id();
-        unsafe {
-            self.entity
-                .world_mut()
-                .resource_scope(|world, mut herder: Mut<ScriptHerder>| {
-                    match herder.upsert_named_component(entity_name, entity, component_name, lookup)
-                    {
-                        Ok(_) => {}
-                        Err(e) => error!("{}", e),
-                    }
-                });
+        match unsafe { self.entity.world_mut() }
+            .get_resource_mut::<ScriptHerder>()
+            .unwrap()
+            .upsert_named_component(
+                entity_name,
+                entity,
+                component_name,
+                make_component_lookup::<T>(),
+            ) {
+            Ok(_) => {}
+            Err(e) => error!("{}", e),
         }
         self
     }
@@ -210,7 +214,7 @@ impl Runtime {
     }
 
     #[inline]
-    pub fn insert_named_resource<S, T>(&mut self, name: S, value: T)
+    pub fn insert_named_resource<S, T>(&mut self, name: S, value: T) -> &mut Self
     where
         S: Into<String>,
         T: Resource + ScriptResource + 'static,
@@ -225,6 +229,7 @@ impl Runtime {
                     Err(e) => error!("{}", e),
                 }
             });
+        self
     }
 
     #[inline]

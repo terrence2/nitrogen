@@ -18,33 +18,9 @@ use bevy_ecs::prelude::*;
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
 use measure::WorldSpaceFrame;
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
-use nitrous::{inject_nitrous_component, method, NitrousComponent, Value};
-use parking_lot::RwLock;
+use nitrous::{inject_nitrous_component, method, NitrousComponent};
 use runtime::{Extension, Runtime, ScriptHerder, SimStage};
-use std::{f64::consts::PI, sync::Arc};
-
-/*
-#[derive(Component, NitrousComponent)]
-#[Name = "arcball"]
-pub struct ArcBallController {
-    inner: Arc<RwLock<ArcBallCamera>>,
-}
-
-#[inject_nitrous]
-impl ArcBallController {
-    pub fn new(arcball: Arc<RwLock<ArcBallCamera>>) -> Self {
-        Self { inner: arcball }
-    }
-
-    pub fn apply_input_state(&mut self) {
-        self.inner.write().apply_input_state();
-    }
-
-    pub fn world_space_frame(&self) -> WorldSpaceFrame {
-        self.inner.read().world_space_frame()
-    }
-}
- */
+use std::f64::consts::PI;
 
 /// The ArcBall system will, if the "player" entity has an ArcBallController
 /// will translate device events into relevant arcball updates on that player
@@ -434,7 +410,7 @@ mod tests {
 
     #[test]
     fn it_can_compute_eye_positions_at_origin() -> Result<()> {
-        let mut c = ArcBallCamera::detached();
+        let mut c = ArcBallController::new();
         c.set_eye(Graticule::new(radians!(0), radians!(0), meters!(0)))?;
         c.set_target(Graticule::new(radians!(0), radians!(0), meters!(0)));
 
@@ -494,7 +470,7 @@ mod tests {
 
     #[test]
     fn it_can_compute_eye_positions_with_offset_latitude() -> Result<()> {
-        let mut c = ArcBallCamera::detached();
+        let mut c = ArcBallController::new();
         c.set_eye(Graticule::new(radians!(0), radians!(0), meters!(0)))?;
         c.set_target(Graticule::new(radians!(0), radians!(0), meters!(0)));
 
@@ -538,7 +514,7 @@ mod tests {
 
     #[test]
     fn it_can_compute_eye_positions_with_offset_longitude() -> Result<()> {
-        let mut c = ArcBallCamera::detached();
+        let mut c = ArcBallController::new();
         c.set_eye(Graticule::new(radians!(0), radians!(0), meters!(0)))?;
         c.set_target(Graticule::new(radians!(0), radians!(0), meters!(0)));
 
