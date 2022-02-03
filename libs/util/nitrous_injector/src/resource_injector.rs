@@ -29,7 +29,8 @@ pub(crate) fn analyze(ast: Ast) -> InjectModel {
 }
 
 fn make_resource_get_arm(_type_name: &str, name: &str) -> Arm {
-    parse2(quote! { #name => { Ok(::nitrous::Value::make_resource_method(self, #name)) } }).unwrap()
+    parse2(quote! { #name => { Ok(::nitrous::Value::make_resource_method::<Self>(#name)) } })
+        .unwrap()
 }
 
 pub(crate) fn lower(model: InjectModel) -> Ir {

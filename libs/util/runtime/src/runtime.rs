@@ -16,7 +16,7 @@ use crate::herder::ScriptHerder;
 use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource, world::EntityMut};
 use log::error;
-use nitrous::{make_component_lookup, ScriptComponent, ScriptResource};
+use nitrous::{make_component_lookup_mut, ScriptComponent, ScriptResource};
 
 /// Interface for extending the Runtime.
 pub trait Extension {
@@ -67,6 +67,7 @@ pub enum FrameStage {
     TrackStateChanges,
     EnsureGpuUpdated,
     Render,
+    FrameEnd,
 }
 
 pub struct NamedEntityMut<'w> {
@@ -108,7 +109,7 @@ impl<'w> NamedEntityMut<'w> {
                 entity_name,
                 entity,
                 component_name,
-                make_component_lookup::<T>(),
+                make_component_lookup_mut::<T>(),
             ) {
             Ok(_) => {}
             Err(e) => error!("{}", e),
@@ -157,7 +158,8 @@ impl Default for Runtime {
             .with_stage(FrameStage::PostSystem, SystemStage::parallel())
             .with_stage(FrameStage::TrackStateChanges, SystemStage::parallel())
             .with_stage(FrameStage::EnsureGpuUpdated, SystemStage::parallel())
-            .with_stage(FrameStage::Render, SystemStage::parallel());
+            .with_stage(FrameStage::Render, SystemStage::parallel())
+            .with_stage(FrameStage::FrameEnd, SystemStage::parallel());
 
         let mut world = World::default();
         world.insert_resource(ScriptHerder::default());
@@ -202,15 +204,6 @@ impl Runtime {
             name: name.into(),
             entity: self.world.spawn(),
         }
-
-        // let entity = self
-        //     .world
-        //     .resource_scope(|world, mut herder: Mut<ScriptHerder>| {
-        //         let entity = world.spawn();
-        //         herder.insert_named_entity(name, entity.id());
-        //         entity
-        //     });
-        // unimplemented!()
     }
 
     #[inline]
@@ -220,15 +213,8 @@ impl Runtime {
         T: Resource + ScriptResource + 'static,
     {
         self.world.insert_resource(value);
-        let name = name.into();
-        self.world
-            .resource_scope(|world, mut herder: Mut<ScriptHerder>| {
-                let resource = world.get_resource::<T>().unwrap();
-                match herder.insert_named_resource::<T>(name, resource) {
-                    Ok(_) => {}
-                    Err(e) => error!("{}", e),
-                }
-            });
+        self.resource_mut::<ScriptHerder>()
+            .insert_named_resource::<T>(name.into());
         self
     }
 

@@ -16,7 +16,7 @@ use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource};
 use log::{error, info, trace};
 use nitrous::{
-    ComponentLookupFunc, ExecutionContext, LocalNamespace, NitrousExecutor, NitrousScript,
+    ComponentLookupMutFunc, ExecutionContext, LocalNamespace, NitrousExecutor, NitrousScript,
     ScriptResource, Value, WorldIndex, YieldState,
 };
 use std::sync::Arc;
@@ -60,13 +60,16 @@ impl ScriptHerder {
         self.index.lookup_resource(name)
     }
 
+    pub fn attrs<'a>(&'a self, value: Value, world: &'a mut World) -> Result<Vec<&'a str>> {
+        value.attrs(&self.index, world)
+    }
+
     #[inline]
-    pub(crate) fn insert_named_resource<T>(&mut self, name: String, resource: &T) -> Result<()>
+    pub(crate) fn insert_named_resource<T>(&mut self, name: String)
     where
         T: Resource + ScriptResource + 'static,
     {
-        self.index.insert_named_resource(name, resource)?;
-        Ok(())
+        self.index.insert_named_resource::<T>(name);
     }
 
     #[inline]
@@ -75,7 +78,7 @@ impl ScriptHerder {
         entity_name: &str,
         entity: Entity,
         component_name: &str,
-        lookup: Arc<ComponentLookupFunc>,
+        lookup: Arc<ComponentLookupMutFunc>,
     ) -> Result<()> {
         self.index
             .upsert_named_component(entity_name, entity, component_name, lookup)

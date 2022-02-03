@@ -31,7 +31,7 @@ use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
 use orrery::Orrery;
 use parking_lot::RwLock;
 use platform_dirs::AppDirs;
-use runtime::{Extension, Runtime, ScriptHerder, StartupOpts};
+use runtime::{Extension, FrameStage, Runtime, ScriptHerder, StartupOpts};
 use stars::StarsBuffer;
 use std::{f32::consts::PI, fs::create_dir_all, str::FromStr, sync::Arc, time::Instant};
 use structopt::StructOpt;
@@ -86,6 +86,9 @@ impl Extension for System {
         let widgets = runtime.resource::<WidgetBuffer<SimState>>();
         let system = System::new(widgets)?;
         runtime.insert_named_resource("system", system);
+        runtime
+            .frame_stage_mut(FrameStage::FrameEnd)
+            .add_system(Self::sys_track_visible_state);
         runtime.resource_mut::<ScriptHerder>().run_string(
             r#"
                 bindings.bind("Escape", "system.exit()");
@@ -174,6 +177,20 @@ impl System {
             camera_fov,
             fps_label,
         })
+    }
+
+    fn sys_track_visible_state(
+        query: Query<(&ArcBallController, &Camera)>,
+        timestep: Res<TimeStep>,
+        orrery: Res<Orrery>,
+        system: ResMut<System>,
+    ) {
+        for (arcball, camera) in query.iter() {
+            system
+                .track_visible_state(*timestep.now(), &orrery, &arcball, &camera)
+                .ok();
+            break;
+        }
     }
 
     pub fn track_visible_state(
@@ -566,13 +583,6 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
                 .submit(vec![encoder.finish()]);
             surface_texture.present();
         }
-
-        // runtime.resource::<System>().track_visible_state(
-        //     frame_start, // compute frame times from actual elapsed time
-        //     runtime.resource::<Orrery>(),
-        //     &arcball.read(),
-        //     &camera.read(),
-        // )?;
     }
 
     Ok(())

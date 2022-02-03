@@ -91,13 +91,13 @@ impl FullscreenBuffer {
 mod tests {
     use super::*;
     use anyhow::Result;
-    use gpu::TestResources;
 
     #[cfg(unix)]
     #[test]
     fn it_can_create_a_buffer() -> Result<()> {
-        let TestResources { gpu, .. } = Gpu::for_test_unix()?;
-        let _fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
+        let mut runtime = Gpu::for_test_unix()?;
+        let gpu = runtime::resource::<Gpu>();
+        let _fullscreen_buffer = FullscreenBuffer::new(&gpu);
         Ok(())
     }
 }

@@ -25,8 +25,8 @@ pub use crate::{
     exec::{ExecutionContext, NitrousExecutor, YieldState},
     lower::{Instr, NitrousCode},
     memory::{
-        make_component_lookup, make_component_lookup_mut, ComponentLookupFunc, LocalNamespace,
-        ScriptComponent, ScriptResource, WorldIndex,
+        make_component_lookup_mut, ComponentLookupMutFunc, LocalNamespace, ScriptComponent,
+        ScriptResource, WorldIndex,
     },
     script::NitrousScript,
     value::Value,

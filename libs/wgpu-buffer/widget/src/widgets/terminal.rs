@@ -170,7 +170,8 @@ impl Terminal {
             } else if let Expr::Attr(mod_name_term, Term::Symbol(sym)) = e.as_mut() {
                 if let Expr::Term(Term::Symbol(mod_name)) = mod_name_term.as_ref() {
                     if let Some(value) = herder.lookup_resource(mod_name) {
-                        if let Ok(attr_names) = value.attr_names() {
+                        /*
+                        if let Ok(attr_names) = herder.attrs(value) {
                             let sim = attr_names
                                 .iter()
                                 .filter(|&s| s.starts_with(sym.as_str()))
@@ -180,6 +181,7 @@ impl Terminal {
                                 return Some(format!("{}.{}", mod_name, sim[0]));
                             }
                         }
+                         */
                     }
                 }
             }

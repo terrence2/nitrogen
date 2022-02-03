@@ -12,36 +12,26 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use crate::memory::make_resource_lookup_mut;
 use crate::{
     memory::{
-        make_component_lookup_mut, ComponentLookupFunc, ComponentLookupMutFunc,
-        ResourceTraitObject, WorldIndex,
+        make_component_lookup_mut, ComponentLookupMutFunc, ResourceLookupMutFunc, WorldIndex,
     },
     ScriptComponent, ScriptResource,
 };
 use anyhow::{anyhow, bail, Result};
-use bevy_ecs::prelude::*;
+use bevy_ecs::{prelude::*, system::Resource};
 use futures::Future;
 use geodesy::{GeoSurface, Graticule, Target};
 use log::error;
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
-use std::borrow::BorrowMut;
 use std::{
+    borrow::BorrowMut,
     fmt::{self, Debug, Formatter},
     pin::Pin,
     sync::Arc,
 };
-
-/// Opaque version of our deeply cursed internals for public non-consumption.
-#[derive(Clone)]
-pub struct OpaqueResourceRef(ResourceTraitObject);
-
-impl OpaqueResourceRef {
-    pub(crate) fn call_method(&mut self, method_name: &str, args: &[Value]) -> Result<Value> {
-        self.0.to_resource().call_method(method_name, args)
-    }
-}
 
 pub type FutureValue = Pin<Box<dyn Future<Output = Value> + Send + Sync + Unpin + 'static>>;
 
@@ -52,10 +42,10 @@ pub enum Value {
     Float(OrderedFloat<f64>),
     String(String),
     Graticule(Graticule<GeoSurface>),
-    Resource(OpaqueResourceRef),
-    ResourceMethod(OpaqueResourceRef, String), // TODO: atoms?
+    Resource(Arc<ResourceLookupMutFunc>),
+    ResourceMethod(Arc<ResourceLookupMutFunc>, String), // TODO: atoms?
     Entity(Entity),
-    Component(Entity, Arc<ComponentLookupFunc>),
+    Component(Entity, Arc<ComponentLookupMutFunc>),
     ComponentMethod(Entity, Arc<ComponentLookupMutFunc>, String), // TODO: atoms?
     Future(Arc<RwLock<FutureValue>>),
 }
@@ -80,15 +70,15 @@ impl Value {
         Self::Boolean(false)
     }
 
-    pub(crate) fn new_resource(rto: ResourceTraitObject) -> Self {
-        Self::Resource(OpaqueResourceRef(rto))
+    pub(crate) fn new_resource(lookup: Arc<ResourceLookupMutFunc>) -> Self {
+        Self::Resource(lookup)
     }
 
     pub(crate) fn new_entity(entity: Entity) -> Self {
         Self::Entity(entity)
     }
 
-    pub(crate) fn new_component(entity: Entity, lookup: Arc<ComponentLookupFunc>) -> Self {
+    pub(crate) fn new_component(entity: Entity, lookup: Arc<ComponentLookupMutFunc>) -> Self {
         Value::Component(entity, lookup)
     }
 
@@ -138,11 +128,12 @@ impl Value {
         bail!("not a string value: {}", self)
     }
 
-    pub fn make_resource_method(resource: &dyn ScriptResource, name: &str) -> Self {
-        Self::ResourceMethod(
-            OpaqueResourceRef(ResourceTraitObject::from_resource(resource)),
-            name.to_owned(),
-        )
+    pub fn make_resource_method<T>(name: &str) -> Self
+    where
+        T: Resource + ScriptResource + 'static,
+    {
+        let lookup = make_resource_lookup_mut::<T>();
+        Self::ResourceMethod(lookup, name.to_owned())
     }
 
     pub fn make_component_method<T>(entity: Entity, name: &str) -> Self
@@ -174,7 +165,7 @@ impl Value {
 
     pub fn attr(&self, name: &str, index: &WorldIndex, world: &mut World) -> Result<Value> {
         Ok(match self {
-            Value::Resource(resource_ref) => resource_ref.0.to_resource().get(name)?,
+            Value::Resource(lookup) => lookup(world).get(name)?,
             Value::Entity(entity) => index
                 .lookup_component(entity, name)
                 .ok_or_else(|| anyhow!("no such component {} on entity {:?}", name, entity))?,
@@ -188,8 +179,8 @@ impl Value {
 
     pub fn call_method(&mut self, args: &[Value], world: &mut World) -> Result<Value> {
         Ok(match self {
-            Value::ResourceMethod(resource, method_name) => {
-                resource.call_method(method_name, args)?
+            Value::ResourceMethod(lookup, method_name) => {
+                lookup.borrow_mut()(world).call_method(method_name, args)?
             }
             Value::ComponentMethod(entity, lookup, method_name) => {
                 lookup.borrow_mut()(*entity, world).call_method(*entity, method_name, args)?
@@ -201,21 +192,11 @@ impl Value {
         })
     }
 
-    pub fn attr_names(&self) -> Result<Vec<&str>> {
+    pub fn attrs<'a>(&self, index: &'a WorldIndex, world: &'a mut World) -> Result<Vec<&'a str>> {
         Ok(match self {
-            Value::Resource(resource_ref) => resource_ref.0.to_resource().names(),
-            Value::Entity(entity) => {
-                // TODO: we should be able to list components
-                // index
-                //     .lookup_component(entity, name)
-                //     .ok_or_else(|| anyhow!("no such component {} on entity {:?}", name, entity))?
-                unimplemented!("list components on entity")
-            }
-            Value::Component(entity, lookup) => {
-                // TODO: we should be able to list attrs on a component
-                // lookup(*entity, world).get(*entity, name)?
-                unimplemented!("list attrs on component")
-            }
+            Value::Resource(lookup) => lookup(world).names(),
+            Value::Entity(entity) => index.component_attrs(entity),
+            Value::Component(entity, lookup) => lookup(*entity, world).names(),
             _ => bail!(
                 "attribute base must be a resource, entity, or component, not {:?}",
                 self
@@ -256,9 +237,9 @@ impl fmt::Display for Value {
             Self::Float(v) => write!(f, "{}", v),
             Self::String(v) => write!(f, "\"{}\"", v),
             Self::Graticule(v) => write!(f, "{}", v),
-            Self::Resource(v) => write!(f, "{}", v.0.to_resource().resource_type_name()),
-            Self::ResourceMethod(v, name) => {
-                write!(f, "{}.{}", v.0.to_resource().resource_type_name(), name)
+            Self::Resource(_) => write!(f, "<resource>"),
+            Self::ResourceMethod(_, name) => {
+                write!(f, "<resource>.{}", name)
             }
             Self::Entity(ent) => write!(f, "@{:?}", ent),
             Self::Component(ent, _) => write!(f, "@[{:?}].<lookup>", ent),
@@ -291,14 +272,11 @@ impl PartialEq for Value {
                 Self::Graticule(b) => a == b,
                 _ => false,
             },
-            Self::Resource(a) => match other {
-                Self::Resource(b) => a.0 == b.0,
-                _ => false,
-            },
             Self::Entity(a) => match other {
                 Self::Entity(b) => a == b,
                 _ => false,
             },
+            Self::Resource(_) => false,
             Self::Component(_, _) => false,
             Self::ComponentMethod(_, _, _) => false,
             Self::ResourceMethod(_, _) => false,
