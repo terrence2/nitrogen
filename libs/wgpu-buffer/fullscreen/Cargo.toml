@@ -16,11 +16,13 @@ runtime = { path = "../../util/runtime" }
 [dev-dependencies]
 chrono = "^ 0.4"
 absolute_unit = { path = "../../util/absolute_unit" }
+animate = { path = "../../sim/animate" }
 camera = { path = "../../sim/camera" }
 event_mapper = { path = "../../sim/event_mapper" }
 geodesy = { path = "../../util/geodesy" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 input = { path = "../../system/input" }
+measure = { path = "../../sim/measure" }
 nitrous = { path = "../../util/nitrous" }
 orrery = { path = "../../sim/orrery" }
 window = { path = "../../system/window" }

@@ -578,7 +578,7 @@ impl PatchManager {
         Ok(())
     }
 
-    pub fn ensure_uploaded(&self, gpu: &Gpu, tracker: &mut UploadTracker) {
+    pub fn ensure_uploaded(&self, gpu: &Gpu, tracker: &UploadTracker) {
         gpu.upload_slice_to(
             "terrain-geo-patch-vertex-upload-buffer",
             &self.live_vertices,

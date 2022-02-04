@@ -595,7 +595,7 @@ where
 
     /// Upload the current contents to the GPU. Note that this is non-destructive. If needed,
     /// the builder can accumulate more textures and upload again later.
-    pub fn make_upload_buffer(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) -> Result<()> {
+    pub fn make_upload_buffer(&mut self, gpu: &Gpu, tracker: &UploadTracker) -> Result<()> {
         // If we started a texture upload last frame, replace the prior texture with the new.
         // Any glyphs in the new region will have an oob Frame for one frame, but that's better
         // than having the entire glyph texture be noise for one frame.

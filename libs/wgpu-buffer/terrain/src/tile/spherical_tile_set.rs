@@ -95,7 +95,7 @@ impl TileSet for SphericalHeightTileSet {
         self.common.finish_visibility_update(catalog);
     }
 
-    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) {
+    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &UploadTracker) {
         self.common.ensure_uploaded(gpu, tracker);
     }
 
@@ -216,7 +216,7 @@ impl TileSet for SphericalColorTileSet {
         self.common.finish_visibility_update(catalog)
     }
 
-    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) {
+    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &UploadTracker) {
         self.common.ensure_uploaded(gpu, tracker);
     }
 
@@ -339,7 +339,7 @@ impl TileSet for SphericalNormalsTileSet {
         self.common.finish_visibility_update(catalog);
     }
 
-    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) {
+    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &UploadTracker) {
         self.common.ensure_uploaded(gpu, tracker);
     }
 

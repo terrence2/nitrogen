@@ -207,6 +207,16 @@ impl Runtime {
     }
 
     #[inline]
+    pub fn get<T: Component + 'static>(&self, entity: Entity) -> &T {
+        self.world.get::<T>(entity).expect("entity not found")
+    }
+
+    #[inline]
+    pub fn get_mut<T: Component + 'static>(&mut self, entity: Entity) -> Mut<T> {
+        self.world.get_mut::<T>(entity).expect("entity not found")
+    }
+
+    #[inline]
     pub fn insert_named_resource<S, T>(&mut self, name: S, value: T) -> &mut Self
     where
         S: Into<String>,

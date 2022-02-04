@@ -24,7 +24,7 @@ use composite::CompositeRenderPass;
 use event_mapper::EventMapper;
 use fullscreen::FullscreenBuffer;
 use global_data::GlobalParametersBuffer;
-use gpu::{DetailLevelOpts, Gpu};
+use gpu::{DetailLevelOpts, Gpu, UploadTracker};
 use input::{InputFocus, InputSystem};
 use measure::WorldSpaceFrame;
 use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
@@ -422,32 +422,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         while runtime.resource::<TimeStep>().next_now() < frame_start {
             runtime.run_sim_once();
         }
-
         runtime.run_frame_once();
-
-        let mut tracker = Default::default();
-        runtime
-            .resource::<GlobalParametersBuffer>()
-            .ensure_uploaded(runtime.resource::<Gpu>(), &mut tracker)?;
-        runtime
-            .world
-            .resource_scope(|world, mut terrain: Mut<TerrainBuffer>| {
-                terrain
-                    .ensure_uploaded(world.get_resource::<Gpu>().unwrap(), &mut tracker)
-                    .ok();
-            });
-        runtime
-            .world
-            .resource_scope(|world, mut widget: Mut<WidgetBuffer<SimState>>| {
-                widget
-                    .ensure_uploaded(
-                        *world.get_resource::<TimeStep>().unwrap().now(),
-                        world.get_resource::<Gpu>().unwrap(),
-                        world.get_resource::<Window>().unwrap(),
-                        &mut tracker,
-                    )
-                    .ok();
-            });
 
         {
             let config = runtime.resource::<Window>().config().to_owned();
@@ -471,7 +446,9 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
             };
 
             {
-                tracker.dispatch_uploads(&mut encoder);
+                runtime
+                    .resource_mut::<UploadTracker>()
+                    .dispatch_uploads_until_empty(&mut encoder);
 
                 encoder = runtime
                     .resource::<WidgetBuffer<SimState>>()

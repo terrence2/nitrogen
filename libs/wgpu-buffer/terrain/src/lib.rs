@@ -165,6 +165,9 @@ impl Extension for TerrainBuffer {
         runtime
             .frame_stage_mut(FrameStage::TrackStateChanges)
             .add_system(Self::sys_track_state_changes);
+        runtime
+            .frame_stage_mut(FrameStage::EnsureGpuUpdated)
+            .add_system(Self::sys_ensure_uploaded);
 
         Ok(())
     }
@@ -769,11 +772,17 @@ impl TerrainBuffer {
         Ok(())
     }
 
-    // Push CPU state to GPU
-    pub fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) -> Result<()> {
+    fn sys_ensure_uploaded(
+        mut terrain: ResMut<TerrainBuffer>,
+        gpu: Res<Gpu>,
+        tracker: Res<UploadTracker>,
+    ) {
+        terrain.ensure_uploaded(&gpu, &tracker);
+    }
+
+    pub fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &UploadTracker) {
         self.patch_manager.ensure_uploaded(gpu, tracker);
         self.tile_manager.ensure_uploaded(gpu, tracker);
-        Ok(())
     }
 
     pub fn paint_atlas_indices(

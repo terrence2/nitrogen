@@ -634,7 +634,7 @@ impl SphericalTileSetCommon {
         );
     }
 
-    pub(crate) fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) {
+    pub(crate) fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &UploadTracker) {
         // FIXME: precompute this
         let raw_tile_size = self.atlas_texture_extent.width as usize
             * self.atlas_texture_extent.height as usize

@@ -126,6 +126,9 @@ where
         runtime
             .frame_stage_mut(FrameStage::TrackStateChanges)
             .add_system(Self::sys_track_state_changes);
+        runtime
+            .frame_stage_mut(FrameStage::EnsureGpuUpdated)
+            .add_system(Self::sys_ensure_uploaded);
         Ok(())
     }
 }
@@ -428,12 +431,24 @@ where
         Ok(())
     }
 
+    pub fn sys_ensure_uploaded(
+        mut widget: ResMut<WidgetBuffer<T>>,
+        timestep: Res<TimeStep>,
+        gpu: Res<Gpu>,
+        window: Res<Window>,
+        tracker: Res<UploadTracker>,
+    ) {
+        widget
+            .ensure_uploaded(*timestep.now(), &gpu, &window, &tracker)
+            .ok();
+    }
+
     pub fn ensure_uploaded(
         &mut self,
         now: Instant,
         gpu: &Gpu,
         win: &Window,
-        tracker: &mut UploadTracker,
+        tracker: &UploadTracker,
     ) -> Result<()> {
         // Draw into the paint context.
         self.paint_context.reset_for_frame();

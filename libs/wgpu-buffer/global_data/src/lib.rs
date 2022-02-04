@@ -172,6 +172,9 @@ impl Extension for GlobalParametersBuffer {
         runtime
             .frame_stage_mut(FrameStage::TrackStateChanges)
             .add_system(Self::sys_track_state_changes);
+        runtime
+            .frame_stage_mut(FrameStage::EnsureGpuUpdated)
+            .add_system(Self::sys_ensure_uploaded);
 
         Ok(())
     }
@@ -274,14 +277,21 @@ impl GlobalParametersBuffer {
         self.globals.set_window_info(win);
     }
 
-    pub fn ensure_uploaded(&self, gpu: &Gpu, tracker: &mut UploadTracker) -> Result<()> {
+    fn sys_ensure_uploaded(
+        globals: Res<GlobalParametersBuffer>,
+        gpu: Res<Gpu>,
+        tracker: Res<UploadTracker>,
+    ) {
+        globals.ensure_uploaded(&gpu, &tracker);
+    }
+
+    pub fn ensure_uploaded(&self, gpu: &Gpu, tracker: &UploadTracker) {
         let buffer = gpu.push_data(
             "global-upload-buffer",
             &self.globals,
             wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_SRC,
         );
         tracker.upload_ba(buffer, self.parameters_buffer.clone(), self.buffer_size);
-        Ok(())
     }
 }
 

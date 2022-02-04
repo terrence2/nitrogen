@@ -75,7 +75,7 @@ pub trait TileSet: Debug + Send + Sync + 'static {
     fn begin_visibility_update(&mut self);
     fn note_required(&mut self, visible_patch: &VisiblePatch);
     fn finish_visibility_update(&mut self, camera: &Camera, catalog: Arc<RwLock<Catalog>>);
-    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker);
+    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &UploadTracker);
 
     // Indicate that the current index should be written to the debug file.
     fn snapshot_index(&mut self, gpu: &mut Gpu);
@@ -236,7 +236,7 @@ impl TileManager {
         }
     }
 
-    pub fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) {
+    pub fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &UploadTracker) {
         for ts in self.tile_sets.iter_mut() {
             ts.ensure_uploaded(gpu, tracker);
         }

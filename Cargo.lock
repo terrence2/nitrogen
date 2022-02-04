@@ -1182,6 +1182,7 @@ name = "fullscreen"
 version = "0.0.0"
 dependencies = [
  "absolute_unit",
+ "animate",
  "anyhow",
  "build_shaders",
  "camera",
@@ -1192,6 +1193,7 @@ dependencies = [
  "gpu",
  "input",
  "log",
+ "measure",
  "nitrous",
  "orrery",
  "parking_lot",
