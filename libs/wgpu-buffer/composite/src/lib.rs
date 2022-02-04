@@ -13,12 +13,13 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
+use bevy_ecs::prelude::*;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::GlobalParametersBuffer;
 use gpu::Gpu;
 use input::InputFocus;
 use log::trace;
-use runtime::{Extension, Runtime};
+use runtime::{Extension, FrameStage, Runtime};
 use shader_shared::Group;
 use std::marker::PhantomData;
 use ui::UiRenderPass;
@@ -45,6 +46,9 @@ where
             runtime.resource::<Gpu>(),
         )?;
         runtime.insert_resource(composite);
+        runtime
+            .frame_stage_mut(FrameStage::Render)
+            .add_system(Self::sys_composite_scene.after("before_composite"));
         Ok(())
     }
 }
@@ -138,6 +142,33 @@ where
         })
     }
 
+    // composite: Accumulate offscreen buffers into a final image.
+    fn sys_composite_scene(
+        composite: Res<CompositeRenderPass<T>>,
+        fullscreen: Res<FullscreenBuffer>,
+        globals: Res<GlobalParametersBuffer>,
+        world: Res<WorldRenderPass>,
+        ui: Res<UiRenderPass<T>>,
+        gpu: Res<Gpu>,
+        maybe_surface: Res<Option<wgpu::SurfaceTexture>>,
+        maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+    ) {
+        if let Some(surface_texture) = maybe_surface.into_inner() {
+            if let Some(encoder) = maybe_encoder.into_inner() {
+                let view = surface_texture
+                    .texture
+                    .create_view(&::wgpu::TextureViewDescriptor::default());
+                let render_pass_desc_ref = wgpu::RenderPassDescriptor {
+                    label: Some("screen-composite-render-pass"),
+                    color_attachments: &[Gpu::color_attachment(&view)],
+                    depth_stencil_attachment: Some(gpu.depth_stencil_attachment()),
+                };
+                let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
+                let _rpass = composite.composite_scene(rpass, &fullscreen, &globals, &world, &ui);
+            }
+        }
+    }
+
     pub fn composite_scene<'a>(
         &'a self,
         mut rpass: wgpu::RenderPass<'a>,
@@ -145,13 +176,13 @@ where
         globals: &'a GlobalParametersBuffer,
         world: &'a WorldRenderPass,
         ui: &'a UiRenderPass<T>,
-    ) -> Result<wgpu::RenderPass<'a>> {
+    ) -> wgpu::RenderPass<'a> {
         rpass.set_pipeline(&self.pipeline);
         rpass.set_bind_group(Group::Globals.index(), globals.bind_group(), &[]);
         rpass.set_bind_group(Group::OffScreenWorld.index(), world.bind_group(), &[]);
         rpass.set_bind_group(Group::OffScreenUi.index(), ui.bind_group(), &[]);
         rpass.set_vertex_buffer(0, fullscreen.vertex_buffer());
         rpass.draw(fullscreen.vertex_buffer_range(), 0..1);
-        Ok(rpass)
+        rpass
     }
 }

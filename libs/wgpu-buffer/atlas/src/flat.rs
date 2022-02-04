@@ -764,7 +764,7 @@ where
         Ok(())
     }
 
-    pub fn maintain_gpu_resources(&self, encoder: &mut wgpu::CommandEncoder) -> Result<()> {
+    pub fn maintain_gpu_resources(&self, encoder: &mut wgpu::CommandEncoder) {
         let target_texture = if let Some(ref next_texture) = self.next_texture {
             next_texture.clone()
         } else {
@@ -798,7 +798,6 @@ where
             rpass.set_vertex_buffer(0, vertex_buffer.slice(..));
             rpass.draw(0..4, 0..1);
         }
-        Ok(())
     }
 
     /// Upload and then steal the texture. Useful when used as a one-shot atlas.
@@ -817,7 +816,7 @@ where
                 label: Some("atlas-finish"),
             });
         tracker.dispatch_uploads_until_empty(&mut encoder);
-        self.maintain_gpu_resources(&mut encoder)?;
+        self.maintain_gpu_resources(&mut encoder);
         gpu.queue_mut().submit(vec![encoder.finish()]);
 
         self.make_upload_buffer(gpu, tracker)?;

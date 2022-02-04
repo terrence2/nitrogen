@@ -59,14 +59,43 @@ pub enum SimStage {
 // from the current cameras. Not generally for actually writing to the GPU.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, StageLabel)]
 pub enum FrameStage {
+    /// Run anything that should run with last frame system state.
     PreInput,
+    /// Read values from the system event queue.
     ReadSystem,
+    /// Do anything needed with system events this frame.
     HandleSystem,
+    /// Respond to system events, like display config changes.
     HandleDisplayChange,
+    /// Do anything needed that uses the after-change settings.
     PostSystem,
+    /// Transfer entity state into CPU-side GPU transfer buffers.
     TrackStateChanges,
+    /// Push non-render uploads into the frame update queue.
     EnsureGpuUpdated,
+
+    /// Create the target surface.
+    CreateTargetSurface,
+
+    /// Create the frame's encoder.
+    CreateCommandEncoder,
+
+    /// Encode any uploads we queued up.
+    DispatchUploads,
+
+    /// Everything that needs to use the command encoder and target surface.
     Render,
+
+    /// Finish and submit commands to the GPU.
+    SubmitCommands,
+
+    /// Present our target surface.
+    PresentTargetSurface,
+
+    /// Recreate display if out-of-date.
+    HandleOutOfDateRenderer,
+
+    /// Right before frame end.
     FrameEnd,
 }
 
@@ -150,16 +179,23 @@ impl Default for Runtime {
             )
             .with_stage(SimStage::PostScript, SystemStage::parallel());
 
+        use SystemStage as SS;
         let frame_schedule = Schedule::default()
-            .with_stage(FrameStage::PreInput, SystemStage::parallel())
-            .with_stage(FrameStage::ReadSystem, SystemStage::parallel())
-            .with_stage(FrameStage::HandleSystem, SystemStage::parallel())
-            .with_stage(FrameStage::HandleDisplayChange, SystemStage::parallel())
-            .with_stage(FrameStage::PostSystem, SystemStage::parallel())
-            .with_stage(FrameStage::TrackStateChanges, SystemStage::parallel())
-            .with_stage(FrameStage::EnsureGpuUpdated, SystemStage::parallel())
-            .with_stage(FrameStage::Render, SystemStage::parallel())
-            .with_stage(FrameStage::FrameEnd, SystemStage::parallel());
+            .with_stage(FrameStage::PreInput, SS::parallel())
+            .with_stage(FrameStage::ReadSystem, SS::parallel())
+            .with_stage(FrameStage::HandleSystem, SS::parallel())
+            .with_stage(FrameStage::HandleDisplayChange, SS::parallel())
+            .with_stage(FrameStage::PostSystem, SS::parallel())
+            .with_stage(FrameStage::TrackStateChanges, SS::parallel())
+            .with_stage(FrameStage::EnsureGpuUpdated, SS::parallel())
+            .with_stage(FrameStage::CreateTargetSurface, SS::single_threaded())
+            .with_stage(FrameStage::HandleOutOfDateRenderer, SS::single_threaded())
+            .with_stage(FrameStage::CreateCommandEncoder, SS::single_threaded())
+            .with_stage(FrameStage::DispatchUploads, SS::single_threaded())
+            .with_stage(FrameStage::Render, SS::parallel())
+            .with_stage(FrameStage::SubmitCommands, SS::single_threaded())
+            .with_stage(FrameStage::PresentTargetSurface, SS::single_threaded())
+            .with_stage(FrameStage::FrameEnd, SS::parallel());
 
         let mut world = World::default();
         world.insert_resource(ScriptHerder::default());

@@ -422,17 +422,12 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         while runtime.resource::<TimeStep>().next_now() < frame_start {
             runtime.run_sim_once();
         }
+
         runtime.run_frame_once();
 
+        /*
         {
             let config = runtime.resource::<Window>().config().to_owned();
-
-            let mut encoder = runtime
-                .resource_mut::<Gpu>()
-                .device()
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("frame-encoder"),
-                });
 
             let surface_texture = if let Some(surface_texture) =
                 runtime.resource_mut::<Gpu>().get_next_framebuffer()?
@@ -441,9 +436,16 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
             } else {
                 runtime
                     .resource_mut::<Gpu>()
-                    .on_display_config_changed(&config)?;
+                    .on_display_config_changed(&config);
                 continue;
             };
+
+            let mut encoder = runtime
+                .resource_mut::<Gpu>()
+                .device()
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("frame-encoder"),
+                });
 
             {
                 runtime
@@ -560,6 +562,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
                 .submit(vec![encoder.finish()]);
             surface_texture.present();
         }
+         */
     }
 
     Ok(())

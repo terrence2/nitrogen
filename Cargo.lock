@@ -620,6 +620,7 @@ name = "composite"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "bevy_ecs",
  "build_shaders",
  "fullscreen",
  "global_data",

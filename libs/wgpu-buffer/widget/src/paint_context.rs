@@ -118,10 +118,7 @@ impl PaintContext {
         self.font_context.make_upload_buffer(gpu, tracker)
     }
 
-    pub fn maintain_font_atlas(
-        &self,
-        encoder: wgpu::CommandEncoder,
-    ) -> Result<wgpu::CommandEncoder> {
-        self.font_context.maintain_font_atlas(encoder)
+    pub fn maintain_font_atlas(&self, encoder: &mut wgpu::CommandEncoder) {
+        self.font_context.maintain_font_atlas(encoder);
     }
 }

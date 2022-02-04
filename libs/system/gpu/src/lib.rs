@@ -83,12 +83,31 @@ impl Extension for Gpu {
         runtime
             .frame_stage_mut(FrameStage::HandleDisplayChange)
             .add_system(Self::sys_handle_display_config_change);
-        runtime.insert_resource(UploadTracker::default());
 
-        // FIXME: Once we've tied into this all...
-        // runtime
-        //     .frame_stage_mut(FrameStage::PostRender)
-        //     .add_system(Self::sys_clear_upload_tracker);
+        runtime.insert_resource(None as Option<wgpu::SurfaceTexture>);
+        runtime
+            .frame_stage_mut(FrameStage::CreateTargetSurface)
+            .add_system(Self::sys_create_target_surface);
+        runtime
+            .frame_stage_mut(FrameStage::HandleOutOfDateRenderer)
+            .add_system(Self::sys_handle_out_of_date_renderer);
+        runtime
+            .frame_stage_mut(FrameStage::PresentTargetSurface)
+            .add_system(Self::sys_present_target_surface);
+
+        runtime.insert_resource(None as Option<wgpu::CommandEncoder>);
+        runtime
+            .frame_stage_mut(FrameStage::CreateCommandEncoder)
+            .add_system(Self::sys_create_command_encoder);
+        runtime
+            .frame_stage_mut(FrameStage::SubmitCommands)
+            .add_system(Self::sys_submit_frame_commands);
+
+        runtime.insert_resource(UploadTracker::default());
+        runtime
+            .frame_stage_mut(FrameStage::DispatchUploads)
+            .add_system(Self::sys_dispatch_uploads);
+
         Ok(())
     }
 }
@@ -340,17 +359,82 @@ impl Gpu {
         })
     }
 
-    pub fn sys_handle_display_config_change(
+    fn sys_create_target_surface(
+        mut gpu: ResMut<Gpu>,
+        mut maybe_surface: ResMut<Option<wgpu::SurfaceTexture>>,
+    ) {
+        assert!(maybe_surface.is_none());
+        *maybe_surface = if let Ok(surface) = gpu.get_next_framebuffer() {
+            surface
+        } else {
+            None
+        };
+    }
+
+    fn sys_handle_out_of_date_renderer(
+        mut gpu: ResMut<Gpu>,
+        maybe_surface: Res<Option<wgpu::SurfaceTexture>>,
+        window: Res<Window>,
+    ) {
+        if maybe_surface.is_none() {
+            gpu.on_display_config_changed(window.config());
+        }
+    }
+
+    fn sys_create_command_encoder(
+        mut gpu: ResMut<Gpu>,
+        maybe_surface: Res<Option<wgpu::SurfaceTexture>>,
+        mut maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+    ) {
+        // Only create the encoder if we have a surface to write to.
+        assert!(maybe_encoder.is_none());
+        if maybe_surface.is_some() {
+            *maybe_encoder = Some(gpu.device().create_command_encoder(
+                &wgpu::CommandEncoderDescriptor {
+                    label: Some("frame-encoder"),
+                },
+            ));
+        }
+    }
+
+    fn sys_dispatch_uploads(
+        mut upload_tracker: ResMut<UploadTracker>,
+        mut maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+    ) {
+        if let Some(encoder) = maybe_encoder.into_inner() {
+            upload_tracker.dispatch_uploads_until_empty(encoder);
+        }
+    }
+
+    fn sys_submit_frame_commands(
+        mut gpu: ResMut<Gpu>,
+        mut maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+    ) {
+        let mut empty_encoder = None as Option<wgpu::CommandEncoder>;
+        mem::swap(&mut empty_encoder, &mut maybe_encoder);
+        if let Some(encoder) = empty_encoder {
+            gpu.queue_mut().submit(vec![encoder.finish()]);
+        }
+    }
+
+    fn sys_present_target_surface(mut maybe_surface: ResMut<Option<wgpu::SurfaceTexture>>) {
+        let mut empty_surface = None as Option<wgpu::SurfaceTexture>;
+        mem::swap(&mut empty_surface, &mut maybe_surface);
+        if let Some(surface) = empty_surface {
+            surface.present();
+        }
+    }
+
+    fn sys_handle_display_config_change(
         updated_config: Res<Option<DisplayConfig>>,
         mut gpu: ResMut<Gpu>,
     ) {
         if let Some(config) = updated_config.as_ref() {
-            gpu.on_display_config_changed(config)
-                .expect("Gpu::on_display_config_changed");
+            gpu.on_display_config_changed(config);
         }
     }
 
-    pub fn on_display_config_changed(&mut self, config: &DisplayConfig) -> Result<()> {
+    pub fn on_display_config_changed(&mut self, config: &DisplayConfig) {
         info!(
             "window config changed {}x{}",
             config.window_size().width,
@@ -377,8 +461,6 @@ impl Gpu {
                 depth_or_array_layers: 1,
             };
         }
-
-        Ok(())
     }
 
     // pub fn register_render_extent_change_receiver<T: RenderExtentChangeReceiver>(
