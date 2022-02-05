@@ -1108,15 +1108,15 @@ mod test {
     use super::*;
     use absolute_unit::{degrees, meters};
     use anyhow::Result;
-    use camera::{ArcBallCamera, Camera};
+    use camera::{ArcBallController, Camera};
     use geodesy::{GeoSurface, Graticule, Target};
 
     #[test]
     fn test_pathological() -> Result<()> {
         let mut tree = PatchTree::new(15, 150.0, 300);
         let mut live_patches = Vec::new();
-        let mut camera = Camera::detached(degrees!(90), 16.0 / 9.0, meters!(0.1));
-        let mut arcball = ArcBallCamera::detached();
+        let mut camera = Camera::new(degrees!(90), 16.0 / 9.0, meters!(0.1));
+        let mut arcball = ArcBallController::new();
         arcball.set_eye(Graticule::<Target>::new(
             degrees!(89),
             degrees!(0),
@@ -1156,8 +1156,8 @@ mod test {
     fn test_zoom_in() -> Result<()> {
         let mut tree = PatchTree::new(15, 150.0, 300);
         let mut live_patches = Vec::new();
-        let mut camera = Camera::detached(degrees!(90), 16.0 / 9.0, meters!(0.1));
-        let mut arcball = ArcBallCamera::detached();
+        let mut camera = Camera::new(degrees!(90), 16.0 / 9.0, meters!(0.1));
+        let mut arcball = ArcBallController::new();
         arcball.set_target(Graticule::<GeoSurface>::new(
             degrees!(0),
             degrees!(0),
@@ -1183,8 +1183,8 @@ mod test {
     fn test_fly_forward() -> Result<()> {
         let mut tree = PatchTree::new(15, 150.0, 300);
         let mut live_patches = Vec::new();
-        let mut camera = Camera::detached(degrees!(90), 16.0 / 9.0, meters!(0.1));
-        let mut arcball = ArcBallCamera::detached();
+        let mut camera = Camera::new(degrees!(90), 16.0 / 9.0, meters!(0.1));
+        let mut arcball = ArcBallController::new();
         arcball.set_target(Graticule::<GeoSurface>::new(
             degrees!(0),
             degrees!(0),

@@ -829,7 +829,7 @@ impl TerrainBuffer {
         }
     }
 
-    pub fn tessellate<'a>(&'a self, mut cpass: wgpu::ComputePass<'a>) -> wgpu::ComputePass<'a> {
+    fn tessellate<'a>(&'a self, mut cpass: wgpu::ComputePass<'a>) -> wgpu::ComputePass<'a> {
         // Use the CPU input mesh to tessellate on the GPU.
         cpass = self.patch_manager.tessellate(cpass);
 
@@ -843,7 +843,7 @@ impl TerrainBuffer {
         cpass
     }
 
-    pub fn deferred_texture_target(
+    fn deferred_texture_target(
         &self,
     ) -> (
         [wgpu::RenderPassColorAttachment; 1],
@@ -889,7 +889,7 @@ impl TerrainBuffer {
     /// Draw the tessellated and height-displaced patch geometry to an offscreen buffer colored
     /// with the texture coordinates. This is the only geometry pass. All other terrain passes
     /// work in the screen space that we create here.
-    pub fn deferred_texture<'a>(
+    fn deferred_texture<'a>(
         &'a self,
         mut rpass: wgpu::RenderPass<'a>,
         globals_buffer: &'a GlobalParametersBuffer,
@@ -929,7 +929,7 @@ impl TerrainBuffer {
     /// Use the offscreen texcoord buffer to build offscreen color and normals buffers.
     /// These offscreen buffers will get fed into the `world` renderer with the atmosphere,
     /// clouds, shadowmap, etc, to composite a final "world" image.
-    pub fn accumulate_normal_and_color<'a>(
+    fn accumulate_normal_and_color<'a>(
         &'a self,
         mut cpass: wgpu::ComputePass<'a>,
         globals_buffer: &'a GlobalParametersBuffer,

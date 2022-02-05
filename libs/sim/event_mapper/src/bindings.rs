@@ -94,7 +94,7 @@ impl Bindings {
                 if chord.is_pressed(Some(input), state) {
                     // Note: chord is in possible chord list, so must be present.
                     for script in &self.script_map[chord] {
-                        herder.run_with_locals(locals.to_owned(), script.to_owned());
+                        herder.run_binding(locals.to_owned(), script.to_owned());
                     }
                 }
             }
@@ -220,7 +220,7 @@ impl Bindings {
         for script in scripts {
             let mut locals = locals.to_owned();
             locals.put("pressed", Value::True());
-            herder.run_with_locals(locals, script);
+            herder.run_binding(locals, script);
         }
         Ok(())
     }
@@ -234,7 +234,7 @@ impl Bindings {
         for script in scripts {
             let mut locals = locals.to_owned();
             locals.put("pressed", Value::False());
-            herder.run_with_locals(locals, script);
+            herder.run_binding(locals, script);
         }
         Ok(())
     }

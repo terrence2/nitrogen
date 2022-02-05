@@ -22,13 +22,13 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use gpu::Gpu;
-use input::{ElementState, InputEvent, VirtualKeyCode};
+use input::{ElementState, InputEvent, ModifiersState, VirtualKeyCode};
 use nitrous::{
     ir::{Expr, Stmt, Term},
     NitrousAst, NitrousScript, Value,
 };
 use parking_lot::RwLock;
-use runtime::ScriptHerder;
+use runtime::{ScriptCompletion, ScriptCompletions, ScriptHerder, ScriptResult, ScriptRunKind};
 use std::io::Read;
 use std::{
     fs::{File, OpenOptions},
@@ -232,36 +232,56 @@ impl Terminal {
 
         self.add_command_to_history(&command)?;
 
-        herder.run(NitrousScript::compile(&command)?);
-
-        // FIXME: make sure we have logging of errors... event system? entity system?
-
-        /*
-        let output = self.output.clone();
-        let mut interpreter = interpreter.to_owned();
-        rayon::spawn(move || match interpreter.interpret_once(&command) {
-            Ok(value) => {
-                let s = match value {
-                    Value::String(s) => s,
-                    v => format!("{}", v),
-                };
-                for line in s.lines() {
-                    output.write().append_line(line);
-                    println!("{}", line);
-                }
-            }
-            Err(err) => {
-                println!("failed to execute '{}'", command);
-                println!("  Error: {:?}", err);
-                output
-                    .write()
-                    .append_line(&format!("failed to execute '{}'", command));
-                output.write().append_line(&format!("  Error: {:?}", err));
-            }
-        });
-         */
+        herder.run_interactive(&command)?;
 
         Ok(())
+    }
+
+    pub fn report_script_completions(&self, completions: &ScriptCompletions) {
+        for completion in completions {
+            if completion.meta.kind() == ScriptRunKind::Interactive {
+                match &completion.result {
+                    ScriptResult::Ok(v) => {
+                        let screen = &mut self.output.write();
+                        screen.append_line(&if let Value::String(s) = v {
+                            format!("{}", s)
+                        } else {
+                            format!("{}", v)
+                        });
+                    }
+                    ScriptResult::Err(error) => {
+                        self.show_script_error(completion, error);
+                    }
+                };
+            } else if completion.result.is_error() {
+                self.show_script_error(completion, completion.result.error().unwrap());
+            }
+        }
+    }
+
+    fn show_script_error(&self, completion: &ScriptCompletion, error: &str) {
+        let screen = &mut self.output.write();
+
+        let prefix = "Script Failed: ";
+        let script = format!("{}", completion.meta.context().script());
+        screen.append_line(&format!("{}{}", prefix, script));
+        screen.last_line_mut().unwrap().select_all();
+        screen.last_line_mut().unwrap().change_color(Color::Yellow);
+        screen
+            .last_line_mut()
+            .unwrap()
+            .select(prefix.len()..prefix.len() + script.len());
+        screen.last_line_mut().unwrap().change_color(Color::Gray);
+
+        let prefix = "  Error: ";
+        screen.append_line(&format!("{}{}", prefix, error));
+        screen.last_line_mut().unwrap().select_all();
+        screen.last_line_mut().unwrap().change_color(Color::Gray);
+        screen
+            .last_line_mut()
+            .unwrap()
+            .select(prefix.len()..prefix.len() + error.len());
+        screen.last_line_mut().unwrap().change_color(Color::Red);
     }
 }
 

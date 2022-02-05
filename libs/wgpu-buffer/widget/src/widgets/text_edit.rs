@@ -98,6 +98,10 @@ impl TextEdit {
         self.lines.push(self.make_run(markup));
     }
 
+    pub fn last_line_mut(&mut self) -> Option<&mut TextRun> {
+        self.lines.last_mut()
+    }
+
     fn make_run(&self, text: &str) -> TextRun {
         TextRun::empty()
             .with_hidden_selection()

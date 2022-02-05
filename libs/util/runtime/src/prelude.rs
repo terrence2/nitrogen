@@ -12,16 +12,27 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-mod herder;
-mod prelude;
-mod runtime;
-mod startup;
 
-pub use crate::{
-    herder::{
-        ExecutionMetadata, ScriptCompletion, ScriptCompletions, ScriptHerder, ScriptResult,
-        ScriptRunKind, ScriptRunPhase,
-    },
-    runtime::{Extension, FrameStage, Runtime, SimStage, StartupStage},
-    startup::StartupOpts,
-};
+/// Prelude for the nitrous language when running under nitrogen.
+/// This resource gets inserted into the runtime as "prelude", but
+/// all of the names are also inserted automatically as values into
+/// locals in every script execution, so be fastidious.
+use crate::{Extension, Runtime};
+use nitrous::{inject_nitrous_resource, method, NitrousResource};
+
+#[derive(Debug, Default, NitrousResource)]
+pub struct Prelude;
+
+impl Extension for Prelude {
+    fn init(runtime: &mut Runtime) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
+
+#[inject_nitrous_resource]
+impl Prelude {
+    #[method]
+    fn help(&self) -> String {
+        "hello, world!".to_owned()
+    }
+}

@@ -18,6 +18,7 @@ use bevy_ecs::prelude::*;
 
 /// Store current execution state of some specific script.
 /// Note: this state must always be used with the same script.
+#[derive(Clone, Debug)]
 pub struct ExecutionContext {
     locals: LocalNamespace,
     stack: Vec<Value>,
@@ -33,6 +34,10 @@ impl ExecutionContext {
             script,
             counter: 0,
         }
+    }
+
+    pub fn script(&self) -> &NitrousScript {
+        &self.script
     }
 }
 

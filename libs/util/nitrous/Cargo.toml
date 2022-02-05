@@ -10,6 +10,7 @@ lalrpop = "0.19.4"
 [dependencies]
 anyhow = { version = "^ 1", features = ["backtrace"] }
 bevy_ecs = "^ 0.6"
+ellipse = "^ 0.2"
 lalrpop-util = { version = "0.19.4", features = ["lexer"] }
 log = "^ 0.4"
 futures = "^ 0.3"

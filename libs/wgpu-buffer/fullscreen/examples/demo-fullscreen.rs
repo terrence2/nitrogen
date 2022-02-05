@@ -15,16 +15,17 @@
 use absolute_unit::{degrees, meters};
 use animate::TimeStep;
 use anyhow::Result;
+use bevy_ecs::prelude::*;
 use camera::{ArcBallController, ArcBallSystem, Camera, CameraSystem};
 use event_mapper::EventMapper;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
-use gpu::{Gpu, UploadTracker};
+use gpu::Gpu;
 use input::{DemoFocus, InputSystem};
 use measure::WorldSpaceFrame;
 use orrery::Orrery;
-use runtime::{Extension, Runtime};
+use runtime::{Extension, FrameStage, Runtime};
 use std::time::Instant;
 use window::{DisplayOpts, Window, WindowBuilder};
 
@@ -39,6 +40,9 @@ impl Extension for App {
             runtime.resource::<Gpu>(),
         )?;
         runtime.insert_resource(app);
+        runtime
+            .frame_stage_mut(FrameStage::Render)
+            .add_system(Self::sys_render);
         Ok(())
     }
 }
@@ -113,6 +117,33 @@ impl App {
                 multiview: None,
             });
         Ok(Self { pipeline })
+    }
+
+    fn sys_render(
+        app: Res<App>,
+        globals: Res<GlobalParametersBuffer>,
+        fullscreen: Res<FullscreenBuffer>,
+        gpu: Res<Gpu>,
+        maybe_surface: Res<Option<wgpu::SurfaceTexture>>,
+        maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+    ) {
+        if let Some(surface_texture) = maybe_surface.into_inner() {
+            if let Some(encoder) = maybe_encoder.into_inner() {
+                let view = surface_texture
+                    .texture
+                    .create_view(&::wgpu::TextureViewDescriptor::default());
+                let render_pass_desc_ref = wgpu::RenderPassDescriptor {
+                    label: Some("screen-composite-render-pass"),
+                    color_attachments: &[Gpu::color_attachment(&view)],
+                    depth_stencil_attachment: Some(gpu.depth_stencil_attachment()),
+                };
+                let mut rpass = encoder.begin_render_pass(&render_pass_desc_ref);
+                rpass.set_pipeline(&app.pipeline);
+                rpass.set_bind_group(0, globals.bind_group(), &[]);
+                rpass.set_vertex_buffer(0, fullscreen.vertex_buffer());
+                rpass.draw(0..4, 0..1);
+            }
+        }
     }
 }
 
@@ -195,57 +226,5 @@ fn window_main(mut runtime: Runtime) -> Result<()> {
         runtime
             .get_mut::<ArcBallController>(player_ent)
             .handle_mousemotion(-0.5f64, 0f64);
-
-        {
-            let config = runtime.resource::<Window>().config().to_owned();
-
-            let mut encoder = runtime
-                .resource_mut::<Gpu>()
-                .device()
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("frame-encoder"),
-                });
-
-            let surface_texture = if let Some(surface_texture) =
-                runtime.resource_mut::<Gpu>().get_next_framebuffer()?
-            {
-                surface_texture
-            } else {
-                runtime
-                    .resource_mut::<Gpu>()
-                    .on_display_config_changed(&config)?;
-                continue;
-            };
-
-            runtime
-                .resource_mut::<UploadTracker>()
-                .dispatch_uploads_until_empty(&mut encoder);
-
-            {
-                let gpu = runtime.resource::<Gpu>();
-                let view = surface_texture
-                    .texture
-                    .create_view(&::wgpu::TextureViewDescriptor::default());
-                let render_pass_desc_ref = wgpu::RenderPassDescriptor {
-                    label: Some("screen-composite-render-pass"),
-                    color_attachments: &[Gpu::color_attachment(&view)],
-                    depth_stencil_attachment: Some(gpu.depth_stencil_attachment()),
-                };
-                let mut rpass = encoder.begin_render_pass(&render_pass_desc_ref);
-                rpass.set_pipeline(&runtime.resource::<App>().pipeline);
-                rpass.set_bind_group(
-                    0,
-                    runtime.resource::<GlobalParametersBuffer>().bind_group(),
-                    &[],
-                );
-                rpass.set_vertex_buffer(0, runtime.resource::<FullscreenBuffer>().vertex_buffer());
-                rpass.draw(0..4, 0..1);
-            }
-            runtime
-                .resource_mut::<Gpu>()
-                .queue_mut()
-                .submit(vec![encoder.finish()]);
-            surface_texture.present();
-        }
     }
 }

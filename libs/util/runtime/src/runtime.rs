@@ -12,7 +12,10 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::herder::ScriptHerder;
+use crate::{
+    herder::{ScriptCompletions, ScriptHerder, ScriptRunKind},
+    prelude::Prelude,
+};
 use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource, world::EntityMut};
 use log::error;
@@ -142,7 +145,7 @@ impl<'w> NamedEntityMut<'w> {
 }
 
 pub struct Runtime {
-    pub world: World,
+    world: World,
     startup_schedule: Schedule,
     sim_schedule: Schedule,
     frame_schedule: Schedule,
@@ -155,7 +158,7 @@ impl Default for Runtime {
             .with_stage(
                 StartupStage::RunScript,
                 SystemStage::single_threaded()
-                    .with_system(ScriptHerder::sys_run_scripts.exclusive_system()),
+                    .with_system(ScriptHerder::sys_run_startup_scripts.exclusive_system()),
             )
             .with_stage(StartupStage::PostScript, SystemStage::parallel());
 
@@ -169,7 +172,7 @@ impl Default for Runtime {
             .with_stage(
                 SimStage::RunScript,
                 SystemStage::single_threaded()
-                    .with_system(ScriptHerder::sys_run_scripts.exclusive_system()),
+                    .with_system(ScriptHerder::sys_run_sim_scripts.exclusive_system()),
             )
             .with_stage(SimStage::PostScript, SystemStage::parallel());
 
@@ -191,15 +194,19 @@ impl Default for Runtime {
             .with_stage(FrameStage::PresentTargetSurface, SS::single_threaded())
             .with_stage(FrameStage::FrameEnd, SS::parallel());
 
-        let mut world = World::default();
-        world.insert_resource(ScriptHerder::default());
-
-        Self {
-            world,
+        let mut runtime = Self {
+            world: World::default(),
             startup_schedule,
             sim_schedule,
             frame_schedule,
-        }
+        };
+
+        runtime
+            .insert_resource(ScriptHerder::default())
+            .insert_resource(ScriptCompletions::new())
+            .insert_named_resource("prelude", Prelude::default());
+
+        runtime
     }
 }
 
@@ -215,18 +222,29 @@ impl Runtime {
     }
 
     #[inline]
+    pub fn run_interactive(&mut self, script_text: &str) -> Result<()> {
+        self.resource_mut::<ScriptHerder>()
+            .run_interactive(script_text)
+    }
+
+    #[inline]
     pub fn run_string(&mut self, script_text: &str) -> Result<()> {
         self.resource_mut::<ScriptHerder>().run_string(script_text)
     }
 
     #[inline]
     pub fn run<N: Into<NitrousScript>>(&mut self, script: N) {
-        self.resource_mut::<ScriptHerder>().run(script)
+        self.resource_mut::<ScriptHerder>()
+            .run(script, ScriptRunKind::Precompiled)
     }
 
+    #[inline]
     pub fn run_with_locals<N: Into<NitrousScript>>(&mut self, locals: LocalNamespace, script: N) {
-        self.resource_mut::<ScriptHerder>()
-            .run_with_locals(locals, script)
+        self.resource_mut::<ScriptHerder>().run_with_locals(
+            locals,
+            script,
+            ScriptRunKind::Precompiled,
+        )
     }
 
     #[inline]

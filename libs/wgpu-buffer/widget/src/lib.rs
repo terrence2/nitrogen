@@ -49,8 +49,7 @@ use log::trace;
 use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
 use parking_lot::RwLock;
 use platform_dirs::AppDirs;
-use runtime::{Extension, Runtime, SimStage};
-use runtime::{FrameStage, ScriptHerder};
+use runtime::{Extension, FrameStage, Runtime, ScriptCompletions, ScriptHerder, SimStage};
 use std::{
     borrow::Borrow, marker::PhantomData, mem, num::NonZeroU64, ops::Range, path::Path, sync::Arc,
     time::Instant,
@@ -124,12 +123,14 @@ where
             .sim_stage_mut(SimStage::HandleInput)
             .add_system(Self::sys_handle_input_events);
         runtime
+            .sim_stage_mut(SimStage::PostScript)
+            .add_system(Self::sys_report_script_completions);
+        runtime
             .frame_stage_mut(FrameStage::TrackStateChanges)
             .add_system(Self::sys_track_state_changes);
         runtime
             .frame_stage_mut(FrameStage::EnsureGpuUpdated)
             .add_system(Self::sys_ensure_uploaded);
-
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_maintain_font_atlas
                 .before("UiRenderPass")
@@ -412,6 +413,16 @@ where
         Ok(())
     }
 
+    fn sys_report_script_completions(
+        widgets: Res<WidgetBuffer<T>>,
+        completions: Res<ScriptCompletions>,
+    ) {
+        widgets
+            .terminal
+            .write()
+            .report_script_completions(&completions);
+    }
+
     fn sys_track_state_changes(
         step: Res<TimeStep>,
         window: Res<Window>,
@@ -557,23 +568,17 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use gpu::TestResources;
+    use input::DemoFocus;
     use std::env::current_dir;
 
     #[test]
     fn test_label_widget() -> Result<()> {
-        let TestResources {
-            window,
-            gpu,
-            mut interpreter,
-            ..
-        } = Gpu::for_test_unix()?;
+        let mut runtime = Gpu::for_test_unix()?;
+        runtime
+            .insert_resource(AppDirs::new(Some("nitrogen"), true).unwrap())
+            .insert_resource(TimeStep::new_60fps())
+            .load_extension::<WidgetBuffer<DemoFocus>>()?;
 
-        let widgets = WidgetBuffer::new(
-            &mut gpu.write(),
-            &mut interpreter,
-            &(current_dir()?.join("__dump__")),
-        )?;
         let label = Label::new(
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\
             สิบสองกษัตริย์ก่อนหน้าแลถัดไป       สององค์ไซร้โง่เขลาเบาปัญญา\
@@ -585,23 +590,13 @@ mod test {
             Y [ˈʏpsilɔn], Yen [jɛn], Yoga [ˈjoːgɑ]",
         )
         .wrapped();
-        widgets
-            .read()
+        runtime
+            .resource_mut::<WidgetBuffer<DemoFocus>>()
             .root_container()
             .write()
             .add_child("label", label);
 
-        widgets
-            .write()
-            .track_state_changes(Instant::now(), &window.read())?;
-
-        let mut tracker = Default::default();
-        widgets.write().ensure_uploaded(
-            Instant::now(),
-            &mut gpu.write(),
-            &window.read(),
-            &mut tracker,
-        )?;
+        runtime.run_frame_once();
 
         Ok(())
     }

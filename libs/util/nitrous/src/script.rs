@@ -17,10 +17,13 @@ use crate::{
     lower::{Atom, Instr, NitrousCode},
 };
 use anyhow::Result;
+use ellipse::Ellipse;
+use std::fmt::Formatter;
 use std::{collections::HashMap, fmt};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct NitrousScript {
+    origin: String,
     code: Vec<Instr>,
     atoms: HashMap<Atom, String>,
 }
@@ -29,7 +32,11 @@ impl NitrousScript {
     pub fn compile(script: &str) -> Result<Self> {
         let ast = NitrousAst::parse(script)?;
         let (code, atoms) = NitrousCode::lower(ast)?.finish()?;
-        Ok(Self { code, atoms })
+        Ok(Self {
+            origin: script.to_owned(),
+            code,
+            atoms,
+        })
     }
 
     pub fn code(&self) -> &[Instr] {
@@ -51,8 +58,8 @@ impl From<&NitrousScript> for NitrousScript {
     }
 }
 
-impl fmt::Display for NitrousScript {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl fmt::Debug for NitrousScript {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         for (i, instr) in self.code.iter().enumerate() {
             match instr {
                 Instr::Push(v) => writeln!(f, "{:03} <-- {}", i, v)?,
@@ -80,5 +87,20 @@ impl fmt::Display for NitrousScript {
             }
         }
         Ok(())
+    }
+}
+
+impl fmt::Display for NitrousScript {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            self.origin
+                .trim_start()
+                .split('\n')
+                .next()
+                .unwrap_or("")
+                .truncate_ellipse(40 - 3)
+        )
     }
 }

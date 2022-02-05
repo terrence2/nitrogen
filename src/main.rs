@@ -74,8 +74,8 @@ struct VisibleWidgets {
 
 #[derive(Debug, NitrousResource)]
 struct System {
-    exit: bool,
     visible_widgets: VisibleWidgets,
+    exit: bool,
 }
 
 impl Extension for System {
@@ -102,8 +102,8 @@ impl System {
     pub fn new(widgets: &WidgetBuffer<DemoFocus>) -> Result<Self> {
         let visible_widgets = Self::build_gui(widgets)?;
         Ok(Self {
-            exit: false,
             visible_widgets,
+            exit: false,
         })
     }
 
@@ -290,6 +290,8 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .insert_scriptable(camera)
         .id();
 
+    // Causes all initial tiles to be blank? Wat?
+    runtime.run_startup();
     while !runtime.resource::<System>().exit {
         // Catch monotonic sim time up to system time.
         let frame_start = Instant::now();
