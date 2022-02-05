@@ -587,10 +587,7 @@ impl PatchManager {
         );
     }
 
-    pub fn tessellate<'a>(
-        &'a self,
-        mut cpass: wgpu::ComputePass<'a>,
-    ) -> Result<wgpu::ComputePass<'a>> {
+    pub fn tessellate<'a>(&'a self, mut cpass: wgpu::ComputePass<'a>) -> wgpu::ComputePass<'a> {
         // Copy our upload buffer into seed positions for subdivisions.
         let patch_count = 3 * self.desired_patch_count as u32;
         assert!(patch_count < u16::MAX as u32);
@@ -611,7 +608,7 @@ impl PatchManager {
             cpass.dispatch(wg_x, wg_y, 1);
         }
 
-        Ok(cpass)
+        cpass
     }
 
     pub(crate) fn displace_height_bind_group_layout(&self) -> &wgpu::BindGroupLayout {

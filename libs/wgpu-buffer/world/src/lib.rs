@@ -89,6 +89,11 @@ impl Extension for WorldRenderPass {
         runtime
             .frame_stage_mut(FrameStage::HandleSystem)
             .add_system(Self::sys_handle_display_config_change);
+        runtime.frame_stage_mut(FrameStage::Render).add_system(
+            Self::sys_render_world
+                .before("CompositeRenderPass")
+                .label("WorldRenderPass"),
+        );
 
         // TODO: figure out debug bindings
         runtime.resource_mut::<ScriptHerder>().run_string(
@@ -558,6 +563,28 @@ impl WorldRenderPass {
         )
     }
 
+    fn sys_render_world(
+        world: Res<WorldRenderPass>,
+        globals: Res<GlobalParametersBuffer>,
+        fullscreen: Res<FullscreenBuffer>,
+        atmosphere: Res<AtmosphereBuffer>,
+        stars: Res<StarsBuffer>,
+        terrain: Res<TerrainBuffer>,
+        maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+    ) {
+        if let Some(encoder) = maybe_encoder.into_inner() {
+            let (color_attachments, depth_stencil_attachment) = world.offscreen_target_cleared();
+            let render_pass_desc_ref = wgpu::RenderPassDescriptor {
+                label: Some("offscreen-draw-world"),
+                color_attachments: &color_attachments,
+                depth_stencil_attachment,
+            };
+            let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
+            let _rpass =
+                world.render_world(rpass, &globals, &fullscreen, &atmosphere, &stars, &terrain);
+        }
+    }
+
     pub fn render_world<'a>(
         &'a self,
         mut rpass: wgpu::RenderPass<'a>,
@@ -566,7 +593,7 @@ impl WorldRenderPass {
         atmosphere_buffer: &'a AtmosphereBuffer,
         stars_buffer: &'a StarsBuffer,
         terrain_buffer: &'a TerrainBuffer,
-    ) -> Result<wgpu::RenderPass<'a>> {
+    ) -> wgpu::RenderPass<'a> {
         match self.debug_mode {
             DebugMode::None => rpass.set_pipeline(&self.composite_pipeline),
             DebugMode::Deferred => rpass.set_pipeline(&self.dbg_deferred_pipeline),
@@ -609,6 +636,6 @@ impl WorldRenderPass {
             }
         }
 
-        Ok(rpass)
+        rpass
     }
 }

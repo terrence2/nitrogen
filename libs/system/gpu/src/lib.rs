@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 mod detail;
-mod frame_graph;
 mod upload_tracker;
 
 pub use crate::{
@@ -382,7 +381,7 @@ impl Gpu {
     }
 
     fn sys_create_command_encoder(
-        mut gpu: ResMut<Gpu>,
+        gpu: Res<Gpu>,
         maybe_surface: Res<Option<wgpu::SurfaceTexture>>,
         mut maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
@@ -399,7 +398,7 @@ impl Gpu {
 
     fn sys_dispatch_uploads(
         mut upload_tracker: ResMut<UploadTracker>,
-        mut maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+        maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
         if let Some(encoder) = maybe_encoder.into_inner() {
             upload_tracker.dispatch_uploads_until_empty(encoder);

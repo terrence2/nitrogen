@@ -130,9 +130,11 @@ where
             .frame_stage_mut(FrameStage::EnsureGpuUpdated)
             .add_system(Self::sys_ensure_uploaded);
 
-        runtime
-            .frame_stage_mut(FrameStage::Render)
-            .add_system(Self::sys_maintain_font_atlas.label("maintain_font_atlas"));
+        runtime.frame_stage_mut(FrameStage::Render).add_system(
+            Self::sys_maintain_font_atlas
+                .before("UiRenderPass")
+                .label("WidgetBuffer::maintain_font_atlas"),
+        );
         Ok(())
     }
 }
@@ -536,7 +538,7 @@ where
 
     fn sys_maintain_font_atlas(
         widgets: Res<WidgetBuffer<T>>,
-        mut maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+        maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
         if let Some(encoder) = maybe_encoder.into_inner() {
             widgets.paint_context.maintain_font_atlas(encoder);

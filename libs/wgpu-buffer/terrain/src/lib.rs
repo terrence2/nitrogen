@@ -168,6 +168,24 @@ impl Extension for TerrainBuffer {
         runtime
             .frame_stage_mut(FrameStage::EnsureGpuUpdated)
             .add_system(Self::sys_ensure_uploaded);
+        runtime
+            .frame_stage_mut(FrameStage::Render)
+            .add_system(Self::sys_paint_atlas_indices.label("paint_atlas_indices"));
+        runtime
+            .frame_stage_mut(FrameStage::Render)
+            .add_system(Self::sys_tesselate.label("tesselate"));
+        runtime.frame_stage_mut(FrameStage::Render).add_system(
+            Self::sys_deferred_texture
+                .label("deferred_texture")
+                .after("tesselate")
+                .after("paint_atlas_indices"),
+        );
+        runtime.frame_stage_mut(FrameStage::Render).add_system(
+            Self::sys_accumulate_normal_and_color
+                .label("accumulate_normal_and_color")
+                .after("deferred_texture")
+                .before("WorldRenderPass"),
+        );
 
         Ok(())
     }
@@ -777,36 +795,43 @@ impl TerrainBuffer {
         gpu: Res<Gpu>,
         tracker: Res<UploadTracker>,
     ) {
-        terrain.ensure_uploaded(&gpu, &tracker);
+        terrain.patch_manager.ensure_uploaded(&gpu, &tracker);
+        terrain.tile_manager.ensure_uploaded(&gpu, &tracker);
     }
 
-    pub fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &UploadTracker) {
-        self.patch_manager.ensure_uploaded(gpu, tracker);
-        self.tile_manager.ensure_uploaded(gpu, tracker);
+    fn sys_paint_atlas_indices(
+        terrain: Res<TerrainBuffer>,
+        maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+    ) {
+        if let Some(encoder) = maybe_encoder.into_inner() {
+            terrain.tile_manager.paint_atlas_indices(encoder);
+        }
     }
 
-    pub fn paint_atlas_indices(
-        &self,
-        encoder: wgpu::CommandEncoder,
-    ) -> Result<wgpu::CommandEncoder> {
-        self.tile_manager.paint_atlas_indices(encoder)
+    fn sys_tesselate(
+        terrain: Res<TerrainBuffer>,
+        maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+    ) {
+        if let Some(encoder) = maybe_encoder.into_inner() {
+            let cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("compute-pass"),
+            });
+            let _cpass = terrain.tessellate(cpass);
+        }
     }
 
-    pub fn tessellate<'a>(
-        &'a self,
-        mut cpass: wgpu::ComputePass<'a>,
-    ) -> Result<wgpu::ComputePass<'a>> {
+    pub fn tessellate<'a>(&'a self, mut cpass: wgpu::ComputePass<'a>) -> wgpu::ComputePass<'a> {
         // Use the CPU input mesh to tessellate on the GPU.
-        cpass = self.patch_manager.tessellate(cpass)?;
+        cpass = self.patch_manager.tessellate(cpass);
 
         // Use our height tiles to displace mesh.
         cpass = self.tile_manager.displace_height(
             self.patch_manager.target_vertex_count(),
             self.patch_manager.displace_height_bind_group(),
             cpass,
-        )?;
+        );
 
-        Ok(cpass)
+        cpass
     }
 
     pub fn deferred_texture_target(
@@ -835,6 +860,23 @@ impl TerrainBuffer {
         )
     }
 
+    fn sys_deferred_texture(
+        terrain: Res<TerrainBuffer>,
+        globals: Res<GlobalParametersBuffer>,
+        maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+    ) {
+        if let Some(encoder) = maybe_encoder.into_inner() {
+            let (color_attachments, depth_stencil_attachment) = terrain.deferred_texture_target();
+            let render_pass_desc_ref = wgpu::RenderPassDescriptor {
+                label: Some(concat!("non-screen-render-pass-terrain-deferred",)),
+                color_attachments: &color_attachments,
+                depth_stencil_attachment,
+            };
+            let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
+            let _rpass = terrain.deferred_texture(rpass, &globals);
+        }
+    }
+
     /// Draw the tessellated and height-displaced patch geometry to an offscreen buffer colored
     /// with the texture coordinates. This is the only geometry pass. All other terrain passes
     /// work in the screen space that we create here.
@@ -842,7 +884,7 @@ impl TerrainBuffer {
         &'a self,
         mut rpass: wgpu::RenderPass<'a>,
         globals_buffer: &'a GlobalParametersBuffer,
-    ) -> Result<wgpu::RenderPass<'a>> {
+    ) -> wgpu::RenderPass<'a> {
         rpass.set_pipeline(&self.deferred_texture_pipeline);
         rpass.set_bind_group(Group::Globals.index(), globals_buffer.bind_group(), &[]);
         rpass.set_vertex_buffer(0, self.patch_manager.vertex_buffer());
@@ -859,7 +901,20 @@ impl TerrainBuffer {
                 0..1,
             );
         }
-        Ok(rpass)
+        rpass
+    }
+
+    fn sys_accumulate_normal_and_color(
+        terrain: Res<TerrainBuffer>,
+        globals: Res<GlobalParametersBuffer>,
+        maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+    ) {
+        if let Some(encoder) = maybe_encoder.into_inner() {
+            let cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("compute-pass"),
+            });
+            let _cpass = terrain.accumulate_normal_and_color(cpass, &globals);
+        }
     }
 
     /// Use the offscreen texcoord buffer to build offscreen color and normals buffers.
@@ -869,7 +924,7 @@ impl TerrainBuffer {
         &'a self,
         mut cpass: wgpu::ComputePass<'a>,
         globals_buffer: &'a GlobalParametersBuffer,
-    ) -> Result<wgpu::ComputePass<'a>> {
+    ) -> wgpu::ComputePass<'a> {
         cpass.set_pipeline(&self.accumulate_clear_pipeline);
         cpass.set_bind_group(Group::Globals.index(), globals_buffer.bind_group(), &[]);
         cpass.set_bind_group(
@@ -884,16 +939,16 @@ impl TerrainBuffer {
             &self.acc_extent,
             globals_buffer,
             &self.accumulate_common_bind_group,
-        )?;
+        );
 
         cpass = self.tile_manager.accumulate_colors(
             cpass,
             &self.acc_extent,
             globals_buffer,
             &self.accumulate_common_bind_group,
-        )?;
+        );
 
-        Ok(cpass)
+        cpass
     }
 
     pub fn add_tile_set(&mut self, tile_set: Box<dyn TileSet>) -> TileSetHandle {

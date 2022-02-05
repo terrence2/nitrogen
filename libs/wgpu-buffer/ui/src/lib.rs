@@ -60,8 +60,8 @@ where
             .add_system(Self::sys_handle_display_config_change);
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_render_ui
-                .after("maintain_font_atlas")
-                .label("before_composite"),
+                .before("CompositeRenderPass")
+                .label("UiRenderPass"),
         );
         Ok(())
     }
@@ -425,7 +425,7 @@ where
         globals: Res<GlobalParametersBuffer>,
         widgets: Res<WidgetBuffer<T>>,
         world: Res<WorldRenderPass>,
-        mut maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+        maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
         if let Some(encoder) = maybe_encoder.into_inner() {
             let (color_attachments, depth_stencil_attachment) = ui.offscreen_target();

@@ -24,8 +24,8 @@ use composite::CompositeRenderPass;
 use event_mapper::EventMapper;
 use fullscreen::FullscreenBuffer;
 use global_data::GlobalParametersBuffer;
-use gpu::{DetailLevelOpts, Gpu, UploadTracker};
-use input::{InputFocus, InputSystem};
+use gpu::{DetailLevelOpts, Gpu};
+use input::{DemoFocus, InputFocus, InputSystem};
 use measure::WorldSpaceFrame;
 use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
 use orrery::Orrery;
@@ -83,7 +83,7 @@ struct System {
 
 impl Extension for System {
     fn init(runtime: &mut Runtime) -> Result<()> {
-        let widgets = runtime.resource::<WidgetBuffer<SimState>>();
+        let widgets = runtime.resource::<WidgetBuffer<DemoFocus>>();
         let system = System::new(widgets)?;
         runtime.insert_named_resource("system", system);
         runtime
@@ -91,9 +91,14 @@ impl Extension for System {
             .add_system(Self::sys_track_visible_state);
         runtime.resource_mut::<ScriptHerder>().run_string(
             r#"
+                /// Bevy has an Escape to exit system that seems clutch for this usage
                 bindings.bind("Escape", "system.exit()");
                 bindings.bind("q", "system.exit()");
+
+                /// FIXME: move internal to terrain
                 bindings.bind("p", "system.toggle_pin_camera(pressed)");
+
+                /// FIXME: move to widgets, or just drop
                 bindings.bind("g", "widget.dump_glyphs(pressed)");
             "#,
         )?;
@@ -103,7 +108,7 @@ impl Extension for System {
 
 #[inject_nitrous_resource]
 impl System {
-    pub fn new(widgets: &WidgetBuffer<SimState>) -> Result<Self> {
+    pub fn new(widgets: &WidgetBuffer<DemoFocus>) -> Result<Self> {
         let visible_widgets = Self::build_gui(widgets)?;
         Ok(Self {
             exit: false,
@@ -113,7 +118,7 @@ impl System {
         })
     }
 
-    pub fn build_gui(widgets: &WidgetBuffer<SimState>) -> Result<VisibleWidgets> {
+    pub fn build_gui(widgets: &WidgetBuffer<DemoFocus>) -> Result<VisibleWidgets> {
         let sim_time = Label::new("").with_color(Color::White).wrapped();
         let camera_direction = Label::new("").with_color(Color::White).wrapped();
         let camera_position = Label::new("").with_color(Color::White).wrapped();
@@ -251,110 +256,6 @@ impl System {
     // }
 }
 
-/*
-make_frame_graph!(
-    FrameGraph {
-        buffers: {
-            // Note: order must be lock order
-            // system
-            composite: CompositeRenderPass,
-            ui: UiRenderPass,
-            widgets: WidgetBuffer,
-            world: WorldRenderPass,
-            terrain: TerrainBuffer,
-            atmosphere: AtmosphereBuffer,
-            stars: StarsBuffer,
-            fullscreen: FullscreenBuffer,
-            globals: GlobalParametersBuffer
-            // gpu
-            // window
-            // arcball
-            // camera
-            // orrery
-        };
-        passes: [
-            // widget
-            maintain_font_atlas: Any() { widgets() },
-
-            // terrain
-            // Update the indices so we have correct height data to tessellate with and normal
-            // and color data to accumulate.
-            paint_atlas_indices: Any() { terrain() },
-            // Apply heights to the terrain mesh.
-            tessellate: Compute() { terrain() },
-            // Render the terrain mesh's texcoords to an offscreen buffer.
-            deferred_texture: Render(terrain, deferred_texture_target) {
-                terrain( globals )
-            },
-            // Accumulate normal and color data.
-            accumulate_normal_and_color: Compute() { terrain( globals ) },
-
-            // world: Flatten terrain g-buffer into the final image and mix in stars.
-            render_world: Render(world, offscreen_target_cleared) {
-                world( globals, fullscreen, atmosphere, stars, terrain )
-            },
-
-            // ui: Draw our widgets onto a buffer with resolution independent of the world.
-            render_ui: Render(ui, offscreen_target) {
-                ui( globals, widgets, world )
-            },
-
-            // composite: Accumulate offscreen buffers into a final image.
-            composite_scene: Render(Screen) {
-                composite( fullscreen, globals, world, ui )
-            }
-        ];
-    }
-);
-*/
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub enum SimState {
-    Demo,
-    Terminal,
-}
-
-impl Default for SimState {
-    fn default() -> Self {
-        Self::Demo
-    }
-}
-
-impl FromStr for SimState {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> std::prelude::rust_2015::Result<Self, Self::Err> {
-        Ok(match s {
-            "demo" => Self::Demo,
-            "terminal" => Self::Terminal,
-            _ => bail!(
-                "unknown focus to bind in {}; expected \"demo\" or \"terminal\"",
-                s
-            ),
-        })
-    }
-}
-
-impl InputFocus for SimState {
-    fn name(&self) -> &'static str {
-        match self {
-            Self::Demo => "demo",
-            Self::Terminal => "terminal",
-        }
-    }
-
-    fn is_terminal_focused(&self) -> bool {
-        *self == Self::Terminal
-    }
-
-    fn toggle_terminal(&mut self) {
-        *self = match self {
-            Self::Terminal => Self::Demo,
-            Self::Demo => Self::Terminal,
-        };
-    }
-}
-
 fn main() -> Result<()> {
     env_logger::init();
     InputSystem::run_forever(
@@ -378,9 +279,9 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .insert_resource(opt.detail_opts.cpu_detail())
         .insert_resource(opt.detail_opts.gpu_detail())
         .insert_resource(app_dirs)
-        .insert_resource(SimState::Demo)
+        .insert_resource(DemoFocus::Demo)
         .load_extension::<Catalog>()?
-        .load_extension::<EventMapper<SimState>>()?
+        .load_extension::<EventMapper<DemoFocus>>()?
         .load_extension::<Window>()?
         .load_extension::<Gpu>()?
         .load_extension::<AtmosphereBuffer>()?
@@ -389,9 +290,9 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .load_extension::<StarsBuffer>()?
         .load_extension::<TerrainBuffer>()?
         .load_extension::<WorldRenderPass>()?
-        .load_extension::<WidgetBuffer<SimState>>()?
-        .load_extension::<UiRenderPass<SimState>>()?
-        .load_extension::<CompositeRenderPass<SimState>>()?
+        .load_extension::<WidgetBuffer<DemoFocus>>()?
+        .load_extension::<UiRenderPass<DemoFocus>>()?
+        .load_extension::<CompositeRenderPass<DemoFocus>>()?
         .load_extension::<System>()?
         .load_extension::<Orrery>()?
         .load_extension::<Timeline>()?
@@ -423,146 +324,8 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
             runtime.run_sim_once();
         }
 
+        // Display a frame
         runtime.run_frame_once();
-
-        /*
-        {
-            let config = runtime.resource::<Window>().config().to_owned();
-
-            let surface_texture = if let Some(surface_texture) =
-                runtime.resource_mut::<Gpu>().get_next_framebuffer()?
-            {
-                surface_texture
-            } else {
-                runtime
-                    .resource_mut::<Gpu>()
-                    .on_display_config_changed(&config);
-                continue;
-            };
-
-            let mut encoder = runtime
-                .resource_mut::<Gpu>()
-                .device()
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("frame-encoder"),
-                });
-
-            {
-                runtime
-                    .resource_mut::<UploadTracker>()
-                    .dispatch_uploads_until_empty(&mut encoder);
-
-                encoder = runtime
-                    .resource::<WidgetBuffer<SimState>>()
-                    .maintain_font_atlas(encoder)?;
-                encoder = runtime
-                    .resource::<TerrainBuffer>()
-                    .paint_atlas_indices(encoder)?;
-
-                // terrain
-                {
-                    let cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                        label: Some("compute-pass"),
-                    });
-                    let _cpass = runtime.resource::<TerrainBuffer>().tessellate(cpass)?;
-                }
-                {
-                    let (color_attachments, depth_stencil_attachment) = runtime
-                        .resource::<TerrainBuffer>()
-                        .deferred_texture_target();
-                    let render_pass_desc_ref = wgpu::RenderPassDescriptor {
-                        label: Some(concat!("non-screen-render-pass-terrain-deferred",)),
-                        color_attachments: &color_attachments,
-                        depth_stencil_attachment,
-                    };
-                    let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
-                    let _rpass = runtime
-                        .resource::<TerrainBuffer>()
-                        .deferred_texture(rpass, runtime.resource::<GlobalParametersBuffer>())?;
-                }
-                {
-                    let cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                        label: Some("compute-pass"),
-                    });
-                    let _cpass = runtime
-                        .resource::<TerrainBuffer>()
-                        .accumulate_normal_and_color(
-                            cpass,
-                            runtime.resource::<GlobalParametersBuffer>(),
-                        )?;
-                }
-
-                // world: Flatten terrain g-buffer into the final image and mix in stars.
-                {
-                    let (color_attachments, depth_stencil_attachment) = runtime
-                        .resource::<WorldRenderPass>()
-                        .offscreen_target_cleared();
-                    let render_pass_desc_ref = wgpu::RenderPassDescriptor {
-                        label: Some("offscreen-draw-world"),
-                        color_attachments: &color_attachments,
-                        depth_stencil_attachment,
-                    };
-                    let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
-                    let _rpass = runtime.resource::<WorldRenderPass>().render_world(
-                        rpass,
-                        runtime.resource::<GlobalParametersBuffer>(),
-                        runtime.resource::<FullscreenBuffer>(),
-                        runtime.resource::<AtmosphereBuffer>(),
-                        runtime.resource::<StarsBuffer>(),
-                        &runtime.resource::<TerrainBuffer>(),
-                    )?;
-                }
-
-                // ui: Draw our widgets onto a buffer with resolution independent of the world.
-                {
-                    let (color_attachments, depth_stencil_attachment) = runtime
-                        .resource::<UiRenderPass<SimState>>()
-                        .offscreen_target();
-                    let render_pass_desc_ref = wgpu::RenderPassDescriptor {
-                        label: Some(concat!("non-screen-render-pass-ui-draw-offscreen",)),
-                        color_attachments: &color_attachments,
-                        depth_stencil_attachment,
-                    };
-                    let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
-                    let _rpass = runtime.resource::<UiRenderPass<SimState>>().render_ui(
-                        rpass,
-                        runtime.resource::<GlobalParametersBuffer>(),
-                        runtime.resource::<WidgetBuffer<SimState>>(),
-                        runtime.resource::<WorldRenderPass>(),
-                    )?;
-                }
-
-                // composite: Accumulate offscreen buffers into a final image.
-                {
-                    let gpu = runtime.resource::<Gpu>();
-                    let view = surface_texture
-                        .texture
-                        .create_view(&::wgpu::TextureViewDescriptor::default());
-                    let render_pass_desc_ref = wgpu::RenderPassDescriptor {
-                        label: Some("screen-composite-render-pass"),
-                        color_attachments: &[Gpu::color_attachment(&view)],
-                        depth_stencil_attachment: Some(gpu.depth_stencil_attachment()),
-                    };
-                    let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
-                    let _rpass = runtime
-                        .resource::<CompositeRenderPass<SimState>>()
-                        .composite_scene(
-                            rpass,
-                            runtime.resource::<FullscreenBuffer>(),
-                            runtime.resource::<GlobalParametersBuffer>(),
-                            runtime.resource::<WorldRenderPass>(),
-                            runtime.resource::<UiRenderPass<SimState>>(),
-                        )?;
-                }
-            };
-
-            runtime
-                .resource_mut::<Gpu>()
-                .queue_mut()
-                .submit(vec![encoder.finish()]);
-            surface_texture.present();
-        }
-         */
     }
 
     Ok(())

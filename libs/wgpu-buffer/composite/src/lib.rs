@@ -48,7 +48,7 @@ where
         runtime.insert_resource(composite);
         runtime
             .frame_stage_mut(FrameStage::Render)
-            .add_system(Self::sys_composite_scene.after("before_composite"));
+            .add_system(Self::sys_composite_scene.label("CompositeRenderPass"));
         Ok(())
     }
 }

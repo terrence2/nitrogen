@@ -95,7 +95,7 @@ pub trait TileSet: Debug + Send + Sync + 'static {
         vertex_count: u32,
         mesh_bind_group: &'a wgpu::BindGroup,
         cpass: wgpu::ComputePass<'a>,
-    ) -> Result<wgpu::ComputePass<'a>>;
+    ) -> wgpu::ComputePass<'a>;
 
     // Implementors should read from the provided screen space world position coordinates and
     // accumulate into the provided normal accumulation buffer. Accumulation buffers will be
@@ -107,7 +107,7 @@ pub trait TileSet: Debug + Send + Sync + 'static {
         globals_buffer: &'a GlobalParametersBuffer,
         accumulate_common_bind_group: &'a wgpu::BindGroup,
         cpass: wgpu::ComputePass<'a>,
-    ) -> Result<wgpu::ComputePass<'a>>;
+    ) -> wgpu::ComputePass<'a>;
 
     // Implementors should read from the provided screen space world position coordinates and
     // accumulate into the provided color accumulation buffer. Accumulation buffers will be
@@ -119,7 +119,7 @@ pub trait TileSet: Debug + Send + Sync + 'static {
         globals_buffer: &'a GlobalParametersBuffer,
         accumulate_common_bind_group: &'a wgpu::BindGroup,
         cpass: wgpu::ComputePass<'a>,
-    ) -> Result<wgpu::ComputePass<'a>>;
+    ) -> wgpu::ComputePass<'a>;
 }
 
 // A collection of TileSet, potentially more than one per kind.
@@ -254,14 +254,10 @@ impl TileManager {
         self.take_index_snapshot = true;
     }
 
-    pub fn paint_atlas_indices(
-        &self,
-        mut encoder: wgpu::CommandEncoder,
-    ) -> Result<wgpu::CommandEncoder> {
+    pub fn paint_atlas_indices(&self, encoder: &mut wgpu::CommandEncoder) {
         for ts in self.tile_sets.iter() {
-            ts.paint_atlas_index(&mut encoder);
+            ts.paint_atlas_index(encoder);
         }
-        Ok(encoder)
     }
 
     pub fn displace_height<'a>(
@@ -269,11 +265,11 @@ impl TileManager {
         vertex_count: u32,
         mesh_bind_group: &'a wgpu::BindGroup,
         mut cpass: wgpu::ComputePass<'a>,
-    ) -> Result<wgpu::ComputePass<'a>> {
+    ) -> wgpu::ComputePass<'a> {
         for ts in self.tile_sets.iter() {
-            cpass = ts.displace_height(vertex_count, mesh_bind_group, cpass)?;
+            cpass = ts.displace_height(vertex_count, mesh_bind_group, cpass);
         }
-        Ok(cpass)
+        cpass
     }
 
     pub fn accumulate_normals<'a>(
@@ -282,12 +278,12 @@ impl TileManager {
         extent: &wgpu::Extent3d,
         globals_buffer: &'a GlobalParametersBuffer,
         accumulate_common_bind_group: &'a wgpu::BindGroup,
-    ) -> Result<wgpu::ComputePass<'a>> {
+    ) -> wgpu::ComputePass<'a> {
         for ts in self.tile_sets.iter() {
             cpass =
-                ts.accumulate_normals(extent, globals_buffer, accumulate_common_bind_group, cpass)?;
+                ts.accumulate_normals(extent, globals_buffer, accumulate_common_bind_group, cpass);
         }
-        Ok(cpass)
+        cpass
     }
 
     pub fn accumulate_colors<'a>(
@@ -296,11 +292,11 @@ impl TileManager {
         extent: &wgpu::Extent3d,
         globals_buffer: &'a GlobalParametersBuffer,
         accumulate_common_bind_group: &'a wgpu::BindGroup,
-    ) -> Result<wgpu::ComputePass<'a>> {
+    ) -> wgpu::ComputePass<'a> {
         for ts in self.tile_sets.iter() {
             cpass =
-                ts.accumulate_colors(extent, globals_buffer, accumulate_common_bind_group, cpass)?;
+                ts.accumulate_colors(extent, globals_buffer, accumulate_common_bind_group, cpass);
         }
-        Ok(cpass)
+        cpass
     }
 }
