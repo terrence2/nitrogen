@@ -506,7 +506,7 @@ impl PatchManager {
         camera: &Camera,
         optimize_camera: &Camera,
         visible_regions: &mut Vec<VisiblePatch>,
-    ) -> Result<()> {
+    ) {
         // Select optimal live patches from our coherent patch tree.
         self.live_patches.clear();
         self.patch_tree
@@ -575,7 +575,6 @@ impl PatchManager {
         }
 
         //println!("dt: {:?}", Instant::now() - loop_start);
-        Ok(())
     }
 
     pub fn ensure_uploaded(&self, gpu: &Gpu, tracker: &UploadTracker) {

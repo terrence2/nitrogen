@@ -19,7 +19,7 @@ use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
 use measure::WorldSpaceFrame;
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
 use nitrous::{inject_nitrous_component, method, NitrousComponent};
-use runtime::{Extension, Runtime, ScriptHerder, SimStage};
+use runtime::{Extension, Runtime, SimStage};
 use std::f64::consts::PI;
 
 /// The ArcBall system will, if the "player" entity has an ArcBallController
@@ -28,7 +28,7 @@ use std::f64::consts::PI;
 pub struct ArcBallSystem;
 impl Extension for ArcBallSystem {
     fn init(runtime: &mut Runtime) -> Result<()> {
-        runtime.resource_mut::<ScriptHerder>().run_string(
+        runtime.run_string(
             r#"
                 bindings.bind("mouse1", "@player.arcball.pan_view(pressed)");
                 bindings.bind("mouse3", "@player.arcball.move_view(pressed)");

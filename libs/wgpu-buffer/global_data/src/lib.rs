@@ -21,7 +21,7 @@ use gpu::{Gpu, UploadTracker};
 use nalgebra::{convert, Matrix3, Matrix4, Point3, Vector3, Vector4};
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use orrery::Orrery;
-use runtime::{Extension, FrameStage, Runtime, ScriptHerder};
+use runtime::{Extension, FrameStage, Runtime};
 use std::{mem, sync::Arc};
 use window::Window;
 use zerocopy::{AsBytes, FromBytes};
@@ -161,7 +161,7 @@ impl Extension for GlobalParametersBuffer {
         let globals = GlobalParametersBuffer::new(runtime.resource::<Gpu>().device());
 
         // TODO:  move to configuration, once that's a thing
-        runtime.resource_mut::<ScriptHerder>().run_string(
+        runtime.run_string(
             r#"
                 bindings.bind("LBracket", "globals.decrease_gamma(pressed)");
                 bindings.bind("RBracket", "globals.increase_gamma(pressed)");

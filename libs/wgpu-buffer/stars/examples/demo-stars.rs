@@ -40,8 +40,10 @@ fn main() -> Result<()> {
 fn window_main(mut runtime: Runtime) -> Result<()> {
     let mut interpreter = Interpreter::default();
     let _mapper = EventMapper::new(&mut interpreter);
-    let display_config =
-        DisplayConfig::discover(&DisplayOpts::default(), runtime.get_resource::<OsWindow>());
+    let display_config = DisplayConfig::discover(
+        &DisplayOpts::default(),
+        runtime.maybe_resource::<OsWindow>(),
+    );
     let window = Window::new(
         runtime.remove_resource::<OsWindow>(),
         display_config,
@@ -166,7 +168,7 @@ fn window_main(mut runtime: Runtime) -> Result<()> {
 
     loop {
         for event in runtime
-            .get_resource::<Arc<Mutex<InputController>>>()
+            .maybe_resource::<Arc<Mutex<InputController>>>()
             .lock()
             .poll_input_events()?
         {
@@ -181,7 +183,7 @@ fn window_main(mut runtime: Runtime) -> Result<()> {
             }
         }
         let sys_events = runtime
-            .get_resource::<Arc<Mutex<InputController>>>()
+            .maybe_resource::<Arc<Mutex<InputController>>>()
             .lock()
             .poll_system_events()?;
         for event in &sys_events {

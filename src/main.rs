@@ -14,26 +14,25 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{degrees, meters, radians};
 use animate::{TimeStep, Timeline};
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 use atmosphere::AtmosphereBuffer;
 use bevy_ecs::prelude::*;
 use camera::{ArcBallController, ArcBallSystem, Camera, CameraSystem};
 use catalog::{Catalog, CatalogOpts};
-use chrono::{TimeZone, Utc};
 use composite::CompositeRenderPass;
 use event_mapper::EventMapper;
 use fullscreen::FullscreenBuffer;
 use global_data::GlobalParametersBuffer;
 use gpu::{DetailLevelOpts, Gpu};
-use input::{DemoFocus, InputFocus, InputSystem};
+use input::{DemoFocus, InputSystem};
 use measure::WorldSpaceFrame;
 use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
 use orrery::Orrery;
 use parking_lot::RwLock;
 use platform_dirs::AppDirs;
-use runtime::{Extension, FrameStage, Runtime, ScriptHerder, StartupOpts};
+use runtime::{Extension, FrameStage, Runtime, StartupOpts};
 use stars::StarsBuffer;
-use std::{f32::consts::PI, fs::create_dir_all, str::FromStr, sync::Arc, time::Instant};
+use std::{f32::consts::PI, fs::create_dir_all, sync::Arc, time::Instant};
 use structopt::StructOpt;
 use terminal_size::{terminal_size, Width};
 use terrain::TerrainBuffer;
@@ -76,8 +75,6 @@ struct VisibleWidgets {
 #[derive(Debug, NitrousResource)]
 struct System {
     exit: bool,
-    pin_camera: bool,
-    camera: Option<Camera>,
     visible_widgets: VisibleWidgets,
 }
 
@@ -89,17 +86,11 @@ impl Extension for System {
         runtime
             .frame_stage_mut(FrameStage::FrameEnd)
             .add_system(Self::sys_track_visible_state);
-        runtime.resource_mut::<ScriptHerder>().run_string(
+        runtime.run_string(
             r#"
                 /// Bevy has an Escape to exit system that seems clutch for this usage
                 bindings.bind("Escape", "system.exit()");
                 bindings.bind("q", "system.exit()");
-
-                /// FIXME: move internal to terrain
-                bindings.bind("p", "system.toggle_pin_camera(pressed)");
-
-                /// FIXME: move to widgets, or just drop
-                bindings.bind("g", "widget.dump_glyphs(pressed)");
             "#,
         )?;
         Ok(())
@@ -112,8 +103,6 @@ impl System {
         let visible_widgets = Self::build_gui(widgets)?;
         Ok(Self {
             exit: false,
-            pin_camera: false,
-            camera: None,
             visible_widgets,
         })
     }
@@ -240,20 +229,6 @@ impl System {
     pub fn exit(&mut self) {
         self.exit = true;
     }
-
-    #[method]
-    pub fn toggle_pin_camera(&mut self, pressed: bool) {
-        if pressed {
-            self.pin_camera = !self.pin_camera;
-        }
-    }
-
-    // pub fn current_camera(&mut self, camera: &Camera) -> &Camera {
-    //     if !self.pin_camera {
-    //         self.camera = camera.to_owned();
-    //     }
-    //     &self.camera
-    // }
 }
 
 fn main() -> Result<()> {
@@ -276,10 +251,12 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     runtime
         .insert_resource(opt.catalog_opts)
         .insert_resource(opt.display_opts)
+        .insert_resource(opt.startup_opts)
         .insert_resource(opt.detail_opts.cpu_detail())
         .insert_resource(opt.detail_opts.gpu_detail())
         .insert_resource(app_dirs)
         .insert_resource(DemoFocus::Demo)
+        .load_extension::<StartupOpts>()?
         .load_extension::<Catalog>()?
         .load_extension::<EventMapper<DemoFocus>>()?
         .load_extension::<Window>()?
@@ -312,10 +289,6 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .insert_scriptable(ArcBallController::new())
         .insert_scriptable(camera)
         .id();
-
-    // We are now finished and can safely run the startup scripts / configuration.
-    opt.startup_opts
-        .on_startup(&mut runtime.resource_mut::<ScriptHerder>())?;
 
     while !runtime.resource::<System>().exit {
         // Catch monotonic sim time up to system time.

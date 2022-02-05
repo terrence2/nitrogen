@@ -22,13 +22,13 @@ use geometry::Plane;
 use measure::WorldSpaceFrame;
 use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, UnitQuaternion, Vector3};
 use nitrous::{inject_nitrous_component, method, NitrousComponent};
-use runtime::{Extension, FrameStage, Runtime, ScriptHerder, SimStage};
+use runtime::{Extension, FrameStage, Runtime, SimStage};
 use window::DisplayConfig;
 
 pub struct CameraSystem;
 impl Extension for CameraSystem {
     fn init(runtime: &mut Runtime) -> Result<()> {
-        runtime.resource_mut::<ScriptHerder>().run_string(
+        runtime.run_string(
             r#"
                 bindings.bind("PageUp", "@player.camera.increase_fov(pressed)");
                 bindings.bind("PageDown", "@player.camera.decrease_fov(pressed)");
@@ -51,7 +51,7 @@ struct InputState {
     fov_delta: Angle<Degrees>,
 }
 
-#[derive(Debug, Component, NitrousComponent)]
+#[derive(Clone, Debug, Component, NitrousComponent)]
 #[Name = "camera"]
 pub struct Camera {
     // Camera parameters

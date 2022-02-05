@@ -12,12 +12,12 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::ScriptHerder;
+use crate::{Extension, Runtime};
 use anyhow::Result;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
-#[derive(Debug, StructOpt)]
+#[derive(Clone, Debug, StructOpt)]
 pub struct StartupOpts {
     /// Run a command after startup
     #[structopt(short = "C", long)]
@@ -28,27 +28,27 @@ pub struct StartupOpts {
     execute: Option<PathBuf>,
 }
 
-impl StartupOpts {
-    pub fn on_startup(&self, herder: &mut ScriptHerder) -> Result<()> {
+impl Extension for StartupOpts {
+    fn init(runtime: &mut Runtime) -> Result<()> {
         if let Ok(code) = std::fs::read_to_string("autoexec.n2o") {
-            herder.run_string(&code)?;
+            runtime.run_string(&code)?;
         }
-
-        if let Some(command) = self.command.as_ref() {
-            herder.run_string(command)?;
-        }
-
-        if let Some(exec_file) = self.execute.as_ref() {
-            match std::fs::read_to_string(exec_file) {
-                Ok(code) => {
-                    herder.run_string(&code)?;
-                }
-                Err(e) => {
-                    println!("Read file for {:?}: {}", exec_file, e);
+        if let Some(opts) = runtime.maybe_resource::<StartupOpts>() {
+            let opts = opts.to_owned();
+            if let Some(command) = opts.command.as_ref() {
+                runtime.run_string(command)?;
+            }
+            if let Some(exec_file) = opts.execute.as_ref() {
+                match std::fs::read_to_string(exec_file) {
+                    Ok(code) => {
+                        runtime.run_string(&code)?;
+                    }
+                    Err(e) => {
+                        println!("Read file for {:?}: {}", exec_file, e);
+                    }
                 }
             }
         }
-
         Ok(())
     }
 }

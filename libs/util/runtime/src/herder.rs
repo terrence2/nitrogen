@@ -37,29 +37,35 @@ impl Default for ScriptHerder {
 }
 
 impl ScriptHerder {
+    #[inline]
     pub fn run_string(&mut self, script_text: &str) -> Result<()> {
         trace!("run_string: {}", script_text);
         self.run(NitrousScript::compile(script_text)?);
         Ok(())
     }
 
+    #[inline]
     pub fn run<N: Into<NitrousScript>>(&mut self, script: N) {
         self.run_with_locals(LocalNamespace::empty(), script)
     }
 
+    #[inline]
     pub fn run_with_locals<N: Into<NitrousScript>>(&mut self, locals: LocalNamespace, script: N) {
         self.gthread
             .push(ExecutionContext::new(locals, script.into()));
     }
 
+    #[inline]
     pub fn resource_names(&self) -> impl Iterator<Item = &String> {
         self.index.resource_names()
     }
 
+    #[inline]
     pub fn lookup_resource(&self, name: &str) -> Option<Value> {
         self.index.lookup_resource(name)
     }
 
+    #[inline]
     pub fn attrs<'a>(&'a self, value: Value, world: &'a mut World) -> Result<Vec<&'a str>> {
         value.attrs(&self.index, world)
     }
@@ -84,6 +90,7 @@ impl ScriptHerder {
             .upsert_named_component(entity_name, entity, component_name, lookup)
     }
 
+    #[inline]
     pub(crate) fn sys_run_scripts(world: &mut World) {
         world.resource_scope(|world, mut herder: Mut<ScriptHerder>| {
             herder.run_scripts(world);

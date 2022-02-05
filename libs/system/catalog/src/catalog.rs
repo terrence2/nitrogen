@@ -84,7 +84,7 @@ impl Debug for Catalog {
 impl Extension for Catalog {
     fn init(runtime: &mut Runtime) -> Result<()> {
         let mut catalog = Catalog::empty("main");
-        if let Some(opt) = runtime.get_resource::<CatalogOpts>() {
+        if let Some(opt) = runtime.maybe_resource::<CatalogOpts>() {
             for (i, d) in opt.lib_paths.iter().enumerate() {
                 catalog.add_drawer(DirectoryDrawer::from_directory(100 + i as i64, d)?)?;
             }

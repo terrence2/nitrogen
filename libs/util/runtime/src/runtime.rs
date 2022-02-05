@@ -16,7 +16,9 @@ use crate::herder::ScriptHerder;
 use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource, world::EntityMut};
 use log::error;
-use nitrous::{make_component_lookup_mut, ScriptComponent, ScriptResource};
+use nitrous::{
+    make_component_lookup_mut, LocalNamespace, NitrousScript, ScriptComponent, ScriptResource,
+};
 
 /// Interface for extending the Runtime.
 pub trait Extension {
@@ -73,28 +75,20 @@ pub enum FrameStage {
     TrackStateChanges,
     /// Push non-render uploads into the frame update queue.
     EnsureGpuUpdated,
-
     /// Create the target surface.
     CreateTargetSurface,
-
     /// Create the frame's encoder.
     CreateCommandEncoder,
-
     /// Encode any uploads we queued up.
     DispatchUploads,
-
     /// Everything that needs to use the command encoder and target surface.
     Render,
-
     /// Finish and submit commands to the GPU.
     SubmitCommands,
-
     /// Present our target surface.
     PresentTargetSurface,
-
     /// Recreate display if out-of-date.
     HandleOutOfDateRenderer,
-
     /// Right before frame end.
     FrameEnd,
 }
@@ -221,6 +215,21 @@ impl Runtime {
     }
 
     #[inline]
+    pub fn run_string(&mut self, script_text: &str) -> Result<()> {
+        self.resource_mut::<ScriptHerder>().run_string(script_text)
+    }
+
+    #[inline]
+    pub fn run<N: Into<NitrousScript>>(&mut self, script: N) {
+        self.resource_mut::<ScriptHerder>().run(script)
+    }
+
+    pub fn run_with_locals<N: Into<NitrousScript>>(&mut self, locals: LocalNamespace, script: N) {
+        self.resource_mut::<ScriptHerder>()
+            .run_with_locals(locals, script)
+    }
+
+    #[inline]
     pub fn load_extension<T: Extension>(&mut self) -> Result<&mut Self> {
         T::init(self)?;
         Ok(self)
@@ -271,7 +280,7 @@ impl Runtime {
     }
 
     #[inline]
-    pub fn get_resource<T: Resource>(&self) -> Option<&T> {
+    pub fn maybe_resource<T: Resource>(&self) -> Option<&T> {
         self.world.get_resource()
     }
 

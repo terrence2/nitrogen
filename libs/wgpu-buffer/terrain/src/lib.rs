@@ -128,6 +128,9 @@ pub struct TerrainBuffer {
     patch_manager: PatchManager,
     tile_manager: TileManager,
 
+    toggle_pin_camera: bool,
+    pinned_camera: Option<Camera>,
+
     // Cache allocation for transferring visible allocations from patches to tiles.
     visible_regions: Vec<VisiblePatch>,
 
@@ -159,6 +162,11 @@ impl Extension for TerrainBuffer {
             &runtime.resource::<Gpu>(),
         )?;
         runtime.insert_named_resource("terrain", terrain);
+        runtime.run_string(
+            r#"
+                bindings.bind("p", "terrain.toggle_pin_camera(pressed)");
+            "#,
+        )?;
         runtime
             .frame_stage_mut(FrameStage::HandleDisplayChange)
             .add_system(Self::sys_handle_display_config_change);
@@ -495,6 +503,8 @@ impl TerrainBuffer {
         Ok(Self {
             patch_manager,
             tile_manager,
+            toggle_pin_camera: false,
+            pinned_camera: None,
             visible_regions: Vec::new(),
             acc_extent: gpu.attachment_extent(),
             deferred_texture_pipeline,
@@ -512,9 +522,11 @@ impl TerrainBuffer {
         })
     }
 
-    pub fn init(self) -> Result<Arc<RwLock<Self>>> {
-        let terrain = Arc::new(RwLock::new(self));
-        Ok(terrain)
+    #[method]
+    fn toggle_pin_camera(&mut self, pressed: bool) {
+        if pressed {
+            self.toggle_pin_camera = true;
+        }
     }
 
     pub fn sys_handle_display_config_change(
@@ -752,33 +764,32 @@ impl TerrainBuffer {
         catalog: Res<Arc<RwLock<Catalog>>>,
         mut terrain: ResMut<TerrainBuffer>,
     ) {
-        // FIXME: camera debug pinning... this should probably conditionally disable copy from
-        //        camera to vis-camera using a system something? Oh, or why don't we just do it
-        //        ourselves? Put a pin state on terrain, which already has debug bindings.
         // FIXME: multiple camera support
         for (i, camera) in query.iter().enumerate() {
             assert_eq!(i, 0);
-            // let vis_camera = system.current_camera(&camera.camera());
-            terrain
-                .track_state_changes(camera, camera, catalog.clone())
-                .expect("Terrain::track_state_changes");
+            terrain.track_state_changes(camera, catalog.clone());
         }
     }
 
     // Given the new camera position, update our internal CPU tracking.
-    pub fn track_state_changes(
-        &mut self,
-        camera: &Camera,
-        optimize_camera: &Camera,
-        catalog: Arc<RwLock<Catalog>>,
-    ) -> Result<()> {
+    fn track_state_changes(&mut self, camera: &Camera, catalog: Arc<RwLock<Catalog>>) {
+        if self.toggle_pin_camera {
+            self.toggle_pin_camera = false;
+            self.pinned_camera = match self.pinned_camera {
+                None => Some(camera.to_owned()),
+                Some(_) => None,
+            };
+        }
+        let optimize_camera = if let Some(camera) = &self.pinned_camera {
+            camera
+        } else {
+            camera
+        };
+
         // Upload patches and capture visibility regions.
         self.visible_regions.clear();
-        self.patch_manager.track_state_changes(
-            camera,
-            optimize_camera,
-            &mut self.visible_regions,
-        )?;
+        self.patch_manager
+            .track_state_changes(camera, optimize_camera, &mut self.visible_regions);
 
         // Dispatch visibility to tiles so that they can manage the actively loaded set.
         self.tile_manager.begin_visibility_update();
@@ -786,8 +797,6 @@ impl TerrainBuffer {
             self.tile_manager.note_required(visible_patch);
         }
         self.tile_manager.finish_visibility_update(camera, catalog);
-
-        Ok(())
     }
 
     fn sys_ensure_uploaded(

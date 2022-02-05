@@ -19,7 +19,7 @@ use chrono::{prelude::*, Duration};
 use lazy_static::lazy_static;
 use nalgebra::{Point3, Unit, UnitQuaternion, Vector3, Vector4};
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
-use runtime::{Extension, Runtime, ScriptHerder, SimStage};
+use runtime::{Extension, Runtime, SimStage};
 use std::f64::consts::PI;
 
 /**
@@ -312,7 +312,7 @@ impl Extension for Orrery {
         runtime
             .sim_stage_mut(SimStage::TimeStep)
             .add_system(Self::sys_step_time);
-        runtime.resource_mut::<ScriptHerder>().run_string(
+        runtime.run_string(
             r#"
                 bindings.bind("mouse2", "orrery.move_sun(pressed)");
                 bindings.bind("mouseMotion", "orrery.handle_mousemove(dx)");

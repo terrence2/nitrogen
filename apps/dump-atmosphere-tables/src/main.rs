@@ -52,8 +52,10 @@ fn window_main(mut runtime: Runtime) -> Result<()> {
     let opt = Opt::from_args();
     let mut interpreter = Interpreter::default();
 
-    let display_config =
-        DisplayConfig::discover(&DisplayOpts::default(), runtime.get_resource::<OsWindow>());
+    let display_config = DisplayConfig::discover(
+        &DisplayOpts::default(),
+        runtime.maybe_resource::<OsWindow>(),
+    );
     let window = Window::new(
         runtime.remove_resource::<OsWindow>(),
         display_config,

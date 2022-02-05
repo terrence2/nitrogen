@@ -20,7 +20,7 @@ use global_data::GlobalParametersBuffer;
 use gpu::{DisplayConfig, Gpu};
 use log::trace;
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
-use runtime::{Extension, FrameStage, Runtime, ScriptHerder};
+use runtime::{Extension, FrameStage, Runtime};
 use shader_shared::Group;
 use stars::StarsBuffer;
 use terrain::{TerrainBuffer, TerrainVertex};
@@ -96,7 +96,7 @@ impl Extension for WorldRenderPass {
         );
 
         // TODO: figure out debug bindings
-        runtime.resource_mut::<ScriptHerder>().run_string(
+        runtime.run_string(
             r#"
                 bindings.bind("w", "world.toggle_wireframe_mode(pressed)");
                 bindings.bind("r", "world.change_debug_mode(pressed)");
