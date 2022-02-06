@@ -21,6 +21,7 @@ use bevy_ecs::{prelude::*, system::Resource, world::EntityMut};
 use log::error;
 use nitrous::{
     make_component_lookup_mut, LocalNamespace, NitrousScript, ScriptComponent, ScriptResource,
+    Value,
 };
 
 /// Interface for extending the Runtime.
@@ -313,8 +314,26 @@ impl Runtime {
     }
 
     #[inline]
+    pub fn resource_by_name(&mut self, name: &str) -> &dyn ScriptResource {
+        if let Value::Resource(lookup) = self
+            .resource::<ScriptHerder>()
+            .lookup_resource(name)
+            .expect("unset named resource")
+        {
+            lookup(&mut self.world)
+        } else {
+            panic!("unable to access resoure by name")
+        }
+    }
+
+    #[inline]
     pub fn remove_resource<T: Resource>(&mut self) -> Option<T> {
         self.world.remove_resource()
+    }
+
+    #[inline]
+    pub fn resource_names(&self) -> impl Iterator<Item = &String> {
+        self.resource::<ScriptHerder>().resource_names()
     }
 
     #[inline]

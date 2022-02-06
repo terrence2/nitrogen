@@ -55,7 +55,7 @@ pub(crate) struct Ir {
     pub(crate) get_arms: Vec<Arm>,
     pub(crate) put_arms: Vec<Arm>,
     pub(crate) names: Vec<String>,
-    pub(crate) help_items: Vec<String>,
+    pub(crate) list_items: Vec<String>,
 }
 
 impl Ir {
@@ -66,7 +66,7 @@ impl Ir {
             get_arms: Vec::new(),
             put_arms: Vec::new(),
             names: Vec::new(),
-            help_items: Vec::new(),
+            list_items: Vec::new(),
         }
     }
 }
@@ -82,7 +82,7 @@ pub(crate) fn lower_methods<F>(
     for (ident, args, ret) in methods {
         let name = format!("{}", ident);
         ir.names.push(name.clone());
-        ir.help_items.push(format!(
+        ir.list_items.push(format!(
             "{}({})",
             name,
             args.iter()
@@ -101,15 +101,15 @@ pub(crate) fn lower_methods<F>(
     }
 }
 
-pub(crate) fn lower_help<F>(ir: &mut Ir, make_get_arm: F)
+pub(crate) fn lower_list<F>(ir: &mut Ir, make_get_arm: F)
 where
     F: Fn(&str, &str) -> Arm,
 {
     let type_name = ir.item.self_ty.clone().into_token_stream().to_string();
     ir.method_arms
-        .push(parse2(quote! { "help" => { self.__show_help__() } }).unwrap());
-    ir.get_arms.push(make_get_arm(&type_name, "help"));
-    ir.help_items.push("help()".to_owned());
+        .push(parse2(quote! { "list" => { self.__show_list__() } }).unwrap());
+    ir.get_arms.push(make_get_arm(&type_name, "list"));
+    ir.list_items.push("list()".to_owned());
 }
 
 fn lower_arg(i: usize, arg: &ArgDef) -> Expr {

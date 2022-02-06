@@ -225,6 +225,16 @@ impl Terminal {
         }
     }
 
+    fn is_help_command(command: &str) -> bool {
+        let cmd = command.trim().to_lowercase();
+        cmd.starts_with("help") || cmd.starts_with("?") || cmd.ends_with("?")
+    }
+
+    fn is_quit_command(command: &str) -> bool {
+        let cmd = command.trim().to_lowercase();
+        cmd.starts_with("quit") || cmd.starts_with("exit") || cmd == "q"
+    }
+
     fn on_enter_pressed(&mut self, herder: &mut ScriptHerder) -> Result<()> {
         let command = self.edit.read().line().flatten();
         self.edit.write().line_mut().select_all();
@@ -232,7 +242,19 @@ impl Terminal {
 
         self.add_command_to_history(&command)?;
 
-        herder.run_interactive(&command)?;
+        match herder.run_interactive(&command) {
+            Ok(_) => {}
+            Err(e) => {
+                // Help with some common cases before we show a scary error.
+                if Self::is_help_command(&command) {
+                    herder.run_interactive("prelude.show_guide()");
+                } else if Self::is_quit_command(&command) {
+                    herder.run_interactive("prelude.quit()");
+                } else {
+                    self.show_run_error(&command, &e.to_string());
+                }
+            }
+        }
 
         Ok(())
     }
@@ -243,11 +265,19 @@ impl Terminal {
                 match &completion.result {
                     ScriptResult::Ok(v) => {
                         let screen = &mut self.output.write();
-                        screen.append_line(&if let Value::String(s) = v {
-                            format!("{}", s)
-                        } else {
-                            format!("{}", v)
-                        });
+                        match v {
+                            Value::String(s) => {
+                                for line in s.lines() {
+                                    screen.append_line(line);
+                                }
+                            }
+                            Value::ResourceMethod(_, _) => {
+                                screen.append_line(&format!("{} is a method, did you mean to call it?\nTry using up-arrow to go back and add parentheses to the end.", v));
+                            }
+                            _ => {
+                                screen.append_line(&v.to_string());
+                            }
+                        }
                     }
                     ScriptResult::Err(error) => {
                         self.show_script_error(completion, error);
@@ -260,10 +290,14 @@ impl Terminal {
     }
 
     fn show_script_error(&self, completion: &ScriptCompletion, error: &str) {
+        self.show_run_error(&completion.meta.context().script().to_string(), error);
+    }
+
+    fn show_run_error(&self, command: &str, error: &str) {
         let screen = &mut self.output.write();
 
         let prefix = "Script Failed: ";
-        let script = format!("{}", completion.meta.context().script());
+        let script = format!("{}", command);
         screen.append_line(&format!("{}{}", prefix, script));
         screen.last_line_mut().unwrap().select_all();
         screen.last_line_mut().unwrap().change_color(Color::Yellow);

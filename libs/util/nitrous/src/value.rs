@@ -12,10 +12,10 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::memory::make_resource_lookup_mut;
 use crate::{
     memory::{
-        make_component_lookup_mut, ComponentLookupMutFunc, ResourceLookupMutFunc, WorldIndex,
+        make_component_lookup_mut, make_resource_lookup_mut, ComponentLookupMutFunc,
+        ResourceLookupMutFunc, RustCallbackFunc, WorldIndex,
     },
     ScriptComponent, ScriptResource,
 };
@@ -23,6 +23,7 @@ use anyhow::{anyhow, bail, Result};
 use bevy_ecs::{prelude::*, system::Resource};
 use futures::Future;
 use geodesy::{GeoSurface, Graticule, Target};
+use itertools::Itertools;
 use log::error;
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
@@ -47,6 +48,7 @@ pub enum Value {
     Entity(Entity),
     Component(Entity, Arc<ComponentLookupMutFunc>),
     ComponentMethod(Entity, Arc<ComponentLookupMutFunc>, String), // TODO: atoms?
+    RustMethod(Arc<RustCallbackFunc>),
     Future(Arc<RwLock<FutureValue>>),
 }
 
@@ -166,9 +168,22 @@ impl Value {
     pub fn attr(&self, name: &str, index: &WorldIndex, world: &mut World) -> Result<Value> {
         Ok(match self {
             Value::Resource(lookup) => lookup(world).get(name)?,
-            Value::Entity(entity) => index
-                .lookup_component(entity, name)
-                .ok_or_else(|| anyhow!("no such component {} on entity {:?}", name, entity))?,
+            Value::Entity(entity) => {
+                // TODO: there's almost certainly a smarter way to do this.
+                if name == "list" {
+                    #[allow(unstable_name_collisions)]
+                    let msg: Value = index
+                        .entity_components(entity)
+                        .map(|v| v.intersperse("\n").collect())
+                        .unwrap_or_else(|| "error: unknown entity name".to_owned())
+                        .into();
+                    Value::RustMethod(Arc::new(move |_, _| msg.clone()))
+                } else {
+                    index.lookup_component(entity, name).ok_or_else(|| {
+                        anyhow!("no such component {} on entity {:?}", name, entity)
+                    })?
+                }
+            }
             Value::Component(entity, lookup) => lookup(*entity, world).get(*entity, name)?,
             _ => bail!(
                 "attribute base must be a resource, entity, or component, not {:?}",
@@ -185,6 +200,7 @@ impl Value {
             Value::ComponentMethod(entity, lookup, method_name) => {
                 lookup.borrow_mut()(*entity, world).call_method(*entity, method_name, args)?
             }
+            Value::RustMethod(method) => method(args, world),
             _ => {
                 error!("attempting to call non-method value: {}", self);
                 bail!("attempting to call non-method value: {}", self);
@@ -244,6 +260,7 @@ impl fmt::Display for Value {
             Self::Entity(ent) => write!(f, "@{:?}", ent),
             Self::Component(ent, _) => write!(f, "@[{:?}].<lookup>", ent),
             Self::ComponentMethod(ent, _, name) => write!(f, "@[{:?}].<lookup>.{}", ent, name),
+            Self::RustMethod(_) => write!(f, "<callback>"),
             Self::Future(_) => write!(f, "Future"),
         }
     }
@@ -280,6 +297,7 @@ impl PartialEq for Value {
             Self::Component(_, _) => false,
             Self::ComponentMethod(_, _, _) => false,
             Self::ResourceMethod(_, _) => false,
+            Self::RustMethod(_) => false,
             Self::Future(_) => false,
         }
     }

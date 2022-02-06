@@ -45,7 +45,7 @@ pub(crate) fn lower(model: InjectModel) -> Ir {
         ..
     } = model;
     let mut ir = Ir::new(item);
-    lower_help(&mut ir, make_component_get_arm);
+    lower_list(&mut ir, make_component_get_arm);
     lower_methods(methods, &mut ir, make_component_get_arm);
     ir
 }
@@ -57,7 +57,7 @@ pub(crate) fn codegen(ir: Ir) -> TokenStream {
         get_arms,
         put_arms,
         names,
-        help_items,
+        list_items,
     } = ir;
     let ty = &item.self_ty;
     let (impl_generics, _ty_generics, where_clause) = item.generics.split_for_impl();
@@ -97,8 +97,8 @@ pub(crate) fn codegen(ir: Ir) -> TokenStream {
                 vec![#(#names),*]
             }
 
-            fn __show_help__(&self) -> ::anyhow::Result<::nitrous::Value> {
-                let items = vec![#(#help_items),*];
+            fn __show_list__(&self) -> ::anyhow::Result<::nitrous::Value> {
+                let items = vec![#(#list_items),*];
                 let out = items.join("\n");
                 Ok(::nitrous::Value::String(out))
             }

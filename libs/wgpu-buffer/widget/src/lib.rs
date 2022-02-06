@@ -45,7 +45,7 @@ use font_common::{FontAdvance, FontInterface};
 use font_ttf::TtfFont;
 use gpu::{Gpu, UploadTracker};
 use input::{ElementState, InputEvent, InputEventVec, InputFocus, ModifiersState, VirtualKeyCode};
-use log::trace;
+use log::{error, trace};
 use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
 use parking_lot::RwLock;
 use platform_dirs::AppDirs;
@@ -96,6 +96,7 @@ where
 
     // Auto-inserted widgets.
     terminal: Arc<RwLock<Terminal>>,
+    request_toggle_terminal: bool,
     show_terminal: bool,
 
     // The four key buffers.
@@ -245,6 +246,7 @@ where
             cursor_position: Position::origin(),
 
             terminal,
+            request_toggle_terminal: false,
             show_terminal: false,
 
             widget_info_buffer,
@@ -323,26 +325,16 @@ where
         0u32..self.paint_context.text_pool.len() as u32
     }
 
-    pub fn toggle_terminal(&mut self) {
-        match self.show_terminal {
-            true => self.hide_terminal(true),
-            false => self.show_terminal(true),
+    #[method]
+    pub fn toggle_terminal(&mut self, pressed: bool) {
+        if pressed {
+            self.request_toggle_terminal = true;
         }
     }
 
-    #[method]
-    pub fn show_terminal(&mut self, _pressed: bool) {
-        self.show_terminal = true;
-        self.terminal.write().set_visible(true);
-    }
-
-    #[method]
-    pub fn hide_terminal(&mut self, _pressed: bool) {
-        self.show_terminal = false;
-        self.terminal.write().set_visible(false);
-    }
-
-    pub fn is_toggle_terminal_event(&self, event: &InputEvent) -> bool {
+    // Since terminal-active mode consumes all keys instead of our bindings,
+    // we have to handle toggling as a special case.
+    fn is_toggle_terminal_event(&self, event: &InputEvent) -> bool {
         if let InputEvent::KeyboardKey {
             virtual_keycode,
             press_state,
@@ -370,17 +362,28 @@ where
     ) {
         widgets
             .handle_events(&events, *input_focus, &mut herder, &window)
-            .expect("Widgets::handle_events");
+            .or_else(|e| {
+                error!("handle_input_events: {}\n{}", e, e.backtrace());
+                Err(e)
+            })
+            .ok();
 
         if events
             .iter()
             .any(|event| widgets.is_toggle_terminal_event(event))
         {
+            widgets.request_toggle_terminal = true;
+        }
+
+        if widgets.request_toggle_terminal {
+            widgets.request_toggle_terminal = false;
             input_focus.toggle_terminal();
+            widgets.show_terminal = !widgets.show_terminal;
+            widgets.terminal.write().set_visible(widgets.show_terminal);
         }
     }
 
-    pub fn handle_events(
+    fn handle_events(
         &mut self,
         events: &[InputEvent],
         focus: T,
@@ -388,10 +391,6 @@ where
         win: &Window,
     ) -> Result<()> {
         for event in events {
-            if self.is_toggle_terminal_event(event) {
-                self.toggle_terminal();
-                continue;
-            }
             if let InputEvent::CursorMove { pixel_position, .. } = event {
                 let (x, y) = *pixel_position;
                 self.cursor_position = Position::new(

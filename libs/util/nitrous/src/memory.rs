@@ -55,9 +55,6 @@ pub trait ScriptComponent: Send + Sync + 'static {
     fn names(&self) -> Vec<&str>;
 }
 
-// pub type ComponentLookupFunc =
-//     dyn Fn(Entity, &mut World) -> &(dyn ScriptComponent + 'static) + Send + Sync + 'static;
-
 pub type ComponentLookupMutFunc =
     dyn Fn(Entity, &mut World) -> &mut (dyn ScriptComponent + 'static) + Send + Sync + 'static;
 
@@ -72,16 +69,8 @@ where
     })
 }
 
-// pub fn make_component_lookup<T>() -> Arc<ComponentLookupFunc>
-// where
-//     T: Component + ScriptComponent + 'static,
-// {
-//     Arc::new(move |entity: Entity, world: &mut World| {
-//         let ptr = world.get_mut::<T>(entity).unwrap().into_inner();
-//         let cto: &(dyn ScriptComponent + 'static) = ptr;
-//         cto
-//     })
-// }
+/// An inline function that can be stuffed into a Value, where needed.
+pub type RustCallbackFunc = dyn Fn(&[Value], &mut World) -> Value + Send + Sync + 'static;
 
 #[derive(Default)]
 struct EntityMetadata {
@@ -159,6 +148,12 @@ impl WorldIndex {
                     .map(|lookup| Value::new_component(*entity, lookup.to_owned()))
             })
             .flatten()
+    }
+
+    pub fn entity_components(&self, entity: &Entity) -> Option<impl Iterator<Item = &str>> {
+        self.entity_metadata
+            .get(entity)
+            .map(|comps| comps.components.keys().map(|k| k.as_ref()))
     }
 
     pub fn component_attrs(&self, entity: &Entity) -> Vec<&str> {

@@ -2019,6 +2019,7 @@ dependencies = [
  "ellipse",
  "futures",
  "geodesy",
+ "itertools",
  "lalrpop",
  "lalrpop-util",
  "log",
