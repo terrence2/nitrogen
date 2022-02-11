@@ -14,12 +14,37 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource};
+use itertools::Itertools;
 use log::{trace, warn};
 use nitrous::{
     ComponentLookupMutFunc, ExecutionContext, LocalNamespace, NitrousExecutor, NitrousScript,
     ScriptResource, Value, WorldIndex, YieldState,
 };
 use std::sync::Arc;
+
+pub const GUIDE: &'static str = r#"
+Welcome to the Nitrogen Terminal
+--------------------------------
+From here, you can tweak and investigate every aspect of the game.
+
+The command `list()` may be used at the top level, or on any item, to get a list
+of all items that can be accessed there. Use `help()` to show this message again.
+
+Engine "resources" are accessed with the name of the resource followed by a dot,
+followed by the name of a property or method on the resource. Methods may be called
+by adding a pair of parentheses after.
+
+Examples:
+   terrain.toggle_pin_camera(true)
+
+Named game "entities" are accessed with an @ symbol, followed by the name of the
+entity, followed by a dot, followed by the name of a "component" on the entity,
+followed by another dot, followed by the name of a property or method on that
+component. As with resources, methods are called by appending parentheses.
+
+Examples:
+    @player.camera.exposure()
+"#;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ScriptRunKind {
@@ -130,14 +155,38 @@ impl ScriptHerder {
         script: N,
         kind: ScriptRunKind,
     ) {
+        let locals = if kind == ScriptRunKind::Interactive {
+            Self::add_builtins(&self.index, locals)
+        } else {
+            locals
+        };
         self.gthread.push(ExecutionMetadata {
             context: ExecutionContext::new(locals, script.into()),
             kind,
         });
     }
 
+    pub fn add_builtins(index: &WorldIndex, mut locals: LocalNamespace) -> LocalNamespace {
+        #[allow(unstable_name_collisions)]
+        let resource_list: Value = index
+            .resource_names()
+            .map(|v| v.as_ref())
+            .intersperse("\n")
+            .collect::<String>()
+            .into();
+        locals.put_if_absent(
+            "list",
+            Value::RustMethod(Arc::new(move |_, _| resource_list.clone())),
+        );
+        locals.put_if_absent(
+            "help",
+            Value::RustMethod(Arc::new(move |_, _| GUIDE.to_owned().into())),
+        );
+        locals
+    }
+
     #[inline]
-    pub fn resource_names(&self) -> impl Iterator<Item = &String> {
+    pub fn resource_names(&self) -> impl Iterator<Item = &str> {
         self.index.resource_names()
     }
 
@@ -157,6 +206,28 @@ impl ScriptHerder {
         T: Resource + ScriptResource + 'static,
     {
         self.index.insert_named_resource::<T>(name);
+    }
+
+    pub fn entity_names(&self) -> impl Iterator<Item = &str> {
+        self.index.entity_names()
+    }
+
+    pub fn lookup_entity(&self, name: &str) -> Option<Value> {
+        self.index.lookup_entity(name)
+    }
+
+    pub fn entity_component_names(&self, entity: Entity) -> Option<impl Iterator<Item = &str>> {
+        self.index.entity_component_names(entity)
+    }
+
+    pub fn entity_component_attrs(
+        &self,
+        entity: Entity,
+        component_name: &str,
+        world: &mut World,
+    ) -> Option<Vec<String>> {
+        self.index
+            .entity_component_attrs(entity, component_name, world)
     }
 
     #[inline]

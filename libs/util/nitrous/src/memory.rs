@@ -77,6 +77,12 @@ struct EntityMetadata {
     components: HashMap<String, Arc<ComponentLookupMutFunc>>,
 }
 
+impl EntityMetadata {
+    fn component_names(&self) -> impl Iterator<Item = &str> {
+        self.components.keys().map(|s| s.as_str())
+    }
+}
+
 /// A map from names to pointers into World.
 #[derive(Default)]
 pub struct WorldIndex {
@@ -105,8 +111,8 @@ impl WorldIndex {
             .map(|lookup| Value::new_resource(lookup.clone()))
     }
 
-    pub fn resource_names(&self) -> impl Iterator<Item = &String> {
-        self.resource_ptrs.keys()
+    pub fn resource_names(&self) -> impl Iterator<Item = &str> {
+        self.resource_ptrs.keys().map(|s| s.as_str())
     }
 
     pub fn upsert_named_component(
@@ -128,6 +134,36 @@ impl WorldIndex {
         ensure!(!meta.components.contains_key(component_name));
         meta.components.insert(component_name.to_owned(), lookup);
         Ok(())
+    }
+
+    pub fn entity_names(&self) -> impl Iterator<Item = &str> {
+        self.named_entities.keys().map(|s| s.as_str())
+    }
+
+    pub fn entity_component_names(&self, entity: Entity) -> Option<impl Iterator<Item = &str>> {
+        self.entity_metadata
+            .get(&entity)
+            .map(|components| components.component_names())
+    }
+
+    pub fn entity_component_attrs(
+        &self,
+        entity: Entity,
+        component_name: &str,
+        world: &mut World,
+    ) -> Option<Vec<String>> {
+        self.entity_metadata
+            .get(&entity)
+            .map(|components| {
+                components.components.get(component_name).map(|lookup| {
+                    lookup(entity, world)
+                        .names()
+                        .iter()
+                        .map(|&s| s.to_owned())
+                        .collect::<Vec<String>>()
+                })
+            })
+            .flatten()
     }
 
     /// Look up a named entity in the index.
@@ -197,6 +233,14 @@ impl LocalNamespace {
         Self {
             memory: HashMap::new(),
         }
+    }
+
+    #[inline]
+    pub fn put_if_absent(&mut self, name: &str, value: Value) -> &mut Self {
+        if !self.memory.contains_key(name) {
+            self.memory.insert(name.to_owned(), value);
+        }
+        self
     }
 
     #[inline]

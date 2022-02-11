@@ -12,10 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{
-    herder::{ScriptCompletions, ScriptHerder, ScriptRunKind},
-    prelude::Prelude,
-};
+use crate::herder::{ScriptCompletions, ScriptHerder, ScriptRunKind};
 use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource, world::EntityMut};
 use log::error;
@@ -204,8 +201,7 @@ impl Default for Runtime {
 
         runtime
             .insert_resource(ScriptHerder::default())
-            .insert_resource(ScriptCompletions::new())
-            .insert_named_resource("prelude", Prelude::default());
+            .insert_resource(ScriptCompletions::new());
 
         runtime
     }
@@ -332,7 +328,7 @@ impl Runtime {
     }
 
     #[inline]
-    pub fn resource_names(&self) -> impl Iterator<Item = &String> {
+    pub fn resource_names(&self) -> impl Iterator<Item = &str> {
         self.resource::<ScriptHerder>().resource_names()
     }
 

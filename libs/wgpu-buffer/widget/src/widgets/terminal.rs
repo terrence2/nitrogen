@@ -21,6 +21,7 @@ use crate::{
     LineEdit, TextEdit, VerticalBox,
 };
 use anyhow::{Context, Result};
+use bevy_ecs::prelude::*;
 use gpu::Gpu;
 use input::{ElementState, InputEvent, ModifiersState, VirtualKeyCode};
 use nitrous::{
@@ -153,35 +154,51 @@ impl Terminal {
         self.output.write().append_line(line);
     }
 
-    fn try_completion(&self, mut partial: NitrousAst, herder: &mut ScriptHerder) -> Option<String> {
-        if partial.statements().len() != 1 {
-            return None;
-        }
-        if let Stmt::Expr(ref mut e) = partial.statements_mut()[0].as_mut() {
-            // FIXME: we need access to world for global access to do matching
-            if let Expr::Term(Term::Symbol(sym)) = e.as_mut() {
-                let sim = herder
+    fn try_complete_resource(partial: &NitrousAst, world: &mut World) -> Option<String> {
+        if let Stmt::Expr(ref e) = partial.statements()[0].as_ref() {
+            if let Expr::Term(Term::Symbol(sym)) = e.as_ref() {
+                let matching_resources = world
+                    .get_resource::<ScriptHerder>()
+                    .unwrap()
                     .resource_names()
                     .filter(|&s| s.starts_with(sym.as_str()))
-                    .collect::<Vec<&String>>();
-                if sim.len() == 1 {
-                    return Some(sim[0].to_owned());
+                    .collect::<Vec<&str>>();
+                if matching_resources.len() == 1 {
+                    return Some(matching_resources[0].to_owned());
+                } else {
+                    // TODO: show top N potential completions?
                 }
-            } else if let Expr::Attr(mod_name_term, Term::Symbol(sym)) = e.as_mut() {
-                if let Expr::Term(Term::Symbol(mod_name)) = mod_name_term.as_ref() {
-                    if let Some(value) = herder.lookup_resource(mod_name) {
-                        /*
-                        if let Ok(attr_names) = herder.attrs(value) {
-                            let sim = attr_names
-                                .iter()
-                                .filter(|&s| s.starts_with(sym.as_str()))
-                                .cloned()
-                                .collect::<Vec<&str>>();
-                            if sim.len() == 1 {
-                                return Some(format!("{}.{}", mod_name, sim[0]));
-                            }
+            }
+        }
+        None
+    }
+
+    fn try_complete_resource_attrs(partial: &NitrousAst, world: &mut World) -> Option<String> {
+        if let Stmt::Expr(ref e) = partial.statements()[0].as_ref() {
+            if let Expr::Attr(lhs_name_term, Term::Symbol(sym)) = e.as_ref() {
+                if let Expr::Term(Term::Symbol(res_name)) = lhs_name_term.as_ref() {
+                    if let Some(value) = world
+                        .get_resource::<ScriptHerder>()
+                        .unwrap()
+                        .lookup_resource(res_name)
+                    {
+                        let matching_attrs =
+                            world.resource_scope(|world, herder: Mut<ScriptHerder>| {
+                                if let Ok(attr_names) = herder.attrs(value, world) {
+                                    attr_names
+                                        .iter()
+                                        .filter(|&s| s.starts_with(sym.as_str()))
+                                        .map(|s| s.to_owned().to_owned())
+                                        .collect::<Vec<String>>()
+                                } else {
+                                    Vec::new()
+                                }
+                            });
+                        if matching_attrs.len() == 1 {
+                            return Some(format!("{}.{}", res_name, matching_attrs[0]));
+                        } else {
+                            // TODO: show top N potential completions
                         }
-                         */
                     }
                 }
             }
@@ -189,10 +206,121 @@ impl Terminal {
         None
     }
 
-    fn on_tab_pressed(&mut self, herder: &mut ScriptHerder) {
+    fn try_complete_entity(partial: &NitrousAst, herder: &ScriptHerder) -> Option<String> {
+        if let Stmt::Expr(ref e) = partial.statements()[0].as_ref() {
+            if let Expr::Term(Term::AtSymbol(sym)) = e.as_ref() {
+                let matching_entities = herder
+                    .entity_names()
+                    .filter(|&s| s.starts_with(sym.as_str()))
+                    .collect::<Vec<&str>>();
+                if matching_entities.len() == 1 {
+                    return Some("@".to_owned() + matching_entities[0]);
+                } else {
+                    // TODO: show top N potential completions?
+                }
+            }
+        }
+        None
+    }
+
+    fn try_complete_entity_component(
+        partial: &NitrousAst,
+        herder: &ScriptHerder,
+    ) -> Option<String> {
+        if let Stmt::Expr(ref e) = partial.statements()[0].as_ref() {
+            if let Expr::Attr(lhs_name_term, Term::Symbol(sym)) = e.as_ref() {
+                if let Expr::Term(Term::AtSymbol(ent_name)) = lhs_name_term.as_ref() {
+                    if let Some(value) = herder.lookup_entity(ent_name) {
+                        if let Value::Entity(entity) = value {
+                            if let Some(component_names) = herder.entity_component_names(entity) {
+                                let matching_components = component_names
+                                    .filter(|&s| s.starts_with(sym.as_str()))
+                                    .collect::<Vec<_>>();
+                                if matching_components.len() == 1 {
+                                    return Some(format!(
+                                        "@{}.{}",
+                                        ent_name, matching_components[0]
+                                    ));
+                                } else {
+                                    // TODO: show top N potential completions
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn try_complete_entity_component_attrs(
+        partial: &NitrousAst,
+        world: &mut World,
+    ) -> Option<String> {
+        if let Stmt::Expr(ref e) = partial.statements()[0].as_ref() {
+            if let Expr::Attr(attr_term, Term::Symbol(attr_sym)) = e.as_ref() {
+                if let Expr::Attr(ent_term, Term::Symbol(comp_sym)) = attr_term.as_ref() {
+                    if let Expr::Term(Term::AtSymbol(ent_sym)) = ent_term.as_ref() {
+                        if let Some(value) = world
+                            .get_resource::<ScriptHerder>()
+                            .unwrap()
+                            .lookup_entity(ent_sym)
+                        {
+                            if let Value::Entity(entity) = value {
+                                let maybe_attr_names =
+                                    world.resource_scope(|world, herder: Mut<ScriptHerder>| {
+                                        herder.entity_component_attrs(entity, comp_sym, world)
+                                    });
+                                if let Some(attr_names) = maybe_attr_names {
+                                    let matching_attrs = attr_names
+                                        .iter()
+                                        .filter(|&s| s.starts_with(attr_sym.as_str()))
+                                        .collect::<Vec<_>>();
+                                    if matching_attrs.len() == 1 {
+                                        return Some(format!(
+                                            "@{}.{}.{}",
+                                            ent_sym, comp_sym, matching_attrs[0]
+                                        ));
+                                    } else {
+                                        // TODO: show top N potential completions
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn try_completion(&self, mut partial: NitrousAst, world: &mut World) -> Option<String> {
+        if partial.statements().len() != 1 {
+            return None;
+        }
+        if let Some(s) = Self::try_complete_resource(&partial, world) {
+            return Some(s);
+        }
+        if let Some(s) = Self::try_complete_resource_attrs(&partial, world) {
+            return Some(s);
+        }
+        if let Some(s) = Self::try_complete_entity_component_attrs(&partial, world) {
+            return Some(s);
+        }
+        let herder = world.get_resource::<ScriptHerder>().unwrap();
+        if let Some(s) = Self::try_complete_entity(&partial, herder) {
+            return Some(s);
+        }
+        if let Some(s) = Self::try_complete_entity_component(&partial, herder) {
+            return Some(s);
+        }
+        None
+    }
+
+    fn on_tab_pressed(&mut self, world: &mut World) {
         let incomplete = self.edit.read().line().flatten();
         if let Ok(partial) = NitrousAst::parse(&incomplete) {
-            if let Some(full) = self.try_completion(partial, herder) {
+            if let Some(full) = self.try_completion(partial, world) {
                 self.edit.write().line_mut().select_all();
                 self.edit.write().line_mut().insert(&full);
             }
@@ -232,7 +360,7 @@ impl Terminal {
 
     fn is_quit_command(command: &str) -> bool {
         let cmd = command.trim().to_lowercase();
-        cmd.starts_with("quit") || cmd.starts_with("exit") || cmd == "q"
+        cmd == "quit" || cmd == "exit" || cmd == "q"
     }
 
     fn on_enter_pressed(&mut self, herder: &mut ScriptHerder) -> Result<()> {
@@ -247,9 +375,9 @@ impl Terminal {
             Err(e) => {
                 // Help with some common cases before we show a scary error.
                 if Self::is_help_command(&command) {
-                    herder.run_interactive("prelude.show_guide()");
+                    herder.run_interactive("help()")?;
                 } else if Self::is_quit_command(&command) {
-                    herder.run_interactive("prelude.quit()");
+                    herder.run_interactive("quit()")?;
                 } else {
                     self.show_run_error(&command, &e.to_string());
                 }
@@ -271,8 +399,14 @@ impl Terminal {
                                     screen.append_line(line);
                                 }
                             }
-                            Value::ResourceMethod(_, _) => {
-                                screen.append_line(&format!("{} is a method, did you mean to call it?\nTry using up-arrow to go back and add parentheses to the end.", v));
+                            Value::ResourceMethod(_, _) | Value::ComponentMethod(_, _, _) => {
+                                screen.append_line(&format!(
+                                    "{} is a method, did you mean to call it?",
+                                    v
+                                ));
+                                screen.append_line(
+                                    "Try using up-arrow to go back and add parentheses to the end.",
+                                );
                             }
                             _ => {
                                 screen.append_line(&v.to_string());
@@ -316,6 +450,48 @@ impl Terminal {
             .unwrap()
             .select(prefix.len()..prefix.len() + error.len());
         screen.last_line_mut().unwrap().change_color(Color::Red);
+    }
+
+    // We need the world in order to do completions.
+    pub fn handle_terminal_events(&mut self, event: &InputEvent, world: &mut World) -> Result<()> {
+        // Intercept the enter key and process the command in edit into the terminal.
+        if let InputEvent::KeyboardKey {
+            virtual_keycode,
+            press_state,
+            modifiers_state,
+            window_focused,
+            ..
+        } = event
+        {
+            if !window_focused {
+                return Ok(());
+            }
+
+            // Reserved for window manager.
+            if modifiers_state.alt() || modifiers_state.logo() {
+                return Ok(());
+            }
+
+            if *press_state == ElementState::Pressed {
+                match (modifiers_state.ctrl(), virtual_keycode) {
+                    (false, VirtualKeyCode::Tab) => {
+                        self.on_tab_pressed(world);
+                    }
+                    (false, VirtualKeyCode::Up) => {
+                        self.on_up_pressed();
+                    }
+                    (false, VirtualKeyCode::Down) => {
+                        self.on_down_pressed();
+                    }
+                    (false, VirtualKeyCode::Return | VirtualKeyCode::NumpadEnter) => {
+                        let herder = &mut world.get_resource_mut::<ScriptHerder>().unwrap();
+                        self.on_enter_pressed(herder)?;
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -369,47 +545,12 @@ impl Widget for Terminal {
             return Ok(());
         }
 
-        // FIXME: set focus parameter here equal to whatever we call the line_edit child
+        // FIXME: handle keyboard focus properly; force it to the line_edit child
         self.edit
             .write()
             .handle_event(event, focus, cursor_position, herder)?;
 
-        // Intercept the enter key and process the command in edit into the terminal.
-        if let InputEvent::KeyboardKey {
-            virtual_keycode,
-            press_state,
-            modifiers_state,
-            window_focused,
-            ..
-        } = event
-        {
-            if !window_focused {
-                return Ok(());
-            }
-
-            // Reserved for window manager.
-            if modifiers_state.alt() || modifiers_state.logo() {
-                return Ok(());
-            }
-
-            if *press_state == ElementState::Pressed {
-                match (modifiers_state.ctrl(), virtual_keycode) {
-                    (false, VirtualKeyCode::Tab) => {
-                        self.on_tab_pressed(herder);
-                    }
-                    (false, VirtualKeyCode::Up) => {
-                        self.on_up_pressed();
-                    }
-                    (false, VirtualKeyCode::Down) => {
-                        self.on_down_pressed();
-                    }
-                    (false, VirtualKeyCode::Return | VirtualKeyCode::NumpadEnter) => {
-                        self.on_enter_pressed(herder)?;
-                    }
-                    _ => {}
-                }
-            }
-        }
+        // Note: terminal-specific input is handled later in handle_terminal_input
 
         Ok(())
     }

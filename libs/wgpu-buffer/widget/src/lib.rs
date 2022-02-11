@@ -120,9 +120,20 @@ where
         let state_dir = runtime.resource::<AppDirs>().state_dir.clone();
         let widget = WidgetBuffer::<T>::new(&mut runtime.resource_mut::<Gpu>(), &state_dir)?;
         runtime.insert_named_resource("widget", widget);
-        runtime
-            .sim_stage_mut(SimStage::HandleInput)
-            .add_system(Self::sys_handle_input_events);
+        runtime.sim_stage_mut(SimStage::HandleInput).add_system(
+            Self::sys_handle_input_events.label("WidgetBuffer::sys_handle_input_events"),
+        );
+        runtime.sim_stage_mut(SimStage::HandleInput).add_system(
+            Self::sys_handle_terminal_events
+                .exclusive_system()
+                .label("WidgetBuffer::sys_handle_terminal_events")
+                .after("WidgetBuffer::sys_handle_input_events"),
+        );
+        runtime.sim_stage_mut(SimStage::HandleInput).add_system(
+            Self::sys_handle_toggle_terminal
+                .label("WidgetBuffer::sys_handle_toggle_terminal")
+                .after("WidgetBuffer::sys_handle_terminal_events"),
+        );
         runtime
             .sim_stage_mut(SimStage::PostScript)
             .add_system(Self::sys_report_script_completions);
@@ -353,21 +364,11 @@ where
         false
     }
 
-    pub fn sys_handle_input_events(
+    pub fn sys_handle_toggle_terminal(
         events: Res<InputEventVec>,
         mut input_focus: ResMut<T>,
-        window: Res<Window>,
-        mut herder: ResMut<ScriptHerder>,
         mut widgets: ResMut<WidgetBuffer<T>>,
     ) {
-        widgets
-            .handle_events(&events, *input_focus, &mut herder, &window)
-            .or_else(|e| {
-                error!("handle_input_events: {}\n{}", e, e.backtrace());
-                Err(e)
-            })
-            .ok();
-
         if events
             .iter()
             .any(|event| widgets.is_toggle_terminal_event(event))
@@ -381,6 +382,22 @@ where
             widgets.show_terminal = !widgets.show_terminal;
             widgets.terminal.write().set_visible(widgets.show_terminal);
         }
+    }
+
+    pub fn sys_handle_input_events(
+        events: Res<InputEventVec>,
+        input_focus: Res<T>,
+        window: Res<Window>,
+        mut herder: ResMut<ScriptHerder>,
+        mut widgets: ResMut<WidgetBuffer<T>>,
+    ) {
+        widgets
+            .handle_events(&events, *input_focus, &mut herder, &window)
+            .or_else(|e| {
+                error!("handle_input_events: {}\n{}", e, e.backtrace());
+                Err(e)
+            })
+            .ok();
     }
 
     fn handle_events(
@@ -410,6 +427,21 @@ where
             )?;
         }
         Ok(())
+    }
+
+    fn sys_handle_terminal_events(world: &mut World) {
+        if world.get_resource_mut::<T>().unwrap().is_terminal_focused() {
+            let events = world.get_resource::<InputEventVec>().unwrap().to_owned();
+            world.resource_scope(|world, mut widgets: Mut<WidgetBuffer<T>>| {
+                for event in events {
+                    widgets
+                        .terminal
+                        .write()
+                        .handle_terminal_events(&event, world)
+                        .ok();
+                }
+            })
+        }
     }
 
     fn sys_report_script_completions(
