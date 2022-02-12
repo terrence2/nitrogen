@@ -87,7 +87,7 @@ impl Extension for WorldRenderPass {
         )?;
         runtime.insert_named_resource("world", world);
         runtime
-            .frame_stage_mut(FrameStage::HandleSystem)
+            .frame_stage_mut(FrameStage::HandleDisplayChange)
             .add_system(Self::sys_handle_display_config_change);
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_render_world

@@ -9,5 +9,6 @@ anyhow = "^ 1"
 bevy_ecs = "^ 0.6"
 itertools = "^ 0.10"
 log = "^ 0.4"
+pretty-type-name = "1.0"
 structopt = "^ 0.3"
 nitrous = { path = "../../util/nitrous" }

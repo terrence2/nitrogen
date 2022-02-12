@@ -120,23 +120,22 @@ where
         let state_dir = runtime.resource::<AppDirs>().state_dir.clone();
         let widget = WidgetBuffer::<T>::new(&mut runtime.resource_mut::<Gpu>(), &state_dir)?;
         runtime.insert_named_resource("widget", widget);
+
+        runtime
+            .sim_stage_mut(SimStage::HandleInput)
+            .add_system(Self::sys_handle_terminal_events.exclusive_system());
         runtime.sim_stage_mut(SimStage::HandleInput).add_system(
-            Self::sys_handle_input_events.label("WidgetBuffer::sys_handle_input_events"),
+            Self::sys_handle_toggle_terminal.label("WidgetBuffer::sys_handle_toggle_terminal"),
         );
         runtime.sim_stage_mut(SimStage::HandleInput).add_system(
-            Self::sys_handle_terminal_events
-                .exclusive_system()
-                .label("WidgetBuffer::sys_handle_terminal_events")
-                .after("WidgetBuffer::sys_handle_input_events"),
-        );
-        runtime.sim_stage_mut(SimStage::HandleInput).add_system(
-            Self::sys_handle_toggle_terminal
-                .label("WidgetBuffer::sys_handle_toggle_terminal")
-                .after("WidgetBuffer::sys_handle_terminal_events"),
+            Self::sys_handle_input_events
+                .label("WidgetBuffer::sys_handle_input_events")
+                .before("WidgetBuffer::sys_handle_toggle_terminal"),
         );
         runtime
             .sim_stage_mut(SimStage::PostScript)
             .add_system(Self::sys_report_script_completions);
+
         runtime
             .frame_stage_mut(FrameStage::TrackStateChanges)
             .add_system(Self::sys_track_state_changes);

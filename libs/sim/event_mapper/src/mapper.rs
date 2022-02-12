@@ -54,9 +54,9 @@ where
 {
     fn init(runtime: &mut Runtime) -> Result<()> {
         runtime.insert_named_resource("bindings", EventMapper::<T>::new());
-        runtime
-            .sim_stage_mut(SimStage::HandleInput)
-            .add_system(Self::sys_handle_input_events);
+        runtime.sim_stage_mut(SimStage::HandleInput).add_system(
+            Self::sys_handle_input_events.before("WidgetBuffer::sys_handle_input_events"),
+        );
         Ok(())
     }
 }

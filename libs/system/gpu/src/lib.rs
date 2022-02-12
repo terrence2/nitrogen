@@ -80,8 +80,12 @@ impl Extension for Gpu {
         let gpu = Self::new(runtime.resource::<Window>(), Default::default())?;
         runtime.insert_named_resource("gpu", gpu);
         runtime
-            .frame_stage_mut(FrameStage::HandleDisplayChange)
-            .add_system(Self::sys_handle_display_config_change);
+            .frame_stage_mut(FrameStage::HandleSystem)
+            .add_system(
+                Self::sys_handle_display_config_change
+                    .label("Gpu::sys_handle_display_config_change")
+                    .after("Window::sys_handle_system_events"),
+            );
 
         runtime.insert_resource(None as Option<wgpu::SurfaceTexture>);
         runtime

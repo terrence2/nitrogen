@@ -12,7 +12,10 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::herder::{ScriptCompletions, ScriptHerder, ScriptRunKind};
+use crate::{
+    dump_schedule::dump_schedule,
+    herder::{ScriptCompletions, ScriptHerder, ScriptRunKind},
+};
 use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource, world::EntityMut};
 use log::error;
@@ -20,6 +23,7 @@ use nitrous::{
     make_component_lookup_mut, LocalNamespace, NitrousScript, ScriptComponent, ScriptResource,
     Value,
 };
+use std::path::PathBuf;
 
 /// Interface for extending the Runtime.
 pub trait Extension {
@@ -147,6 +151,7 @@ pub struct Runtime {
     startup_schedule: Schedule,
     sim_schedule: Schedule,
     frame_schedule: Schedule,
+    dump_schedules: bool,
 }
 
 impl Default for Runtime {
@@ -197,6 +202,7 @@ impl Default for Runtime {
             startup_schedule,
             sim_schedule,
             frame_schedule,
+            dump_schedules: false,
         };
 
         runtime
@@ -209,6 +215,11 @@ impl Default for Runtime {
 
 impl Runtime {
     #[inline]
+    pub fn set_dump_schedules_on_startup(&mut self) {
+        self.dump_schedules = true;
+    }
+
+    #[inline]
     pub fn sim_stage_mut(&mut self, sim_stage: SimStage) -> &mut SystemStage {
         self.sim_schedule.get_stage_mut(&sim_stage).unwrap()
     }
@@ -216,6 +227,11 @@ impl Runtime {
     #[inline]
     pub fn frame_stage_mut(&mut self, frame_stage: FrameStage) -> &mut SystemStage {
         self.frame_schedule.get_stage_mut(&frame_stage).unwrap()
+    }
+
+    #[inline]
+    pub fn startup_stage_mut(&mut self, startup_stage: StartupStage) -> &mut SystemStage {
+        self.startup_schedule.get_stage_mut(&startup_stage).unwrap()
     }
 
     #[inline]
@@ -345,6 +361,40 @@ impl Runtime {
     #[inline]
     pub fn run_startup(&mut self) {
         self.startup_schedule.run_once(&mut self.world);
+
+        if self.dump_schedules {
+            self.dump_schedules = false;
+            self.dump_startup_schedule();
+            self.dump_sim_schedule();
+            self.dump_frame_schedule();
+        }
+    }
+
+    #[inline]
+    pub fn dump_startup_schedule(&self) {
+        dump_schedule(
+            &self.world,
+            &self.startup_schedule,
+            &PathBuf::from("startup_schedule.dot"),
+        );
+    }
+
+    #[inline]
+    pub fn dump_sim_schedule(&self) {
+        dump_schedule(
+            &self.world,
+            &self.sim_schedule,
+            &PathBuf::from("sim_schedule.dot"),
+        );
+    }
+
+    #[inline]
+    pub fn dump_frame_schedule(&self) {
+        dump_schedule(
+            &self.world,
+            &self.frame_schedule,
+            &PathBuf::from("frame_schedule.dot"),
+        );
     }
 }
 

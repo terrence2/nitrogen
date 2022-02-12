@@ -229,7 +229,7 @@ impl Extension for Window {
         runtime.insert_resource(None as Option<DisplayConfig>);
         runtime
             .frame_stage_mut(FrameStage::HandleSystem)
-            .add_system(Self::sys_handle_system_events);
+            .add_system(Self::sys_handle_system_events.label("Window::sys_handle_system_events"));
         Ok(())
     }
 }

@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{Extension, Runtime};
+use crate::{Extension, Runtime, StartupStage};
 use anyhow::Result;
 use std::path::PathBuf;
 use structopt::StructOpt;
@@ -26,6 +26,10 @@ pub struct StartupOpts {
     /// Run given file after startup
     #[structopt(short = "x", long)]
     execute: Option<PathBuf>,
+
+    /// Dump schedules after startup
+    #[structopt(long)]
+    dump_schedules: bool,
 }
 
 impl Extension for StartupOpts {
@@ -47,6 +51,9 @@ impl Extension for StartupOpts {
                         println!("Read file for {:?}: {}", exec_file, e);
                     }
                 }
+            }
+            if opts.dump_schedules {
+                runtime.set_dump_schedules_on_startup();
             }
         }
         Ok(())
