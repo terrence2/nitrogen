@@ -997,12 +997,12 @@ mod test {
     #[cfg(unix)]
     #[test]
     fn test_incremental_upload() -> Result<()> {
-        let mut runtime = Gpu::for_test_unix()?;
-        let mut gpu = runtime.resource_mut::<Gpu>();
+        let runtime = Gpu::for_test_unix()?;
+        let gpu = runtime.resource::<Gpu>();
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "test_incremental",
-            &gpu,
+            gpu,
             256,
             256,
             wgpu::TextureFormat::Rgba8Unorm,
@@ -1012,25 +1012,25 @@ mod test {
         // Base upload
         let _ = packer.push_image(
             &RgbaImage::from_pixel(254, 254, *Rgba::from_slice(&[255, 0, 0, 255])),
-            &gpu,
+            gpu,
         )?;
-        packer.make_upload_buffer(&mut gpu, &mut Default::default())?;
+        packer.make_upload_buffer(gpu, &Default::default())?;
         let _ = packer.texture();
 
         // Grow
         let _ = packer.push_image(
             &RgbaImage::from_pixel(24, 254, *Rgba::from_slice(&[255, 0, 0, 255])),
-            &gpu,
+            gpu,
         )?;
-        packer.make_upload_buffer(&mut gpu, &mut Default::default())?;
+        packer.make_upload_buffer(gpu, &Default::default())?;
         let _ = packer.texture();
 
         // Reuse
         let _ = packer.push_image(
             &RgbaImage::from_pixel(24, 254, *Rgba::from_slice(&[255, 0, 0, 255])),
-            &gpu,
+            gpu,
         )?;
-        packer.make_upload_buffer(&mut gpu, &mut Default::default())?;
+        packer.make_upload_buffer(gpu, &Default::default())?;
         let _ = packer.texture();
         Ok(())
     }

@@ -182,9 +182,9 @@ impl ScriptHerder {
         locals.put_if_absent(
             "exit",
             Value::RustMethod(Arc::new(|_args, world| {
-                world
-                    .get_resource_mut::<ExitRequest>()
-                    .map(|mut exit| exit.request_exit());
+                if let Some(mut exit) = world.get_resource_mut::<ExitRequest>() {
+                    exit.request_exit();
+                }
                 Value::True()
             })),
         );

@@ -278,6 +278,7 @@ mod test {
     }
 
     #[test]
+    #[allow(clippy::bool_assert_comparison)]
     fn test_basic() -> Result<()> {
         let mut runtime = prepare()?;
         let mut state = ModifiersState::empty();
@@ -302,6 +303,7 @@ mod test {
     }
 
     #[test]
+    #[allow(clippy::bool_assert_comparison)]
     fn test_modifier_planes() -> Result<()> {
         let mut runtime = prepare()?;
         let mut state = ModifiersState::empty();
@@ -330,6 +332,7 @@ mod test {
 
     #[test]
     #[ignore]
+    #[allow(clippy::bool_assert_comparison)]
     fn test_exact_modifer_matching() -> Result<()> {
         env_logger::init();
         let mut runtime = prepare()?;
