@@ -12,25 +12,22 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use absolute_unit::{degrees, meters};
-use anyhow::{bail, Result};
-use camera::{ArcBallCamera, Camera};
-//use fullscreen::FullscreenBuffer;
-use chrono::{TimeZone, Utc};
-use geodesy::{GeoSurface, Graticule, Target};
+use absolute_unit::{meters, radians};
+use animate::{TimeStep, Timeline};
+use anyhow::Result;
+use camera::{ArcBallController, ArcBallSystem, Camera, CameraSystem};
+use event_mapper::EventMapper;
 use global_data::GlobalParametersBuffer;
 use gpu::Gpu;
-use input::{InputController, InputEvent, InputSystem, VirtualKeyCode};
-//use legion::*;
-// use tokio::{runtime::Runtime, sync::RwLock as AsyncRwLock};
-use nitrous::Interpreter;
+use input::{DemoFocus, InputController, InputSystem};
+use measure::WorldSpaceFrame;
 use orrery::Orrery;
-use parking_lot::RwLock;
-use std::sync::Arc;
+use runtime::Runtime;
+use std::{f32::consts::PI, time::Instant};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::console;
-use window::{DisplayConfig, DisplayOpts, Window};
+use window::Window;
 #[cfg(target_arch = "wasm32")]
 use winit::platform::web::WindowExtWebSys;
 use winit::window::{Window as OsWindow, WindowBuilder};
@@ -48,28 +45,14 @@ async fn async_trampoline() {
     }
 }
 
-#[allow(unused)]
-struct AppContext {
-    interpreter: Interpreter,
-    window: Arc<RwLock<Window>>,
-    gpu: Arc<RwLock<Gpu>>,
-    camera: Arc<RwLock<Camera>>,
-    arcball: Arc<RwLock<ArcBallCamera>>,
-    orrery: Arc<RwLock<Orrery>>,
-    // //async_rt: Runtime,
-    // //legion: World,
-    globals_buffer: Arc<RwLock<GlobalParametersBuffer>>,
-    // fullscreen_buffer: Arc<RwLock<FullscreenBuffer>>,
-}
-
 async fn async_main() -> Result<()> {
     let event_loop = InputSystem::make_event_loop();
-    let os_window = WindowBuilder::new()
+    let _os_window = WindowBuilder::new()
         .with_title("Nitrogen Web Demo")
         .build(&event_loop)?;
 
     // FIXME: we need a different mechanism for handling resize events on web
-    let _input_controller = InputController::for_web(&event_loop);
+    // let _input_controller = InputController::for_web(&event_loop);
 
     #[cfg(target_arch = "wasm32")]
     {
@@ -80,53 +63,53 @@ async fn async_main() -> Result<()> {
         js_body.append_child(&canvas).unwrap();
     }
 
-    //let mut async_rt = Runtime::new()?;
-    //let legion = World::default();
+    let mut runtime = Runtime::default();
+    runtime
+        // .insert_resource(opt.catalog_opts)
+        // .insert_resource(opt.display_opts)
+        // .insert_resource(opt.startup_opts)
+        // .insert_resource(opt.detail_opts.cpu_detail())
+        // .insert_resource(opt.detail_opts.gpu_detail())
+        // .insert_resource(app_dirs)
+        .insert_resource(DemoFocus::Demo)
+        // .load_extension::<StartupOpts>()?
+        // .load_extension::<Catalog>()?
+        .load_extension::<EventMapper<DemoFocus>>()?
+        .load_extension::<Window>()?
+        .load_extension::<Gpu>()?
+        // .load_extension::<AtmosphereBuffer>()?
+        // .load_extension::<FullscreenBuffer>()?
+        .load_extension::<GlobalParametersBuffer>()?
+        // .load_extension::<StarsBuffer>()?
+        // .load_extension::<TerrainBuffer>()?
+        // .load_extension::<WorldRenderPass>()?
+        // .load_extension::<WidgetBuffer<DemoFocus>>()?
+        // .load_extension::<UiRenderPass<DemoFocus>>()?
+        // .load_extension::<CompositeRenderPass<DemoFocus>>()?
+        // .load_extension::<System>()?
+        .load_extension::<Orrery>()?
+        .load_extension::<Timeline>()?
+        .load_extension::<TimeStep>()?
+        .load_extension::<CameraSystem>()?
+        .load_extension::<ArcBallSystem>()?;
 
-    let mut interpreter = Interpreter::default();
-    // let mapper = EventMapper::new(&mut interpreter);
-
-    let display_config = DisplayConfig::discover(&DisplayOpts::default(), &os_window);
-    let window = Window::new(os_window, display_config, &mut interpreter)?;
-    let gpu = Gpu::new_async(&mut window.write(), Default::default(), &mut interpreter).await?;
-
-    let globals_buffer = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter);
-    // let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
-
-    let camera = Camera::install(
-        degrees!(90),
-        window.read().render_aspect_ratio(),
+    // But we need at least a camera and controller before the sim is ready to run.
+    let camera = Camera::new(
+        radians!(PI / 2.0),
+        runtime.resource::<Window>().render_aspect_ratio(),
         meters!(0.5),
-        &mut interpreter,
-    )?;
-    let arcball = ArcBallCamera::install(&mut interpreter)?;
-    arcball.write().set_eye(Graticule::<Target>::new(
-        degrees!(0),
-        degrees!(0),
-        meters!(10),
-    ))?;
-    arcball.write().set_target(Graticule::<GeoSurface>::new(
-        degrees!(0),
-        degrees!(0),
-        meters!(10),
-    ));
-    arcball.write().set_distance(meters!(40.0));
-    let orrery = Orrery::new(Utc.ymd(1964, 2, 24).and_hms(12, 0, 0), &mut interpreter)?;
+    );
+    let _player_ent = runtime
+        .spawn_named("player")
+        .insert(WorldSpaceFrame::default())
+        .insert_scriptable(ArcBallController::default())
+        .insert_scriptable(camera)
+        .id();
 
-    let _ctx = AppContext {
-        interpreter,
-        window,
-        gpu,
-        camera,
-        arcball,
-        //async_rt,
-        //legion,
-        globals_buffer,
-        // fullscreen_buffer,
-        orrery,
-    };
+    runtime.run_startup();
+
     #[cfg(target_arch = "wasm32")]
-    InputSystem::run_forever(event_loop, window, window_loop, _ctx).await?;
+    InputSystem::run_forever(event_loop, _os_window, window_loop, runtime).await?;
 
     Ok(())
 }
@@ -135,8 +118,21 @@ async fn async_main() -> Result<()> {
 fn window_loop(
     os_window: &OsWindow,
     input_controller: &InputController,
-    app: &mut AppContext,
+    runtime: &mut Runtime,
 ) -> Result<()> {
+    // Catch monotonic sim time up to system time.
+    let frame_start = Instant::now();
+    while runtime.resource::<TimeStep>().next_now() < frame_start {
+        runtime.run_sim_once();
+    }
+
+    // Display a frame
+    runtime.run_frame_once();
+
+    os_window.request_redraw();
+    Ok(())
+
+    /*
     for event in input_controller.poll_input_events()? {
         console::log_1(&format!("EVENT: {:?}", event).into());
         match event {
@@ -197,4 +193,5 @@ fn window_loop(
 
     os_window.request_redraw();
     Ok(())
+     */
 }

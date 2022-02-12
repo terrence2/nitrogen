@@ -361,6 +361,23 @@ impl Orrery {
     }
 
     #[method]
+    pub fn set_date_time(
+        &mut self,
+        year: i64,
+        month: i64,
+        day: i64,
+        hour: i64,
+        min: i64,
+        sec: i64,
+    ) {
+        self.now = Utc.ymd(year as i32, month as u32, day as u32).and_hms(
+            hour as u32,
+            min as u32,
+            sec as u32,
+        );
+    }
+
+    #[method]
     pub fn get_unix_ms(&self) -> f64 {
         self.now.timestamp_nanos() as f64 / 1_000_000.
     }
@@ -474,40 +491,41 @@ impl Orrery {
 mod tests {
     use super::*;
     use event_mapper::EventMapper;
+    use input::DemoFocus;
 
     #[test]
     fn it_works() -> Result<()> {
-        let mut interpreter = Interpreter::default();
-        let _mapper = EventMapper::new(&mut interpreter);
-        let orrery = Orrery::new(Utc::now(), &mut interpreter)?;
-        orrery.read().sun_direction();
+        let runtime = Runtime::default()
+            .with_extension::<EventMapper<DemoFocus>>()?
+            .with_extension::<Orrery>()?;
+        runtime.resource::<Orrery>().sun_direction();
         Ok(())
     }
 
     #[test]
     fn test_leap_seconds() -> Result<()> {
-        let mut interpreter = Interpreter::default();
-        let _mapper = EventMapper::new(&mut interpreter);
+        let mut runtime = Runtime::default()
+            .with_extension::<EventMapper<DemoFocus>>()?
+            .with_extension::<Orrery>()?;
+        runtime
+            .resource_mut::<Orrery>()
+            .set_date_time(2020, 1, 1, 12, 0, 0);
         assert_eq!(
-            Orrery::new(Utc.ymd(2020, 1, 1).and_hms(12, 0, 0), &mut interpreter)?
-                .read()
-                .num_leap_seconds(),
+            runtime.resource::<Orrery>().num_leap_seconds(),
             Duration::seconds(27)
         );
-        let mut interpreter = Interpreter::default();
-        let _mapper = EventMapper::new(&mut interpreter);
+        runtime
+            .resource_mut::<Orrery>()
+            .set_date_time(2010, 1, 1, 12, 0, 0);
         assert_eq!(
-            Orrery::new(Utc.ymd(2010, 1, 1).and_hms(12, 0, 0), &mut interpreter)?
-                .read()
-                .num_leap_seconds(),
+            runtime.resource::<Orrery>().num_leap_seconds(),
             Duration::seconds(24)
         );
-        let mut interpreter = Interpreter::default();
-        let _mapper = EventMapper::new(&mut interpreter);
+        runtime
+            .resource_mut::<Orrery>()
+            .set_date_time(1969, 1, 1, 12, 0, 0);
         assert_eq!(
-            Orrery::new(Utc.ymd(1969, 1, 1).and_hms(12, 0, 0), &mut interpreter)?
-                .read()
-                .num_leap_seconds(),
+            runtime.resource::<Orrery>().num_leap_seconds(),
             Duration::seconds(0)
         );
         Ok(())

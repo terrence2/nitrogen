@@ -95,9 +95,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn it_can_create_a_buffer() -> Result<()> {
-        let mut runtime = Gpu::for_test_unix()?;
-        let gpu = runtime.resource::<Gpu>();
-        let _fullscreen_buffer = FullscreenBuffer::new(&gpu);
+        let runtime = Gpu::for_test_unix()?.with_extension::<FullscreenBuffer>()?;
+        let _fullscreen_buffer = runtime.resource::<FullscreenBuffer>();
         Ok(())
     }
 }

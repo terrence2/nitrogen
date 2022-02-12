@@ -13,24 +13,15 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 
-// All code in this module is heavily inspired by -- and all too
-// frequently directly copied from -- the most excellent:
-//     https://ebruneton.github.io/precomputed_atmospheric_scattering/
-// Which is:
-//     Copyright (c) 2017 Eric Bruneton
-// All errors and omissions below were introduced in transcription
-// to Rust/Vulkan/wgpu and are not reflective of the high quality of the
-// original work in any way.
 use anyhow::Result;
 use atmosphere::{Precompute, TableHelpers};
 use futures::executor::block_on;
 use gpu::Gpu;
 use input::InputSystem;
-use nitrous::Interpreter;
 use runtime::Runtime;
 use std::{fs, path::PathBuf, time::Instant};
 use structopt::StructOpt;
-use window::{DisplayConfig, DisplayOpts, OsWindow, Window, WindowBuilder};
+use window::{Window, WindowBuilder};
 
 /// Pre-compute atmosphere tables for embedding in code
 #[derive(Debug, StructOpt)]
@@ -50,22 +41,14 @@ fn main() -> Result<()> {
 
 fn window_main(mut runtime: Runtime) -> Result<()> {
     let opt = Opt::from_args();
-    let mut interpreter = Interpreter::default();
 
-    let display_config = DisplayConfig::discover(
-        &DisplayOpts::default(),
-        runtime.maybe_resource::<OsWindow>(),
-    );
-    let window = Window::new(
-        runtime.remove_resource::<OsWindow>(),
-        display_config,
-        &mut interpreter,
-    )?;
-    let gpu = Gpu::new(&mut window.write(), Default::default(), &mut interpreter)?;
+    runtime
+        .load_extension::<Window>()?
+        .load_extension::<Gpu>()?;
 
     let precompute_start = Instant::now();
-    let pcp = Precompute::new(&gpu.read())?;
-    let _ = pcp.build_textures(&mut gpu.write())?;
+    let pcp = Precompute::new(runtime.resource::<Gpu>())?;
+    let _ = pcp.build_textures(&mut runtime.resource_mut::<Gpu>())?;
     println!("Precompute time: {:?}", precompute_start.elapsed());
 
     let write_start = Instant::now();
@@ -87,7 +70,7 @@ fn window_main(mut runtime: Runtime) -> Result<()> {
         &scattering_path,
         pcp.single_mie_scattering_texture(),
         &single_mie_scattering_path,
-        &mut gpu.write(),
+        &mut runtime.resource_mut::<Gpu>(),
     ))?;
     println!("Write time: {:?}", write_start.elapsed());
 

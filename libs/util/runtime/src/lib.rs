@@ -19,8 +19,8 @@ mod startup;
 
 pub use crate::{
     herder::{
-        ExecutionMetadata, ScriptCompletion, ScriptCompletions, ScriptHerder, ScriptResult,
-        ScriptRunKind, ScriptRunPhase,
+        ExecutionMetadata, ExitRequest, ScriptCompletion, ScriptCompletions, ScriptHerder,
+        ScriptResult, ScriptRunKind, ScriptRunPhase,
     },
     runtime::{Extension, FrameStage, Runtime, SimStage, StartupStage},
     startup::StartupOpts,

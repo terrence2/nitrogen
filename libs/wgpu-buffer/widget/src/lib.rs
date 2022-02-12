@@ -599,7 +599,6 @@ where
 mod test {
     use super::*;
     use input::DemoFocus;
-    use std::env::current_dir;
 
     #[test]
     fn test_label_widget() -> Result<()> {

@@ -47,6 +47,22 @@ Examples:
 "#;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum ExitRequest {
+    Exit,
+    Continue,
+}
+
+impl ExitRequest {
+    pub fn request_exit(&mut self) {
+        *self = ExitRequest::Exit;
+    }
+
+    pub fn still_running(&self) -> bool {
+        *self == ExitRequest::Continue
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ScriptRunKind {
     Interactive,
     String,
@@ -151,37 +167,43 @@ impl ScriptHerder {
     #[inline]
     pub fn run_with_locals<N: Into<NitrousScript>>(
         &mut self,
-        locals: LocalNamespace,
+        mut locals: LocalNamespace,
         script: N,
         kind: ScriptRunKind,
     ) {
-        let locals = if kind == ScriptRunKind::Interactive {
-            Self::add_builtins(&self.index, locals)
-        } else {
-            locals
-        };
+        Self::add_builtins(kind, &self.index, &mut locals);
         self.gthread.push(ExecutionMetadata {
             context: ExecutionContext::new(locals, script.into()),
             kind,
         });
     }
 
-    pub fn add_builtins(index: &WorldIndex, mut locals: LocalNamespace) -> LocalNamespace {
-        #[allow(unstable_name_collisions)]
-        let resource_list: Value = index
-            .resource_names()
-            .intersperse("\n")
-            .collect::<String>()
-            .into();
+    pub fn add_builtins(kind: ScriptRunKind, index: &WorldIndex, locals: &mut LocalNamespace) {
         locals.put_if_absent(
-            "list",
-            Value::RustMethod(Arc::new(move |_, _| resource_list.clone())),
+            "exit",
+            Value::RustMethod(Arc::new(|_args, world| {
+                world
+                    .get_resource_mut::<ExitRequest>()
+                    .map(|mut exit| exit.request_exit());
+                Value::True()
+            })),
         );
-        locals.put_if_absent(
-            "help",
-            Value::RustMethod(Arc::new(move |_, _| GUIDE.to_owned().into())),
-        );
-        locals
+        if kind == ScriptRunKind::Interactive {
+            #[allow(unstable_name_collisions)]
+            let resource_list: Value = index
+                .resource_names()
+                .intersperse("\n")
+                .collect::<String>()
+                .into();
+            locals.put_if_absent(
+                "list",
+                Value::RustMethod(Arc::new(move |_, _| resource_list.clone())),
+            );
+            locals.put_if_absent(
+                "help",
+                Value::RustMethod(Arc::new(move |_, _| GUIDE.to_owned().into())),
+            );
+        }
     }
 
     #[inline]

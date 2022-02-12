@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     dump_schedule::dump_schedule,
-    herder::{ScriptCompletions, ScriptHerder, ScriptRunKind},
+    herder::{ExitRequest, ScriptCompletions, ScriptHerder, ScriptRunKind},
 };
 use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource, world::EntityMut};
@@ -206,6 +206,7 @@ impl Default for Runtime {
         };
 
         runtime
+            .insert_resource(ExitRequest::Continue)
             .insert_resource(ScriptHerder::default())
             .insert_resource(ScriptCompletions::new());
 
@@ -263,6 +264,12 @@ impl Runtime {
     #[inline]
     pub fn load_extension<T: Extension>(&mut self) -> Result<&mut Self> {
         T::init(self)?;
+        Ok(self)
+    }
+
+    #[inline]
+    pub fn with_extension<T: Extension>(mut self) -> Result<Self> {
+        T::init(&mut self)?;
         Ok(self)
     }
 

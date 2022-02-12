@@ -19,15 +19,18 @@ gpu = { path = "../../system/gpu" }
 runtime = { path = "../../util/runtime" }
 
 [dev-dependencies]
+bevy_ecs = "^ 0.6"
 chrono = "^ 0.4"
 parking_lot = "^ 0.11"
 absolute_unit = { path = "../../util/absolute_unit" }
+animate = { path = "../../sim/animate" }
 camera = { path = "../../sim/camera" }
 event_mapper = { path = "../../sim/event_mapper" }
 fullscreen = { path = "../../wgpu-buffer/fullscreen" }
 geodesy = { path = "../../util/geodesy" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 input = { path = "../../system/input" }
+measure = { path = "../../sim/measure" }
 nitrous = { path = "../../util/nitrous" }
 orrery = { path = "../../sim/orrery" }
 window = { path = "../../system/window" }

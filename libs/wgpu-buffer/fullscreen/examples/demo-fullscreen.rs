@@ -25,7 +25,7 @@ use gpu::Gpu;
 use input::{DemoFocus, InputSystem};
 use measure::WorldSpaceFrame;
 use orrery::Orrery;
-use runtime::{Extension, FrameStage, Runtime};
+use runtime::{ExitRequest, Extension, FrameStage, Runtime};
 use std::time::Instant;
 use window::{DisplayOpts, Window, WindowBuilder};
 
@@ -167,7 +167,8 @@ fn window_main(mut runtime: Runtime) -> Result<()> {
         .load_extension::<Orrery>()?
         .load_extension::<CameraSystem>()?
         .load_extension::<ArcBallSystem>()?
-        .load_extension::<TimeStep>()?;
+        .load_extension::<TimeStep>()?
+        .run_string(r#"bindings.bind("Escape", "exit()");"#)?;
 
     // But we need at least a camera and controller before the sim is ready to run.
     let camera = Camera::new(
@@ -175,7 +176,7 @@ fn window_main(mut runtime: Runtime) -> Result<()> {
         runtime.resource::<Window>().render_aspect_ratio(),
         meters!(0.1),
     );
-    let mut arcball = ArcBallController::new();
+    let mut arcball = ArcBallController::default();
     arcball.pan_view(true);
     arcball.set_eye(Graticule::<Target>::new(
         degrees!(0),
@@ -195,7 +196,7 @@ fn window_main(mut runtime: Runtime) -> Result<()> {
         .insert_scriptable(camera)
         .id();
 
-    loop {
+    while runtime.resource::<ExitRequest>().still_running() {
         // Catch monotonic sim time up to system time.
         let frame_start = Instant::now();
         while runtime.resource::<TimeStep>().next_now() < frame_start {
@@ -204,27 +205,10 @@ fn window_main(mut runtime: Runtime) -> Result<()> {
 
         runtime.run_frame_once();
 
-        // TODO: clean exit
-        /*
-        for event in runtime
-            .get_resource::<Arc<Mutex<InputController>>>()
-            .lock()
-            .poll_input_events()?
-        {
-            if let InputEvent::KeyboardKey {
-                virtual_keycode, ..
-            } = event
-            {
-                if virtual_keycode == VirtualKeyCode::Q || virtual_keycode == VirtualKeyCode::Escape
-                {
-                    return Ok(());
-                }
-            }
-        }
-         */
-
         runtime
             .get_mut::<ArcBallController>(player_ent)
             .handle_mousemotion(-0.5f64, 0f64);
     }
+
+    Ok(())
 }

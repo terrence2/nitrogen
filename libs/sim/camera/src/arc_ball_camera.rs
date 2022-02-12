@@ -412,7 +412,7 @@ mod tests {
 
     #[test]
     fn it_can_compute_eye_positions_at_origin() -> Result<()> {
-        let mut c = ArcBallController::new();
+        let mut c = ArcBallController::default();
         c.set_eye(Graticule::new(radians!(0), radians!(0), meters!(0)))?;
         c.set_target(Graticule::new(radians!(0), radians!(0), meters!(0)));
 
@@ -472,7 +472,7 @@ mod tests {
 
     #[test]
     fn it_can_compute_eye_positions_with_offset_latitude() -> Result<()> {
-        let mut c = ArcBallController::new();
+        let mut c = ArcBallController::default();
         c.set_eye(Graticule::new(radians!(0), radians!(0), meters!(0)))?;
         c.set_target(Graticule::new(radians!(0), radians!(0), meters!(0)));
 
@@ -516,7 +516,7 @@ mod tests {
 
     #[test]
     fn it_can_compute_eye_positions_with_offset_longitude() -> Result<()> {
-        let mut c = ArcBallController::new();
+        let mut c = ArcBallController::default();
         c.set_eye(Graticule::new(radians!(0), radians!(0), meters!(0)))?;
         c.set_target(Graticule::new(radians!(0), radians!(0), meters!(0)));
 

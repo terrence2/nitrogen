@@ -18,3 +18,4 @@ runtime = { path = "../../util/runtime" }
 
 [dev-dependencies]
 event_mapper = { path = "../../sim/event_mapper" }
+input = { path = "../../system/input" }

@@ -30,7 +30,7 @@ use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
 use orrery::Orrery;
 use parking_lot::RwLock;
 use platform_dirs::AppDirs;
-use runtime::{Extension, FrameStage, Runtime, StartupOpts};
+use runtime::{ExitRequest, Extension, FrameStage, Runtime, StartupOpts};
 use stars::StarsBuffer;
 use std::{f32::consts::PI, fs::create_dir_all, sync::Arc, time::Instant};
 use structopt::StructOpt;
@@ -75,7 +75,6 @@ struct VisibleWidgets {
 #[derive(Debug, NitrousResource)]
 struct System {
     visible_widgets: VisibleWidgets,
-    exit: bool,
 }
 
 impl Extension for System {
@@ -88,9 +87,8 @@ impl Extension for System {
             .add_system(Self::sys_track_visible_state);
         runtime.run_string(
             r#"
-                /// Bevy has an Escape to exit system that seems clutch for this usage
-                bindings.bind("Escape", "system.exit()");
-                bindings.bind("q", "system.exit()");
+                bindings.bind("Escape", "exit()");
+                bindings.bind("q", "exit()");
             "#,
         )?;
         Ok(())
@@ -101,10 +99,7 @@ impl Extension for System {
 impl System {
     pub fn new(widgets: &WidgetBuffer<DemoFocus>) -> Result<Self> {
         let visible_widgets = Self::build_gui(widgets)?;
-        Ok(Self {
-            visible_widgets,
-            exit: false,
-        })
+        Ok(Self { visible_widgets })
     }
 
     pub fn build_gui(widgets: &WidgetBuffer<DemoFocus>) -> Result<VisibleWidgets> {
@@ -223,11 +218,6 @@ impl System {
     pub fn println(&self, message: Value) {
         println!("{}", message);
     }
-
-    #[method]
-    pub fn exit(&mut self) {
-        self.exit = true;
-    }
 }
 
 fn main() -> Result<()> {
@@ -291,7 +281,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
 
     // Causes all initial tiles to be blank? Wat?
     runtime.run_startup();
-    while !runtime.resource::<System>().exit {
+    while runtime.resource::<ExitRequest>().still_running() {
         // Catch monotonic sim time up to system time.
         let frame_start = Instant::now();
         while runtime.resource::<TimeStep>().next_now() < frame_start {

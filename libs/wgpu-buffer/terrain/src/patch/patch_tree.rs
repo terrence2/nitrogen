@@ -1116,7 +1116,7 @@ mod test {
         let mut tree = PatchTree::new(15, 150.0, 300);
         let mut live_patches = Vec::new();
         let mut camera = Camera::new(degrees!(90), 16.0 / 9.0, meters!(0.1));
-        let mut arcball = ArcBallController::new();
+        let mut arcball = ArcBallController::default();
         arcball.set_eye(Graticule::<Target>::new(
             degrees!(89),
             degrees!(0),
@@ -1157,7 +1157,7 @@ mod test {
         let mut tree = PatchTree::new(15, 150.0, 300);
         let mut live_patches = Vec::new();
         let mut camera = Camera::new(degrees!(90), 16.0 / 9.0, meters!(0.1));
-        let mut arcball = ArcBallController::new();
+        let mut arcball = ArcBallController::default();
         arcball.set_target(Graticule::<GeoSurface>::new(
             degrees!(0),
             degrees!(0),
@@ -1184,7 +1184,7 @@ mod test {
         let mut tree = PatchTree::new(15, 150.0, 300);
         let mut live_patches = Vec::new();
         let mut camera = Camera::new(degrees!(90), 16.0 / 9.0, meters!(0.1));
-        let mut arcball = ArcBallController::new();
+        let mut arcball = ArcBallController::default();
         arcball.set_target(Graticule::<GeoSurface>::new(
             degrees!(0),
             degrees!(0),

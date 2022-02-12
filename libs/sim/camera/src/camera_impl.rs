@@ -332,7 +332,7 @@ mod test {
     fn test_depth_restore() -> Result<()> {
         let aspect_ratio = 0.9488875526157546;
         let mut camera = Camera::new(degrees!(90), aspect_ratio, meters!(0.5));
-        let mut arcball = ArcBallController::new();
+        let mut arcball = ArcBallController::default();
         arcball.set_target(Graticule::<GeoSurface>::new(
             degrees!(0),
             degrees!(0),
