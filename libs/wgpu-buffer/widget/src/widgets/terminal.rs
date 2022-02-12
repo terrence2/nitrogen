@@ -23,10 +23,10 @@ use crate::{
 use anyhow::{Context, Result};
 use bevy_ecs::prelude::*;
 use gpu::Gpu;
-use input::{ElementState, InputEvent, ModifiersState, VirtualKeyCode};
+use input::{ElementState, InputEvent, VirtualKeyCode};
 use nitrous::{
     ir::{Expr, Stmt, Term},
-    NitrousAst, NitrousScript, Value,
+    NitrousAst, Value,
 };
 use parking_lot::RwLock;
 use runtime::{ScriptCompletion, ScriptCompletions, ScriptHerder, ScriptResult, ScriptRunKind};
@@ -294,7 +294,7 @@ impl Terminal {
         None
     }
 
-    fn try_completion(&self, mut partial: NitrousAst, world: &mut World) -> Option<String> {
+    fn try_completion(&self, partial: NitrousAst, world: &mut World) -> Option<String> {
         if partial.statements().len() != 1 {
             return None;
         }

@@ -431,7 +431,7 @@ where
     fn sys_handle_terminal_events(world: &mut World) {
         if world.get_resource_mut::<T>().unwrap().is_terminal_focused() {
             let events = world.get_resource::<InputEventVec>().unwrap().to_owned();
-            world.resource_scope(|world, mut widgets: Mut<WidgetBuffer<T>>| {
+            world.resource_scope(|world, widgets: Mut<WidgetBuffer<T>>| {
                 for event in events {
                     widgets
                         .terminal

@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{Extension, Runtime, StartupStage};
+use crate::{Extension, Runtime};
 use anyhow::Result;
 use std::path::PathBuf;
 use structopt::StructOpt;

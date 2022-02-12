@@ -80,7 +80,7 @@ mod dot {
     }
 
     impl DotGraph {
-        pub fn new(name: &str, kind: &str, attrs: &[(&str, &str)]) -> DotGraph {
+        fn new(name: &str, kind: &str, attrs: &[(&str, &str)]) -> DotGraph {
             let mut dot = DotGraph {
                 buffer: String::new(),
             };
@@ -255,9 +255,8 @@ pub fn schedule_graph_dot_styled_inner(
     use_world_info_for_stages: Option<(&World, &[&dyn StageLabel])>,
     style: &ScheduleGraphStyle,
 ) -> String {
-    let mut graph = DotGraph::new(
+    let mut graph = DotGraph::digraph(
         "schedule",
-        "digraph",
         &[
             ("fontsize", &style.fontsize.to_string()),
             ("fontname", &style.fontname),
@@ -320,9 +319,8 @@ fn build_schedule_graph(
             let marker_id = marker_id(schedule_name, stage_name);
             let stage_name_str = format!("{:?}", stage_name);
 
-            let mut schedule_sub_graph = DotGraph::new(
+            let mut schedule_sub_graph = DotGraph::subgraph(
                 &name,
-                "subgraph",
                 &[
                     ("label", &stage_name_str),
                     ("fontsize", "20"),
@@ -377,9 +375,8 @@ fn system_stage_subgraph(
 ) -> DotGraph {
     let stage_name_str = format!("{:?}", stage_name);
 
-    let mut sub = DotGraph::new(
+    let mut sub = DotGraph::subgraph(
         &format!("cluster_{:?}", stage_name),
-        "subgraph",
         &[
             ("style", "rounded"),
             ("color", &style.bgcolor_stage),
@@ -592,8 +589,7 @@ fn add_dependency_labels(
                 SystemDirection::After => graph.add_edge(&other, me, &[("constraint", "false")]),
             }
         }
-        // assert!(found);
-        log::warn!("Failed to find dependency label");
+        assert!(found);
     }
 }
 
