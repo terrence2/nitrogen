@@ -246,7 +246,7 @@ impl Default for ScheduleGraphStyle {
 pub fn dump_schedule(world: &World, schedule: &Schedule, path: &Path) {
     let dot = schedule_graph_dot_styled_inner(world, schedule, None, &ScheduleGraphStyle::light());
     let mut fp = File::create(path).unwrap();
-    fp.write_all(&dot.as_bytes()).unwrap();
+    fp.write_all(dot.as_bytes()).unwrap();
 }
 
 pub fn schedule_graph_dot_styled_inner(

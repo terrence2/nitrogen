@@ -392,9 +392,9 @@ where
     ) {
         widgets
             .handle_events(&events, *input_focus, &mut herder, &window)
-            .or_else(|e| {
+            .map_err(|e| {
                 error!("handle_input_events: {}\n{}", e, e.backtrace());
-                Err(e)
+                e
             })
             .ok();
     }

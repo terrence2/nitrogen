@@ -79,7 +79,7 @@ where
         let bindings = self
             .bindings
             .entry(focus)
-            .or_insert(Bindings::new(focus.name()));
+            .or_insert_with(|| Bindings::new(focus.name()));
         bindings.bind(event_name, script_raw)?;
         Ok(())
     }

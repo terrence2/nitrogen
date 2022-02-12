@@ -181,9 +181,8 @@ impl System {
     ) {
         for (arcball, camera) in query.iter() {
             system
-                .track_visible_state(*timestep.now(), &orrery, &arcball, &camera)
+                .track_visible_state(*timestep.now(), &orrery, arcball, camera)
                 .ok();
-            break;
         }
     }
 
@@ -286,7 +285,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     let _player_ent = runtime
         .spawn_named("player")
         .insert(WorldSpaceFrame::default())
-        .insert_scriptable(ArcBallController::new())
+        .insert_scriptable(ArcBallController::default())
         .insert_scriptable(camera)
         .id();
 

@@ -32,8 +32,7 @@ pub fn derive_nitrous_resource(input: TokenStream) -> TokenStream {
     let ast = resource::parse(input);
     let model = resource::analyze(ast);
     let ir = resource::lower(model);
-    let rust = resource::codegen(ir);
-    rust
+    resource::codegen(ir)
 }
 
 /// Adds a derivation of the nitrous::ScriptComponent trait and associated methods.
@@ -45,8 +44,7 @@ pub fn derive_nitrous_component(input: TokenStream) -> TokenStream {
     let ast = component::parse(input);
     let model = component::analyze(ast);
     let ir = component::lower(model);
-    let rust = component::codegen(ir);
-    rust
+    component::codegen(ir)
 }
 
 /// Add to the top of a Resource impl block to collect all tagged methods and build
@@ -60,8 +58,7 @@ pub fn inject_nitrous_resource(
     let ast = resource_injector::parse(args, item);
     let model = resource_injector::analyze(ast);
     let ir = resource_injector::lower(model);
-    let rust = resource_injector::codegen(ir);
-    rust
+    resource_injector::codegen(ir)
 }
 
 /// Add to the top of a Component impl block to collect all tagged methods and build
@@ -75,8 +72,7 @@ pub fn inject_nitrous_component(
     let ast = component_injector::parse(args, item);
     let model = component_injector::analyze(ast);
     let ir = component_injector::lower(model);
-    let rust = component_injector::codegen(ir);
-    rust
+    component_injector::codegen(ir)
 }
 
 /// A tag for #[nitrous_injector] indicating to include this function as a method.

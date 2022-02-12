@@ -53,7 +53,7 @@ impl Bindings {
             trace!("binding {} to\n{}", ks, script);
             self.script_map
                 .entry(ks.clone())
-                .or_insert(Vec::new())
+                .or_insert_with(Vec::new)
                 .push(script.clone());
 
             for key in &ks.keys {

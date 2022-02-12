@@ -143,6 +143,7 @@ where
     }
 
     // composite: Accumulate offscreen buffers into a final image.
+    #[allow(clippy::too_many_arguments)]
     fn sys_composite_scene(
         composite: Res<CompositeRenderPass<T>>,
         fullscreen: Res<FullscreenBuffer>,

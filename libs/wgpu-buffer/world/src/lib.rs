@@ -79,7 +79,7 @@ pub struct WorldRenderPass {
 impl Extension for WorldRenderPass {
     fn init(runtime: &mut Runtime) -> Result<()> {
         let world = WorldRenderPass::new(
-            &runtime.resource::<TerrainBuffer>(),
+            runtime.resource::<TerrainBuffer>(),
             runtime.resource::<AtmosphereBuffer>(),
             runtime.resource::<StarsBuffer>(),
             runtime.resource::<GlobalParametersBuffer>(),

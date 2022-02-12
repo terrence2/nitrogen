@@ -159,7 +159,7 @@ impl Extension for TerrainBuffer {
             *runtime.resource::<CpuDetailLevel>(),
             *runtime.resource::<GpuDetailLevel>(),
             runtime.resource::<GlobalParametersBuffer>(),
-            &runtime.resource::<Gpu>(),
+            runtime.resource::<Gpu>(),
         )?;
         runtime.insert_named_resource("terrain", terrain);
         runtime.run_string(

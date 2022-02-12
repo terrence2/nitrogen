@@ -22,7 +22,7 @@ use nitrous::{
 };
 use std::sync::Arc;
 
-pub const GUIDE: &'static str = r#"
+pub const GUIDE: &str = r#"
 Welcome to the Nitrogen Terminal
 --------------------------------
 From here, you can tweak and investigate every aspect of the game.
@@ -170,7 +170,6 @@ impl ScriptHerder {
         #[allow(unstable_name_collisions)]
         let resource_list: Value = index
             .resource_names()
-            .map(|v| v.as_ref())
             .intersperse("\n")
             .collect::<String>()
             .into();

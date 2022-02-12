@@ -29,7 +29,7 @@ use nitrous::{
     NitrousAst, Value,
 };
 use parking_lot::RwLock;
-use runtime::{ScriptCompletion, ScriptCompletions, ScriptHerder, ScriptResult, ScriptRunKind};
+use runtime::{ScriptCompletion, ScriptHerder, ScriptResult, ScriptRunKind};
 use std::io::Read;
 use std::{
     fs::{File, OpenOptions},
@@ -230,20 +230,15 @@ impl Terminal {
         if let Stmt::Expr(ref e) = partial.statements()[0].as_ref() {
             if let Expr::Attr(lhs_name_term, Term::Symbol(sym)) = e.as_ref() {
                 if let Expr::Term(Term::AtSymbol(ent_name)) = lhs_name_term.as_ref() {
-                    if let Some(value) = herder.lookup_entity(ent_name) {
-                        if let Value::Entity(entity) = value {
-                            if let Some(component_names) = herder.entity_component_names(entity) {
-                                let matching_components = component_names
-                                    .filter(|&s| s.starts_with(sym.as_str()))
-                                    .collect::<Vec<_>>();
-                                if matching_components.len() == 1 {
-                                    return Some(format!(
-                                        "@{}.{}",
-                                        ent_name, matching_components[0]
-                                    ));
-                                } else {
-                                    // TODO: show top N potential completions
-                                }
+                    if let Some(Value::Entity(entity)) = herder.lookup_entity(ent_name) {
+                        if let Some(component_names) = herder.entity_component_names(entity) {
+                            let matching_components = component_names
+                                .filter(|&s| s.starts_with(sym.as_str()))
+                                .collect::<Vec<_>>();
+                            if matching_components.len() == 1 {
+                                return Some(format!("@{}.{}", ent_name, matching_components[0]));
+                            } else {
+                                // TODO: show top N potential completions
                             }
                         }
                     }
@@ -261,29 +256,27 @@ impl Terminal {
             if let Expr::Attr(attr_term, Term::Symbol(attr_sym)) = e.as_ref() {
                 if let Expr::Attr(ent_term, Term::Symbol(comp_sym)) = attr_term.as_ref() {
                     if let Expr::Term(Term::AtSymbol(ent_sym)) = ent_term.as_ref() {
-                        if let Some(value) = world
+                        if let Some(Value::Entity(entity)) = world
                             .get_resource::<ScriptHerder>()
                             .unwrap()
                             .lookup_entity(ent_sym)
                         {
-                            if let Value::Entity(entity) = value {
-                                let maybe_attr_names =
-                                    world.resource_scope(|world, herder: Mut<ScriptHerder>| {
-                                        herder.entity_component_attrs(entity, comp_sym, world)
-                                    });
-                                if let Some(attr_names) = maybe_attr_names {
-                                    let matching_attrs = attr_names
-                                        .iter()
-                                        .filter(|&s| s.starts_with(attr_sym.as_str()))
-                                        .collect::<Vec<_>>();
-                                    if matching_attrs.len() == 1 {
-                                        return Some(format!(
-                                            "@{}.{}.{}",
-                                            ent_sym, comp_sym, matching_attrs[0]
-                                        ));
-                                    } else {
-                                        // TODO: show top N potential completions
-                                    }
+                            let maybe_attr_names =
+                                world.resource_scope(|world, herder: Mut<ScriptHerder>| {
+                                    herder.entity_component_attrs(entity, comp_sym, world)
+                                });
+                            if let Some(attr_names) = maybe_attr_names {
+                                let matching_attrs = attr_names
+                                    .iter()
+                                    .filter(|&s| s.starts_with(attr_sym.as_str()))
+                                    .collect::<Vec<_>>();
+                                if matching_attrs.len() == 1 {
+                                    return Some(format!(
+                                        "@{}.{}.{}",
+                                        ent_sym, comp_sym, matching_attrs[0]
+                                    ));
+                                } else {
+                                    // TODO: show top N potential completions
                                 }
                             }
                         }
@@ -355,7 +348,7 @@ impl Terminal {
 
     fn is_help_command(command: &str) -> bool {
         let cmd = command.trim().to_lowercase();
-        cmd.starts_with("help") || cmd.starts_with("?") || cmd.ends_with("?")
+        cmd.starts_with("help") || cmd.starts_with('?') || cmd.ends_with('?')
     }
 
     fn is_quit_command(command: &str) -> bool {
@@ -387,7 +380,7 @@ impl Terminal {
         Ok(())
     }
 
-    pub fn report_script_completions(&self, completions: &ScriptCompletions) {
+    pub fn report_script_completions(&self, completions: &[ScriptCompletion]) {
         for completion in completions {
             if completion.meta.kind() == ScriptRunKind::Interactive {
                 match &completion.result {
@@ -431,7 +424,7 @@ impl Terminal {
         let screen = &mut self.output.write();
 
         let prefix = "Script Failed: ";
-        let script = format!("{}", command);
+        let script = command.to_owned();
         screen.append_line(&format!("{}{}", prefix, script));
         screen.last_line_mut().unwrap().select_all();
         screen.last_line_mut().unwrap().change_color(Color::Yellow);

@@ -145,7 +145,7 @@ impl<'a> NitrousExecutor<'a> {
                 Instr::Attr(atom) => {
                     let base = self.pop("attr base")?;
                     let result =
-                        base.attr(self.state.script.atom(&atom), &self.index, &mut self.world)?;
+                        base.attr(self.state.script.atom(&atom), self.index, self.world)?;
                     self.push(result);
                 }
                 Instr::Await => {

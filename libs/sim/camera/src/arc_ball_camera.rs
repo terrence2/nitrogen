@@ -63,9 +63,8 @@ pub struct ArcBallController {
     eye: Graticule<Target>,
 }
 
-#[inject_nitrous_component]
-impl ArcBallController {
-    pub fn new() -> Self {
+impl Default for ArcBallController {
+    fn default() -> Self {
         Self {
             input: InputState {
                 target_height_delta: meters!(0),
@@ -80,7 +79,10 @@ impl ArcBallController {
             ),
         }
     }
+}
 
+#[inject_nitrous_component]
+impl ArcBallController {
     pub fn world_space_frame(&self) -> WorldSpaceFrame {
         let target = self.cartesian_target_position::<Meters>();
         let eye = self.cartesian_eye_position::<Meters>();

@@ -202,7 +202,7 @@ impl WorldIndex {
                     .map(|v| v.as_str())
                     .collect::<Vec<&str>>()
             })
-            .unwrap_or_else(|| Vec::new())
+            .unwrap_or_else(Vec::new)
     }
 }
 
