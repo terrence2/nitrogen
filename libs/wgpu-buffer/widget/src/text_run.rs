@@ -444,7 +444,7 @@ impl TextRun {
         let cursor = self.selection.anchor();
         let mut base = 0;
         for span in self.spans.iter_mut() {
-            if cursor >= base && cursor < base + span.text.len() - 1 {
+            if cursor >= base && cursor < base + span.text.len() {
                 return Some((span, cursor - base));
             }
             base += span.text.len();
