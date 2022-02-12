@@ -727,6 +727,10 @@ where
             self.unaligned_blit.push((bind_group, vertex_buffer));
         }
 
+        Ok(())
+    }
+
+    pub fn handle_dump_texture(&mut self, gpu: &mut Gpu) -> Result<()> {
         if let Some(path_ref) = self.dump_texture.as_ref() {
             let path = path_ref.to_owned();
             let write_img =
@@ -747,20 +751,19 @@ where
                     }
                     _ => panic!("don't know how to dump texture format: {:?}", fmt),
                 };
-            // Gpu::dump_texture(
-            //     &self.texture,
-            //     wgpu::Extent3d {
-            //         width: self.width,
-            //         height: self.height,
-            //         depth_or_array_layers: 1,
-            //     },
-            //     self.format,
-            //     gpu,
-            //     Box::new(write_img),
-            // )?;
+            Gpu::dump_texture(
+                &self.texture,
+                wgpu::Extent3d {
+                    width: self.width,
+                    height: self.height,
+                    depth_or_array_layers: 1,
+                },
+                self.format,
+                gpu,
+                Box::new(write_img),
+            )?;
         }
         self.dump_texture = None;
-
         Ok(())
     }
 

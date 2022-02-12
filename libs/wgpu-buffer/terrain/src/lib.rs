@@ -194,6 +194,9 @@ impl Extension for TerrainBuffer {
                 .after("deferred_texture")
                 .before("WorldRenderPass"),
         );
+        runtime
+            .frame_stage_mut(FrameStage::FrameEnd)
+            .add_system(Self::sys_handle_capture_snapshot);
 
         Ok(())
     }
@@ -797,6 +800,10 @@ impl TerrainBuffer {
             self.tile_manager.note_required(visible_patch);
         }
         self.tile_manager.finish_visibility_update(camera, catalog);
+    }
+
+    fn sys_handle_capture_snapshot(mut terrain: ResMut<TerrainBuffer>, mut gpu: ResMut<Gpu>) {
+        terrain.tile_manager.handle_capture_snapshot(&mut gpu);
     }
 
     fn sys_ensure_uploaded(

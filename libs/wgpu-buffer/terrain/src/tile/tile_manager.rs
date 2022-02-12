@@ -236,17 +236,18 @@ impl TileManager {
         }
     }
 
+    pub fn handle_capture_snapshot(&mut self, gpu: &mut Gpu) {
+        if self.take_index_snapshot {
+            for ts in self.tile_sets.iter_mut() {
+                ts.snapshot_index(gpu);
+            }
+            self.take_index_snapshot = false;
+        }
+    }
+
     pub fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &UploadTracker) {
         for ts in self.tile_sets.iter_mut() {
             ts.ensure_uploaded(gpu, tracker);
-        }
-
-        if self.take_index_snapshot {
-            for ts in self.tile_sets.iter_mut() {
-                // FIXME: this needs to not require a mut GPU
-                // ts.snapshot_index(gpu);
-            }
-            self.take_index_snapshot = false;
         }
     }
 

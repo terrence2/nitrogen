@@ -147,6 +147,9 @@ where
                 .before("UiRenderPass")
                 .label("WidgetBuffer::maintain_font_atlas"),
         );
+        runtime
+            .frame_stage_mut(FrameStage::FrameEnd)
+            .add_system(Self::sys_handle_dump_texture);
         Ok(())
     }
 }
@@ -575,6 +578,17 @@ where
         );
 
         Ok(())
+    }
+
+    fn sys_handle_dump_texture(mut widgets: ResMut<WidgetBuffer<T>>, mut gpu: ResMut<Gpu>) {
+        widgets
+            .paint_context
+            .handle_dump_texture(&mut gpu)
+            .map_err(|e| {
+                error!("Widgets::handle_dump_texture: {}", e);
+                e
+            })
+            .ok();
     }
 
     fn sys_maintain_font_atlas(

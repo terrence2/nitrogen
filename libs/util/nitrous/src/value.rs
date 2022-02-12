@@ -167,7 +167,9 @@ impl Value {
 
     pub fn attr(&self, name: &str, index: &WorldIndex, world: &mut World) -> Result<Value> {
         Ok(match self {
-            Value::Resource(lookup) => lookup(world).get(name)?,
+            Value::Resource(lookup) => lookup(world)
+                .ok_or_else(|| anyhow!("no such resource for attr: {}", name))?
+                .get(name)?,
             Value::Entity(entity) => {
                 // TODO: there's almost certainly a smarter way to do this.
                 if name == "list" {
@@ -184,7 +186,9 @@ impl Value {
                     })?
                 }
             }
-            Value::Component(entity, lookup) => lookup(*entity, world).get(*entity, name)?,
+            Value::Component(entity, lookup) => lookup(*entity, world)
+                .ok_or_else(|| anyhow!("no such component for attr: {}", name))?
+                .get(*entity, name)?,
             _ => bail!(
                 "attribute base must be a resource, entity, or component, not {:?}",
                 self
@@ -194,11 +198,13 @@ impl Value {
 
     pub fn call_method(&mut self, args: &[Value], world: &mut World) -> Result<Value> {
         Ok(match self {
-            Value::ResourceMethod(lookup, method_name) => {
-                lookup.borrow_mut()(world).call_method(method_name, args)?
-            }
+            Value::ResourceMethod(lookup, method_name) => lookup.borrow_mut()(world)
+                .ok_or_else(|| anyhow!("no such resource for call: {}", method_name))?
+                .call_method(method_name, args)?,
             Value::ComponentMethod(entity, lookup, method_name) => {
-                lookup.borrow_mut()(*entity, world).call_method(*entity, method_name, args)?
+                lookup.borrow_mut()(*entity, world)
+                    .ok_or_else(|| anyhow!("no such component for call: {}", method_name))?
+                    .call_method(*entity, method_name, args)?
             }
             Value::RustMethod(method) => method(args, world),
             _ => {
@@ -210,9 +216,13 @@ impl Value {
 
     pub fn attrs<'a>(&self, index: &'a WorldIndex, world: &'a mut World) -> Result<Vec<&'a str>> {
         Ok(match self {
-            Value::Resource(lookup) => lookup(world).names(),
+            Value::Resource(lookup) => lookup(world)
+                .ok_or_else(|| anyhow!("no such resource for names"))?
+                .names(),
             Value::Entity(entity) => index.component_attrs(entity),
-            Value::Component(entity, lookup) => lookup(*entity, world).names(),
+            Value::Component(entity, lookup) => lookup(*entity, world)
+                .ok_or_else(|| anyhow!("no such component for attrs"))?
+                .names(),
             _ => bail!(
                 "attribute base must be a resource, entity, or component, not {:?}",
                 self

@@ -31,16 +31,19 @@ pub trait ScriptResource: 'static {
 /// Bridges from a name (as in a script) to ScriptResouce. Effectively it stores the T
 /// for us so that we don't have to do TypeId and pointer hyjinx.
 pub type ResourceLookupMutFunc =
-    dyn Fn(&mut World) -> &mut (dyn ScriptResource + 'static) + Send + Sync + 'static;
+    dyn Fn(&mut World) -> Option<&mut (dyn ScriptResource + 'static)> + Send + Sync + 'static;
 
 pub fn make_resource_lookup_mut<T>() -> Arc<ResourceLookupMutFunc>
 where
     T: Resource + ScriptResource + 'static,
 {
     Arc::new(move |world: &mut World| {
-        let ptr = world.get_resource_mut::<T>().unwrap().into_inner();
-        let rto: &mut (dyn ScriptResource + 'static) = ptr;
-        rto
+        if let Some(ptr) = world.get_resource_mut::<T>() {
+            let rto: &mut (dyn ScriptResource + 'static) = ptr.into_inner();
+            Some(rto)
+        } else {
+            None
+        }
     })
 }
 
@@ -55,17 +58,22 @@ pub trait ScriptComponent: Send + Sync + 'static {
     fn names(&self) -> Vec<&str>;
 }
 
-pub type ComponentLookupMutFunc =
-    dyn Fn(Entity, &mut World) -> &mut (dyn ScriptComponent + 'static) + Send + Sync + 'static;
+pub type ComponentLookupMutFunc = dyn Fn(Entity, &mut World) -> Option<&mut (dyn ScriptComponent + 'static)>
+    + Send
+    + Sync
+    + 'static;
 
 pub fn make_component_lookup_mut<T>() -> Arc<ComponentLookupMutFunc>
 where
     T: Component + ScriptComponent + 'static,
 {
     Arc::new(move |entity: Entity, world: &mut World| {
-        let ptr = world.get_mut::<T>(entity).unwrap().into_inner();
-        let cto: &mut (dyn ScriptComponent + 'static) = ptr;
-        cto
+        if let Some(ptr) = world.get_mut::<T>(entity) {
+            let cto: &mut (dyn ScriptComponent + 'static) = ptr.into_inner();
+            Some(cto)
+        } else {
+            None
+        }
     })
 }
 
@@ -155,13 +163,19 @@ impl WorldIndex {
         self.entity_metadata
             .get(&entity)
             .map(|components| {
-                components.components.get(component_name).map(|lookup| {
-                    lookup(entity, world)
-                        .names()
-                        .iter()
-                        .map(|&s| s.to_owned())
-                        .collect::<Vec<String>>()
-                })
+                components
+                    .components
+                    .get(component_name)
+                    .map(|lookup| {
+                        lookup(entity, world).map(|attrs| {
+                            attrs
+                                .names()
+                                .iter()
+                                .map(|&s| s.to_owned())
+                                .collect::<Vec<String>>()
+                        })
+                    })
+                    .flatten()
             })
             .flatten()
     }

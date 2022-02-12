@@ -118,6 +118,10 @@ impl PaintContext {
         self.font_context.make_upload_buffer(gpu, tracker)
     }
 
+    pub fn handle_dump_texture(&mut self, gpu: &mut Gpu) -> Result<()> {
+        self.font_context.handle_dump_texture(gpu)
+    }
+
     pub fn maintain_font_atlas(&self, encoder: &mut wgpu::CommandEncoder) {
         self.font_context.maintain_font_atlas(encoder);
     }

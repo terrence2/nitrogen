@@ -339,7 +339,7 @@ impl Runtime {
             .lookup_resource(name)
             .expect("unset named resource")
         {
-            lookup(&mut self.world)
+            lookup(&mut self.world).unwrap_or_else(|| panic!("no such named resource: {}", name))
         } else {
             panic!("unable to access resoure by name")
         }
