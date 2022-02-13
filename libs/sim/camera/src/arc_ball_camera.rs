@@ -40,9 +40,9 @@ impl Extension for ArcBallSystem {
                 bindings.bind("Down", "@player.arcball.target_down(pressed)");
             "#,
         )?;
-        runtime
-            .sim_stage_mut(SimStage::PostInput)
-            .add_system(ArcBallController::sys_apply_input);
+        runtime.sim_stage_mut(SimStage::PostInput).add_system(
+            ArcBallController::sys_apply_input.label("ArcBallController::sys_apply_input"),
+        );
         Ok(())
     }
 }
@@ -388,14 +388,14 @@ impl ArcBallController {
     }
 
     // Take the inputs applied via interpreting key presses in the prior stage and apply it.
-    pub fn sys_apply_input(mut query: Query<(&mut ArcBallController, &mut WorldSpaceFrame)>) {
+    fn sys_apply_input(mut query: Query<(&mut ArcBallController, &mut WorldSpaceFrame)>) {
         for (mut arcball, mut frame) in query.iter_mut() {
             arcball.apply_input_state();
             *frame = arcball.world_space_frame();
         }
     }
 
-    pub fn apply_input_state(&mut self) {
+    fn apply_input_state(&mut self) {
         self.target.distance += self.input.target_height_delta;
         if self.target.distance < meters!(0f64) {
             self.target.distance = meters!(0f64);

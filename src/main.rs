@@ -279,7 +279,6 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .insert_scriptable(camera)
         .id();
 
-    // Causes all initial tiles to be blank? Wat?
     runtime.run_startup();
     while runtime.resource::<ExitRequest>().still_running() {
         // Catch monotonic sim time up to system time.

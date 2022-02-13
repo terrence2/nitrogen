@@ -36,12 +36,16 @@ impl Extension for CameraSystem {
                 bindings.bind("Shift+RBracket", "@player.camera.increase_exposure(pressed)");
             "#,
         )?;
-        runtime
-            .sim_stage_mut(SimStage::PostInput)
-            .add_system(Camera::sys_apply_input);
+        runtime.sim_stage_mut(SimStage::PostInput).add_system(
+            Camera::sys_apply_input
+                .label("Camera::sys_apply_input")
+                .after("ArcBallController::sys_apply_input"),
+        );
         runtime
             .frame_stage_mut(FrameStage::HandleDisplayChange)
-            .add_system(Camera::sys_apply_display_changes);
+            .add_system(
+                Camera::sys_apply_display_changes.label("Camera::sys_apply_display_changes"),
+            );
         Ok(())
     }
 }
@@ -261,14 +265,14 @@ impl Camera {
         [left, right, bottom, top, near]
     }
 
-    pub fn apply_input_state(&mut self) {
+    fn apply_input_state(&mut self) {
         let mut fov = degrees!(self.fov_y);
         fov += self.input.fov_delta;
         fov = fov.min(degrees!(90)).max(degrees!(1));
         self.fov_y = radians!(fov);
     }
 
-    pub fn update_frame(&mut self, frame: &WorldSpaceFrame) {
+    fn update_frame(&mut self, frame: &WorldSpaceFrame) {
         self.position = *frame.position();
         self.forward = *frame.forward();
         self.right = *frame.right();
@@ -276,7 +280,7 @@ impl Camera {
     }
 
     // Apply interpreted inputs from prior stage; apply new world position.
-    pub fn sys_apply_input(mut query: Query<(&WorldSpaceFrame, &mut Camera)>) {
+    fn sys_apply_input(mut query: Query<(&WorldSpaceFrame, &mut Camera)>) {
         for (frame, mut camera) in query.iter_mut() {
             camera.apply_input_state();
             camera.update_frame(frame);
@@ -284,7 +288,7 @@ impl Camera {
     }
 
     // Apply updated system config, e.g. aspect
-    pub fn sys_apply_display_changes(
+    fn sys_apply_display_changes(
         mut query: Query<&mut Camera>,
         updated_config: Res<Option<DisplayConfig>>,
     ) {

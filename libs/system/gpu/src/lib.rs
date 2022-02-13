@@ -142,7 +142,9 @@ impl Gpu {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
+                    // FIXME: limit our features to webgpu so we can detect problems early
                     features: adapter.features(),
+                    // features: wgpu::Features::all_webgpu_mask(),
                     limits: adapter.limits(),
                 },
                 Some(&trace_path),

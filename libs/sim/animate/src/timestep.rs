@@ -37,9 +37,12 @@ impl Extension for TimeStep {
 #[inject_nitrous_resource]
 impl TimeStep {
     pub fn new_60fps() -> Self {
+        let delta = Duration::from_micros(1_000_000 / 60);
         Self {
-            now: Instant::now(),
-            delta: Duration::from_micros(16_666),
+            // Note: start one tick behind now so that the sim schedule will always
+            //       run at least once before the frame scheduler.
+            now: Instant::now() - delta,
+            delta,
         }
     }
 

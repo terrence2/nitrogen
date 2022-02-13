@@ -188,7 +188,7 @@ impl Timeline {
     pub const EASE_OUT_BEZIER: CubicBezierCurve = CubicBezierCurve::new((0., 0.), (0.58, 1.));
     pub const EASE_IN_OUT_BEZIER: CubicBezierCurve = CubicBezierCurve::new((0.42, 0.), (0.58, 1.));
 
-    pub fn sys_animate(world: &mut World) {
+    fn sys_animate(world: &mut World) {
         let now = *world.get_resource::<TimeStep>().unwrap().now();
         world.resource_scope(|world, mut timeline: Mut<Timeline>| {
             timeline.step_time(&now, world);
