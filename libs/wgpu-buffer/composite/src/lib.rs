@@ -114,7 +114,7 @@ where
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: Gpu::DEPTH_FORMAT,
-                    depth_write_enabled: false, // FIXME
+                    depth_write_enabled: false,
                     depth_compare: wgpu::CompareFunction::Always,
                     stencil: wgpu::StencilState {
                         front: wgpu::StencilFaceState::IGNORE,

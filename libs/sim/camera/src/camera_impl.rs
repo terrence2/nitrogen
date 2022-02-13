@@ -272,7 +272,7 @@ impl Camera {
         self.fov_y = radians!(fov);
     }
 
-    fn update_frame(&mut self, frame: &WorldSpaceFrame) {
+    pub fn update_frame(&mut self, frame: &WorldSpaceFrame) {
         self.position = *frame.position();
         self.forward = *frame.forward();
         self.right = *frame.right();
