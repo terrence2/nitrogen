@@ -11,13 +11,12 @@ log = ">= 0.4"
 nalgebra = "^ 0.29"
 num = "^ 0.3"
 ordered-float = "^ 2"
-parking_lot = "^ 0.11"
 absolute_unit = { path = "../../util/absolute_unit" }
 geodesy = { path = "../../util/geodesy" }
 geometry = { path = "../../util/geometry" }
 measure = { path = "../../sim/measure" }
 nitrous = { path = "../../util/nitrous" }
-nitrous_injector = { path = "../../util/nitrous_injector" }
+runtime = { path = "../../util/runtime" }
 window = { path = "../../system/window" }
 
 [dev-dependencies]

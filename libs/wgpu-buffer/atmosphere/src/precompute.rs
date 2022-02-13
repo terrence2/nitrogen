@@ -1644,16 +1644,16 @@ impl Precompute {
 #[cfg(test)]
 mod test {
     use super::*;
-    use gpu::TestResources;
     use std::time::Instant;
 
     #[cfg(unix)]
     #[test]
     fn test_create() -> Result<()> {
-        let TestResources { gpu, .. } = Gpu::for_test_unix()?;
+        let mut runtime = Gpu::for_test_unix()?;
+        let mut gpu = runtime.resource_mut::<Gpu>();
         let precompute_start = Instant::now();
-        let pcp = Precompute::new(&gpu.read())?;
-        let _atmosphere_params_buf = pcp.build_textures(&mut gpu.write());
+        let pcp = Precompute::new(&gpu)?;
+        let _atmosphere_params_buf = pcp.build_textures(&mut gpu);
         let precompute_time = precompute_start.elapsed();
         println!(
             "AtmosphereBuffers::precompute timing: {}.{}ms",

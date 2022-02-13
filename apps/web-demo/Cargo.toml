@@ -12,21 +12,22 @@ anyhow = { version = "^ 1", features = ["backtrace"] }
 chrono = "^ 0.4"
 console_error_panic_hook = "^ 0.1"
 log = "^ 0.4"
-parking_lot = "^ 0.11"
 smallvec = "^ 1.4"
-tokio = { version = "^ 1.0", features = ["rt-multi-thread", "macros", "io-util", "fs", "sync"] }
-wasm-bindgen = "=0.2.78"
-wasm-bindgen-futures = "=0.4.28"
-web-sys = { version = "=0.3.55", features = ["console"] }
-wgpu = "=0.12.0"
+wasm-bindgen = "=0.2.76"
+wasm-bindgen-futures = "=0.4.26"
+web-sys = { version = "=0.3.53", features = ["console"] }
+wgpu = "^ 0.12"
 winit = "^ 0.26"
 absolute_unit = { path = "../../libs/util/absolute_unit" }
+animate = { path = "../../libs/sim/animate" }
 camera = { path = "../../libs/sim/camera" }
-# fullscreen = { path = "../../libs/wgpu-buffer/fullscreen" }
+event_mapper = { path = "../../libs/sim/event_mapper" }
 geodesy = { path = "../../libs/util/geodesy" }
 global_data = { path = "../../libs/wgpu-buffer/global_data" }
 gpu = { path = "../../libs/system/gpu" }
-window = { path = "../../libs/system/window" }
 input = { path = "../../libs/system/input" }
+measure = { path = "../../libs/sim/measure" }
 nitrous = { path = "../../libs/util/nitrous" }
 orrery = { path = "../../libs/sim/orrery" }
+runtime = { path = "../../libs/util/runtime" }
+window = { path = "../../libs/system/window" }

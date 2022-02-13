@@ -19,12 +19,10 @@ use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::GlobalParametersBuffer;
 use gpu::{DisplayConfig, Gpu};
 use log::trace;
-use nitrous::{Interpreter, Value};
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
-use parking_lot::RwLock;
+use nitrous::{inject_nitrous_resource, method, NitrousResource};
+use runtime::{Extension, FrameStage, Runtime};
 use shader_shared::Group;
 use stars::StarsBuffer;
-use std::sync::Arc;
 use terrain::{TerrainBuffer, TerrainVertex};
 
 #[derive(Debug)]
@@ -50,7 +48,7 @@ impl DebugMode {
     }
 }
 
-#[derive(Debug, NitrousModule)]
+#[derive(Debug, NitrousResource)]
 pub struct WorldRenderPass {
     // Offscreen render targets
     deferred_texture: (wgpu::Texture, wgpu::TextureView),
@@ -78,16 +76,46 @@ pub struct WorldRenderPass {
 // 3) For each layer, for each pixel of the offscreen buffer, accumulate the color and normal
 // 4) For each pixel of the accumulator and depth, compute lighting, skybox, stars, etc.
 
-#[inject_nitrous_module]
+impl Extension for WorldRenderPass {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        let world = WorldRenderPass::new(
+            runtime.resource::<TerrainBuffer>(),
+            runtime.resource::<AtmosphereBuffer>(),
+            runtime.resource::<StarsBuffer>(),
+            runtime.resource::<GlobalParametersBuffer>(),
+            runtime.resource::<Gpu>(),
+        )?;
+        runtime.insert_named_resource("world", world);
+        runtime
+            .frame_stage_mut(FrameStage::HandleDisplayChange)
+            .add_system(Self::sys_handle_display_config_change);
+        runtime.frame_stage_mut(FrameStage::Render).add_system(
+            Self::sys_render_world
+                .before("CompositeRenderPass")
+                .label("WorldRenderPass"),
+        );
+
+        // TODO: figure out debug bindings
+        runtime.run_string(
+            r#"
+                bindings.bind("w", "world.toggle_wireframe_mode(pressed)");
+                bindings.bind("r", "world.change_debug_mode(pressed)");
+            "#,
+        )?;
+
+        Ok(())
+    }
+}
+
+#[inject_nitrous_resource]
 impl WorldRenderPass {
     pub fn new(
         terrain_buffer: &TerrainBuffer,
         atmosphere_buffer: &AtmosphereBuffer,
         stars_buffer: &StarsBuffer,
         globals_buffer: &GlobalParametersBuffer,
-        gpu: &mut Gpu,
-        interpreter: &mut Interpreter,
-    ) -> Result<Arc<RwLock<Self>>> {
+        gpu: &Gpu,
+    ) -> Result<Self> {
         trace!("WorldRenderPass::new");
 
         // Render target reader for compositing.
@@ -275,7 +303,7 @@ impl WorldRenderPass {
                     multiview: None,
                 });
 
-        let world = Arc::new(RwLock::new(Self {
+        Ok(Self {
             deferred_texture,
             deferred_depth,
             deferred_sampler,
@@ -292,13 +320,7 @@ impl WorldRenderPass {
 
             show_wireframe: false,
             debug_mode: DebugMode::None,
-        }));
-
-        // gpu.register_render_extent_change_receiver(world.clone());
-
-        interpreter.put_global("world", Value::Module(world.clone()));
-
-        Ok(world)
+        })
     }
 
     fn _make_deferred_texture_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
@@ -432,25 +454,12 @@ impl WorldRenderPass {
         })
     }
 
-    pub fn add_debug_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
-        interpreter.interpret_once(
-            r#"
-                let bindings := mapper.create_bindings("world");
-                bindings.bind("w", "world.toggle_wireframe_mode(pressed)");
-                bindings.bind("r", "world.change_debug_mode(pressed)");
-            "#,
-        )?;
-        Ok(())
-    }
-
     pub fn sys_handle_display_config_change(
         updated_config: Res<Option<DisplayConfig>>,
-        gpu: Res<Arc<RwLock<Gpu>>>,
-        world: Res<Arc<RwLock<WorldRenderPass>>>,
+        gpu: Res<Gpu>,
+        mut world: ResMut<WorldRenderPass>,
     ) {
         if updated_config.is_some() {
-            let mut world = world.write();
-            let gpu = gpu.read();
             world
                 .handle_render_extent_changed(&gpu)
                 .expect("World::handle_render_extent_changed")
@@ -554,6 +563,28 @@ impl WorldRenderPass {
         )
     }
 
+    fn sys_render_world(
+        world: Res<WorldRenderPass>,
+        globals: Res<GlobalParametersBuffer>,
+        fullscreen: Res<FullscreenBuffer>,
+        atmosphere: Res<AtmosphereBuffer>,
+        stars: Res<StarsBuffer>,
+        terrain: Res<TerrainBuffer>,
+        maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+    ) {
+        if let Some(encoder) = maybe_encoder.into_inner() {
+            let (color_attachments, depth_stencil_attachment) = world.offscreen_target_cleared();
+            let render_pass_desc_ref = wgpu::RenderPassDescriptor {
+                label: Some("offscreen-draw-world"),
+                color_attachments: &color_attachments,
+                depth_stencil_attachment,
+            };
+            let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
+            let _rpass =
+                world.render_world(rpass, &globals, &fullscreen, &atmosphere, &stars, &terrain);
+        }
+    }
+
     pub fn render_world<'a>(
         &'a self,
         mut rpass: wgpu::RenderPass<'a>,
@@ -562,7 +593,7 @@ impl WorldRenderPass {
         atmosphere_buffer: &'a AtmosphereBuffer,
         stars_buffer: &'a StarsBuffer,
         terrain_buffer: &'a TerrainBuffer,
-    ) -> Result<wgpu::RenderPass<'a>> {
+    ) -> wgpu::RenderPass<'a> {
         match self.debug_mode {
             DebugMode::None => rpass.set_pipeline(&self.composite_pipeline),
             DebugMode::Deferred => rpass.set_pipeline(&self.dbg_deferred_pipeline),
@@ -605,6 +636,6 @@ impl WorldRenderPass {
             }
         }
 
-        Ok(rpass)
+        rpass
     }
 }

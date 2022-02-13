@@ -17,4 +17,4 @@ triggered = "^ 0.1"
 absolute_unit = { path = "../../util/absolute_unit" }
 geodesy = { path = "../../util/geodesy" }
 nitrous = { path = "../../util/nitrous" }
-nitrous_injector = { path = "../../util/nitrous_injector" }
+runtime = { path = "../../util/runtime" }

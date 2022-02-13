@@ -20,9 +20,9 @@ use futures::future::{ready, FutureExt};
 use geodesy::Graticule;
 use log::error;
 use lyon_geom::{cubic_bezier::CubicBezierSegment, Point};
-use nitrous::{Interpreter, Value};
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
 use parking_lot::RwLock;
+use runtime::{Extension, Runtime, SimStage};
 use std::{
     sync::Arc,
     time::{Duration, Instant},
@@ -133,7 +133,7 @@ impl ScriptableAnimation {
         })
     }
 
-    pub fn step_time(&mut self, now: &Instant) -> Result<()> {
+    pub fn step_time(&mut self, now: &Instant, world: &mut World) -> Result<()> {
         assert_ne!(self.state, AnimationState::Finished);
         let (current, ended) = if let Some(start_time) = self.start_time {
             let f0 = (*now - start_time).as_secs_f64() / self.duration_f64;
@@ -149,8 +149,8 @@ impl ScriptableAnimation {
             self.state = AnimationState::Running;
             (self.start.clone(), false)
         };
-        if let Some(callable) = &self.callable {
-            callable.spawn_method(&[current]);
+        if let Some(callable) = &mut self.callable {
+            callable.call_method(&[current], world)?;
         }
         if ended {
             self.state = AnimationState::Finished;
@@ -165,12 +165,22 @@ impl ScriptableAnimation {
 }
 
 /// Drive scriptable animations.
-#[derive(Debug, NitrousModule)]
+#[derive(Default, Debug, NitrousResource)]
 pub struct Timeline {
     animations: Vec<ScriptableAnimation>,
 }
 
-#[inject_nitrous_module]
+impl Extension for Timeline {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        runtime.insert_named_resource("timeline", Timeline::default());
+        runtime
+            .sim_stage_mut(SimStage::TimeStep)
+            .add_system(Self::sys_animate.exclusive_system());
+        Ok(())
+    }
+}
+
+#[inject_nitrous_resource]
 impl Timeline {
     pub const LINEAR_BEZIER: CubicBezierCurve = CubicBezierCurve::new((0., 0.), (1., 1.));
     pub const EASE_BEZIER: CubicBezierCurve = CubicBezierCurve::new((0.25, 0.1), (0.25, 1.));
@@ -178,20 +188,17 @@ impl Timeline {
     pub const EASE_OUT_BEZIER: CubicBezierCurve = CubicBezierCurve::new((0., 0.), (0.58, 1.));
     pub const EASE_IN_OUT_BEZIER: CubicBezierCurve = CubicBezierCurve::new((0.42, 0.), (0.58, 1.));
 
-    pub fn new(interpreter: &mut Interpreter) -> Arc<RwLock<Self>> {
-        let timeline = Arc::new(RwLock::new(Self { animations: vec![] }));
-        interpreter.put_global("timeline", Value::Module(timeline.clone()));
-        timeline
+    fn sys_animate(world: &mut World) {
+        let now = *world.get_resource::<TimeStep>().unwrap().now();
+        world.resource_scope(|world, mut timeline: Mut<Timeline>| {
+            timeline.step_time(&now, world);
+        });
     }
 
-    pub fn sys_animate(step: Res<TimeStep>, timeline: Res<Arc<RwLock<Timeline>>>) {
-        timeline.write().step_time(step.now());
-    }
-
-    pub fn step_time(&mut self, now: &Instant) {
+    pub fn step_time(&mut self, now: &Instant, world: &mut World) {
         for animation in &mut self.animations {
             // One animation failing should not propagate to others.
-            if let Err(e) = animation.step_time(now) {
+            if let Err(e) = animation.step_time(now, world) {
                 error!("step_time failed with: {}", e);
             }
         }

@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 mod detail;
-mod frame_graph;
 mod upload_tracker;
 
 pub use crate::{
@@ -32,13 +31,10 @@ pub use winit::dpi::{LogicalSize, PhysicalSize};
 use anyhow::{anyhow, bail, Result};
 use bevy_ecs::prelude::*;
 use futures::executor::block_on;
-use input::InputController;
 use log::{info, trace};
-use nitrous::{Interpreter, Value};
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
-use parking_lot::RwLock;
+use nitrous::{inject_nitrous_resource, method, NitrousResource};
+use runtime::{Extension, FrameStage, Runtime};
 use std::{borrow::Cow, fmt::Debug, fs, mem, num::NonZeroU32, path::PathBuf, ptr, sync::Arc};
-use tokio::runtime::Runtime;
 use wgpu::util::DeviceExt;
 use window::Window;
 use zerocopy::AsBytes;
@@ -56,15 +52,7 @@ impl Default for RenderConfig {
     }
 }
 
-pub struct TestResources {
-    pub window: Arc<RwLock<Window>>,
-    pub gpu: Arc<RwLock<Gpu>>,
-    pub async_rt: Runtime,
-    pub interpreter: Interpreter,
-    pub input: InputController,
-}
-
-#[derive(Debug, NitrousModule)]
+#[derive(Debug, NitrousResource)]
 pub struct Gpu {
     _instance: wgpu::Instance,
     surface: wgpu::Surface,
@@ -87,24 +75,56 @@ pub struct Gpu {
     frame_count: usize,
 }
 
-#[inject_nitrous_module]
+impl Extension for Gpu {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        let gpu = Self::new(runtime.resource::<Window>(), Default::default())?;
+        runtime.insert_named_resource("gpu", gpu);
+        runtime
+            .frame_stage_mut(FrameStage::HandleSystem)
+            .add_system(
+                Self::sys_handle_display_config_change
+                    .label("Gpu::sys_handle_display_config_change")
+                    .after("Window::sys_handle_system_events"),
+            );
+
+        runtime.insert_resource(None as Option<wgpu::SurfaceTexture>);
+        runtime
+            .frame_stage_mut(FrameStage::CreateTargetSurface)
+            .add_system(Self::sys_create_target_surface);
+        runtime
+            .frame_stage_mut(FrameStage::HandleOutOfDateRenderer)
+            .add_system(Self::sys_handle_out_of_date_renderer);
+        runtime
+            .frame_stage_mut(FrameStage::PresentTargetSurface)
+            .add_system(Self::sys_present_target_surface);
+
+        runtime.insert_resource(None as Option<wgpu::CommandEncoder>);
+        runtime
+            .frame_stage_mut(FrameStage::CreateCommandEncoder)
+            .add_system(Self::sys_create_command_encoder);
+        runtime
+            .frame_stage_mut(FrameStage::SubmitCommands)
+            .add_system(Self::sys_submit_frame_commands);
+
+        runtime.insert_resource(UploadTracker::default());
+        runtime
+            .frame_stage_mut(FrameStage::DispatchUploads)
+            .add_system(Self::sys_dispatch_uploads);
+
+        Ok(())
+    }
+}
+
+#[inject_nitrous_resource]
 impl Gpu {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
     pub const SCREEN_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 
-    pub fn new(
-        win: &mut Window,
-        config: RenderConfig,
-        interpreter: &mut Interpreter,
-    ) -> Result<Arc<RwLock<Self>>> {
-        block_on(Self::new_async(win, config, interpreter))
+    pub fn new(window: &Window, config: RenderConfig) -> Result<Self> {
+        block_on(Self::new_async(window, config))
     }
 
-    pub async fn new_async(
-        win: &mut Window,
-        config: RenderConfig,
-        interpreter: &mut Interpreter,
-    ) -> Result<Arc<RwLock<Self>>> {
+    pub async fn new_async(window: &Window, config: RenderConfig) -> Result<Self> {
         let instance = wgpu::Instance::new(wgpu::Backends::PRIMARY);
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -115,21 +135,23 @@ impl Gpu {
             .await
             .ok_or_else(|| anyhow!("no suitable graphics adapter"))?;
 
-        let surface = { unsafe { instance.create_surface(win.os_window()) } };
+        let surface = { unsafe { instance.create_surface(window.os_window()) } };
 
         let trace_path = PathBuf::from("api_tracing.txt");
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: None,
+                    // FIXME: limit our features to webgpu so we can detect problems early
                     features: adapter.features(),
+                    // features: wgpu::Features::all_webgpu_mask(),
                     limits: adapter.limits(),
                 },
                 Some(&trace_path),
             )
             .await?;
 
-        let physical_size = win.physical_size();
+        let physical_size = window.physical_size();
         let sc_desc = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: Self::SCREEN_FORMAT,
@@ -140,14 +162,14 @@ impl Gpu {
         surface.configure(&device, &sc_desc);
         let depth_texture = Self::create_depth_texture(&device, &sc_desc);
 
-        let render_size = win.render_extent();
+        let render_size = window.render_extent();
         let render_extent = wgpu::Extent3d {
             width: render_size.width,
             height: render_size.height,
             depth_or_array_layers: 1,
         };
 
-        let gpu = Arc::new(RwLock::new(Self {
+        Ok(Self {
             _instance: instance,
             surface,
             adapter,
@@ -157,25 +179,17 @@ impl Gpu {
             render_extent,
             config,
             frame_count: 0,
-        }));
-        interpreter.put_global("gpu", Value::Module(gpu.clone()));
-        Ok(gpu)
+        })
     }
 
     #[cfg(unix)]
-    pub fn for_test_unix() -> Result<TestResources> {
-        let (os_window, input) = input::InputController::for_test_unix()?;
-        let mut interpreter = Interpreter::default();
-        let window = Window::new(os_window, DisplayConfig::for_test(), &mut interpreter)?;
-        let gpu = Self::new(&mut window.write(), Default::default(), &mut interpreter)?;
-        let async_rt = Runtime::new()?;
-        Ok(TestResources {
-            gpu,
-            window,
-            async_rt,
-            interpreter,
-            input,
-        })
+    pub fn for_test_unix() -> Result<Runtime> {
+        let mut runtime = input::InputController::for_test_unix()?;
+        runtime
+            .insert_resource(window::DisplayOpts::default())
+            .load_extension::<Window>()?
+            .load_extension::<Gpu>()?;
+        Ok(runtime)
     }
 
     #[method]
@@ -350,18 +364,82 @@ impl Gpu {
         })
     }
 
-    pub fn sys_handle_display_config_change(
-        updated_config: Res<Option<DisplayConfig>>,
-        gpu: Res<Arc<RwLock<Gpu>>>,
+    fn sys_create_target_surface(
+        mut gpu: ResMut<Gpu>,
+        mut maybe_surface: ResMut<Option<wgpu::SurfaceTexture>>,
     ) {
-        if let Some(config) = updated_config.as_ref() {
-            gpu.write()
-                .on_display_config_changed(config)
-                .expect("Gpu::on_display_config_changed");
+        assert!(maybe_surface.is_none());
+        *maybe_surface = if let Ok(surface) = gpu.get_next_framebuffer() {
+            surface
+        } else {
+            None
+        };
+    }
+
+    fn sys_handle_out_of_date_renderer(
+        mut gpu: ResMut<Gpu>,
+        maybe_surface: Res<Option<wgpu::SurfaceTexture>>,
+        window: Res<Window>,
+    ) {
+        if maybe_surface.is_none() {
+            gpu.on_display_config_changed(window.config());
         }
     }
 
-    pub fn on_display_config_changed(&mut self, config: &DisplayConfig) -> Result<()> {
+    fn sys_create_command_encoder(
+        gpu: Res<Gpu>,
+        maybe_surface: Res<Option<wgpu::SurfaceTexture>>,
+        mut maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+    ) {
+        // Only create the encoder if we have a surface to write to.
+        assert!(maybe_encoder.is_none());
+        if maybe_surface.is_some() {
+            *maybe_encoder = Some(gpu.device().create_command_encoder(
+                &wgpu::CommandEncoderDescriptor {
+                    label: Some("frame-encoder"),
+                },
+            ));
+        }
+    }
+
+    fn sys_dispatch_uploads(
+        mut upload_tracker: ResMut<UploadTracker>,
+        maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+    ) {
+        if let Some(encoder) = maybe_encoder.into_inner() {
+            upload_tracker.dispatch_uploads_until_empty(encoder);
+        }
+    }
+
+    fn sys_submit_frame_commands(
+        mut gpu: ResMut<Gpu>,
+        mut maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+    ) {
+        let mut empty_encoder = None as Option<wgpu::CommandEncoder>;
+        mem::swap(&mut empty_encoder, &mut maybe_encoder);
+        if let Some(encoder) = empty_encoder {
+            gpu.queue_mut().submit(vec![encoder.finish()]);
+        }
+    }
+
+    fn sys_present_target_surface(mut maybe_surface: ResMut<Option<wgpu::SurfaceTexture>>) {
+        let mut empty_surface = None as Option<wgpu::SurfaceTexture>;
+        mem::swap(&mut empty_surface, &mut maybe_surface);
+        if let Some(surface) = empty_surface {
+            surface.present();
+        }
+    }
+
+    fn sys_handle_display_config_change(
+        updated_config: Res<Option<DisplayConfig>>,
+        mut gpu: ResMut<Gpu>,
+    ) {
+        if let Some(config) = updated_config.as_ref() {
+            gpu.on_display_config_changed(config);
+        }
+    }
+
+    pub fn on_display_config_changed(&mut self, config: &DisplayConfig) {
         info!(
             "window config changed {}x{}",
             config.window_size().width,
@@ -388,8 +466,6 @@ impl Gpu {
                 depth_or_array_layers: 1,
             };
         }
-
-        Ok(())
     }
 
     // pub fn register_render_extent_change_receiver<T: RenderExtentChangeReceiver>(
@@ -551,7 +627,7 @@ impl Gpu {
         label: &'static str,
         data: &[T],
         target: Arc<wgpu::Buffer>,
-        tracker: &mut UploadTracker,
+        tracker: &UploadTracker,
     ) {
         if let Some(source) = self.maybe_push_slice(label, data, wgpu::BufferUsages::COPY_SRC) {
             tracker.upload(source, target, mem::size_of::<T>() * data.len());
@@ -688,7 +764,8 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn test_create() -> Result<()> {
-        let _ = Gpu::for_test_unix()?;
+        let runtime = Gpu::for_test_unix()?;
+        assert!(runtime.resource::<Gpu>().render_extent().width > 0);
         Ok(())
     }
 }

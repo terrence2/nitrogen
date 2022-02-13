@@ -17,15 +17,14 @@ use crate::{
     font_context::FontContext,
     paint_context::PaintContext,
     region::{Extent, Position, Region},
-    widget::Widget,
+    widget::{Widget, WidgetFocus},
 };
 use anyhow::{anyhow, Result};
 use gpu::Gpu;
-use input::{InputEvent, InputFocus};
-use nitrous::Interpreter;
-use nitrous::Value;
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use input::InputEvent;
+use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
 use parking_lot::RwLock;
+use runtime::ScriptHerder;
 use std::{collections::HashMap, sync::Arc, time::Instant};
 use window::{
     size::{AbsSize, LeftBound, RelSize, ScreenDir, Size},
@@ -83,7 +82,7 @@ impl FloatPacking {
 }
 
 // Items packed from top to bottom.
-#[derive(Debug, NitrousModule)]
+#[derive(Debug, NitrousResource)]
 pub struct FloatBox {
     children: HashMap<String, FloatPacking>,
 
@@ -91,7 +90,7 @@ pub struct FloatBox {
     extent: Extent<RelSize>,
 }
 
-#[inject_nitrous_module]
+#[inject_nitrous_resource]
 impl FloatBox {
     pub fn new() -> Arc<RwLock<Self>> {
         Arc::new(RwLock::new(Self {
@@ -247,15 +246,15 @@ impl Widget for FloatBox {
     fn handle_event(
         &mut self,
         event: &InputEvent,
-        focus: InputFocus,
+        focus: WidgetFocus,
         cursor_position: Position<AbsSize>,
-        interpreter: &mut Interpreter,
+        herder: &mut ScriptHerder,
     ) -> Result<()> {
         for packing in self.children.values() {
             packing
                 .widget
                 .write()
-                .handle_event(event, focus, cursor_position, interpreter)?;
+                .handle_event(event, focus, cursor_position, herder)?;
         }
         Ok(())
     }

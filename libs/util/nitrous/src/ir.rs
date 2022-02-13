@@ -37,6 +37,7 @@ pub enum Expr {
     #[allow(clippy::vec_box)]
     Call(Box<Expr>, Vec<Box<Expr>>),
     BinOp(Box<Expr>, Operator, Box<Expr>),
+    Assign(Term, Box<Expr>),
     Term(Term),
 }
 
@@ -45,7 +46,6 @@ impl fmt::Display for Expr {
         match self {
             Self::Attr(b, n) => write!(f, "{}.{}", b, n),
             Self::Await(e) => write!(f, "await {}", e),
-            Self::BinOp(a, op, b) => write!(f, "{} {} {}", a, op, b),
             Self::Call(func, args) => {
                 write!(f, "{}(", func)?;
                 for (i, a) in args.iter().enumerate() {
@@ -56,6 +56,8 @@ impl fmt::Display for Expr {
                 }
                 write!(f, ")")
             }
+            Self::BinOp(a, op, b) => write!(f, "{} {} {}", a, op, b),
+            Self::Assign(t, e) => write!(f, "{} := {}", t, e),
             Self::Term(t) => write!(f, "{}", t),
         }
     }
@@ -83,6 +85,7 @@ impl fmt::Display for Operator {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Term {
+    AtSymbol(String),
     Symbol(String),
     Boolean(bool),
     Integer(i64),
@@ -93,6 +96,7 @@ pub enum Term {
 impl fmt::Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::AtSymbol(v) => write!(f, "@{}", v),
             Self::Symbol(v) => write!(f, "{}", v),
             Self::Boolean(b) => {
                 if *b {

@@ -12,13 +12,22 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{DrawerFileId, DrawerInterface, FileMetadata};
+use crate::{DirectoryDrawer, DrawerFileId, DrawerInterface, FileMetadata};
 use anyhow::{ensure, Result};
 use glob::{MatchOptions, Pattern};
 use log::debug;
+use parking_lot::RwLock;
+use runtime::{Extension, Runtime};
 use smallvec::SmallVec;
-use std::fmt::Formatter;
-use std::{borrow::Cow, collections::HashMap, fmt::Debug, ops::Range};
+use std::{
+    borrow::Cow,
+    collections::HashMap,
+    fmt::{Debug, Formatter},
+    ops::Range,
+    path::PathBuf,
+    sync::Arc,
+};
+use structopt::StructOpt;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 struct DrawerId(u16);
@@ -37,6 +46,13 @@ pub fn from_utf8_string(input: Cow<[u8]>) -> Result<Cow<str>> {
 pub struct FileId {
     drawer_file_id: DrawerFileId,
     drawer_id: DrawerId,
+}
+
+#[derive(Debug, StructOpt)]
+pub struct CatalogOpts {
+    /// Extra directories to treat as libraries
+    #[structopt(short, long)]
+    lib_paths: Vec<PathBuf>,
 }
 
 /// A catalog is a uniform, indexed interface to a collection of Drawers. This
@@ -62,6 +78,19 @@ impl Debug for Catalog {
             self.drawers.len(),
             self.index.len(),
         )
+    }
+}
+
+impl Extension for Catalog {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        let mut catalog = Catalog::empty("main");
+        if let Some(opt) = runtime.maybe_resource::<CatalogOpts>() {
+            for (i, d) in opt.lib_paths.iter().enumerate() {
+                catalog.add_drawer(DirectoryDrawer::from_directory(100 + i as i64, d)?)?;
+            }
+        }
+        runtime.insert_resource(Arc::new(RwLock::new(catalog)));
+        Ok(())
     }
 }
 

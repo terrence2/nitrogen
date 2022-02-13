@@ -14,8 +14,6 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 mod arc_ball_camera;
 mod camera_impl;
-mod ufo_camera;
 
-pub use arc_ball_camera::{ArcBallCamera, ArcBallController};
-pub use camera_impl::{Camera, CameraComponent};
-pub use ufo_camera::UfoCamera;
+pub use arc_ball_camera::{ArcBallController, ArcBallSystem};
+pub use camera_impl::{Camera, CameraSystem};

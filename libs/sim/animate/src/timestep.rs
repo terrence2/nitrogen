@@ -12,20 +12,37 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use anyhow::Result;
 use bevy_ecs::prelude::*;
+use nitrous::{inject_nitrous_resource, NitrousResource};
+use runtime::{Extension, Runtime, SimStage};
 use std::time::{Duration, Instant};
 
-#[derive(Clone, Debug)]
+#[derive(Debug, NitrousResource)]
 pub struct TimeStep {
     now: Instant,
     delta: Duration,
 }
 
+impl Extension for TimeStep {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        runtime.insert_named_resource("time", TimeStep::new_60fps());
+        runtime
+            .sim_stage_mut(SimStage::TimeStep)
+            .add_system(Self::sys_tick_time);
+        Ok(())
+    }
+}
+
+#[inject_nitrous_resource]
 impl TimeStep {
     pub fn new_60fps() -> Self {
+        let delta = Duration::from_micros(1_000_000 / 60);
         Self {
-            now: Instant::now(),
-            delta: Duration::from_micros(16_666),
+            // Note: start one tick behind now so that the sim schedule will always
+            //       run at least once before the frame scheduler.
+            now: Instant::now() - delta,
+            delta,
         }
     }
 

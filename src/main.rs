@@ -17,23 +17,22 @@ use animate::{TimeStep, Timeline};
 use anyhow::{anyhow, Result};
 use atmosphere::AtmosphereBuffer;
 use bevy_ecs::prelude::*;
-use camera::{ArcBallCamera, ArcBallController, Camera, CameraComponent};
-use catalog::{Catalog, DirectoryDrawer};
-use chrono::{TimeZone, Utc};
+use camera::{ArcBallController, ArcBallSystem, Camera, CameraSystem};
+use catalog::{Catalog, CatalogOpts};
 use composite::CompositeRenderPass;
 use event_mapper::EventMapper;
 use fullscreen::FullscreenBuffer;
 use global_data::GlobalParametersBuffer;
-use gpu::{make_frame_graph, CpuDetailLevel, DetailLevelOpts, Gpu, GpuDetailLevel};
-use input::{InputController, InputSystem};
+use gpu::{DetailLevelOpts, Gpu};
+use input::{DemoFocus, InputSystem};
 use measure::WorldSpaceFrame;
-use nitrous::{Interpreter, StartupOpts, Value};
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
 use orrery::Orrery;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use platform_dirs::AppDirs;
+use runtime::{ExitRequest, Extension, FrameStage, Runtime, StartupOpts};
 use stars::StarsBuffer;
-use std::{f32::consts::PI, fs::create_dir_all, path::PathBuf, sync::Arc, time::Instant};
+use std::{f32::consts::PI, fs::create_dir_all, sync::Arc, time::Instant};
 use structopt::StructOpt;
 use terminal_size::{terminal_size, Width};
 use terrain::TerrainBuffer;
@@ -43,7 +42,7 @@ use widget::{
 };
 use window::{
     size::{LeftBound, Size},
-    DisplayConfig, DisplayOpts, OsWindow, Window, WindowBuilder,
+    DisplayOpts, Window, WindowBuilder,
 };
 use world_render::WorldRenderPass;
 
@@ -51,9 +50,8 @@ use world_render::WorldRenderPass;
 #[derive(Debug, StructOpt)]
 #[structopt(set_term_width = if let Some((Width(w), _)) = terminal_size() { w as usize } else { 80 })]
 struct Opt {
-    /// Extra directories to treat as libraries
-    #[structopt(short, long)]
-    libdir: Vec<PathBuf>,
+    #[structopt(flatten)]
+    catalog_opts: CatalogOpts,
 
     #[structopt(flatten)]
     detail_opts: DetailLevelOpts,
@@ -74,38 +72,37 @@ struct VisibleWidgets {
     fps_label: Arc<RwLock<Label>>,
 }
 
-#[derive(Debug, NitrousModule)]
+#[derive(Debug, NitrousResource)]
 struct System {
-    exit: bool,
-    pin_camera: bool,
-    camera: Camera,
     visible_widgets: VisibleWidgets,
 }
 
-#[inject_nitrous_module]
-impl System {
-    pub fn new(widgets: &WidgetBuffer, interpreter: &mut Interpreter) -> Result<Arc<RwLock<Self>>> {
-        let visible_widgets = Self::build_gui(widgets)?;
-        let system = Arc::new(RwLock::new(Self {
-            exit: false,
-            pin_camera: false,
-            camera: Default::default(),
-            visible_widgets,
-        }));
-        interpreter.put_global("system", Value::Module(system.clone()));
-        interpreter.interpret_once(
+impl Extension for System {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        let widgets = runtime.resource::<WidgetBuffer<DemoFocus>>();
+        let system = System::new(widgets)?;
+        runtime.insert_named_resource("system", system);
+        runtime
+            .frame_stage_mut(FrameStage::FrameEnd)
+            .add_system(Self::sys_track_visible_state);
+        runtime.run_string(
             r#"
-                let bindings := mapper.create_bindings("system");
-                bindings.bind("Escape", "system.exit()");
-                bindings.bind("q", "system.exit()");
-                bindings.bind("p", "system.toggle_pin_camera(pressed)");
-                bindings.bind("g", "widget.dump_glyphs(pressed)");
+                bindings.bind("Escape", "exit()");
+                bindings.bind("q", "exit()");
             "#,
         )?;
-        Ok(system)
+        Ok(())
+    }
+}
+
+#[inject_nitrous_resource]
+impl System {
+    pub fn new(widgets: &WidgetBuffer<DemoFocus>) -> Result<Self> {
+        let visible_widgets = Self::build_gui(widgets)?;
+        Ok(Self { visible_widgets })
     }
 
-    pub fn build_gui(widgets: &WidgetBuffer) -> Result<VisibleWidgets> {
+    pub fn build_gui(widgets: &WidgetBuffer<DemoFocus>) -> Result<VisibleWidgets> {
         let sim_time = Label::new("").with_color(Color::White).wrapped();
         let camera_direction = Label::new("").with_color(Color::White).wrapped();
         let camera_position = Label::new("").with_color(Color::White).wrapped();
@@ -171,11 +168,24 @@ impl System {
         })
     }
 
+    fn sys_track_visible_state(
+        query: Query<(&ArcBallController, &Camera)>,
+        timestep: Res<TimeStep>,
+        orrery: Res<Orrery>,
+        system: ResMut<System>,
+    ) {
+        for (arcball, camera) in query.iter() {
+            system
+                .track_visible_state(*timestep.now(), &orrery, arcball, camera)
+                .ok();
+        }
+    }
+
     pub fn track_visible_state(
-        &mut self,
+        &self,
         now: Instant,
         orrery: &Orrery,
-        arcball: &ArcBallCamera,
+        arcball: &ArcBallController,
         camera: &Camera,
     ) -> Result<()> {
         self.visible_widgets
@@ -208,163 +218,6 @@ impl System {
     pub fn println(&self, message: Value) {
         println!("{}", message);
     }
-
-    #[method]
-    pub fn exit(&mut self) {
-        self.exit = true;
-    }
-
-    #[method]
-    pub fn toggle_pin_camera(&mut self, pressed: bool) {
-        if pressed {
-            self.pin_camera = !self.pin_camera;
-        }
-    }
-
-    pub fn current_camera(&mut self, camera: &Camera) -> &Camera {
-        if !self.pin_camera {
-            self.camera = camera.to_owned();
-        }
-        &self.camera
-    }
-}
-
-make_frame_graph!(
-    FrameGraph {
-        buffers: {
-            // Note: order must be lock order
-            // system
-            composite: CompositeRenderPass,
-            ui: UiRenderPass,
-            widgets: WidgetBuffer,
-            world: WorldRenderPass,
-            terrain: TerrainBuffer,
-            atmosphere: AtmosphereBuffer,
-            stars: StarsBuffer,
-            fullscreen: FullscreenBuffer,
-            globals: GlobalParametersBuffer
-            // gpu
-            // window
-            // arcball
-            // camera
-            // orrery
-        };
-        passes: [
-            // widget
-            maintain_font_atlas: Any() { widgets() },
-
-            // terrain
-            // Update the indices so we have correct height data to tessellate with and normal
-            // and color data to accumulate.
-            paint_atlas_indices: Any() { terrain() },
-            // Apply heights to the terrain mesh.
-            tessellate: Compute() { terrain() },
-            // Render the terrain mesh's texcoords to an offscreen buffer.
-            deferred_texture: Render(terrain, deferred_texture_target) {
-                terrain( globals )
-            },
-            // Accumulate normal and color data.
-            accumulate_normal_and_color: Compute() { terrain( globals ) },
-
-            // world: Flatten terrain g-buffer into the final image and mix in stars.
-            render_world: Render(world, offscreen_target_cleared) {
-                world( globals, fullscreen, atmosphere, stars, terrain )
-            },
-
-            // ui: Draw our widgets onto a buffer with resolution independent of the world.
-            render_ui: Render(ui, offscreen_target) {
-                ui( globals, widgets, world )
-            },
-
-            // composite: Accumulate offscreen buffers into a final image.
-            composite_scene: Render(Screen) {
-                composite( fullscreen, globals, world, ui )
-            }
-        ];
-    }
-);
-
-fn build_frame_graph(
-    cpu_detail: CpuDetailLevel,
-    gpu_detail: GpuDetailLevel,
-    app_dirs: &AppDirs,
-    catalog: &Catalog,
-    window: &mut Window,
-    interpreter: &mut Interpreter,
-    world: &mut World,
-) -> Result<(Arc<RwLock<Gpu>>, FrameGraph)> {
-    let gpu = Gpu::new(window, Default::default(), interpreter)?;
-    world.insert_resource(gpu.clone());
-
-    let atmosphere_buffer = AtmosphereBuffer::new(&mut gpu.write())?;
-    world.insert_resource(atmosphere_buffer.clone());
-
-    let fullscreen_buffer = FullscreenBuffer::new(&gpu.read());
-    world.insert_resource(fullscreen_buffer.clone());
-
-    let globals = GlobalParametersBuffer::new(gpu.read().device(), interpreter);
-    world.insert_resource(globals.clone());
-    globals.write().add_debug_bindings(interpreter)?;
-
-    let stars_buffer = Arc::new(RwLock::new(StarsBuffer::new(&gpu.read())?));
-    world.insert_resource(stars_buffer.clone());
-
-    let terrain_buffer = TerrainBuffer::new(
-        catalog,
-        cpu_detail,
-        gpu_detail,
-        &globals.read(),
-        &mut gpu.write(),
-        interpreter,
-    )?;
-    world.insert_resource(terrain_buffer.clone());
-
-    let world_gfx = WorldRenderPass::new(
-        &terrain_buffer.read(),
-        &atmosphere_buffer.read(),
-        &stars_buffer.read(),
-        &globals.read(),
-        &mut gpu.write(),
-        interpreter,
-    )?;
-    world.insert_resource(world_gfx.clone());
-    world_gfx.write().add_debug_bindings(interpreter)?;
-
-    let widgets = WidgetBuffer::new(&mut gpu.write(), interpreter, &app_dirs.state_dir)?;
-    world.insert_resource(widgets.clone());
-
-    // This is just rendering for widgets, so should be merged.
-    let ui = UiRenderPass::new(
-        &widgets.read(),
-        &world_gfx.read(),
-        &globals.read(),
-        &mut gpu.write(),
-    )?;
-    world.insert_resource(ui.clone());
-
-    let composite = Arc::new(RwLock::new(CompositeRenderPass::new(
-        &ui.read(),
-        &world_gfx.read(),
-        &globals.read(),
-        &mut gpu.write(),
-    )?));
-    world.insert_resource(composite.clone());
-
-    // Compose the frame graph.
-    // TODO: should this be dynamic?
-    let frame_graph = FrameGraph::new(
-        composite,
-        ui,
-        widgets,
-        world_gfx,
-        terrain_buffer,
-        atmosphere_buffer,
-        stars_buffer,
-        fullscreen_buffer,
-        globals,
-    )?;
-
-    Ok((gpu, frame_graph))
 }
 
 fn main() -> Result<()> {
@@ -375,37 +228,8 @@ fn main() -> Result<()> {
     )
 }
 
-fn simulation_main(
-    os_window: OsWindow,
-    input_controller: Arc<Mutex<InputController>>,
-) -> Result<()> {
-    // Create the world and add un-bound resources to it.
-    let mut world = World::default();
-    input_controller.lock().create_resources(&mut world);
-    world.insert_resource(TimeStep::new_60fps());
-    fn timestep(world: &World) -> &TimeStep {
-        world.get_resource::<TimeStep>().unwrap()
-    }
-
-    // Create the game interpreter
-    let mut interpreter = Interpreter::default();
-    world.insert_resource(interpreter.clone());
-
-    // Create the game resource system and insert globals
-    world.insert_resource(None as Option<DisplayConfig>);
-
-    // Parse arguments
+fn simulation_main(mut runtime: Runtime) -> Result<()> {
     let opt = Opt::from_args();
-    let cpu_detail = opt.detail_opts.cpu_detail();
-    let gpu_detail = opt.detail_opts.gpu_detail();
-
-    // Find our files
-    let mut catalog = Catalog::empty("main");
-    for (i, d) in opt.libdir.iter().enumerate() {
-        catalog.add_drawer(DirectoryDrawer::from_directory(100 + i as i64, d)?)?;
-    }
-    let catalog = Arc::new(RwLock::new(catalog));
-    world.insert_resource(catalog.clone());
 
     // Make sure various config locations exist
     let app_dirs = AppDirs::new(Some("nitrogen"), true)
@@ -413,210 +237,58 @@ fn simulation_main(
     create_dir_all(&app_dirs.config_dir)?;
     create_dir_all(&app_dirs.state_dir)?;
 
-    // We have to create the mapper immediately so that the namespace will be available to scripts.
-    let mapper = EventMapper::new(&mut interpreter);
-    world.insert_resource(mapper);
-
-    world.insert_resource(input_controller);
-    let display_config = DisplayConfig::discover(&opt.display_opts, &os_window);
-
-    // So that we can create the window.
-    let window = Window::new(os_window, display_config, &mut interpreter)?;
-    world.insert_resource(window.clone());
-
-    // We don't technically need the window here, just the graphics configuration, and we could
-    // even potentially create blind and expect the resize later. Worth looking into as it would
-    // let us initialize async. The main work to do in parallel is discovering tile trees; this
-    // does not technically depend on the gpu, but does because it lives with terrain creation,
-    // which does need the gpu for resource creation. Probably worth looking to parallelize this
-    // as we could potentially half our startup time.
-    let (gpu, mut frame_graph) = build_frame_graph(
-        cpu_detail,
-        gpu_detail,
-        &app_dirs,
-        &catalog.read(),
-        &mut window.write(),
-        &mut interpreter,
-        &mut world,
-    )?;
-
-    // Create rest of game resources
-    let initial_utc = Utc.ymd(1964, 2, 24).and_hms(12, 0, 0);
-    let orrery = Orrery::new(initial_utc, &mut interpreter)?;
-    world.insert_resource(orrery.clone());
-    let timeline = Timeline::new(&mut interpreter);
-    world.insert_resource(timeline);
-
-    let system = System::new(
-        &frame_graph.widgets(),
-        //&resources.get::<Arc<RwLock<WidgetBuffer>>>().unwrap().read(),
-        &mut interpreter,
-    )?;
-    world.insert_resource(system.clone());
+    runtime
+        .insert_resource(opt.catalog_opts)
+        .insert_resource(opt.display_opts)
+        .insert_resource(opt.startup_opts)
+        .insert_resource(opt.detail_opts.cpu_detail())
+        .insert_resource(opt.detail_opts.gpu_detail())
+        .insert_resource(app_dirs)
+        .insert_resource(DemoFocus::Demo)
+        .load_extension::<StartupOpts>()?
+        .load_extension::<Catalog>()?
+        .load_extension::<EventMapper<DemoFocus>>()?
+        .load_extension::<Window>()?
+        .load_extension::<Gpu>()?
+        .load_extension::<AtmosphereBuffer>()?
+        .load_extension::<FullscreenBuffer>()?
+        .load_extension::<GlobalParametersBuffer>()?
+        .load_extension::<StarsBuffer>()?
+        .load_extension::<TerrainBuffer>()?
+        .load_extension::<WorldRenderPass>()?
+        .load_extension::<WidgetBuffer<DemoFocus>>()?
+        .load_extension::<UiRenderPass<DemoFocus>>()?
+        .load_extension::<CompositeRenderPass<DemoFocus>>()?
+        .load_extension::<System>()?
+        .load_extension::<Orrery>()?
+        .load_extension::<Timeline>()?
+        .load_extension::<TimeStep>()?
+        .load_extension::<CameraSystem>()?
+        .load_extension::<ArcBallSystem>()?;
 
     // But we need at least a camera and controller before the sim is ready to run.
-    let camera = Camera::install(
+    let camera = Camera::new(
         radians!(PI / 2.0),
-        window.read().render_aspect_ratio(),
+        runtime.resource::<Window>().render_aspect_ratio(),
         meters!(0.5),
-        &mut interpreter,
-    )?;
-    let arcball = ArcBallCamera::install(&mut interpreter)?;
-    let _player_ent = world
-        .spawn()
+    );
+    let _player_ent = runtime
+        .spawn_named("player")
         .insert(WorldSpaceFrame::default())
-        .insert(ArcBallController::new(arcball.clone()))
-        .insert(CameraComponent::new(camera.clone()))
+        .insert_scriptable(ArcBallController::default())
+        .insert_scriptable(camera)
         .id();
 
-    //////////////////////////////////////////////////////////////////
-    // Sim Schedule
-    //
-    // The simulation schedule should be used for "pure" entity to entity work and update of
-    // a handful of game related resources, rather than communicating with the GPU. This generally
-    // splits into two phases: per-fixed-tick resource updates and entity updates from resources.
-    let mut sim_schedule = Schedule::default();
-    sim_schedule.add_stage(
-        "time",
-        SystemStage::single_threaded()
-            .with_system(TimeStep::sys_tick_time.system())
-            .with_system(Orrery::sys_step_time.system()),
-    );
-    sim_schedule.add_stage(
-        "read_input_events",
-        SystemStage::single_threaded().with_system(InputController::sys_read_input_events.system()),
-    );
-    sim_schedule.add_stage(
-        "interpret_input_events",
-        SystemStage::parallel()
-            .with_system(WidgetBuffer::sys_handle_input_events.system())
-            .with_system(EventMapper::sys_handle_input_events.system())
-            .with_system(Timeline::sys_animate.system()),
-    );
-    sim_schedule.add_stage(
-        "propagate_changes",
-        SystemStage::single_threaded()
-            .with_system(ArcBallCamera::sys_apply_input.system())
-            .with_system(CameraComponent::sys_apply_input.system()),
-    );
-
-    //////////////////////////////////////////////////////////////////
-    // Track State Changes (from entities and game resources [into graphics systems])
-    //
-    // Copy from entities into buffers more suitable for upload to the GPU. Also, do heavier
-    // CPU-side graphics work that can be parallelized efficiently, like updating the terrain
-    // from the current cameras. Not generally for writing to the GPU.
-    //
-    // TODO: how much can we parallelize for writing to the GPU? Anything at all?
-    //       UploadTracker is shared state. Can we do anything with frame graph?
-    //
-    // Note: We have to take resources as non-mutable references, so that we can run in parallel.
-    //       We can take as many of these in parallel as we want, iff there is no parallel write
-    //       to those same resource (e.g. window). Otherwise we might deadlock.
-
-    fn update_widget_track_state_changes(
-        step: Res<TimeStep>,
-        window: Res<Arc<RwLock<Window>>>,
-        widgets: Res<Arc<RwLock<WidgetBuffer>>>,
-    ) {
-        widgets
-            .write()
-            .track_state_changes(*step.now(), &window.read())
-            .expect("Widgets::track_state_changes");
-    }
-
-    fn update_globals_track_state_changes(
-        query: Query<&CameraComponent>,
-        orrery: Res<Arc<RwLock<Orrery>>>,
-        window: Res<Arc<RwLock<Window>>>,
-        global_data: Res<Arc<RwLock<GlobalParametersBuffer>>>,
-    ) {
-        // FIXME: multiple camera support
-        let mut global_data = global_data.write();
-        let window = window.read();
-        let orrery = orrery.read();
-        for (i, camera) in query.iter().enumerate() {
-            assert_eq!(i, 0);
-            global_data.track_state_changes(&camera.camera(), &orrery, &window);
-        }
-    }
-
-    fn update_terrain_track_state_changes(
-        query: Query<&CameraComponent>,
-        catalog: Res<Arc<RwLock<Catalog>>>,
-        system: Res<Arc<RwLock<System>>>,
-        terrain: Res<Arc<RwLock<TerrainBuffer>>>,
-    ) {
-        // FIXME: multiple camera support
-        let mut system = system.write();
-        let mut terrain = terrain.write();
-        for (i, camera) in query.iter().enumerate() {
-            assert_eq!(i, 0);
-            let vis_camera = system.current_camera(&camera.camera());
-            terrain
-                .track_state_changes(&camera.camera(), vis_camera, catalog.clone())
-                .expect("Terrain::track_state_changes");
-        }
-    }
-
-    let mut frame_schedule = Schedule::default();
-    frame_schedule.add_stage(
-        "input",
-        SystemStage::single_threaded()
-            .with_system(InputController::sys_read_system_events.system()),
-    );
-    let mut update_frame_schedule = Schedule::default();
-    update_frame_schedule.add_stage(
-        "update_frame",
-        SystemStage::single_threaded()
-            .with_system(InputController::sys_read_system_events.system())
-            .with_system(Window::sys_handle_system_events.system())
-            .with_system(CameraComponent::sys_apply_display_changes.system())
-            .with_system(Gpu::sys_handle_display_config_change.system())
-            .with_system(TerrainBuffer::sys_handle_display_config_change.system())
-            .with_system(WorldRenderPass::sys_handle_display_config_change.system())
-            .with_system(UiRenderPass::sys_handle_display_config_change.system())
-            .with_system(update_widget_track_state_changes.system())
-            .with_system(update_globals_track_state_changes.system())
-            .with_system(update_terrain_track_state_changes.system()),
-    );
-
-    // We are now finished and can safely run the startup scripts / configuration.
-    opt.startup_opts.on_startup(&mut interpreter)?;
-
-    while !system.read().exit {
+    runtime.run_startup();
+    while runtime.resource::<ExitRequest>().still_running() {
         // Catch monotonic sim time up to system time.
         let frame_start = Instant::now();
-        while timestep(&world).next_now() < frame_start {
-            sim_schedule.run_once(&mut world);
+        while runtime.resource::<TimeStep>().next_now() < frame_start {
+            runtime.run_sim_once();
         }
 
-        update_frame_schedule.run_once(&mut world);
-
-        let mut tracker = Default::default();
-        frame_graph
-            .globals()
-            .ensure_uploaded(&gpu.read(), &mut tracker)?;
-        frame_graph
-            .terrain_mut()
-            .ensure_uploaded(&mut gpu.write(), &mut tracker)?;
-        frame_graph.widgets_mut().ensure_uploaded(
-            *timestep(&world).now(),
-            &mut gpu.write(),
-            &window.read(),
-            &mut tracker,
-        )?;
-        if !frame_graph.run(gpu.clone(), tracker)? {
-            gpu.write()
-                .on_display_config_changed(window.read().config())?;
-        }
-
-        system.write().track_visible_state(
-            frame_start, // compute frame times from actual elapsed time
-            &orrery.read(),
-            &arcball.read(),
-            &camera.read(),
-        )?;
+        // Display a frame
+        runtime.run_frame_once();
     }
 
     Ok(())

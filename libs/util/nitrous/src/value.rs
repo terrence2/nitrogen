@@ -12,15 +12,23 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::Module;
-use anyhow::{bail, Result};
+use crate::{
+    memory::{
+        make_component_lookup_mut, make_resource_lookup_mut, ComponentLookupMutFunc,
+        ResourceLookupMutFunc, RustCallbackFunc, WorldIndex,
+    },
+    ScriptComponent, ScriptResource,
+};
+use anyhow::{anyhow, bail, Result};
+use bevy_ecs::{prelude::*, system::Resource};
 use futures::Future;
 use geodesy::{GeoSurface, Graticule, Target};
+use itertools::Itertools;
 use log::error;
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
-use smallvec::SmallVec;
 use std::{
+    borrow::BorrowMut,
     fmt::{self, Debug, Formatter},
     pin::Pin,
     sync::Arc,
@@ -35,8 +43,12 @@ pub enum Value {
     Float(OrderedFloat<f64>),
     String(String),
     Graticule(Graticule<GeoSurface>),
-    Module(Arc<RwLock<dyn Module>>),
-    Method(Arc<RwLock<dyn Module>>, String), // TODO: atoms
+    Resource(Arc<ResourceLookupMutFunc>),
+    ResourceMethod(Arc<ResourceLookupMutFunc>, String), // TODO: atoms?
+    Entity(Entity),
+    Component(Entity, Arc<ComponentLookupMutFunc>),
+    ComponentMethod(Entity, Arc<ComponentLookupMutFunc>, String), // TODO: atoms?
+    RustMethod(Arc<RustCallbackFunc>),
     Future(Arc<RwLock<FutureValue>>),
 }
 
@@ -58,6 +70,18 @@ impl Value {
     #[allow(non_snake_case)]
     pub fn False() -> Self {
         Self::Boolean(false)
+    }
+
+    pub(crate) fn new_resource(lookup: Arc<ResourceLookupMutFunc>) -> Self {
+        Self::Resource(lookup)
+    }
+
+    pub(crate) fn new_entity(entity: Entity) -> Self {
+        Self::Entity(entity)
+    }
+
+    pub(crate) fn new_component(entity: Entity, lookup: Arc<ComponentLookupMutFunc>) -> Self {
+        Value::Component(entity, lookup)
     }
 
     pub fn to_bool(&self) -> Result<bool> {
@@ -106,11 +130,20 @@ impl Value {
         bail!("not a string value: {}", self)
     }
 
-    pub fn to_method(&self) -> Result<(Arc<RwLock<dyn Module>>, &str)> {
-        if let Self::Method(module, name) = self {
-            return Ok((module.clone(), name));
-        }
-        bail!("not a method value: {}", self)
+    pub fn make_resource_method<T>(name: &str) -> Self
+    where
+        T: Resource + ScriptResource + 'static,
+    {
+        let lookup = make_resource_lookup_mut::<T>();
+        Self::ResourceMethod(lookup, name.to_owned())
+    }
+
+    pub fn make_component_method<T>(entity: Entity, name: &str) -> Self
+    where
+        T: Component + ScriptComponent + 'static,
+    {
+        let lookup = make_component_lookup_mut::<T>();
+        Self::ComponentMethod(entity, lookup, name.to_owned())
     }
 
     pub fn to_future(&self) -> Result<Arc<RwLock<FutureValue>>> {
@@ -132,19 +165,69 @@ impl Value {
         })
     }
 
-    pub fn spawn_method(&self, args: &[Value]) {
-        fn inner(callable: Value, args: SmallVec<[Value; 2]>) -> Result<()> {
-            let (module, name) = callable.to_method()?;
-            module.write().call_method(name, &args)?;
-            Ok(())
-        }
-        let callable = self.to_owned();
-        let args = SmallVec::from(args);
-        rayon::spawn(move || {
-            if let Err(e) = inner(callable, args) {
-                error!("spawn_method failed with: {}", e);
+    pub fn attr(&self, name: &str, index: &WorldIndex, world: &mut World) -> Result<Value> {
+        Ok(match self {
+            Value::Resource(lookup) => lookup(world)
+                .ok_or_else(|| anyhow!("no such resource for attr: {}", name))?
+                .get(name)?,
+            Value::Entity(entity) => {
+                // TODO: there's almost certainly a smarter way to do this.
+                if name == "list" {
+                    #[allow(unstable_name_collisions)]
+                    let msg: Value = index
+                        .entity_components(entity)
+                        .map(|v| v.intersperse("\n").collect())
+                        .unwrap_or_else(|| "error: unknown entity name".to_owned())
+                        .into();
+                    Value::RustMethod(Arc::new(move |_, _| msg.clone()))
+                } else {
+                    index.lookup_component(entity, name).ok_or_else(|| {
+                        anyhow!("no such component {} on entity {:?}", name, entity)
+                    })?
+                }
             }
-        });
+            Value::Component(entity, lookup) => lookup(*entity, world)
+                .ok_or_else(|| anyhow!("no such component for attr: {}", name))?
+                .get(*entity, name)?,
+            _ => bail!(
+                "attribute base must be a resource, entity, or component, not {:?}",
+                self
+            ),
+        })
+    }
+
+    pub fn call_method(&mut self, args: &[Value], world: &mut World) -> Result<Value> {
+        Ok(match self {
+            Value::ResourceMethod(lookup, method_name) => lookup.borrow_mut()(world)
+                .ok_or_else(|| anyhow!("no such resource for call: {}", method_name))?
+                .call_method(method_name, args)?,
+            Value::ComponentMethod(entity, lookup, method_name) => {
+                lookup.borrow_mut()(*entity, world)
+                    .ok_or_else(|| anyhow!("no such component for call: {}", method_name))?
+                    .call_method(*entity, method_name, args)?
+            }
+            Value::RustMethod(method) => method(args, world),
+            _ => {
+                error!("attempting to call non-method value: {}", self);
+                bail!("attempting to call non-method value: {}", self);
+            }
+        })
+    }
+
+    pub fn attrs<'a>(&self, index: &'a WorldIndex, world: &'a mut World) -> Result<Vec<&'a str>> {
+        Ok(match self {
+            Value::Resource(lookup) => lookup(world)
+                .ok_or_else(|| anyhow!("no such resource for names"))?
+                .names(),
+            Value::Entity(entity) => index.component_attrs(entity),
+            Value::Component(entity, lookup) => lookup(*entity, world)
+                .ok_or_else(|| anyhow!("no such component for attrs"))?
+                .names(),
+            _ => bail!(
+                "attribute base must be a resource, entity, or component, not {:?}",
+                self
+            ),
+        })
     }
 }
 
@@ -157,6 +240,12 @@ impl From<f64> for Value {
 impl From<String> for Value {
     fn from(s: String) -> Self {
         Self::String(s)
+    }
+}
+
+impl From<&str> for Value {
+    fn from(s: &str) -> Self {
+        Self::String(s.to_owned())
     }
 }
 
@@ -174,8 +263,14 @@ impl fmt::Display for Value {
             Self::Float(v) => write!(f, "{}", v),
             Self::String(v) => write!(f, "\"{}\"", v),
             Self::Graticule(v) => write!(f, "{}", v),
-            Self::Module(v) => write!(f, "{}", v.read().module_name()),
-            Self::Method(v, name) => write!(f, "{}.{}", v.read().module_name(), name),
+            Self::Resource(_) => write!(f, "<resource>"),
+            Self::ResourceMethod(_, name) => {
+                write!(f, "<resource>.{}", name)
+            }
+            Self::Entity(ent) => write!(f, "@{:?}", ent),
+            Self::Component(ent, _) => write!(f, "@[{:?}].<lookup>", ent),
+            Self::ComponentMethod(ent, _, name) => write!(f, "@[{:?}].<lookup>.{}", ent, name),
+            Self::RustMethod(_) => write!(f, "<callback>"),
             Self::Future(_) => write!(f, "Future"),
         }
     }
@@ -204,8 +299,15 @@ impl PartialEq for Value {
                 Self::Graticule(b) => a == b,
                 _ => false,
             },
-            Self::Module(_) => false,
-            Self::Method(_, _) => false,
+            Self::Entity(a) => match other {
+                Self::Entity(b) => a == b,
+                _ => false,
+            },
+            Self::Resource(_) => false,
+            Self::Component(_, _) => false,
+            Self::ComponentMethod(_, _, _) => false,
+            Self::ResourceMethod(_, _) => false,
+            Self::RustMethod(_) => false,
             Self::Future(_) => false,
         }
     }

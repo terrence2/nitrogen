@@ -18,27 +18,32 @@ use bevy_ecs::prelude::*;
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
 use measure::WorldSpaceFrame;
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
-use nitrous::{Interpreter, Value};
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
-use parking_lot::RwLock;
-use std::{f64::consts::PI, sync::Arc};
+use nitrous::{inject_nitrous_component, method, NitrousComponent};
+use runtime::{Extension, Runtime, SimStage};
+use std::f64::consts::PI;
 
-#[derive(Component)]
-pub struct ArcBallController {
-    inner: Arc<RwLock<ArcBallCamera>>,
-}
-
-impl ArcBallController {
-    pub fn new(arcball: Arc<RwLock<ArcBallCamera>>) -> Self {
-        Self { inner: arcball }
-    }
-
-    pub fn apply_input_state(&mut self) {
-        self.inner.write().apply_input_state();
-    }
-
-    pub fn world_space_frame(&self) -> WorldSpaceFrame {
-        self.inner.read().world_space_frame()
+/// The ArcBall system will, if the "player" entity has an ArcBallController
+/// will translate device events into relevant arcball updates on that player
+/// and apply those updates on each frame.
+pub struct ArcBallSystem;
+impl Extension for ArcBallSystem {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        runtime.run_string(
+            r#"
+                bindings.bind("mouse1", "@player.arcball.pan_view(pressed)");
+                bindings.bind("mouse3", "@player.arcball.move_view(pressed)");
+                bindings.bind("mouseMotion", "@player.arcball.handle_mousemotion(dx, dy)");
+                bindings.bind("mouseWheel", "@player.arcball.handle_mousewheel(vertical_delta)");
+                bindings.bind("Shift+Up", "@player.arcball.target_up_fast(pressed)");
+                bindings.bind("Shift+Down", "@player.arcball.target_down_fast(pressed)");
+                bindings.bind("Up", "@player.arcball.target_up(pressed)");
+                bindings.bind("Down", "@player.arcball.target_down(pressed)");
+            "#,
+        )?;
+        runtime.sim_stage_mut(SimStage::PostInput).add_system(
+            ArcBallController::sys_apply_input.label("ArcBallController::sys_apply_input"),
+        );
+        Ok(())
     }
 }
 
@@ -49,36 +54,17 @@ struct InputState {
     target_height_delta: Length<Meters>,
 }
 
-#[derive(Debug, NitrousModule)]
-pub struct ArcBallCamera {
+#[derive(Debug, Component, NitrousComponent)]
+#[Name = "arcball"]
+pub struct ArcBallController {
     input: InputState,
 
     target: Graticule<GeoSurface>,
     eye: Graticule<Target>,
 }
 
-#[inject_nitrous_module]
-impl ArcBallCamera {
-    pub fn install(interpreter: &mut Interpreter) -> Result<Arc<RwLock<Self>>> {
-        let arcball = Arc::new(RwLock::new(Self::detached()));
-        interpreter.put_global("arcball", Value::Module(arcball.clone()));
-        interpreter.interpret_once(
-            r#"
-                let bindings := mapper.create_bindings("arc_ball_controller");
-                bindings.bind("mouse1", "arcball.pan_view(pressed)");
-                bindings.bind("mouse3", "arcball.move_view(pressed)");
-                bindings.bind("mouseMotion", "arcball.handle_mousemotion(dx, dy)");
-                bindings.bind("mouseWheel", "arcball.handle_mousewheel(vertical_delta)");
-                bindings.bind("Shift+Up", "arcball.target_up_fast(pressed)");
-                bindings.bind("Shift+Down", "arcball.target_down_fast(pressed)");
-                bindings.bind("Up", "arcball.target_up(pressed)");
-                bindings.bind("Down", "arcball.target_down(pressed)");
-            "#,
-        )?;
-        Ok(arcball)
-    }
-
-    pub fn detached() -> Self {
+impl Default for ArcBallController {
+    fn default() -> Self {
         Self {
             input: InputState {
                 target_height_delta: meters!(0),
@@ -93,7 +79,10 @@ impl ArcBallCamera {
             ),
         }
     }
+}
 
+#[inject_nitrous_component]
+impl ArcBallController {
     pub fn world_space_frame(&self) -> WorldSpaceFrame {
         let target = self.cartesian_target_position::<Meters>();
         let eye = self.cartesian_eye_position::<Meters>();
@@ -399,14 +388,14 @@ impl ArcBallCamera {
     }
 
     // Take the inputs applied via interpreting key presses in the prior stage and apply it.
-    pub fn sys_apply_input(mut query: Query<(&mut ArcBallController, &mut WorldSpaceFrame)>) {
+    fn sys_apply_input(mut query: Query<(&mut ArcBallController, &mut WorldSpaceFrame)>) {
         for (mut arcball, mut frame) in query.iter_mut() {
             arcball.apply_input_state();
             *frame = arcball.world_space_frame();
         }
     }
 
-    pub fn apply_input_state(&mut self) {
+    fn apply_input_state(&mut self) {
         self.target.distance += self.input.target_height_delta;
         if self.target.distance < meters!(0f64) {
             self.target.distance = meters!(0f64);
@@ -423,7 +412,7 @@ mod tests {
 
     #[test]
     fn it_can_compute_eye_positions_at_origin() -> Result<()> {
-        let mut c = ArcBallCamera::detached();
+        let mut c = ArcBallController::default();
         c.set_eye(Graticule::new(radians!(0), radians!(0), meters!(0)))?;
         c.set_target(Graticule::new(radians!(0), radians!(0), meters!(0)));
 
@@ -483,7 +472,7 @@ mod tests {
 
     #[test]
     fn it_can_compute_eye_positions_with_offset_latitude() -> Result<()> {
-        let mut c = ArcBallCamera::detached();
+        let mut c = ArcBallController::default();
         c.set_eye(Graticule::new(radians!(0), radians!(0), meters!(0)))?;
         c.set_target(Graticule::new(radians!(0), radians!(0), meters!(0)));
 
@@ -527,7 +516,7 @@ mod tests {
 
     #[test]
     fn it_can_compute_eye_positions_with_offset_longitude() -> Result<()> {
-        let mut c = ArcBallCamera::detached();
+        let mut c = ArcBallController::default();
         c.set_eye(Graticule::new(radians!(0), radians!(0), meters!(0)))?;
         c.set_target(Graticule::new(radians!(0), radians!(0), meters!(0)));
 

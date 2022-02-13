@@ -595,7 +595,7 @@ where
 
     /// Upload the current contents to the GPU. Note that this is non-destructive. If needed,
     /// the builder can accumulate more textures and upload again later.
-    pub fn make_upload_buffer(&mut self, gpu: &mut Gpu, tracker: &mut UploadTracker) -> Result<()> {
+    pub fn make_upload_buffer(&mut self, gpu: &Gpu, tracker: &UploadTracker) -> Result<()> {
         // If we started a texture upload last frame, replace the prior texture with the new.
         // Any glyphs in the new region will have an oob Frame for one frame, but that's better
         // than having the entire glyph texture be noise for one frame.
@@ -727,6 +727,10 @@ where
             self.unaligned_blit.push((bind_group, vertex_buffer));
         }
 
+        Ok(())
+    }
+
+    pub fn handle_dump_texture(&mut self, gpu: &mut Gpu) -> Result<()> {
         if let Some(path_ref) = self.dump_texture.as_ref() {
             let path = path_ref.to_owned();
             let write_img =
@@ -760,11 +764,10 @@ where
             )?;
         }
         self.dump_texture = None;
-
         Ok(())
     }
 
-    pub fn maintain_gpu_resources(&self, encoder: &mut wgpu::CommandEncoder) -> Result<()> {
+    pub fn maintain_gpu_resources(&self, encoder: &mut wgpu::CommandEncoder) {
         let target_texture = if let Some(ref next_texture) = self.next_texture {
             next_texture.clone()
         } else {
@@ -798,7 +801,6 @@ where
             rpass.set_vertex_buffer(0, vertex_buffer.slice(..));
             rpass.draw(0..4, 0..1);
         }
-        Ok(())
     }
 
     /// Upload and then steal the texture. Useful when used as a one-shot atlas.
@@ -817,7 +819,7 @@ where
                 label: Some("atlas-finish"),
             });
         tracker.dispatch_uploads_until_empty(&mut encoder);
-        self.maintain_gpu_resources(&mut encoder)?;
+        self.maintain_gpu_resources(&mut encoder);
         gpu.queue_mut().submit(vec![encoder.finish()]);
 
         self.make_upload_buffer(gpu, tracker)?;
@@ -876,7 +878,6 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use gpu::TestResources;
     use image::{GrayImage, Luma, Rgba, RgbaImage};
     use rand::prelude::*;
     use std::{env, time::Duration};
@@ -884,11 +885,12 @@ mod test {
     #[cfg(unix)]
     #[test]
     fn test_random_packing() -> Result<()> {
-        let TestResources { gpu, .. } = Gpu::for_test_unix()?;
+        let mut runtime = Gpu::for_test_unix()?;
+        let mut gpu = runtime.resource_mut::<Gpu>();
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "random_packing",
-            &gpu.read(),
+            &gpu,
             Gpu::stride_for_row_size((1024 + 8) * 4) / 4,
             2048,
             wgpu::TextureFormat::Rgba8Unorm,
@@ -903,7 +905,7 @@ mod test {
                 thread_rng().gen_range(minimum..maximum),
                 *Rgba::from_slice(&[random(), random(), random(), 255]),
             );
-            let frame = packer.push_image(&img, &gpu.read())?;
+            let frame = packer.push_image(&img, &gpu)?;
             let w = packer.width();
             let h = packer.height();
             // Frame edges should keep these from ever being full.
@@ -924,14 +926,13 @@ mod test {
             height: packer.height(),
             depth_or_array_layers: 1,
         };
-        let (texture, _view, _sampler) =
-            packer.finish(&mut gpu.write(), &mut Default::default())?;
+        let (texture, _view, _sampler) = packer.finish(&mut gpu, &mut Default::default())?;
         if env::var("DUMP") == Ok("1".to_owned()) {
             Gpu::dump_texture(
                 &texture,
                 extent,
                 wgpu::TextureFormat::Rgba8Unorm,
-                &mut gpu.write(),
+                &mut gpu,
                 Box::new(move |extent, _fmt, data| {
                     let buffer = ImageBuffer::<Rgba<u8>, Vec<u8>>::from_vec(
                         extent.width,
@@ -953,11 +954,12 @@ mod test {
     #[cfg(unix)]
     #[test]
     fn test_finish() -> Result<()> {
-        let TestResources { gpu, .. } = Gpu::for_test_unix()?;
+        let mut runtime = Gpu::for_test_unix()?;
+        let mut gpu = runtime.resource_mut::<Gpu>();
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "test_finish",
-            &gpu.read(),
+            &gpu,
             256,
             256,
             wgpu::TextureFormat::Rgba8Unorm,
@@ -965,21 +967,22 @@ mod test {
         )?;
         let _ = packer.push_image(
             &RgbaImage::from_pixel(254, 254, *Rgba::from_slice(&[255, 0, 0, 255])),
-            &gpu.read(),
+            &gpu,
         )?;
 
-        let _ = packer.finish(&mut gpu.write(), &mut Default::default());
+        let _ = packer.finish(&mut gpu, &mut Default::default());
         Ok(())
     }
 
     #[cfg(unix)]
     #[test]
     fn test_grayscale() -> Result<()> {
-        let TestResources { gpu, .. } = Gpu::for_test_unix()?;
+        let mut runtime = Gpu::for_test_unix()?;
+        let mut gpu = runtime.resource_mut::<Gpu>();
 
         let mut packer = AtlasPacker::<Luma<u8>>::new(
             "test_grayscale",
-            &gpu.read(),
+            &gpu,
             256,
             256,
             wgpu::TextureFormat::R8Unorm,
@@ -987,21 +990,22 @@ mod test {
         )?;
         let _ = packer.push_image(
             &GrayImage::from_pixel(254, 254, *Luma::from_slice(&[255])),
-            &gpu.read(),
+            &gpu,
         )?;
 
-        let _ = packer.finish(&mut gpu.write(), &mut Default::default());
+        let _ = packer.finish(&mut gpu, &mut Default::default());
         Ok(())
     }
 
     #[cfg(unix)]
     #[test]
     fn test_incremental_upload() -> Result<()> {
-        let TestResources { gpu, .. } = Gpu::for_test_unix()?;
+        let runtime = Gpu::for_test_unix()?;
+        let gpu = runtime.resource::<Gpu>();
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
             "test_incremental",
-            &gpu.read(),
+            gpu,
             256,
             256,
             wgpu::TextureFormat::Rgba8Unorm,
@@ -1011,25 +1015,25 @@ mod test {
         // Base upload
         let _ = packer.push_image(
             &RgbaImage::from_pixel(254, 254, *Rgba::from_slice(&[255, 0, 0, 255])),
-            &gpu.read(),
+            gpu,
         )?;
-        packer.make_upload_buffer(&mut gpu.write(), &mut Default::default())?;
+        packer.make_upload_buffer(gpu, &Default::default())?;
         let _ = packer.texture();
 
         // Grow
         let _ = packer.push_image(
             &RgbaImage::from_pixel(24, 254, *Rgba::from_slice(&[255, 0, 0, 255])),
-            &gpu.read(),
+            gpu,
         )?;
-        packer.make_upload_buffer(&mut gpu.write(), &mut Default::default())?;
+        packer.make_upload_buffer(gpu, &Default::default())?;
         let _ = packer.texture();
 
         // Reuse
         let _ = packer.push_image(
             &RgbaImage::from_pixel(24, 254, *Rgba::from_slice(&[255, 0, 0, 255])),
-            &gpu.read(),
+            gpu,
         )?;
-        packer.make_upload_buffer(&mut gpu.write(), &mut Default::default())?;
+        packer.make_upload_buffer(gpu, &Default::default())?;
         let _ = packer.texture();
         Ok(())
     }

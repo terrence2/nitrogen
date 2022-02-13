@@ -18,15 +18,15 @@ use crate::{
     font_context::FontContext,
     paint_context::PaintContext,
     region::{Border, Extent, Position, Region},
-    widget::Widget,
+    widget::{Widget, WidgetFocus},
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
 };
 use anyhow::Result;
 use gpu::Gpu;
-use input::{InputEvent, InputFocus};
-use nitrous::Interpreter;
+use input::InputEvent;
 use parking_lot::RwLock;
+use runtime::ScriptHerder;
 use std::{sync::Arc, time::Instant};
 use window::{
     size::{AbsSize, ScreenDir, Size},
@@ -211,14 +211,14 @@ impl Widget for VerticalBox {
     fn handle_event(
         &mut self,
         event: &InputEvent,
-        focus: InputFocus,
+        focus: WidgetFocus,
         cursor_position: Position<AbsSize>,
-        interpreter: &mut Interpreter,
+        herder: &mut ScriptHerder,
     ) -> Result<()> {
         for child in &self.children {
             child
                 .widget_mut()
-                .handle_event(event, focus, cursor_position, interpreter)?;
+                .handle_event(event, focus, cursor_position, herder)?;
         }
         Ok(())
     }

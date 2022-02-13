@@ -6,17 +6,19 @@ edition = "2021"
 
 [dependencies]
 anyhow = { version = "^ 1", features = ["backtrace"] }
+bevy_ecs = "^ 0.6"
 log = "^ 0.4"
 nalgebra = "^ 0.29"
-parking_lot = "^ 0.11"
+ordered-float = "^ 2"
 wgpu = { version = "^ 0.12", features = ["spirv"] }
 zerocopy = "^ 0.5"
 absolute_unit = { path = "../../util/absolute_unit" }
 geodesy = { path = "../../util/geodesy" }
 camera = { path = "../../sim/camera" }
+event_mapper = { path = "../../sim/event_mapper" }
 gpu = { path = "../../system/gpu" }
 nitrous = { path = "../../util/nitrous" }
-nitrous_injector = { path = "../../util/nitrous_injector" }
+runtime = { path = "../../util/runtime" }
 orrery = { path = "../../sim/orrery" }
 window = { path = "../../system/window" }
 

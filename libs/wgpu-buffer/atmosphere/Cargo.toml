@@ -19,6 +19,7 @@ static_assertions = "^ 1"
 wgpu = { version = "^ 0.12", features = ["spirv"] }
 zerocopy = "^ 0.5"
 gpu = { path = "../../system/gpu" }
+runtime = { path = "../../util/runtime" }
 
 [dev-dependencies]
 spirv-reflect = "^ 0.2"

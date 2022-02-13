@@ -109,7 +109,7 @@ impl PatchManager {
         target_refinement: f64,
         desired_patch_count: usize,
         max_subdivisions: usize,
-        gpu: &mut Gpu,
+        gpu: &Gpu,
     ) -> Result<Self> {
         let patch_upload_stride = 3; // 3 vertices per patch in the upload buffer.
         let patch_upload_byte_size = TerrainUploadVertex::mem_size() * patch_upload_stride;
@@ -506,7 +506,7 @@ impl PatchManager {
         camera: &Camera,
         optimize_camera: &Camera,
         visible_regions: &mut Vec<VisiblePatch>,
-    ) -> Result<()> {
+    ) {
         // Select optimal live patches from our coherent patch tree.
         self.live_patches.clear();
         self.patch_tree
@@ -575,10 +575,9 @@ impl PatchManager {
         }
 
         //println!("dt: {:?}", Instant::now() - loop_start);
-        Ok(())
     }
 
-    pub fn ensure_uploaded(&self, gpu: &Gpu, tracker: &mut UploadTracker) {
+    pub fn ensure_uploaded(&self, gpu: &Gpu, tracker: &UploadTracker) {
         gpu.upload_slice_to(
             "terrain-geo-patch-vertex-upload-buffer",
             &self.live_vertices,
@@ -587,10 +586,7 @@ impl PatchManager {
         );
     }
 
-    pub fn tessellate<'a>(
-        &'a self,
-        mut cpass: wgpu::ComputePass<'a>,
-    ) -> Result<wgpu::ComputePass<'a>> {
+    pub fn tessellate<'a>(&'a self, mut cpass: wgpu::ComputePass<'a>) -> wgpu::ComputePass<'a> {
         // Copy our upload buffer into seed positions for subdivisions.
         let patch_count = 3 * self.desired_patch_count as u32;
         assert!(patch_count < u16::MAX as u32);
@@ -611,7 +607,7 @@ impl PatchManager {
             cpass.dispatch(wg_x, wg_y, 1);
         }
 
-        Ok(cpass)
+        cpass
     }
 
     pub(crate) fn displace_height_bind_group_layout(&self) -> &wgpu::BindGroupLayout {

@@ -23,13 +23,12 @@ use crate::{
 };
 use anyhow::Result;
 use gpu::Gpu;
-use nitrous::Value;
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
 use parking_lot::RwLock;
 use std::{sync::Arc, time::Instant};
 use window::{size::Size, Window};
 
-#[derive(Debug, NitrousModule)]
+#[derive(Debug, NitrousResource)]
 pub struct Label {
     line: TextRun,
 
@@ -38,7 +37,7 @@ pub struct Label {
     allocated_extent: Extent<Size>,
 }
 
-#[inject_nitrous_module]
+#[inject_nitrous_resource]
 impl Label {
     pub fn new<S: AsRef<str> + Into<String>>(content: S) -> Self {
         Self {

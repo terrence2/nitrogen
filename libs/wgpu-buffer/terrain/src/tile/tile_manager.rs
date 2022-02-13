@@ -75,7 +75,7 @@ pub trait TileSet: Debug + Send + Sync + 'static {
     fn begin_visibility_update(&mut self);
     fn note_required(&mut self, visible_patch: &VisiblePatch);
     fn finish_visibility_update(&mut self, camera: &Camera, catalog: Arc<RwLock<Catalog>>);
-    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker);
+    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &UploadTracker);
 
     // Indicate that the current index should be written to the debug file.
     fn snapshot_index(&mut self, gpu: &mut Gpu);
@@ -95,7 +95,7 @@ pub trait TileSet: Debug + Send + Sync + 'static {
         vertex_count: u32,
         mesh_bind_group: &'a wgpu::BindGroup,
         cpass: wgpu::ComputePass<'a>,
-    ) -> Result<wgpu::ComputePass<'a>>;
+    ) -> wgpu::ComputePass<'a>;
 
     // Implementors should read from the provided screen space world position coordinates and
     // accumulate into the provided normal accumulation buffer. Accumulation buffers will be
@@ -107,7 +107,7 @@ pub trait TileSet: Debug + Send + Sync + 'static {
         globals_buffer: &'a GlobalParametersBuffer,
         accumulate_common_bind_group: &'a wgpu::BindGroup,
         cpass: wgpu::ComputePass<'a>,
-    ) -> Result<wgpu::ComputePass<'a>>;
+    ) -> wgpu::ComputePass<'a>;
 
     // Implementors should read from the provided screen space world position coordinates and
     // accumulate into the provided color accumulation buffer. Accumulation buffers will be
@@ -119,7 +119,7 @@ pub trait TileSet: Debug + Send + Sync + 'static {
         globals_buffer: &'a GlobalParametersBuffer,
         accumulate_common_bind_group: &'a wgpu::BindGroup,
         cpass: wgpu::ComputePass<'a>,
-    ) -> Result<wgpu::ComputePass<'a>>;
+    ) -> wgpu::ComputePass<'a>;
 }
 
 // A collection of TileSet, potentially more than one per kind.
@@ -236,11 +236,7 @@ impl TileManager {
         }
     }
 
-    pub fn ensure_uploaded(&mut self, gpu: &mut Gpu, tracker: &mut UploadTracker) {
-        for ts in self.tile_sets.iter_mut() {
-            ts.ensure_uploaded(gpu, tracker);
-        }
-
+    pub fn handle_capture_snapshot(&mut self, gpu: &mut Gpu) {
         if self.take_index_snapshot {
             for ts in self.tile_sets.iter_mut() {
                 ts.snapshot_index(gpu);
@@ -249,18 +245,20 @@ impl TileManager {
         }
     }
 
+    pub fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &UploadTracker) {
+        for ts in self.tile_sets.iter_mut() {
+            ts.ensure_uploaded(gpu, tracker);
+        }
+    }
+
     pub fn snapshot_index(&mut self) {
         self.take_index_snapshot = true;
     }
 
-    pub fn paint_atlas_indices(
-        &self,
-        mut encoder: wgpu::CommandEncoder,
-    ) -> Result<wgpu::CommandEncoder> {
+    pub fn paint_atlas_indices(&self, encoder: &mut wgpu::CommandEncoder) {
         for ts in self.tile_sets.iter() {
-            ts.paint_atlas_index(&mut encoder);
+            ts.paint_atlas_index(encoder);
         }
-        Ok(encoder)
     }
 
     pub fn displace_height<'a>(
@@ -268,11 +266,11 @@ impl TileManager {
         vertex_count: u32,
         mesh_bind_group: &'a wgpu::BindGroup,
         mut cpass: wgpu::ComputePass<'a>,
-    ) -> Result<wgpu::ComputePass<'a>> {
+    ) -> wgpu::ComputePass<'a> {
         for ts in self.tile_sets.iter() {
-            cpass = ts.displace_height(vertex_count, mesh_bind_group, cpass)?;
+            cpass = ts.displace_height(vertex_count, mesh_bind_group, cpass);
         }
-        Ok(cpass)
+        cpass
     }
 
     pub fn accumulate_normals<'a>(
@@ -281,12 +279,12 @@ impl TileManager {
         extent: &wgpu::Extent3d,
         globals_buffer: &'a GlobalParametersBuffer,
         accumulate_common_bind_group: &'a wgpu::BindGroup,
-    ) -> Result<wgpu::ComputePass<'a>> {
+    ) -> wgpu::ComputePass<'a> {
         for ts in self.tile_sets.iter() {
             cpass =
-                ts.accumulate_normals(extent, globals_buffer, accumulate_common_bind_group, cpass)?;
+                ts.accumulate_normals(extent, globals_buffer, accumulate_common_bind_group, cpass);
         }
-        Ok(cpass)
+        cpass
     }
 
     pub fn accumulate_colors<'a>(
@@ -295,11 +293,11 @@ impl TileManager {
         extent: &wgpu::Extent3d,
         globals_buffer: &'a GlobalParametersBuffer,
         accumulate_common_bind_group: &'a wgpu::BindGroup,
-    ) -> Result<wgpu::ComputePass<'a>> {
+    ) -> wgpu::ComputePass<'a> {
         for ts in self.tile_sets.iter() {
             cpass =
-                ts.accumulate_colors(extent, globals_buffer, accumulate_common_bind_group, cpass)?;
+                ts.accumulate_colors(extent, globals_buffer, accumulate_common_bind_group, cpass);
         }
-        Ok(cpass)
+        cpass
     }
 }

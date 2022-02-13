@@ -28,7 +28,7 @@ pub use crate::{
     color::Color,
     paint_context::PaintContext,
     region::{Border, Extent, Position, Region},
-    widget::{Labeled, Widget},
+    widget::{Labeled, Widget, WidgetFocus},
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
     widgets::{
@@ -38,17 +38,22 @@ pub use crate::{
 };
 
 use crate::font_context::FontContext;
+use animate::TimeStep;
 use anyhow::{ensure, Result};
 use bevy_ecs::prelude::*;
 use font_common::{FontAdvance, FontInterface};
 use font_ttf::TtfFont;
 use gpu::{Gpu, UploadTracker};
 use input::{ElementState, InputEvent, InputEventVec, InputFocus, ModifiersState, VirtualKeyCode};
-use log::trace;
-use nitrous::{Interpreter, Value};
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use log::{error, trace};
+use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
 use parking_lot::RwLock;
-use std::{borrow::Borrow, mem, num::NonZeroU64, ops::Range, path::Path, sync::Arc, time::Instant};
+use platform_dirs::AppDirs;
+use runtime::{Extension, FrameStage, Runtime, ScriptCompletions, ScriptHerder, SimStage};
+use std::{
+    borrow::Borrow, marker::PhantomData, mem, num::NonZeroU64, ops::Range, path::Path, sync::Arc,
+    time::Instant,
+};
 use window::{
     size::{AbsSize, Size},
     Window,
@@ -79,8 +84,11 @@ const FIRA_SANS_REGULAR_TTF_DATA: &[u8] =
 const FIRA_MONO_REGULAR_TTF_DATA: &[u8] =
     include_bytes!("../../../../assets/font/FiraMono-Regular.ttf");
 
-#[derive(Debug, NitrousModule)]
-pub struct WidgetBuffer {
+#[derive(Debug, NitrousResource)]
+pub struct WidgetBuffer<T>
+where
+    T: InputFocus,
+{
     // Widget state.
     root: Arc<RwLock<FloatBox>>,
     paint_context: PaintContext,
@@ -88,6 +96,7 @@ pub struct WidgetBuffer {
 
     // Auto-inserted widgets.
     terminal: Arc<RwLock<Terminal>>,
+    request_toggle_terminal: bool,
     show_terminal: bool,
 
     // The four key buffers.
@@ -99,20 +108,63 @@ pub struct WidgetBuffer {
     // The accumulated bind group for all widget rendering, encompassing everything we uploaded above.
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: Option<wgpu::BindGroup>,
+
+    phantom: PhantomData<T>,
 }
 
-#[inject_nitrous_module]
-impl WidgetBuffer {
+impl<T> Extension for WidgetBuffer<T>
+where
+    T: InputFocus,
+{
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        let state_dir = runtime.resource::<AppDirs>().state_dir.clone();
+        let widget = WidgetBuffer::<T>::new(&mut runtime.resource_mut::<Gpu>(), &state_dir)?;
+        runtime.insert_named_resource("widget", widget);
+
+        runtime
+            .sim_stage_mut(SimStage::HandleInput)
+            .add_system(Self::sys_handle_terminal_events.exclusive_system());
+        runtime.sim_stage_mut(SimStage::HandleInput).add_system(
+            Self::sys_handle_toggle_terminal.label("WidgetBuffer::sys_handle_toggle_terminal"),
+        );
+        runtime.sim_stage_mut(SimStage::HandleInput).add_system(
+            Self::sys_handle_input_events
+                .label("WidgetBuffer::sys_handle_input_events")
+                .before("WidgetBuffer::sys_handle_toggle_terminal"),
+        );
+        runtime
+            .sim_stage_mut(SimStage::PostScript)
+            .add_system(Self::sys_report_script_completions);
+
+        runtime
+            .frame_stage_mut(FrameStage::TrackStateChanges)
+            .add_system(Self::sys_track_state_changes);
+        runtime
+            .frame_stage_mut(FrameStage::EnsureGpuUpdated)
+            .add_system(Self::sys_ensure_uploaded);
+        runtime.frame_stage_mut(FrameStage::Render).add_system(
+            Self::sys_maintain_font_atlas
+                .before("UiRenderPass")
+                .label("WidgetBuffer::maintain_font_atlas"),
+        );
+        runtime
+            .frame_stage_mut(FrameStage::FrameEnd)
+            .add_system(Self::sys_handle_dump_texture);
+        Ok(())
+    }
+}
+
+#[inject_nitrous_resource]
+impl<T> WidgetBuffer<T>
+where
+    T: InputFocus,
+{
     const MAX_WIDGETS: usize = 512;
     const MAX_TEXT_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6;
     const MAX_BACKGROUND_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6; // note: rounded corners
     const MAX_IMAGE_VERTICES: usize = Self::MAX_WIDGETS * 4 * 6;
 
-    pub fn new(
-        gpu: &mut Gpu,
-        interpreter: &mut Interpreter,
-        state_dir: &Path,
-    ) -> Result<Arc<RwLock<Self>>> {
+    pub fn new(gpu: &mut Gpu, state_dir: &Path) -> Result<Self> {
         trace!("WidgetBuffer::new");
 
         let mut paint_context = PaintContext::new(gpu)?;
@@ -201,12 +253,13 @@ impl WidgetBuffer {
             .wrapped();
         root.write().add_child("terminal", terminal.clone());
 
-        let widget = Arc::new(RwLock::new(Self {
+        Ok(Self {
             root,
             paint_context,
             cursor_position: Position::origin(),
 
             terminal,
+            request_toggle_terminal: false,
             show_terminal: false,
 
             widget_info_buffer,
@@ -216,21 +269,19 @@ impl WidgetBuffer {
 
             bind_group_layout,
             bind_group: None,
-        }));
 
-        interpreter.put_global("widget", Value::Module(widget.clone()));
-
-        Ok(widget)
+            phantom: PhantomData::default(),
+        })
     }
 
     pub fn root_container(&self) -> Arc<RwLock<FloatBox>> {
         self.root.clone()
     }
 
-    #[method]
-    pub fn root(&self) -> Value {
-        Value::Module(self.root.clone())
-    }
+    // #[method]
+    // pub fn root(&self) -> Value {
+    //     Value::Module(self.root.clone())
+    // }
 
     pub fn add_font<S: Borrow<str> + Into<String>>(
         &mut self,
@@ -287,26 +338,16 @@ impl WidgetBuffer {
         0u32..self.paint_context.text_pool.len() as u32
     }
 
-    pub fn toggle_terminal(&mut self) {
-        match self.show_terminal {
-            true => self.hide_terminal(true),
-            false => self.show_terminal(true),
+    #[method]
+    pub fn toggle_terminal(&mut self, pressed: bool) {
+        if pressed {
+            self.request_toggle_terminal = true;
         }
     }
 
-    #[method]
-    pub fn show_terminal(&mut self, _pressed: bool) {
-        self.show_terminal = true;
-        self.terminal.write().set_visible(true);
-    }
-
-    #[method]
-    pub fn hide_terminal(&mut self, _pressed: bool) {
-        self.show_terminal = false;
-        self.terminal.write().set_visible(false);
-    }
-
-    pub fn is_toggle_terminal_event(&self, event: &InputEvent) -> bool {
+    // Since terminal-active mode consumes all keys instead of our bindings,
+    // we have to handle toggling as a special case.
+    fn is_toggle_terminal_event(&self, event: &InputEvent) -> bool {
         if let InputEvent::KeyboardKey {
             virtual_keycode,
             press_state,
@@ -325,39 +366,50 @@ impl WidgetBuffer {
         false
     }
 
-    pub fn sys_handle_input_events(
+    pub fn sys_handle_toggle_terminal(
         events: Res<InputEventVec>,
-        mut input_focus: ResMut<InputFocus>,
-        window: Res<Arc<RwLock<Window>>>,
-        mut interpreter: ResMut<Interpreter>,
-        widgets: Res<Arc<RwLock<WidgetBuffer>>>,
+        mut input_focus: ResMut<T>,
+        mut widgets: ResMut<WidgetBuffer<T>>,
     ) {
-        widgets
-            .write()
-            .handle_events(&events, *input_focus, &mut interpreter, &window.read())
-            .expect("Widgets::handle_events");
-
-        let widgets = widgets.read();
         if events
             .iter()
             .any(|event| widgets.is_toggle_terminal_event(event))
         {
+            widgets.request_toggle_terminal = true;
+        }
+
+        if widgets.request_toggle_terminal {
+            widgets.request_toggle_terminal = false;
             input_focus.toggle_terminal();
+            widgets.show_terminal = !widgets.show_terminal;
+            widgets.terminal.write().set_visible(widgets.show_terminal);
         }
     }
 
-    pub fn handle_events(
+    pub fn sys_handle_input_events(
+        events: Res<InputEventVec>,
+        input_focus: Res<T>,
+        window: Res<Window>,
+        mut herder: ResMut<ScriptHerder>,
+        mut widgets: ResMut<WidgetBuffer<T>>,
+    ) {
+        widgets
+            .handle_events(&events, *input_focus, &mut herder, &window)
+            .map_err(|e| {
+                error!("handle_input_events: {}\n{}", e, e.backtrace());
+                e
+            })
+            .ok();
+    }
+
+    fn handle_events(
         &mut self,
         events: &[InputEvent],
-        focus: InputFocus,
-        interpreter: &mut Interpreter,
+        focus: T,
+        herder: &mut ScriptHerder,
         win: &Window,
     ) -> Result<()> {
         for event in events {
-            if self.is_toggle_terminal_event(event) {
-                self.toggle_terminal();
-                continue;
-            }
             if let InputEvent::CursorMove { pixel_position, .. } = event {
                 let (x, y) = *pixel_position;
                 self.cursor_position = Position::new(
@@ -367,12 +419,51 @@ impl WidgetBuffer {
             }
             self.root_container().write().handle_event(
                 event,
-                focus,
+                if focus.is_terminal_focused() {
+                    WidgetFocus::Terminal
+                } else {
+                    WidgetFocus::Game
+                },
                 self.cursor_position,
-                interpreter,
+                herder,
             )?;
         }
         Ok(())
+    }
+
+    fn sys_handle_terminal_events(world: &mut World) {
+        if world.get_resource_mut::<T>().unwrap().is_terminal_focused() {
+            let events = world.get_resource::<InputEventVec>().unwrap().to_owned();
+            world.resource_scope(|world, widgets: Mut<WidgetBuffer<T>>| {
+                for event in events {
+                    widgets
+                        .terminal
+                        .write()
+                        .handle_terminal_events(&event, world)
+                        .ok();
+                }
+            })
+        }
+    }
+
+    fn sys_report_script_completions(
+        widgets: Res<WidgetBuffer<T>>,
+        completions: Res<ScriptCompletions>,
+    ) {
+        widgets
+            .terminal
+            .write()
+            .report_script_completions(&completions);
+    }
+
+    fn sys_track_state_changes(
+        step: Res<TimeStep>,
+        window: Res<Window>,
+        mut widgets: ResMut<WidgetBuffer<T>>,
+    ) {
+        widgets
+            .track_state_changes(*step.now(), &window)
+            .expect("Widgets::track_state_changes");
     }
 
     pub fn track_state_changes(&mut self, now: Instant, win: &Window) -> Result<()> {
@@ -390,12 +481,24 @@ impl WidgetBuffer {
         Ok(())
     }
 
+    pub fn sys_ensure_uploaded(
+        mut widget: ResMut<WidgetBuffer<T>>,
+        timestep: Res<TimeStep>,
+        gpu: Res<Gpu>,
+        window: Res<Window>,
+        tracker: Res<UploadTracker>,
+    ) {
+        widget
+            .ensure_uploaded(*timestep.now(), &gpu, &window, &tracker)
+            .ok();
+    }
+
     pub fn ensure_uploaded(
         &mut self,
         now: Instant,
-        gpu: &mut Gpu,
+        gpu: &Gpu,
         win: &Window,
-        tracker: &mut UploadTracker,
+        tracker: &UploadTracker,
     ) -> Result<()> {
         // Draw into the paint context.
         self.paint_context.reset_for_frame();
@@ -477,34 +580,48 @@ impl WidgetBuffer {
         Ok(())
     }
 
+    fn sys_handle_dump_texture(mut widgets: ResMut<WidgetBuffer<T>>, mut gpu: ResMut<Gpu>) {
+        widgets
+            .paint_context
+            .handle_dump_texture(&mut gpu)
+            .map_err(|e| {
+                error!("Widgets::handle_dump_texture: {}", e);
+                e
+            })
+            .ok();
+    }
+
+    fn sys_maintain_font_atlas(
+        widgets: Res<WidgetBuffer<T>>,
+        maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+    ) {
+        if let Some(encoder) = maybe_encoder.into_inner() {
+            widgets.paint_context.maintain_font_atlas(encoder);
+        }
+    }
+
     pub fn maintain_font_atlas(
         &self,
-        encoder: wgpu::CommandEncoder,
+        mut encoder: wgpu::CommandEncoder,
     ) -> Result<wgpu::CommandEncoder> {
-        self.paint_context.maintain_font_atlas(encoder)
+        self.paint_context.maintain_font_atlas(&mut encoder);
+        Ok(encoder)
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use gpu::TestResources;
-    use std::env::current_dir;
+    use input::DemoFocus;
 
     #[test]
     fn test_label_widget() -> Result<()> {
-        let TestResources {
-            window,
-            gpu,
-            mut interpreter,
-            ..
-        } = Gpu::for_test_unix()?;
+        let mut runtime = Gpu::for_test_unix()?;
+        runtime
+            .insert_resource(AppDirs::new(Some("nitrogen"), true).unwrap())
+            .insert_resource(TimeStep::new_60fps())
+            .load_extension::<WidgetBuffer<DemoFocus>>()?;
 
-        let widgets = WidgetBuffer::new(
-            &mut gpu.write(),
-            &mut interpreter,
-            &(current_dir()?.join("__dump__")),
-        )?;
         let label = Label::new(
             "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\
             สิบสองกษัตริย์ก่อนหน้าแลถัดไป       สององค์ไซร้โง่เขลาเบาปัญญา\
@@ -516,23 +633,13 @@ mod test {
             Y [ˈʏpsilɔn], Yen [jɛn], Yoga [ˈjoːgɑ]",
         )
         .wrapped();
-        widgets
-            .read()
+        runtime
+            .resource_mut::<WidgetBuffer<DemoFocus>>()
             .root_container()
             .write()
             .add_child("label", label);
 
-        widgets
-            .write()
-            .track_state_changes(Instant::now(), &window.read())?;
-
-        let mut tracker = Default::default();
-        widgets.write().ensure_uploaded(
-            Instant::now(),
-            &mut gpu.write(),
-            &window.read(),
-            &mut tracker,
-        )?;
+        runtime.run_frame_once();
 
         Ok(())
     }

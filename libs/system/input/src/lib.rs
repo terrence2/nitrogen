@@ -21,16 +21,19 @@ use anyhow::{bail, Result};
 use bevy_ecs::prelude::*;
 use log::warn;
 use parking_lot::Mutex;
+use runtime::{FrameStage, Runtime, SimStage};
 use smallvec::SmallVec;
 use std::{
     collections::HashMap,
+    fmt::Debug,
+    hash::Hash,
+    str::FromStr,
     sync::{
         mpsc::{channel, Receiver, TryRecvError},
         Arc,
     },
     time::Instant,
 };
-use winit::platform::run_return::EventLoopExtRunReturn;
 use winit::{
     event::{
         DeviceEvent, DeviceId, Event, KeyboardInput, MouseScrollDelta, StartCause, WindowEvent,
@@ -42,19 +45,69 @@ use winit::{
 pub type InputEventVec = SmallVec<[InputEvent; 8]>;
 pub type SystemEventVec = SmallVec<[SystemEvent; 8]>;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum InputFocus {
-    Game,
+pub fn test_make_input_events(mut events: Vec<InputEvent>) -> InputEventVec {
+    let mut out = InputEventVec::new();
+    for evt in events.drain(..) {
+        out.push(evt);
+    }
+    out
+}
+
+/// Enable applications to track focus for various purposes, with input focus falling into
+/// large scale classes that affect input processing in major ways.
+pub trait InputFocus:
+    Clone + Copy + Debug + Default + Eq + PartialEq + FromStr + Hash + Send + Sync + 'static
+{
+    fn name(&self) -> &'static str;
+    fn is_terminal_focused(&self) -> bool;
+    fn toggle_terminal(&mut self);
+}
+
+/// A simple two-state InputFocus for demo purposes.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub enum DemoFocus {
+    Demo,
     Terminal,
 }
 
-impl InputFocus {
-    pub fn toggle_terminal(&mut self) {
-        if *self == Self::Game {
-            *self = Self::Terminal;
-        } else {
-            *self = Self::Game;
+impl Default for DemoFocus {
+    fn default() -> Self {
+        Self::Demo
+    }
+}
+
+impl FromStr for DemoFocus {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> std::prelude::rust_2015::Result<Self, Self::Err> {
+        Ok(match s {
+            "demo" => Self::Demo,
+            "terminal" => Self::Terminal,
+            _ => bail!(
+                "unknown focus to bind in {}; expected \"demo\" or \"terminal\"",
+                s
+            ),
+        })
+    }
+}
+
+impl InputFocus for DemoFocus {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Demo => "demo",
+            Self::Terminal => "terminal",
         }
+    }
+
+    fn is_terminal_focused(&self) -> bool {
+        *self == Self::Terminal
+    }
+
+    fn toggle_terminal(&mut self) {
+        *self = match self {
+            Self::Terminal => Self::Demo,
+            Self::Demo => Self::Terminal,
+        };
     }
 }
 
@@ -81,22 +134,30 @@ impl InputController {
         proxy: EventLoopProxy<MetaEvent>,
         input_event_source: Receiver<InputEvent>,
         system_event_source: Receiver<SystemEvent>,
-    ) -> Self {
-        Self {
+        runtime: &mut Runtime,
+    ) -> Arc<Mutex<Self>> {
+        let input_controller = Arc::new(Mutex::new(Self {
             proxy,
             input_event_source,
             system_event_source,
-        }
-    }
+        }));
 
-    fn wrapped(self) -> Arc<Mutex<Self>> {
-        Arc::new(Mutex::new(self))
-    }
+        // Hack so that our window APIs work properly from the get-go.
+        // TODO: is this needed (or even working) on all platforms?
+        input_controller.lock().wait_for_window_configuration().ok();
 
-    pub fn create_resources(&self, world: &mut World) {
-        world.insert_resource(InputEventVec::new());
-        world.insert_resource(SystemEventVec::new());
-        world.insert_resource(InputFocus::Game);
+        runtime.insert_resource(input_controller.clone());
+        runtime.insert_resource(InputEventVec::new());
+        runtime.insert_resource(SystemEventVec::new());
+
+        runtime
+            .sim_stage_mut(SimStage::ReadInput)
+            .add_system(Self::sys_read_input_events);
+        runtime
+            .frame_stage_mut(FrameStage::ReadSystem)
+            .add_system(Self::sys_read_system_events);
+
+        input_controller
     }
 
     pub fn sys_read_input_events(
@@ -125,21 +186,9 @@ impl InputController {
         };
     }
 
-    pub fn for_test(event_loop: &EventLoop<MetaEvent>) -> Self {
-        let (_, rx_input_event) = channel();
-        let (_, rx_system_event) = channel();
-        InputController::new(event_loop.create_proxy(), rx_input_event, rx_system_event)
-    }
-
-    pub fn for_web(event_loop: &EventLoop<MetaEvent>) -> Self {
-        let (_, rx_input_event) = channel();
-        let (_, rx_system_event) = channel();
-        InputController::new(event_loop.create_proxy(), rx_input_event, rx_system_event)
-    }
-
     #[cfg(unix)]
-    pub fn for_test_unix() -> Result<(Window, Self)> {
-        use winit::platform::unix::EventLoopExtUnix;
+    pub fn for_test_unix() -> Result<Runtime> {
+        use winit::platform::{run_return::EventLoopExtRunReturn, unix::EventLoopExtUnix};
         let mut event_loop = EventLoop::<MetaEvent>::new_any_thread();
         let os_window = Window::new(&event_loop).unwrap();
         let mut have_config = false;
@@ -157,7 +206,17 @@ impl InputController {
                 *flow = winit::event_loop::ControlFlow::Exit;
             });
         }
-        Ok((os_window, Self::for_test(&event_loop)))
+        let mut runtime = Runtime::default();
+        let (_, rx_input_event) = channel();
+        let (_, rx_system_event) = channel();
+        InputController::new(
+            event_loop.create_proxy(),
+            rx_input_event,
+            rx_system_event,
+            &mut runtime,
+        );
+        runtime.insert_resource(os_window);
+        Ok(runtime)
     }
 
     pub fn quit(&self) -> Result<()> {
@@ -291,24 +350,27 @@ impl InputSystem {
     #[cfg(not(target_arch = "wasm32"))]
     pub fn run_forever<M>(window_builder: WindowBuilder, mut window_main: M) -> Result<()>
     where
-        M: 'static + Send + FnMut(Window, Arc<Mutex<InputController>>) -> Result<()>,
+        M: 'static + Send + FnMut(Runtime) -> Result<()>,
     {
         let event_loop = EventLoop::<MetaEvent>::with_user_event();
         let window = window_builder.build(&event_loop)?;
         let (tx_input_event, rx_input_event) = channel();
         let (tx_system_event, rx_system_event) = channel();
-        let input_controller =
-            InputController::new(event_loop.create_proxy(), rx_input_event, rx_system_event);
+        let event_loop_proxy = event_loop.create_proxy();
 
         // Spawn the game thread.
         std::thread::spawn(move || {
-            let input_controller = input_controller.wrapped();
+            let mut runtime = Runtime::default();
+            runtime.insert_resource(window);
 
-            // Hack so that our window APIs work properly from the get-go.
-            // TODO: is this needed (or even working) on all platforms?
-            input_controller.lock().wait_for_window_configuration().ok();
+            let input_controller = InputController::new(
+                event_loop_proxy,
+                rx_input_event,
+                rx_system_event,
+                &mut runtime,
+            );
 
-            if let Err(e) = window_main(window, input_controller.clone()) {
+            if let Err(e) = window_main(runtime) {
                 println!("Error: {:?}", e);
             }
             input_controller.lock().quit().ok();

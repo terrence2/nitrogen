@@ -18,14 +18,14 @@ use crate::{
     paint_context::PaintContext,
     region::{Extent, Position, Region},
     text_run::TextRun,
-    widget::Widget,
+    widget::{Widget, WidgetFocus},
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
 use gpu::Gpu;
-use input::{InputEvent, InputFocus};
-use nitrous::Interpreter;
+use input::InputEvent;
 use parking_lot::RwLock;
+use runtime::ScriptHerder;
 use std::{sync::Arc, time::Instant};
 use window::{
     size::{AbsSize, LeftBound, Size},
@@ -98,6 +98,10 @@ impl TextEdit {
         self.lines.push(self.make_run(markup));
     }
 
+    pub fn last_line_mut(&mut self) -> Option<&mut TextRun> {
+        self.lines.last_mut()
+    }
+
     fn make_run(&self, text: &str) -> TextRun {
         TextRun::empty()
             .with_hidden_selection()
@@ -163,9 +167,9 @@ impl Widget for TextEdit {
     fn handle_event(
         &mut self,
         _event: &InputEvent,
-        _focus: InputFocus,
+        _focus: WidgetFocus,
         _cursor_position: Position<AbsSize>,
-        _interpreter: &mut Interpreter,
+        _herder: &mut ScriptHerder,
     ) -> Result<()> {
         assert!(self.read_only);
         Ok(())

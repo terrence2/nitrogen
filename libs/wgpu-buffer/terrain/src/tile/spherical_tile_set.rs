@@ -95,7 +95,7 @@ impl TileSet for SphericalHeightTileSet {
         self.common.finish_visibility_update(catalog);
     }
 
-    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) {
+    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &UploadTracker) {
         self.common.ensure_uploaded(gpu, tracker);
     }
 
@@ -112,7 +112,7 @@ impl TileSet for SphericalHeightTileSet {
         vertex_count: u32,
         mesh_bind_group: &'a BindGroup,
         mut cpass: ComputePass<'a>,
-    ) -> Result<ComputePass<'a>> {
+    ) -> ComputePass<'a> {
         cpass.set_pipeline(&self.displace_height_pipeline);
         cpass.set_bind_group(Group::TerrainDisplaceMesh.index(), mesh_bind_group, &[]);
         cpass.set_bind_group(
@@ -124,7 +124,7 @@ impl TileSet for SphericalHeightTileSet {
         let wg_x = (vertex_count % WORKGROUP_WIDTH).max(1);
         let wg_y = (vertex_count / WORKGROUP_WIDTH).max(1);
         cpass.dispatch(wg_x, wg_y, 1);
-        Ok(cpass)
+        cpass
     }
 
     fn accumulate_normals<'a>(
@@ -133,8 +133,8 @@ impl TileSet for SphericalHeightTileSet {
         _globals_buffer: &'a GlobalParametersBuffer,
         _accumulate_common_bind_group: &'a wgpu::BindGroup,
         cpass: ComputePass<'a>,
-    ) -> Result<ComputePass<'a>> {
-        Ok(cpass)
+    ) -> ComputePass<'a> {
+        cpass
     }
 
     fn accumulate_colors<'a>(
@@ -143,8 +143,8 @@ impl TileSet for SphericalHeightTileSet {
         _globals_buffer: &'a GlobalParametersBuffer,
         _accumulate_common_bind_group: &'a wgpu::BindGroup,
         cpass: ComputePass<'a>,
-    ) -> Result<ComputePass<'a>> {
-        Ok(cpass)
+    ) -> ComputePass<'a> {
+        cpass
     }
 }
 
@@ -216,7 +216,7 @@ impl TileSet for SphericalColorTileSet {
         self.common.finish_visibility_update(catalog)
     }
 
-    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) {
+    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &UploadTracker) {
         self.common.ensure_uploaded(gpu, tracker);
     }
 
@@ -233,8 +233,8 @@ impl TileSet for SphericalColorTileSet {
         _vertex_count: u32,
         _mesh_bind_group: &'a BindGroup,
         cpass: ComputePass<'a>,
-    ) -> Result<ComputePass<'a>> {
-        Ok(cpass)
+    ) -> ComputePass<'a> {
+        cpass
     }
 
     fn accumulate_normals<'a>(
@@ -243,8 +243,8 @@ impl TileSet for SphericalColorTileSet {
         _globals_buffer: &'a GlobalParametersBuffer,
         _accumulate_common_bind_group: &'a wgpu::BindGroup,
         cpass: ComputePass<'a>,
-    ) -> Result<ComputePass<'a>> {
-        Ok(cpass)
+    ) -> ComputePass<'a> {
+        cpass
     }
 
     fn accumulate_colors<'a>(
@@ -253,7 +253,7 @@ impl TileSet for SphericalColorTileSet {
         globals_buffer: &'a GlobalParametersBuffer,
         accumulate_common_bind_group: &'a wgpu::BindGroup,
         mut cpass: ComputePass<'a>,
-    ) -> Result<ComputePass<'a>> {
+    ) -> ComputePass<'a> {
         cpass.set_pipeline(&self.accumulate_spherical_colors_pipeline);
         cpass.set_bind_group(Group::Globals.index(), globals_buffer.bind_group(), &[]);
         cpass.set_bind_group(
@@ -267,7 +267,7 @@ impl TileSet for SphericalColorTileSet {
             &[],
         );
         cpass.dispatch(extent.width / 8, extent.height / 8, 1);
-        Ok(cpass)
+        cpass
     }
 }
 
@@ -339,7 +339,7 @@ impl TileSet for SphericalNormalsTileSet {
         self.common.finish_visibility_update(catalog);
     }
 
-    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &mut UploadTracker) {
+    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &UploadTracker) {
         self.common.ensure_uploaded(gpu, tracker);
     }
 
@@ -356,8 +356,8 @@ impl TileSet for SphericalNormalsTileSet {
         _vertex_count: u32,
         _mesh_bind_group: &'a BindGroup,
         cpass: ComputePass<'a>,
-    ) -> Result<ComputePass<'a>> {
-        Ok(cpass)
+    ) -> ComputePass<'a> {
+        cpass
     }
 
     fn accumulate_normals<'a>(
@@ -366,7 +366,7 @@ impl TileSet for SphericalNormalsTileSet {
         globals_buffer: &'a GlobalParametersBuffer,
         accumulate_common_bind_group: &'a wgpu::BindGroup,
         mut cpass: ComputePass<'a>,
-    ) -> Result<ComputePass<'a>> {
+    ) -> ComputePass<'a> {
         cpass.set_pipeline(&self.accumulate_spherical_normals_pipeline);
         cpass.set_bind_group(Group::Globals.index(), globals_buffer.bind_group(), &[]);
         cpass.set_bind_group(
@@ -381,7 +381,7 @@ impl TileSet for SphericalNormalsTileSet {
         );
         cpass.dispatch(extent.width / 8, extent.height / 8, 1);
 
-        Ok(cpass)
+        cpass
     }
 
     fn accumulate_colors<'a>(
@@ -390,7 +390,7 @@ impl TileSet for SphericalNormalsTileSet {
         _globals_buffer: &'a GlobalParametersBuffer,
         _accumulate_common_bind_group: &'a wgpu::BindGroup,
         cpass: ComputePass<'a>,
-    ) -> Result<ComputePass<'a>> {
-        Ok(cpass)
+    ) -> ComputePass<'a> {
+        cpass
     }
 }

@@ -91,16 +91,16 @@ impl FontContext {
         })
     }
 
-    pub fn make_upload_buffer(&mut self, gpu: &mut Gpu, tracker: &mut UploadTracker) -> Result<()> {
+    pub fn make_upload_buffer(&mut self, gpu: &Gpu, tracker: &UploadTracker) -> Result<()> {
         self.glyph_sheet.make_upload_buffer(gpu, tracker)
     }
 
-    pub fn maintain_font_atlas(
-        &self,
-        mut encoder: wgpu::CommandEncoder,
-    ) -> Result<wgpu::CommandEncoder> {
-        self.glyph_sheet.maintain_gpu_resources(&mut encoder)?;
-        Ok(encoder)
+    pub fn handle_dump_texture(&mut self, gpu: &mut Gpu) -> Result<()> {
+        self.glyph_sheet.handle_dump_texture(gpu)
+    }
+
+    pub fn maintain_font_atlas(&self, encoder: &mut wgpu::CommandEncoder) {
+        self.glyph_sheet.maintain_gpu_resources(encoder);
     }
 
     pub fn glyph_sheet_width(&self) -> u32 {

@@ -33,8 +33,8 @@ pub use crate::{
 use anyhow::Result;
 use gpu::Gpu;
 use log::trace;
-use parking_lot::RwLock;
-use std::{mem, num::NonZeroU64, sync::Arc};
+use runtime::{Extension, Runtime};
+use std::{mem, num::NonZeroU64};
 
 #[derive(Debug)]
 pub struct AtmosphereBuffer {
@@ -42,8 +42,16 @@ pub struct AtmosphereBuffer {
     bind_group: wgpu::BindGroup,
 }
 
+impl Extension for AtmosphereBuffer {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        let atmo = AtmosphereBuffer::new(&mut runtime.resource_mut::<Gpu>())?;
+        runtime.insert_resource(atmo);
+        Ok(())
+    }
+}
+
 impl AtmosphereBuffer {
-    pub fn new(gpu: &mut Gpu) -> Result<Arc<RwLock<Self>>> {
+    pub fn new(gpu: &mut Gpu) -> Result<Self> {
         trace!("AtmosphereBuffer::new");
 
         let atmosphere_params_buffer = TableHelpers::initial_atmosphere_parameters(gpu);
@@ -229,10 +237,10 @@ impl AtmosphereBuffer {
             ],
         });
 
-        Ok(Arc::new(RwLock::new(Self {
+        Ok(Self {
             bind_group_layout,
             bind_group,
-        })))
+        })
     }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {

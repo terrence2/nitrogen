@@ -12,47 +12,70 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-mod injector;
+mod component;
+mod component_injector;
+mod injector_common;
+mod resource;
+mod resource_injector;
 
-use crate::injector::{make_augment_method, make_derive_nitrous_module, make_inject_attribute};
+use crate::injector_common::make_augment_method;
 
 use proc_macro::TokenStream;
-use syn::{parse2, DeriveInput, ItemFn, ItemImpl};
+use syn::{parse2, ItemFn};
 
-/// Adds a derivation of the nitrous::Module trait and associated methods.
-/// These methods proxy to various _inner versions, which are built
-/// using #[method], #[getter], and #[setter] attributes on the impl block.
-#[proc_macro_derive(NitrousModule)]
-pub fn derive_nitrous_module(input: TokenStream) -> TokenStream {
-    let input = proc_macro2::TokenStream::from(input);
-
-    let output: proc_macro2::TokenStream = {
-        let item: DeriveInput = parse2(input).unwrap();
-        make_derive_nitrous_module(item)
-    };
-
-    proc_macro::TokenStream::from(output)
+/// Adds a derivation of the nitrous::ScriptResource trait and associated methods.
+/// These methods proxy to various _inner versions, which are built using #[method],
+/// #[getter], and #[setter] attributes on the impl block, built by using
+/// #[inject_nitrous] on an impl.
+#[proc_macro_derive(NitrousResource)]
+pub fn derive_nitrous_resource(input: TokenStream) -> TokenStream {
+    let ast = resource::parse(input);
+    let model = resource::analyze(ast);
+    let ir = resource::lower(model);
+    resource::codegen(ir)
 }
 
-/// Add to the top of an impl block to collect all tagged methods and build
-/// call and attributes for Nitrous. Note that this is not the
-/// external trait, which is built from #[derive(NitrousModule)] above the struct.
+/// Adds a derivation of the nitrous::ScriptComponent trait and associated methods.
+/// These methods proxy to various _inner versions, which are built using #[method],
+/// #[getter], and #[setter] attributes on the impl block, built by using
+/// #[inject_nitrous] on an impl.
+#[proc_macro_derive(NitrousComponent, attributes(Name))]
+pub fn derive_nitrous_component(input: TokenStream) -> TokenStream {
+    let ast = component::parse(input);
+    let model = component::analyze(ast);
+    let ir = component::lower(model);
+    component::codegen(ir)
+}
+
+/// Add to the top of a Resource impl block to collect all tagged methods and build
+/// call and attributes for Nitrous. Note that this is not the external trait,
+/// which is built from #[derive(NitrousResource)] above the struct.
 #[proc_macro_attribute]
-pub fn inject_nitrous_module(
-    _attr: proc_macro::TokenStream,
-    input: proc_macro::TokenStream,
+pub fn inject_nitrous_resource(
+    args: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
-    let input = proc_macro2::TokenStream::from(input);
-
-    let output: proc_macro2::TokenStream = {
-        let item: ItemImpl = parse2(input).unwrap();
-        make_inject_attribute(item)
-    };
-
-    proc_macro::TokenStream::from(output)
+    let ast = resource_injector::parse(args, item);
+    let model = resource_injector::analyze(ast);
+    let ir = resource_injector::lower(model);
+    resource_injector::codegen(ir)
 }
 
-/// Just a tag for the injector.
+/// Add to the top of a Component impl block to collect all tagged methods and build
+/// call and attributes for Nitrous. Note that this is not the external trait,
+/// which is built from #[derive(NitrousComponent)] above the struct.
+#[proc_macro_attribute]
+pub fn inject_nitrous_component(
+    args: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let ast = component_injector::parse(args, item);
+    let model = component_injector::analyze(ast);
+    let ir = component_injector::lower(model);
+    component_injector::codegen(ir)
+}
+
+/// A tag for #[nitrous_injector] indicating to include this function as a method.
 #[proc_macro_attribute]
 pub fn method(
     _attr: proc_macro::TokenStream,

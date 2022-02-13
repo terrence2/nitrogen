@@ -1,5 +1,6 @@
 // autoexec.n2o: Runs after startup, before the main loop starts.
 let location := "Everest";
-arcball.set_target(arcball.notable_location(location));
-arcball.set_eye(arcball.eye_for(location));
+@player.arcball.set_target(@player.arcball.notable_location(location));
+@player.arcball.set_eye(@player.arcball.eye_for(location));
+orrery.set_date_time(1964, 2, 24, 12, 0, 0);
 

@@ -18,10 +18,9 @@ use bevy_ecs::prelude::*;
 use chrono::{prelude::*, Duration};
 use lazy_static::lazy_static;
 use nalgebra::{Point3, Unit, UnitQuaternion, Vector3, Vector4};
-use nitrous::{Interpreter, Value};
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
-use parking_lot::RwLock;
-use std::{f64::consts::PI, sync::Arc};
+use nitrous::{inject_nitrous_resource, method, NitrousResource};
+use runtime::{Extension, Runtime, SimStage};
+use std::f64::consts::PI;
 
 /**
  * Orbital mechanics works great. Time, however, does not. The time reference for ephimeris is a
@@ -298,7 +297,7 @@ lazy_static! {
     };
 }
 
-#[derive(Debug, NitrousModule)]
+#[derive(Debug, NitrousResource)]
 pub struct Orrery {
     earth_moon_barycenter: KeplerianElements,
 
@@ -306,17 +305,31 @@ pub struct Orrery {
     in_debug_override: bool,
 }
 
-#[inject_nitrous_module]
+impl Extension for Orrery {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        let orrery = Orrery::new_current_time()?;
+        runtime.insert_named_resource("orrery", orrery);
+        runtime
+            .sim_stage_mut(SimStage::TimeStep)
+            .add_system(Self::sys_step_time);
+        runtime.run_string(
+            r#"
+                bindings.bind("mouse2", "orrery.move_sun(pressed)");
+                bindings.bind("mouseMotion", "orrery.handle_mousemove(dx)");
+            "#,
+        )?;
+        Ok(())
+    }
+}
+
+#[inject_nitrous_resource]
 impl Orrery {
-    pub fn new_current_time(interpreter: &mut Interpreter) -> Result<Arc<RwLock<Self>>> {
-        Self::new(Utc::now(), interpreter)
+    pub fn new_current_time() -> Result<Self> {
+        Self::new(Utc::now())
     }
 
-    pub fn new(
-        initial_utc: DateTime<Utc>,
-        interpreter: &mut Interpreter,
-    ) -> Result<Arc<RwLock<Self>>> {
-        let orrery = Arc::new(RwLock::new(Self {
+    pub fn new(initial_utc: DateTime<Utc>) -> Result<Self> {
+        Ok(Self {
             //EM Bary   1.00000018      0.01673163     -0.00054346      100.46691572    102.93005885     -5.11260389
             //         -0.00000003     -0.00003661     -0.01337178    35999.37306329      0.31795260     -0.24123856
             earth_moon_barycenter: KeplerianElements::new(
@@ -340,22 +353,28 @@ impl Orrery {
 
             now: initial_utc,
             in_debug_override: false,
-        }));
-
-        interpreter.put_global("orrery", Value::Module(orrery.clone()));
-        interpreter.interpret_once(
-            r#"
-                let bindings := mapper.create_bindings("orrery");
-                bindings.bind("mouse2", "orrery.move_sun(pressed)");
-                bindings.bind("mouseMotion", "orrery.handle_mousemove(dx)");
-            "#,
-        )?;
-
-        Ok(orrery)
+        })
     }
 
     pub fn get_time(&self) -> DateTime<Utc> {
         self.now
+    }
+
+    #[method]
+    pub fn set_date_time(
+        &mut self,
+        year: i64,
+        month: i64,
+        day: i64,
+        hour: i64,
+        min: i64,
+        sec: i64,
+    ) {
+        self.now = Utc.ymd(year as i32, month as u32, day as u32).and_hms(
+            hour as u32,
+            min as u32,
+            sec as u32,
+        );
     }
 
     #[method]
@@ -381,10 +400,8 @@ impl Orrery {
         Ok(t.timestamp_nanos() as f64 / 1_000_000.)
     }
 
-    pub fn sys_step_time(step: Res<TimeStep>, orrery: Res<Arc<RwLock<Orrery>>>) {
-        orrery
-            .write()
-            .step_time(Duration::from_std(*step.step()).expect("in range"));
+    pub fn sys_step_time(step: Res<TimeStep>, mut orrery: ResMut<Orrery>) {
+        orrery.step_time(Duration::from_std(*step.step()).expect("in range"));
     }
 
     pub fn step_time(&mut self, dt: Duration) {
@@ -474,40 +491,41 @@ impl Orrery {
 mod tests {
     use super::*;
     use event_mapper::EventMapper;
+    use input::DemoFocus;
 
     #[test]
     fn it_works() -> Result<()> {
-        let mut interpreter = Interpreter::default();
-        let _mapper = EventMapper::new(&mut interpreter);
-        let orrery = Orrery::new(Utc::now(), &mut interpreter)?;
-        orrery.read().sun_direction();
+        let runtime = Runtime::default()
+            .with_extension::<EventMapper<DemoFocus>>()?
+            .with_extension::<Orrery>()?;
+        runtime.resource::<Orrery>().sun_direction();
         Ok(())
     }
 
     #[test]
     fn test_leap_seconds() -> Result<()> {
-        let mut interpreter = Interpreter::default();
-        let _mapper = EventMapper::new(&mut interpreter);
+        let mut runtime = Runtime::default()
+            .with_extension::<EventMapper<DemoFocus>>()?
+            .with_extension::<Orrery>()?;
+        runtime
+            .resource_mut::<Orrery>()
+            .set_date_time(2020, 1, 1, 12, 0, 0);
         assert_eq!(
-            Orrery::new(Utc.ymd(2020, 1, 1).and_hms(12, 0, 0), &mut interpreter)?
-                .read()
-                .num_leap_seconds(),
+            runtime.resource::<Orrery>().num_leap_seconds(),
             Duration::seconds(27)
         );
-        let mut interpreter = Interpreter::default();
-        let _mapper = EventMapper::new(&mut interpreter);
+        runtime
+            .resource_mut::<Orrery>()
+            .set_date_time(2010, 1, 1, 12, 0, 0);
         assert_eq!(
-            Orrery::new(Utc.ymd(2010, 1, 1).and_hms(12, 0, 0), &mut interpreter)?
-                .read()
-                .num_leap_seconds(),
+            runtime.resource::<Orrery>().num_leap_seconds(),
             Duration::seconds(24)
         );
-        let mut interpreter = Interpreter::default();
-        let _mapper = EventMapper::new(&mut interpreter);
+        runtime
+            .resource_mut::<Orrery>()
+            .set_date_time(1969, 1, 1, 12, 0, 0);
         assert_eq!(
-            Orrery::new(Utc.ymd(1969, 1, 1).and_hms(12, 0, 0), &mut interpreter)?
-                .read()
-                .num_leap_seconds(),
+            runtime.resource::<Orrery>().num_leap_seconds(),
             Duration::seconds(0)
         );
         Ok(())

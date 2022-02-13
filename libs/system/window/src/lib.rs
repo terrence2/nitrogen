@@ -18,10 +18,9 @@ use anyhow::{bail, Result};
 use bevy_ecs::prelude::*;
 use input::{SystemEvent, SystemEventVec};
 use log::info;
-use nitrous::{Interpreter, Value};
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
-use parking_lot::RwLock;
-use std::{fmt::Debug, str::FromStr, string::ToString, sync::Arc};
+use nitrous::{inject_nitrous_resource, method, NitrousResource};
+use runtime::{Extension, FrameStage, Runtime};
+use std::{fmt::Debug, str::FromStr, string::ToString};
 use structopt::StructOpt;
 
 pub use winit::{
@@ -208,27 +207,41 @@ impl DisplayConfig {
     }
 }
 
-#[derive(Debug, NitrousModule)]
+#[derive(Debug, NitrousResource)]
 pub struct Window {
     os_window: OsWindow,
     config: DisplayConfig,
     config_changed: bool,
 }
 
-#[inject_nitrous_module]
+impl Extension for Window {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        let display_config = DisplayConfig::discover(
+            runtime.resource::<DisplayOpts>(),
+            runtime.resource::<OsWindow>(),
+        );
+
+        // FIXME: can we pull this off the runtime when we need it?
+        let os_window = runtime.remove_resource::<OsWindow>().unwrap();
+
+        let window = Window::new(os_window, display_config);
+        runtime.insert_named_resource("window", window);
+        runtime.insert_resource(None as Option<DisplayConfig>);
+        runtime
+            .frame_stage_mut(FrameStage::HandleSystem)
+            .add_system(Self::sys_handle_system_events.label("Window::sys_handle_system_events"));
+        Ok(())
+    }
+}
+
+#[inject_nitrous_resource]
 impl Window {
-    pub fn new(
-        os_window: OsWindow,
-        config: DisplayConfig,
-        interpreter: &mut Interpreter,
-    ) -> Result<Arc<RwLock<Self>>> {
-        let win = Arc::new(RwLock::new(Self {
+    pub fn new(os_window: OsWindow, config: DisplayConfig) -> Self {
+        Self {
             os_window,
             config,
             config_changed: false,
-        }));
-        interpreter.put_global("window", Value::Module(win.clone()));
-        Ok(win)
+        }
     }
 
     fn note_display_config_change(&mut self) {
@@ -237,10 +250,10 @@ impl Window {
 
     pub fn sys_handle_system_events(
         events: Res<SystemEventVec>,
-        window: Res<Arc<RwLock<Window>>>,
+        mut window: ResMut<Window>,
         mut updated_config: ResMut<Option<DisplayConfig>>,
     ) {
-        *updated_config = window.write().handle_system_events(&events);
+        *updated_config = window.handle_system_events(&events);
     }
 
     pub fn handle_system_events(&mut self, events: &[SystemEvent]) -> Option<DisplayConfig> {
@@ -363,9 +376,11 @@ mod tests {
 
     #[test]
     fn it_works() -> Result<()> {
-        let (os_window, _) = input::InputController::for_test_unix()?;
-        let mut interpreter = Interpreter::default();
-        let _win_handle = Window::new(os_window, DisplayConfig::for_test(), &mut interpreter)?;
+        let mut runtime = input::InputController::for_test_unix()?;
+        runtime
+            .insert_resource(DisplayOpts::default())
+            .load_extension::<Window>()?;
+        assert!(runtime.resource::<Window>().width() > 0);
         Ok(())
     }
 }

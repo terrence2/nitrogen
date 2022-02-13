@@ -16,15 +16,19 @@ use anyhow::Result;
 use bevy_ecs::prelude::*;
 use global_data::GlobalParametersBuffer;
 use gpu::{DisplayConfig, Gpu};
+use input::InputFocus;
 use log::trace;
-use parking_lot::RwLock;
+use runtime::{Extension, FrameStage, Runtime};
 use shader_shared::Group;
-use std::sync::Arc;
+use std::marker::PhantomData;
 use widget::{WidgetBuffer, WidgetVertex};
 use world::WorldRenderPass;
 
 #[derive(Debug)]
-pub struct UiRenderPass {
+pub struct UiRenderPass<T>
+where
+    T: InputFocus,
+{
     // Offscreen render targets
     deferred_texture: (wgpu::Texture, wgpu::TextureView),
     deferred_depth: (wgpu::Texture, wgpu::TextureView),
@@ -35,15 +39,44 @@ pub struct UiRenderPass {
     background_pipeline: wgpu::RenderPipeline,
     // image_pipeline: wgpu::RenderPipeline,
     text_pipeline: wgpu::RenderPipeline,
+
+    widget_type_holder: PhantomData<T>,
 }
 
-impl UiRenderPass {
+impl<T> Extension for UiRenderPass<T>
+where
+    T: InputFocus,
+{
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        let ui = UiRenderPass::new(
+            runtime.resource::<WidgetBuffer<T>>(),
+            runtime.resource::<WorldRenderPass>(),
+            runtime.resource::<GlobalParametersBuffer>(),
+            runtime.resource::<Gpu>(),
+        )?;
+        runtime.insert_resource(ui);
+        runtime
+            .frame_stage_mut(FrameStage::HandleDisplayChange)
+            .add_system(Self::sys_handle_display_config_change);
+        runtime.frame_stage_mut(FrameStage::Render).add_system(
+            Self::sys_render_ui
+                .before("CompositeRenderPass")
+                .label("UiRenderPass"),
+        );
+        Ok(())
+    }
+}
+
+impl<T> UiRenderPass<T>
+where
+    T: InputFocus,
+{
     pub fn new(
-        widget_buffer: &WidgetBuffer,
+        widget_buffer: &WidgetBuffer<T>,
         world_render_pass: &WorldRenderPass,
         global_data: &GlobalParametersBuffer,
-        gpu: &mut Gpu,
-    ) -> Result<Arc<RwLock<Self>>> {
+        gpu: &Gpu,
+    ) -> Result<Self> {
         trace!("UiRenderPass::new");
 
         // Binding layout for composite to read our offscreen render.
@@ -242,7 +275,7 @@ impl UiRenderPass {
                 multiview: None,
             });
 
-        let ui = Arc::new(RwLock::new(Self {
+        Ok(Self {
             deferred_texture,
             deferred_depth,
             deferred_sampler,
@@ -251,11 +284,9 @@ impl UiRenderPass {
 
             background_pipeline,
             text_pipeline,
-        }));
 
-        // gpu.register_render_extent_change_receiver(ui.clone());
-
-        Ok(ui)
+            widget_type_holder: PhantomData::default(),
+        })
     }
 
     fn _make_deferred_texture_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
@@ -334,12 +365,10 @@ impl UiRenderPass {
 
     pub fn sys_handle_display_config_change(
         updated_config: Res<Option<DisplayConfig>>,
-        gpu: Res<Arc<RwLock<Gpu>>>,
-        ui: Res<Arc<RwLock<UiRenderPass>>>,
+        gpu: Res<Gpu>,
+        mut ui: ResMut<UiRenderPass<T>>,
     ) {
         if updated_config.is_some() {
-            let mut ui = ui.write();
-            let gpu = gpu.read();
             ui.handle_render_extent_changed(&gpu)
                 .expect("UI::handle_render_extent_changed")
         }
@@ -391,13 +420,32 @@ impl UiRenderPass {
         )
     }
 
+    fn sys_render_ui(
+        ui: Res<UiRenderPass<T>>,
+        globals: Res<GlobalParametersBuffer>,
+        widgets: Res<WidgetBuffer<T>>,
+        world: Res<WorldRenderPass>,
+        maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+    ) {
+        if let Some(encoder) = maybe_encoder.into_inner() {
+            let (color_attachments, depth_stencil_attachment) = ui.offscreen_target();
+            let render_pass_desc_ref = wgpu::RenderPassDescriptor {
+                label: Some(concat!("non-screen-render-pass-ui-draw-offscreen",)),
+                color_attachments: &color_attachments,
+                depth_stencil_attachment,
+            };
+            let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
+            let _rpass = ui.render_ui(rpass, &globals, &widgets, &world);
+        }
+    }
+
     pub fn render_ui<'a>(
         &'a self,
         mut rpass: wgpu::RenderPass<'a>,
         global_data: &'a GlobalParametersBuffer,
-        widget_buffer: &'a WidgetBuffer,
+        widget_buffer: &'a WidgetBuffer<T>,
         world: &'a WorldRenderPass,
-    ) -> Result<wgpu::RenderPass<'a>> {
+    ) -> wgpu::RenderPass<'a> {
         // Background
         rpass.set_pipeline(&self.background_pipeline);
         rpass.set_bind_group(Group::Globals.index(), global_data.bind_group(), &[]);
@@ -413,6 +461,6 @@ impl UiRenderPass {
         rpass.set_vertex_buffer(0, widget_buffer.text_vertex_buffer());
         rpass.draw(widget_buffer.text_vertex_range(), 0..1);
 
-        Ok(rpass)
+        rpass
     }
 }

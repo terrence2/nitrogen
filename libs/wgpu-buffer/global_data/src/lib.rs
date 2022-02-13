@@ -14,14 +14,14 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{Kilometers, Meters};
 use anyhow::Result;
+use bevy_ecs::prelude::*;
 use camera::Camera;
 use core::num::NonZeroU64;
 use gpu::{Gpu, UploadTracker};
 use nalgebra::{convert, Matrix3, Matrix4, Point3, Vector3, Vector4};
-use nitrous::{Interpreter, Value};
-use nitrous_injector::{inject_nitrous_module, method, NitrousModule};
+use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use orrery::Orrery;
-use parking_lot::RwLock;
+use runtime::{Extension, FrameStage, Runtime};
 use std::{mem, sync::Arc};
 use window::Window;
 use zerocopy::{AsBytes, FromBytes};
@@ -146,7 +146,7 @@ impl Globals {
     }
 }
 
-#[derive(Debug, NitrousModule)]
+#[derive(Debug, NitrousResource)]
 pub struct GlobalParametersBuffer {
     bind_group_layout: wgpu::BindGroupLayout,
     bind_group: wgpu::BindGroup,
@@ -156,11 +156,35 @@ pub struct GlobalParametersBuffer {
     tone_gamma: f32,
 }
 
-#[inject_nitrous_module]
+impl Extension for GlobalParametersBuffer {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        let globals = GlobalParametersBuffer::new(runtime.resource::<Gpu>().device());
+
+        // TODO:  move to configuration, once that's a thing
+        runtime.run_string(
+            r#"
+                bindings.bind("LBracket", "globals.decrease_gamma(pressed)");
+                bindings.bind("RBracket", "globals.increase_gamma(pressed)");
+            "#,
+        )?;
+
+        runtime.insert_named_resource("globals", globals);
+        runtime
+            .frame_stage_mut(FrameStage::TrackStateChanges)
+            .add_system(Self::sys_track_state_changes);
+        runtime
+            .frame_stage_mut(FrameStage::EnsureGpuUpdated)
+            .add_system(Self::sys_ensure_uploaded);
+
+        Ok(())
+    }
+}
+
+#[inject_nitrous_resource]
 impl GlobalParametersBuffer {
     const INITIAL_GAMMA: f32 = 2.2f32;
 
-    pub fn new(device: &wgpu::Device, interpreter: &mut Interpreter) -> Arc<RwLock<Self>> {
+    pub fn new(device: &wgpu::Device) -> Self {
         let buffer_size = mem::size_of::<Globals>() as wgpu::BufferAddress;
         let parameters_buffer = Arc::new(device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("globals-buffer"),
@@ -196,29 +220,14 @@ impl GlobalParametersBuffer {
             }],
         });
 
-        let globals = Arc::new(RwLock::new(Self {
+        Self {
             bind_group_layout,
             bind_group,
             buffer_size,
             parameters_buffer,
             globals: Default::default(),
             tone_gamma: Self::INITIAL_GAMMA,
-        }));
-
-        interpreter.put_global("globals", Value::Module(globals.clone()));
-
-        globals
-    }
-
-    pub fn add_debug_bindings(&mut self, interpreter: &mut Interpreter) -> Result<()> {
-        interpreter.interpret_once(
-            r#"
-                let bindings := mapper.create_bindings("globals");
-                bindings.bind("LBracket", "globals.decrease_gamma(pressed)");
-                bindings.bind("RBracket", "globals.increase_gamma(pressed)");
-            "#,
-        )?;
-        Ok(())
+        }
     }
 
     #[method]
@@ -235,12 +244,30 @@ impl GlobalParametersBuffer {
         }
     }
 
+    #[method]
+    pub fn tone_gamma(&self) -> f64 {
+        self.tone_gamma as f64
+    }
+
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.bind_group_layout
     }
 
     pub fn bind_group(&self) -> &wgpu::BindGroup {
         &self.bind_group
+    }
+
+    fn sys_track_state_changes(
+        query: Query<&Camera>,
+        orrery: Res<Orrery>,
+        window: Res<Window>,
+        mut globals: ResMut<GlobalParametersBuffer>,
+    ) {
+        // FIXME: multiple camera support
+        for (i, camera) in query.iter().enumerate() {
+            assert_eq!(i, 0);
+            globals.track_state_changes(camera, &orrery, &window);
+        }
     }
 
     pub fn track_state_changes(&mut self, camera: &Camera, orrery: &Orrery, win: &Window) {
@@ -250,31 +277,35 @@ impl GlobalParametersBuffer {
         self.globals.set_window_info(win);
     }
 
-    pub fn ensure_uploaded(&self, gpu: &Gpu, tracker: &mut UploadTracker) -> Result<()> {
+    fn sys_ensure_uploaded(
+        globals: Res<GlobalParametersBuffer>,
+        gpu: Res<Gpu>,
+        tracker: Res<UploadTracker>,
+    ) {
+        globals.ensure_uploaded(&gpu, &tracker);
+    }
+
+    pub fn ensure_uploaded(&self, gpu: &Gpu, tracker: &UploadTracker) {
         let buffer = gpu.push_data(
             "global-upload-buffer",
             &self.globals,
             wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_SRC,
         );
         tracker.upload_ba(buffer, self.parameters_buffer.clone(), self.buffer_size);
-        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpu::{Gpu, TestResources};
+    use gpu::Gpu;
 
     #[cfg(unix)]
     #[test]
     fn it_can_create_a_buffer() -> Result<()> {
-        let TestResources {
-            mut interpreter,
-            gpu,
-            ..
-        } = Gpu::for_test_unix()?;
-        let _globals_buffer = GlobalParametersBuffer::new(gpu.read().device(), &mut interpreter);
+        let mut runtime = Gpu::for_test_unix()?;
+        runtime.load_extension::<GlobalParametersBuffer>()?;
+        assert!(runtime.resource::<GlobalParametersBuffer>().tone_gamma() > 0.0);
         Ok(())
     }
 }
