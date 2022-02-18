@@ -807,7 +807,7 @@ where
     pub fn finish(
         mut self,
         gpu: &mut Gpu,
-        tracker: &mut UploadTracker,
+        tracker: &UploadTracker,
     ) -> Result<(Arc<wgpu::Texture>, wgpu::TextureView, wgpu::Sampler)> {
         // Note: we need to crank make_upload_buffer twice because of the way
         // we defer moving to a new texture to ensure in-flight uploads happen.

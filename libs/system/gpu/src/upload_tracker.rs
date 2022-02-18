@@ -212,7 +212,7 @@ impl UploadTracker {
         gpu.queue_mut().submit(vec![encoder.finish()]);
     }
 
-    pub fn dispatch_uploads_until_empty(&mut self, encoder: &mut wgpu::CommandEncoder) {
+    pub fn dispatch_uploads_until_empty(&self, encoder: &mut wgpu::CommandEncoder) {
         for desc in self.b2b_uploads.lock().drain(..) {
             encoder.copy_buffer_to_buffer(
                 &desc.source,
@@ -270,7 +270,7 @@ impl UploadTracker {
         }
     }
 
-    pub fn dispatch_uploads(mut self, encoder: &mut wgpu::CommandEncoder) {
+    pub fn dispatch_uploads(self, encoder: &mut wgpu::CommandEncoder) {
         self.dispatch_uploads_until_empty(encoder)
     }
 }
