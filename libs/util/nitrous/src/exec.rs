@@ -14,7 +14,6 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{lower::Instr, HeapMut, LocalNamespace, NitrousScript, Value, WorldIndex};
 use anyhow::{anyhow, bail, Result};
-use bevy_ecs::prelude::*;
 
 /// Store current execution state of some specific script.
 /// Note: this state must always be used with the same script.
@@ -136,7 +135,7 @@ impl<'a> NitrousExecutor<'a> {
                 }
                 Instr::Attr(atom) => {
                     let base = self.pop("attr base")?;
-                    let result = base.attr(self.state.script.atom(&atom), self.heap.as_mut())?;
+                    let result = base.attr(self.state.script.atom(&atom), self.heap.as_ref())?;
                     self.push(result);
                 }
                 Instr::Await => {

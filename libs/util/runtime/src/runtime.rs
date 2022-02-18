@@ -18,11 +18,7 @@ use crate::{
 };
 use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource, world::EntityMut};
-use log::error;
-use nitrous::{
-    make_component_lookup_mut, Heap, LocalNamespace, NamedEntityMut, NitrousScript,
-    ScriptComponent, ScriptResource, Value,
-};
+use nitrous::{Heap, LocalNamespace, NamedEntityMut, NitrousScript, ScriptResource};
 use std::path::PathBuf;
 
 /// Interface for extending the Runtime.

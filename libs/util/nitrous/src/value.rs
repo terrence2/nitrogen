@@ -13,11 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    memory::{
-        make_component_lookup_mut, ComponentLookupMutFunc, ResourceLookup, RustCallbackFunc,
-        WorldIndex,
-    },
-    HeapMut, HeapRef, ScriptComponent, ScriptResource,
+    memory::{ComponentLookup, ResourceLookup, RustCallbackFunc, WorldIndex},
+    HeapRef, ScriptComponent, ScriptResource,
 };
 use anyhow::{anyhow, bail, Result};
 use bevy_ecs::{prelude::*, system::Resource};
@@ -28,7 +25,6 @@ use log::error;
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
 use std::{
-    borrow::BorrowMut,
     fmt::{self, Debug, Formatter},
     pin::Pin,
     sync::Arc,
@@ -46,8 +42,8 @@ pub enum Value {
     Resource(ResourceLookup),
     ResourceMethod(ResourceLookup, String), // TODO: atoms?
     Entity(Entity),
-    Component(Entity, Arc<ComponentLookupMutFunc>),
-    ComponentMethod(Entity, Arc<ComponentLookupMutFunc>, String), // TODO: atoms?
+    Component(Entity, ComponentLookup),
+    ComponentMethod(Entity, ComponentLookup, String), // TODO: atoms?
     RustMethod(Arc<RustCallbackFunc>),
     Future(Arc<RwLock<FutureValue>>),
 }
@@ -80,8 +76,8 @@ impl Value {
         Self::Entity(entity)
     }
 
-    pub(crate) fn new_component(entity: Entity, lookup: Arc<ComponentLookupMutFunc>) -> Self {
-        Value::Component(entity, lookup)
+    pub(crate) fn new_component(entity: Entity, lookup: &ComponentLookup) -> Self {
+        Value::Component(entity, lookup.to_owned())
     }
 
     pub fn to_bool(&self) -> Result<bool> {
@@ -141,8 +137,7 @@ impl Value {
     where
         T: Component + ScriptComponent + 'static,
     {
-        let lookup = make_component_lookup_mut::<T>();
-        Self::ComponentMethod(entity, lookup, name.to_owned())
+        Self::ComponentMethod(entity, ComponentLookup::new::<T>(), name.to_owned())
     }
 
     pub fn to_future(&self) -> Result<Arc<RwLock<FutureValue>>> {
@@ -164,7 +159,7 @@ impl Value {
         })
     }
 
-    pub fn attr(&self, name: &str, mut heap: HeapMut) -> Result<Value> {
+    pub fn attr(&self, name: &str, heap: HeapRef) -> Result<Value> {
         Ok(match self {
             Value::Resource(lookup) => lookup
                 .get_ref(heap.world())
@@ -187,7 +182,8 @@ impl Value {
                         })?
                 }
             }
-            Value::Component(entity, lookup) => lookup(*entity, heap.world_mut())
+            Value::Component(entity, lookup) => lookup
+                .get_ref(*entity, heap.world())
                 .ok_or_else(|| anyhow!("no such component for attr: {}", name))?
                 .get(*entity, name)?,
             _ => bail!(
@@ -203,11 +199,10 @@ impl Value {
                 .get_mut(world)
                 .ok_or_else(|| anyhow!("no such resource for call: {}", method_name))?
                 .call_method(method_name, args)?,
-            Value::ComponentMethod(entity, lookup, method_name) => {
-                lookup.borrow_mut()(*entity, world)
-                    .ok_or_else(|| anyhow!("no such component for call: {}", method_name))?
-                    .call_method(*entity, method_name, args)?
-            }
+            Value::ComponentMethod(entity, lookup, method_name) => lookup
+                .get_mut(*entity, world)
+                .ok_or_else(|| anyhow!("no such component for call: {}", method_name))?
+                .call_method(*entity, method_name, args)?,
             Value::RustMethod(method) => method(args, world),
             _ => {
                 error!("attempting to call non-method value: {}", self);
@@ -227,7 +222,8 @@ impl Value {
                 .ok_or_else(|| anyhow!("no such resource for names"))?
                 .names(),
             Value::Entity(entity) => index.component_attrs(entity),
-            Value::Component(entity, lookup) => lookup(*entity, world)
+            Value::Component(entity, lookup) => lookup
+                .get_ref(*entity, world)
                 .ok_or_else(|| anyhow!("no such component for attrs"))?
                 .names(),
             _ => bail!(

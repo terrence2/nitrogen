@@ -12,13 +12,9 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{
-    heap::{HeapMut, HeapRef},
-    value::Value,
-};
+use crate::value::Value;
 use anyhow::{anyhow, ensure, Result};
 use bevy_ecs::{prelude::*, system::Resource};
-use std::borrow::BorrowMut;
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
 /// Use #[derive(NitrousResource)] to implement this trait. The derived implementation
@@ -83,22 +79,6 @@ impl ResourceLookup {
     }
 }
 
-/*
-pub fn make_resource_lookup_mut<T>() -> Arc<ResourceLookupMutFunc>
-where
-    T: Resource + ScriptResource + 'static,
-{
-    Arc::new(move |world: &mut World| {
-        if let Some(ptr) = world.get_resource_mut::<T>() {
-            let rto: &mut (dyn ScriptResource + 'static) = ptr.into_inner();
-            Some(rto)
-        } else {
-            None
-        }
-    })
-}
- */
-
 /// Use #[derive(NitrousComponent)] to implement this trait. The derived implementation
 /// will expect the struct to have an impl block annotated with #[inject_nitrous]. This
 /// second macro will use #[method] tags to populate lookups for the various operations.
@@ -110,23 +90,63 @@ pub trait ScriptComponent: Send + Sync + 'static {
     fn names(&self) -> Vec<&str>;
 }
 
+pub type ComponentLookupRefFunc =
+    dyn Fn(Entity, &World) -> Option<&(dyn ScriptComponent + 'static)> + Send + Sync + 'static;
 pub type ComponentLookupMutFunc = dyn Fn(Entity, &mut World) -> Option<&mut (dyn ScriptComponent + 'static)>
     + Send
     + Sync
     + 'static;
 
-pub fn make_component_lookup_mut<T>() -> Arc<ComponentLookupMutFunc>
-where
-    T: Component + ScriptComponent + 'static,
-{
-    Arc::new(move |entity: Entity, world: &mut World| {
-        if let Some(ptr) = world.get_mut::<T>(entity) {
-            let cto: &mut (dyn ScriptComponent + 'static) = ptr.into_inner();
-            Some(cto)
-        } else {
-            None
+#[derive(Clone)]
+pub struct ComponentLookup {
+    ref_func: Arc<ComponentLookupRefFunc>,
+    mut_func: Arc<ComponentLookupMutFunc>,
+}
+
+impl ComponentLookup {
+    pub fn new<T>() -> Self
+    where
+        T: Component + ScriptComponent + 'static,
+    {
+        Self {
+            ref_func: Arc::new(move |entity, world| {
+                world.get::<T>(entity).map(|ptr| {
+                    let cto: &(dyn ScriptComponent + 'static) = ptr;
+                    cto
+                })
+            }),
+            mut_func: Arc::new(move |entity, world| {
+                world.get_mut::<T>(entity).map(|ptr| {
+                    let cto: &mut (dyn ScriptComponent + 'static) = ptr.into_inner();
+                    cto
+                })
+            }),
         }
-    })
+    }
+
+    pub fn as_ref<'a>(&self, entity: Entity, world: &'a World) -> &'a dyn ScriptComponent {
+        (self.ref_func)(entity, world).expect("resource present")
+    }
+
+    pub fn get_ref<'a>(&self, entity: Entity, world: &'a World) -> Option<&'a dyn ScriptComponent> {
+        (self.ref_func)(entity, world)
+    }
+
+    pub fn as_mut<'a>(
+        &mut self,
+        entity: Entity,
+        world: &'a mut World,
+    ) -> &'a mut dyn ScriptComponent {
+        (self.mut_func)(entity, world).expect("resource present")
+    }
+
+    pub fn get_mut<'a>(
+        &mut self,
+        entity: Entity,
+        world: &'a mut World,
+    ) -> Option<&'a mut dyn ScriptComponent> {
+        (self.mut_func)(entity, world)
+    }
 }
 
 /// An inline function that can be stuffed into a Value, where needed.
@@ -134,7 +154,7 @@ pub type RustCallbackFunc = dyn Fn(&[Value], &mut World) -> Value + Send + Sync 
 
 #[derive(Default)]
 struct EntityMetadata {
-    components: HashMap<String, Arc<ComponentLookupMutFunc>>,
+    components: HashMap<String, ComponentLookup>,
 }
 
 impl EntityMetadata {
@@ -191,7 +211,7 @@ impl WorldIndex {
         &mut self,
         entity: Entity,
         component_name: &str,
-        lookup: Arc<ComponentLookupMutFunc>,
+        lookup: ComponentLookup,
     ) -> Result<()> {
         ensure!(self.entity_metadata.contains_key(&entity));
         let meta = self
@@ -220,7 +240,7 @@ impl WorldIndex {
         &self,
         entity: Entity,
         component_name: &str,
-        world: &mut World,
+        world: &World,
     ) -> Option<Vec<String>> {
         self.entity_metadata
             .get(&entity)
@@ -229,7 +249,7 @@ impl WorldIndex {
                     .components
                     .get(component_name)
                     .map(|lookup| {
-                        lookup(entity, world).map(|attrs| {
+                        lookup.get_ref(entity, world).map(|attrs| {
                             attrs
                                 .names()
                                 .iter()
@@ -257,7 +277,7 @@ impl WorldIndex {
                 comps
                     .components
                     .get(name)
-                    .map(|lookup| Value::new_component(*entity, lookup.to_owned()))
+                    .map(|lookup| Value::new_component(*entity, lookup))
             })
             .flatten()
     }

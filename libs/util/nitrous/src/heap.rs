@@ -13,12 +13,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    memory::{make_component_lookup_mut, ScriptComponent, ScriptResource, WorldIndex},
+    memory::{ComponentLookup, ScriptComponent, ScriptResource, WorldIndex},
     value::Value,
 };
 use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource, world::EntityMut};
-use std::ops::Deref;
 
 /// Wraps an EntityMut to provide named creation methods
 pub struct NamedEntityMut<'w> {
@@ -55,7 +54,7 @@ impl<'w> NamedEntityMut<'w> {
         unsafe { self.entity.world_mut() }
             .get_resource_mut::<WorldIndex>()
             .unwrap()
-            .insert_named_component(entity, component_name, make_component_lookup_mut::<T>())?;
+            .insert_named_component(entity, component_name, ComponentLookup::new::<T>())?;
         Ok(self)
     }
 }

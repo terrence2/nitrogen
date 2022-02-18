@@ -13,12 +13,10 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
-use bevy_ecs::{prelude::*, system::Resource};
-use itertools::Itertools;
+use bevy_ecs::prelude::*;
 use log::{trace, warn};
 use nitrous::{
-    ComponentLookupMutFunc, ExecutionContext, HeapMut, LocalNamespace, NitrousExecutor,
-    NitrousScript, ScriptResource, Value, WorldIndex, YieldState,
+    ExecutionContext, HeapMut, LocalNamespace, NitrousExecutor, NitrousScript, Value, YieldState,
 };
 use std::sync::Arc;
 
@@ -125,14 +123,12 @@ pub type ScriptCompletions = Vec<ScriptCompletion>;
 /// Manage script execution state.
 pub struct ScriptHerder {
     gthread: Vec<ExecutionMetadata>,
-    // index: WorldIndex,
 }
 
 impl Default for ScriptHerder {
     fn default() -> Self {
         Self {
             gthread: Vec::new(),
-            // index: WorldIndex::empty(),
         }
     }
 }
@@ -192,6 +188,7 @@ impl ScriptHerder {
             })),
         );
         if kind == ScriptRunKind::Interactive {
+            // FIXME: we still need a way to do this
             /*
             #[allow(unstable_name_collisions)]
             let resource_list: Value = index
@@ -231,7 +228,7 @@ impl ScriptHerder {
 
         let mut next_gthreads = Vec::with_capacity(self.gthread.capacity());
         for mut meta in self.gthread.drain(..) {
-            let mut executor = NitrousExecutor::new(&mut meta.context, heap.as_mut());
+            let executor = NitrousExecutor::new(&mut meta.context, heap.as_mut());
             match executor.run_until_yield() {
                 Ok(yield_state) => match yield_state {
                     YieldState::Yielded => next_gthreads.push(meta),
