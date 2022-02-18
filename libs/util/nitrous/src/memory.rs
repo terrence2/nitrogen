@@ -30,9 +30,9 @@ pub trait ScriptResource: 'static {
 
 /// Bridges from a name (as in a script) to ScriptResouce. Effectively it stores the T
 /// for us so that we don't have to do TypeId and pointer hyjinx.
-pub type ResourceLookupRefFunc =
+type ResourceLookupRefFunc =
     dyn Fn(&World) -> Option<&(dyn ScriptResource + 'static)> + Send + Sync + 'static;
-pub type ResourceLookupMutFunc =
+type ResourceLookupMutFunc =
     dyn Fn(&mut World) -> Option<&mut (dyn ScriptResource + 'static)> + Send + Sync + 'static;
 
 #[derive(Clone)]
@@ -90,9 +90,9 @@ pub trait ScriptComponent: Send + Sync + 'static {
     fn names(&self) -> Vec<&str>;
 }
 
-pub type ComponentLookupRefFunc =
+type ComponentLookupRefFunc =
     dyn Fn(Entity, &World) -> Option<&(dyn ScriptComponent + 'static)> + Send + Sync + 'static;
-pub type ComponentLookupMutFunc = dyn Fn(Entity, &mut World) -> Option<&mut (dyn ScriptComponent + 'static)>
+type ComponentLookupMutFunc = dyn Fn(Entity, &mut World) -> Option<&mut (dyn ScriptComponent + 'static)>
     + Send
     + Sync
     + 'static;
