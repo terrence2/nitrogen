@@ -926,7 +926,7 @@ mod test {
             height: packer.height(),
             depth_or_array_layers: 1,
         };
-        let (texture, _view, _sampler) = packer.finish(&mut gpu, &mut Default::default())?;
+        let (texture, _view, _sampler) = packer.finish(&mut gpu, &Default::default())?;
         if env::var("DUMP") == Ok("1".to_owned()) {
             Gpu::dump_texture(
                 &texture,
@@ -970,7 +970,7 @@ mod test {
             &gpu,
         )?;
 
-        let _ = packer.finish(&mut gpu, &mut Default::default());
+        let _ = packer.finish(&mut gpu, &Default::default());
         Ok(())
     }
 
@@ -993,7 +993,7 @@ mod test {
             &gpu,
         )?;
 
-        let _ = packer.finish(&mut gpu, &mut Default::default());
+        let _ = packer.finish(&mut gpu, &Default::default());
         Ok(())
     }
 

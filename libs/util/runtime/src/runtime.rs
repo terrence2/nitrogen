@@ -18,7 +18,7 @@ use crate::{
 };
 use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource, world::EntityMut};
-use nitrous::{Heap, LocalNamespace, NamedEntityMut, NitrousScript, ScriptResource};
+use nitrous::{Heap, HeapMut, LocalNamespace, NamedEntityMut, NitrousScript, ScriptResource};
 use std::path::PathBuf;
 
 /// Interface for extending the Runtime.
@@ -193,7 +193,7 @@ impl Runtime {
     #[inline]
     pub fn dump_startup_schedule(&self) {
         dump_schedule(
-            &self.heap.world(),
+            self.heap.world(),
             &self.startup_schedule,
             &PathBuf::from("startup_schedule.dot"),
         );
@@ -202,7 +202,7 @@ impl Runtime {
     #[inline]
     pub fn dump_sim_schedule(&self) {
         dump_schedule(
-            &self.heap.world(),
+            self.heap.world(),
             &self.sim_schedule,
             &PathBuf::from("sim_schedule.dot"),
         );
@@ -211,7 +211,7 @@ impl Runtime {
     #[inline]
     pub fn dump_frame_schedule(&self) {
         dump_schedule(
-            &self.heap.world(),
+            self.heap.world(),
             &self.frame_schedule,
             &PathBuf::from("frame_schedule.dot"),
         );
@@ -344,7 +344,7 @@ impl Runtime {
     }
 
     #[inline]
-    pub fn resource_scope<T: Resource, U>(&mut self, f: impl FnOnce(&mut World, Mut<T>) -> U) -> U {
+    pub fn resource_scope<T: Resource, U>(&mut self, f: impl FnOnce(HeapMut, Mut<T>) -> U) -> U {
         self.heap.resource_scope(f)
     }
 }

@@ -38,6 +38,14 @@ impl ExecutionContext {
     pub fn script(&self) -> &NitrousScript {
         &self.script
     }
+
+    pub fn has_started(&self) -> bool {
+        self.counter != 0
+    }
+
+    pub fn locals_mut(&mut self) -> &mut LocalNamespace {
+        &mut self.locals
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -130,7 +138,7 @@ impl<'a> NitrousExecutor<'a> {
                     for _ in 0..arg_cnt {
                         args.push(self.pop("arg")?);
                     }
-                    let result = base.call_method(&args, self.heap.world_mut())?;
+                    let result = base.call_method(&args, self.heap.as_mut())?;
                     self.push(result);
                 }
                 Instr::Attr(atom) => {

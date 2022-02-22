@@ -14,9 +14,11 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
 use bevy_ecs::prelude::*;
+use itertools::*;
 use log::{trace, warn};
 use nitrous::{
-    ExecutionContext, HeapMut, LocalNamespace, NitrousExecutor, NitrousScript, Value, YieldState,
+    ExecutionContext, HeapMut, HeapRef, LocalNamespace, NitrousExecutor, NitrousScript, Value,
+    YieldState,
 };
 use std::sync::Arc;
 
@@ -88,6 +90,37 @@ impl ExecutionMetadata {
     pub fn context(&self) -> &ExecutionContext {
         &self.context
     }
+
+    pub fn maybe_add_builtins(&mut self, heap: HeapRef) {
+        if self.context.has_started() {
+            // Don't repeat for yielded scripts
+            return;
+        }
+
+        self.context.locals_mut().put_if_absent(
+            "exit",
+            Value::RustMethod(Arc::new(|_args, mut heap| {
+                heap.resource_mut::<ExitRequest>().request_exit();
+                Ok(Value::True())
+            })),
+        );
+        if self.kind == ScriptRunKind::Interactive {
+            #[allow(unstable_name_collisions)]
+            let resource_list: Value = heap
+                .resource_names()
+                .intersperse("\n")
+                .collect::<String>()
+                .into();
+            self.context.locals_mut().put_if_absent(
+                "list",
+                Value::RustMethod(Arc::new(move |_, _| Ok(resource_list.clone()))),
+            );
+            self.context.locals_mut().put_if_absent(
+                "help",
+                Value::RustMethod(Arc::new(move |_, _| Ok(GUIDE.to_owned().into()))),
+            );
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -121,16 +154,9 @@ pub struct ScriptCompletion {
 pub type ScriptCompletions = Vec<ScriptCompletion>;
 
 /// Manage script execution state.
+#[derive(Default)]
 pub struct ScriptHerder {
     gthread: Vec<ExecutionMetadata>,
-}
-
-impl Default for ScriptHerder {
-    fn default() -> Self {
-        Self {
-            gthread: Vec::new(),
-        }
-    }
 }
 
 impl ScriptHerder {
@@ -163,49 +189,14 @@ impl ScriptHerder {
     #[inline]
     pub fn run_with_locals<N: Into<NitrousScript>>(
         &mut self,
-        mut locals: LocalNamespace,
+        locals: LocalNamespace,
         script: N,
         kind: ScriptRunKind,
     ) {
-        Self::add_builtins(kind, /*&self.index,*/ &mut locals);
         self.gthread.push(ExecutionMetadata {
             context: ExecutionContext::new(locals, script.into()),
             kind,
         });
-    }
-
-    pub fn add_builtins(
-        kind: ScriptRunKind, /*, index: &WorldIndex*/
-        locals: &mut LocalNamespace,
-    ) {
-        locals.put_if_absent(
-            "exit",
-            Value::RustMethod(Arc::new(|_args, world| {
-                if let Some(mut exit) = world.get_resource_mut::<ExitRequest>() {
-                    exit.request_exit();
-                }
-                Value::True()
-            })),
-        );
-        if kind == ScriptRunKind::Interactive {
-            // FIXME: we still need a way to do this
-            /*
-            #[allow(unstable_name_collisions)]
-            let resource_list: Value = index
-                .resource_names()
-                .intersperse("\n")
-                .collect::<String>()
-                .into();
-            locals.put_if_absent(
-                "list",
-                Value::RustMethod(Arc::new(move |_, _| resource_list.clone())),
-            );
-             */
-            locals.put_if_absent(
-                "help",
-                Value::RustMethod(Arc::new(move |_, _| GUIDE.to_owned().into())),
-            );
-        }
     }
 
     #[inline]
@@ -228,6 +219,7 @@ impl ScriptHerder {
 
         let mut next_gthreads = Vec::with_capacity(self.gthread.capacity());
         for mut meta in self.gthread.drain(..) {
+            meta.maybe_add_builtins(heap.as_ref());
             let executor = NitrousExecutor::new(&mut meta.context, heap.as_mut());
             match executor.run_until_yield() {
                 Ok(yield_state) => match yield_state {

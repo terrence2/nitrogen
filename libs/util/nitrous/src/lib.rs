@@ -21,6 +21,10 @@ mod memory;
 mod script;
 mod value;
 
+pub mod reexport {
+    pub use bevy_ecs::prelude::Entity;
+}
+
 pub use crate::{
     ast::NitrousAst,
     exec::{ExecutionContext, NitrousExecutor, YieldState},

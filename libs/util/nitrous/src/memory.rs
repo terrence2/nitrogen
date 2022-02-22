@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::value::Value;
+use crate::{heap::HeapMut, value::Value};
 use anyhow::{anyhow, ensure, Result};
 use bevy_ecs::{prelude::*, system::Resource};
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
@@ -20,9 +20,9 @@ use std::{collections::HashMap, fmt::Debug, sync::Arc};
 /// Use #[derive(NitrousResource)] to implement this trait. The derived implementation
 /// will expect the struct to have an impl block annotated with #[inject_nitrous]. This
 /// second macro will use #[method] tags to populate lookups for the various operations.
-pub trait ScriptResource: 'static {
+pub trait ScriptResource: Resource + 'static {
     fn resource_type_name(&self) -> String;
-    fn call_method(&mut self, name: &str, args: &[Value]) -> Result<Value>;
+    fn call_method(&mut self, name: &str, args: &[Value], heap: HeapMut) -> Result<Value>;
     fn put(&mut self, name: &str, value: Value) -> Result<()>;
     fn get(&self, name: &str) -> Result<Value>;
     fn names(&self) -> Vec<&str>;
@@ -34,11 +34,13 @@ type ResourceLookupRefFunc =
     dyn Fn(&World) -> Option<&(dyn ScriptResource + 'static)> + Send + Sync + 'static;
 type ResourceLookupMutFunc =
     dyn Fn(&mut World) -> Option<&mut (dyn ScriptResource + 'static)> + Send + Sync + 'static;
+type ResourceCallMethodFunc = dyn Fn(&str, &[Value], HeapMut) -> Result<Value> + Send + Sync;
 
 #[derive(Clone)]
 pub struct ResourceLookup {
     ref_func: Arc<ResourceLookupRefFunc>,
     mut_func: Arc<ResourceLookupMutFunc>,
+    call_func: Arc<ResourceCallMethodFunc>,
 }
 
 impl ResourceLookup {
@@ -48,16 +50,22 @@ impl ResourceLookup {
     {
         Self {
             ref_func: Arc::new(move |world| {
-                world.get_resource::<T>().map(|ptr| {
-                    let rto: &(dyn ScriptResource + 'static) = ptr;
+                world.get_resource::<T>().map(|resource| {
+                    let rto: &(dyn ScriptResource + 'static) = resource;
                     rto
                 })
             }),
             mut_func: Arc::new(move |world| {
-                world.get_resource_mut::<T>().map(|ptr| {
-                    let rto: &mut (dyn ScriptResource + 'static) = ptr.into_inner();
+                world.get_resource_mut::<T>().map(|resource| {
+                    let rto: &mut (dyn ScriptResource + 'static) = resource.into_inner();
                     rto
                 })
+            }),
+            call_func: Arc::new(|method_name, args, mut heap| {
+                let mut resource = heap.world_mut().remove_resource::<T>().unwrap();
+                let rv = resource.call_method(method_name, args, heap.as_mut());
+                heap.world_mut().insert_resource(resource);
+                rv
             }),
         }
     }
@@ -76,6 +84,10 @@ impl ResourceLookup {
 
     pub fn get_mut<'a>(&mut self, world: &'a mut World) -> Option<&'a mut dyn ScriptResource> {
         (self.mut_func)(world)
+    }
+
+    pub fn call_method(&self, method_name: &str, args: &[Value], heap: HeapMut) -> Result<Value> {
+        (self.call_func)(method_name, args, heap)
     }
 }
 
@@ -150,7 +162,7 @@ impl ComponentLookup {
 }
 
 /// An inline function that can be stuffed into a Value, where needed.
-pub type RustCallbackFunc = dyn Fn(&[Value], &mut World) -> Value + Send + Sync + 'static;
+pub type RustCallbackFunc = dyn Fn(&[Value], HeapMut) -> Result<Value> + Send + Sync + 'static;
 
 #[derive(Default)]
 struct EntityMetadata {

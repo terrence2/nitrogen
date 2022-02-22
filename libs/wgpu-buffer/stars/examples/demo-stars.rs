@@ -216,10 +216,10 @@ fn window_main(mut runtime: Runtime) -> Result<()> {
     ));
     arcball.set_distance(meters!(40.0));
     let player_ent = runtime
-        .spawn_named("player")
+        .spawn_named("player")?
         .insert(WorldSpaceFrame::default())
-        .insert_scriptable(arcball)
-        .insert_scriptable(camera)
+        .insert_scriptable(arcball)?
+        .insert_scriptable(camera)?
         .id();
 
     while runtime.resource::<ExitRequest>().still_running() {

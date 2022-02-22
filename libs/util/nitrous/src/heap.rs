@@ -175,7 +175,7 @@ macro_rules! impl_mutable_heap_methods {
         pub fn insert_named_resource<S, T>(&mut self, name: S, value: T) -> &mut Self
         where
             S: Into<String>,
-            T: Resource + ScriptResource + 'static,
+            T: ScriptResource + 'static,
         {
             self.world.insert_resource(value);
             self.resource_mut::<WorldIndex>()
@@ -207,9 +207,10 @@ macro_rules! impl_mutable_heap_methods {
         #[inline]
         pub fn resource_scope<T: Resource, U>(
             &mut self,
-            f: impl FnOnce(&mut World, Mut<T>) -> U,
+            f: impl FnOnce(HeapMut, Mut<T>) -> U,
         ) -> U {
-            self.world.resource_scope(f)
+            self.world
+                .resource_scope(|world, t: Mut<T>| f(HeapMut::wrap(world), t))
         }
     };
 }
