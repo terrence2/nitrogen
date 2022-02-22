@@ -20,7 +20,7 @@ use futures::future::{ready, FutureExt};
 use geodesy::Graticule;
 use log::error;
 use lyon_geom::{cubic_bezier::CubicBezierSegment, Point};
-use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
+use nitrous::{inject_nitrous_resource, method, HeapMut, NitrousResource, Value};
 use parking_lot::RwLock;
 use runtime::{Extension, Runtime, SimStage};
 use std::{
@@ -150,7 +150,7 @@ impl ScriptableAnimation {
             (self.start.clone(), false)
         };
         if let Some(callable) = &mut self.callable {
-            callable.call_method(&[current], world)?;
+            callable.call_method(&[current], HeapMut::wrap(world))?;
         }
         if ended {
             self.state = AnimationState::Finished;

@@ -12,9 +12,8 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{lower::Instr, LocalNamespace, NitrousScript, Value, WorldIndex};
+use crate::{lower::Instr, HeapMut, LocalNamespace, NitrousScript, Value, WorldIndex};
 use anyhow::{anyhow, bail, Result};
-use bevy_ecs::prelude::*;
 
 /// Store current execution state of some specific script.
 /// Note: this state must always be used with the same script.
@@ -39,6 +38,14 @@ impl ExecutionContext {
     pub fn script(&self) -> &NitrousScript {
         &self.script
     }
+
+    pub fn has_started(&self) -> bool {
+        self.counter != 0
+    }
+
+    pub fn locals_mut(&mut self) -> &mut LocalNamespace {
+        &mut self.locals
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -50,21 +57,12 @@ pub enum YieldState {
 /// Executing scripts requires some state and some
 pub struct NitrousExecutor<'a> {
     state: &'a mut ExecutionContext,
-    index: &'a mut WorldIndex,
-    world: &'a mut World,
+    heap: HeapMut<'a>,
 }
 
 impl<'a> NitrousExecutor<'a> {
-    pub fn new(
-        state: &'a mut ExecutionContext,
-        index: &'a mut WorldIndex,
-        world: &'a mut World,
-    ) -> Self {
-        Self {
-            state,
-            index,
-            world,
-        }
+    pub fn new(state: &'a mut ExecutionContext, heap: HeapMut<'a>) -> Self {
+        Self { state, heap }
     }
 
     fn push(&mut self, value: Value) {
@@ -78,7 +76,7 @@ impl<'a> NitrousExecutor<'a> {
             .ok_or_else(|| anyhow!("empty stack at pop: {}", ctx))
     }
 
-    pub fn run_until_yield(&mut self) -> Result<YieldState> {
+    pub fn run_until_yield(mut self) -> Result<YieldState> {
         for pc in self.state.counter..self.state.script.code().len() {
             let instr = self.state.script.code()[pc].to_owned();
             match instr {
@@ -87,7 +85,7 @@ impl<'a> NitrousExecutor<'a> {
                     let name = self.state.script.atom(&atom);
                     if let Some(value) = self.state.locals.get(name) {
                         self.push(value);
-                    } else if let Some(resource) = self.index.lookup_resource(name) {
+                    } else if let Some(resource) = self.heap.maybe_resource_value_by_name(name) {
                         self.push(resource);
                     } else {
                         bail!("unknown local or resource varable: {}", name);
@@ -96,7 +94,8 @@ impl<'a> NitrousExecutor<'a> {
                 Instr::LoadEntity(atom) => {
                     let name = self.state.script.atom(&atom);
                     let entity = self
-                        .index
+                        .heap
+                        .resource::<WorldIndex>()
                         .lookup_entity(name)
                         .ok_or_else(|| anyhow!("no such entity: @{}", name))?;
                     self.push(entity);
@@ -139,13 +138,12 @@ impl<'a> NitrousExecutor<'a> {
                     for _ in 0..arg_cnt {
                         args.push(self.pop("arg")?);
                     }
-                    let result = base.call_method(&args, self.world)?;
+                    let result = base.call_method(&args, self.heap.as_mut())?;
                     self.push(result);
                 }
                 Instr::Attr(atom) => {
                     let base = self.pop("attr base")?;
-                    let result =
-                        base.attr(self.state.script.atom(&atom), self.index, self.world)?;
+                    let result = base.attr(self.state.script.atom(&atom), self.heap.as_ref())?;
                     self.push(result);
                 }
                 Instr::Await => {

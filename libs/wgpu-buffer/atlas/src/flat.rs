@@ -807,7 +807,7 @@ where
     pub fn finish(
         mut self,
         gpu: &mut Gpu,
-        tracker: &mut UploadTracker,
+        tracker: &UploadTracker,
     ) -> Result<(Arc<wgpu::Texture>, wgpu::TextureView, wgpu::Sampler)> {
         // Note: we need to crank make_upload_buffer twice because of the way
         // we defer moving to a new texture to ensure in-flight uploads happen.
@@ -926,7 +926,7 @@ mod test {
             height: packer.height(),
             depth_or_array_layers: 1,
         };
-        let (texture, _view, _sampler) = packer.finish(&mut gpu, &mut Default::default())?;
+        let (texture, _view, _sampler) = packer.finish(&mut gpu, &Default::default())?;
         if env::var("DUMP") == Ok("1".to_owned()) {
             Gpu::dump_texture(
                 &texture,
@@ -970,7 +970,7 @@ mod test {
             &gpu,
         )?;
 
-        let _ = packer.finish(&mut gpu, &mut Default::default());
+        let _ = packer.finish(&mut gpu, &Default::default());
         Ok(())
     }
 
@@ -993,7 +993,7 @@ mod test {
             &gpu,
         )?;
 
-        let _ = packer.finish(&mut gpu, &mut Default::default());
+        let _ = packer.finish(&mut gpu, &Default::default());
         Ok(())
     }
 

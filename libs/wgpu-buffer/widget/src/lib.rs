@@ -46,7 +46,7 @@ use font_ttf::TtfFont;
 use gpu::{Gpu, UploadTracker};
 use input::{ElementState, InputEvent, InputEventVec, InputFocus, ModifiersState, VirtualKeyCode};
 use log::{error, trace};
-use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
+use nitrous::{inject_nitrous_resource, method, HeapMut, NitrousResource, Value};
 use parking_lot::RwLock;
 use platform_dirs::AppDirs;
 use runtime::{Extension, FrameStage, Runtime, ScriptCompletions, ScriptHerder, SimStage};
@@ -439,7 +439,7 @@ where
                     widgets
                         .terminal
                         .write()
-                        .handle_terminal_events(&event, world)
+                        .handle_terminal_events(&event, HeapMut::wrap(world))
                         .ok();
                 }
             })

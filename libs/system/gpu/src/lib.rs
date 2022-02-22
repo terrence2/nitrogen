@@ -187,6 +187,8 @@ impl Gpu {
         let mut runtime = input::InputController::for_test_unix()?;
         runtime
             .insert_resource(window::DisplayOpts::default())
+            .insert_resource(CpuDetailLevel::High)
+            .insert_resource(GpuDetailLevel::High)
             .load_extension::<Window>()?
             .load_extension::<Gpu>()?;
         Ok(runtime)
@@ -403,7 +405,7 @@ impl Gpu {
     }
 
     fn sys_dispatch_uploads(
-        mut upload_tracker: ResMut<UploadTracker>,
+        upload_tracker: Res<UploadTracker>,
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
         if let Some(encoder) = maybe_encoder.into_inner() {

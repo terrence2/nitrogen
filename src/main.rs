@@ -221,6 +221,7 @@ impl System {
 }
 
 fn main() -> Result<()> {
+    let _opt = Opt::from_args(); // process help before opening a window
     env_logger::init();
     InputSystem::run_forever(
         WindowBuilder::new().with_title("Nitrogen Demo"),
@@ -273,10 +274,10 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         meters!(0.5),
     );
     let _player_ent = runtime
-        .spawn_named("player")
+        .spawn_named("player")?
         .insert(WorldSpaceFrame::default())
-        .insert_scriptable(ArcBallController::default())
-        .insert_scriptable(camera)
+        .insert_scriptable(ArcBallController::default())?
+        .insert_scriptable(camera)?
         .id();
 
     runtime.run_startup();

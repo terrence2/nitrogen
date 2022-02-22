@@ -137,6 +137,8 @@ fn lower_arg(i: usize, arg: &ArgDef) -> Expr {
         }
         Scalar::Value => parse2(quote! { args.get(#i).expect("not enough args").clone() }).unwrap(),
         Scalar::Unit => parse2(quote! { ::nitrous::Value::True() }).unwrap(),
+        Scalar::HeapMut => parse2(quote! { heap }).unwrap(),
+        Scalar::HeapRef => parse2(quote! { heap.as_ref() }).unwrap(),
     }
 }
 
@@ -173,6 +175,9 @@ fn lower_method_call(name: &str, item: Ident, arg_exprs: &[Expr], ret: RetType) 
             Scalar::Unit => {
                 quote! { #name => { self.#item( #(#arg_exprs),* ); Ok(::nitrous::Value::True()) } }
             }
+            Scalar::HeapMut | Scalar::HeapRef => {
+                panic!("invalid return of heap type from method")
+            }
         },
         RetType::ResultRaw(llty) => match llty {
             Scalar::Boolean => {
@@ -201,6 +206,9 @@ fn lower_method_call(name: &str, item: Ident, arg_exprs: &[Expr], ret: RetType) 
             }
             Scalar::Unit => {
                 quote! { #name => { self.#item( #(#arg_exprs),* )?; Ok(::nitrous::Value::True()) } }
+            }
+            Scalar::HeapMut | Scalar::HeapRef => {
+                panic!("invalid return of heap type from method")
             }
         },
     }).unwrap()
@@ -277,6 +285,8 @@ pub(crate) enum Scalar {
     GraticuleTarget,
     Value,
     Unit,
+    HeapMut,
+    HeapRef,
 }
 
 impl Scalar {
@@ -322,6 +332,8 @@ impl Scalar {
             "str" => Scalar::StrRef,
             "String" => Scalar::String,
             "Value" => Scalar::Value,
+            "HeapMut" => Scalar::HeapMut,
+            "HeapRef" => Scalar::HeapRef,
             "Graticule" => {
                 if let PathArguments::AngleBracketed(args) =
                     &p.path.segments.first().unwrap().arguments

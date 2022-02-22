@@ -100,10 +100,10 @@ async fn async_main() -> Result<()> {
         meters!(0.5),
     );
     let _player_ent = runtime
-        .spawn_named("player")
+        .spawn_named("player")?
         .insert(WorldSpaceFrame::default())
-        .insert_scriptable(ArcBallController::default())
-        .insert_scriptable(camera)
+        .insert_scriptable(ArcBallController::default())?
+        .insert_scriptable(camera)?
         .id();
 
     runtime.run_startup();

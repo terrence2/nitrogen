@@ -13,11 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    memory::{
-        make_component_lookup_mut, make_resource_lookup_mut, ComponentLookupMutFunc,
-        ResourceLookupMutFunc, RustCallbackFunc, WorldIndex,
-    },
-    ScriptComponent, ScriptResource,
+    memory::{ComponentLookup, ResourceLookup, RustCallbackFunc, WorldIndex},
+    HeapMut, HeapRef, ScriptComponent, ScriptResource,
 };
 use anyhow::{anyhow, bail, Result};
 use bevy_ecs::{prelude::*, system::Resource};
@@ -28,7 +25,6 @@ use log::error;
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
 use std::{
-    borrow::BorrowMut,
     fmt::{self, Debug, Formatter},
     pin::Pin,
     sync::Arc,
@@ -43,11 +39,11 @@ pub enum Value {
     Float(OrderedFloat<f64>),
     String(String),
     Graticule(Graticule<GeoSurface>),
-    Resource(Arc<ResourceLookupMutFunc>),
-    ResourceMethod(Arc<ResourceLookupMutFunc>, String), // TODO: atoms?
+    Resource(ResourceLookup),
+    ResourceMethod(ResourceLookup, String), // TODO: atoms?
     Entity(Entity),
-    Component(Entity, Arc<ComponentLookupMutFunc>),
-    ComponentMethod(Entity, Arc<ComponentLookupMutFunc>, String), // TODO: atoms?
+    Component(Entity, ComponentLookup),
+    ComponentMethod(Entity, ComponentLookup, String), // TODO: atoms?
     RustMethod(Arc<RustCallbackFunc>),
     Future(Arc<RwLock<FutureValue>>),
 }
@@ -72,16 +68,16 @@ impl Value {
         Self::Boolean(false)
     }
 
-    pub(crate) fn new_resource(lookup: Arc<ResourceLookupMutFunc>) -> Self {
-        Self::Resource(lookup)
+    pub(crate) fn new_resource(lookup: &ResourceLookup) -> Self {
+        Self::Resource(lookup.to_owned())
     }
 
     pub(crate) fn new_entity(entity: Entity) -> Self {
         Self::Entity(entity)
     }
 
-    pub(crate) fn new_component(entity: Entity, lookup: Arc<ComponentLookupMutFunc>) -> Self {
-        Value::Component(entity, lookup)
+    pub(crate) fn new_component(entity: Entity, lookup: &ComponentLookup) -> Self {
+        Value::Component(entity, lookup.to_owned())
     }
 
     pub fn to_bool(&self) -> Result<bool> {
@@ -134,16 +130,14 @@ impl Value {
     where
         T: Resource + ScriptResource + 'static,
     {
-        let lookup = make_resource_lookup_mut::<T>();
-        Self::ResourceMethod(lookup, name.to_owned())
+        Self::ResourceMethod(ResourceLookup::new::<T>(), name.to_owned())
     }
 
     pub fn make_component_method<T>(entity: Entity, name: &str) -> Self
     where
         T: Component + ScriptComponent + 'static,
     {
-        let lookup = make_component_lookup_mut::<T>();
-        Self::ComponentMethod(entity, lookup, name.to_owned())
+        Self::ComponentMethod(entity, ComponentLookup::new::<T>(), name.to_owned())
     }
 
     pub fn to_future(&self) -> Result<Arc<RwLock<FutureValue>>> {
@@ -165,62 +159,68 @@ impl Value {
         })
     }
 
-    pub fn attr(&self, name: &str, index: &WorldIndex, world: &mut World) -> Result<Value> {
-        Ok(match self {
-            Value::Resource(lookup) => lookup(world)
+    pub fn attr(&self, name: &str, heap: HeapRef) -> Result<Value> {
+        match self {
+            Value::Resource(lookup) => lookup
+                .get_ref(heap.world())
                 .ok_or_else(|| anyhow!("no such resource for attr: {}", name))?
-                .get(name)?,
+                .get(name),
             Value::Entity(entity) => {
                 // TODO: there's almost certainly a smarter way to do this.
                 if name == "list" {
                     #[allow(unstable_name_collisions)]
-                    let msg: Value = index
-                        .entity_components(entity)
+                    let msg: Value = heap
+                        .entity_component_names(*entity)
                         .map(|v| v.intersperse("\n").collect())
                         .unwrap_or_else(|| "error: unknown entity name".to_owned())
                         .into();
-                    Value::RustMethod(Arc::new(move |_, _| msg.clone()))
+                    Ok(Value::RustMethod(Arc::new(move |_, _| Ok(msg.clone()))))
                 } else {
-                    index.lookup_component(entity, name).ok_or_else(|| {
-                        anyhow!("no such component {} on entity {:?}", name, entity)
-                    })?
+                    heap.maybe_component_value_by_name(*entity, name)
+                        .ok_or_else(|| anyhow!("no such component {} on entity {:?}", name, entity))
                 }
             }
-            Value::Component(entity, lookup) => lookup(*entity, world)
+            Value::Component(entity, lookup) => lookup
+                .get_ref(*entity, heap.world())
                 .ok_or_else(|| anyhow!("no such component for attr: {}", name))?
-                .get(*entity, name)?,
+                .get(*entity, name),
             _ => bail!(
                 "attribute base must be a resource, entity, or component, not {:?}",
                 self
             ),
-        })
+        }
     }
 
-    pub fn call_method(&mut self, args: &[Value], world: &mut World) -> Result<Value> {
-        Ok(match self {
-            Value::ResourceMethod(lookup, method_name) => lookup.borrow_mut()(world)
-                .ok_or_else(|| anyhow!("no such resource for call: {}", method_name))?
-                .call_method(method_name, args)?,
-            Value::ComponentMethod(entity, lookup, method_name) => {
-                lookup.borrow_mut()(*entity, world)
-                    .ok_or_else(|| anyhow!("no such component for call: {}", method_name))?
-                    .call_method(*entity, method_name, args)?
+    pub fn call_method(&mut self, args: &[Value], mut heap: HeapMut) -> Result<Value> {
+        match self {
+            Value::ResourceMethod(lookup, method_name) => {
+                lookup.call_method(method_name, args, heap)
             }
-            Value::RustMethod(method) => method(args, world),
+            Value::ComponentMethod(entity, lookup, method_name) => lookup
+                .get_mut(*entity, heap.world_mut())
+                .ok_or_else(|| anyhow!("no such component for call: {}", method_name))?
+                .call_method(*entity, method_name, args),
+            Value::RustMethod(method) => method(args, heap),
             _ => {
                 error!("attempting to call non-method value: {}", self);
                 bail!("attempting to call non-method value: {}", self);
             }
-        })
+        }
     }
 
-    pub fn attrs<'a>(&self, index: &'a WorldIndex, world: &'a mut World) -> Result<Vec<&'a str>> {
+    pub fn attrs<'a>(
+        &'a self,
+        index: &'a WorldIndex,
+        world: &'a mut World,
+    ) -> Result<Vec<&'a str>> {
         Ok(match self {
-            Value::Resource(lookup) => lookup(world)
+            Value::Resource(lookup) => lookup
+                .get_ref(world)
                 .ok_or_else(|| anyhow!("no such resource for names"))?
                 .names(),
             Value::Entity(entity) => index.component_attrs(entity),
-            Value::Component(entity, lookup) => lookup(*entity, world)
+            Value::Component(entity, lookup) => lookup
+                .get_ref(*entity, world)
                 .ok_or_else(|| anyhow!("no such component for attrs"))?
                 .names(),
             _ => bail!(

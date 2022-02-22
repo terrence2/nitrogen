@@ -18,11 +18,7 @@ use crate::{
 };
 use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource, world::EntityMut};
-use log::error;
-use nitrous::{
-    make_component_lookup_mut, LocalNamespace, NitrousScript, ScriptComponent, ScriptResource,
-    Value,
-};
+use nitrous::{Heap, HeapMut, LocalNamespace, NamedEntityMut, NitrousScript, ScriptResource};
 use std::path::PathBuf;
 
 /// Interface for extending the Runtime.
@@ -98,56 +94,8 @@ pub enum FrameStage {
     FrameEnd,
 }
 
-pub struct NamedEntityMut<'w> {
-    name: String,
-    entity: EntityMut<'w>,
-}
-
-impl<'w> NamedEntityMut<'w> {
-    pub fn id(&self) -> Entity {
-        self.entity.id()
-    }
-
-    pub fn insert<T>(&mut self, value: T) -> &mut Self
-    where
-        T: Component,
-    {
-        self.entity.insert(value);
-        self
-    }
-
-    pub fn insert_scriptable<T>(&mut self, value: T) -> &mut Self
-    where
-        T: Component + ScriptComponent + 'static,
-    {
-        let component_name = value.component_name();
-
-        // Record the component in the store.
-        self.entity.insert(value);
-
-        // Index the component in the script engine.
-        // Safety: this is safe because you cannot get to an RtEntity from just the world, so we
-        //         cannot be entering here through some world-related path, such as a system.
-        let entity_name = self.name.as_str();
-        let entity = self.entity.id();
-        match unsafe { self.entity.world_mut() }
-            .get_resource_mut::<ScriptHerder>()
-            .unwrap()
-            .upsert_named_component(
-                entity_name,
-                entity,
-                component_name,
-                make_component_lookup_mut::<T>(),
-            ) {
-            Ok(_) => {}
-            Err(e) => error!("{}", e),
-        }
-        self
-    }
-}
-
 pub struct Runtime {
-    world: World,
+    heap: Heap,
     startup_schedule: Schedule,
     sim_schedule: Schedule,
     frame_schedule: Schedule,
@@ -198,7 +146,7 @@ impl Default for Runtime {
             .with_stage(FrameStage::FrameEnd, SS::parallel());
 
         let mut runtime = Self {
-            world: World::default(),
+            heap: Heap::default(),
             startup_schedule,
             sim_schedule,
             frame_schedule,
@@ -216,8 +164,69 @@ impl Default for Runtime {
 
 impl Runtime {
     #[inline]
+    pub fn run_sim_once(&mut self) {
+        self.sim_schedule.run_once(self.heap.world_mut());
+    }
+
+    #[inline]
+    pub fn run_frame_once(&mut self) {
+        self.frame_schedule.run_once(self.heap.world_mut());
+    }
+
+    #[inline]
+    pub fn run_startup(&mut self) {
+        self.startup_schedule.run_once(self.heap.world_mut());
+
+        if self.dump_schedules {
+            self.dump_schedules = false;
+            self.dump_startup_schedule();
+            self.dump_sim_schedule();
+            self.dump_frame_schedule();
+        }
+    }
+
+    #[inline]
     pub fn set_dump_schedules_on_startup(&mut self) {
         self.dump_schedules = true;
+    }
+
+    #[inline]
+    pub fn dump_startup_schedule(&self) {
+        dump_schedule(
+            self.heap.world(),
+            &self.startup_schedule,
+            &PathBuf::from("startup_schedule.dot"),
+        );
+    }
+
+    #[inline]
+    pub fn dump_sim_schedule(&self) {
+        dump_schedule(
+            self.heap.world(),
+            &self.sim_schedule,
+            &PathBuf::from("sim_schedule.dot"),
+        );
+    }
+
+    #[inline]
+    pub fn dump_frame_schedule(&self) {
+        dump_schedule(
+            self.heap.world(),
+            &self.frame_schedule,
+            &PathBuf::from("frame_schedule.dot"),
+        );
+    }
+
+    #[inline]
+    pub fn load_extension<T: Extension>(&mut self) -> Result<&mut Self> {
+        T::init(self)?;
+        Ok(self)
+    }
+
+    #[inline]
+    pub fn with_extension<T: Extension>(mut self) -> Result<Self> {
+        T::init(&mut self)?;
+        Ok(self)
     }
 
     #[inline]
@@ -234,6 +243,8 @@ impl Runtime {
     pub fn startup_stage_mut(&mut self, startup_stage: StartupStage) -> &mut SystemStage {
         self.startup_schedule.get_stage_mut(&startup_stage).unwrap()
     }
+
+    // Script passthrough
 
     #[inline]
     pub fn run_interactive(&mut self, script_text: &str) -> Result<()> {
@@ -261,42 +272,29 @@ impl Runtime {
         )
     }
 
-    #[inline]
-    pub fn load_extension<T: Extension>(&mut self) -> Result<&mut Self> {
-        T::init(self)?;
-        Ok(self)
-    }
-
-    #[inline]
-    pub fn with_extension<T: Extension>(mut self) -> Result<Self> {
-        T::init(&mut self)?;
-        Ok(self)
-    }
+    // Heap passthrough
 
     #[inline]
     pub fn spawn(&mut self) -> EntityMut {
-        self.world.spawn()
+        self.heap.spawn()
     }
 
     #[inline]
-    pub fn spawn_named<S>(&mut self, name: S) -> NamedEntityMut
+    pub fn spawn_named<S>(&mut self, name: S) -> Result<NamedEntityMut>
     where
         S: Into<String>,
     {
-        NamedEntityMut {
-            name: name.into(),
-            entity: self.world.spawn(),
-        }
+        self.heap.spawn_named(name)
     }
 
     #[inline]
     pub fn get<T: Component + 'static>(&self, entity: Entity) -> &T {
-        self.world.get::<T>(entity).expect("entity not found")
+        self.heap.get::<T>(entity)
     }
 
     #[inline]
     pub fn get_mut<T: Component + 'static>(&mut self, entity: Entity) -> Mut<T> {
-        self.world.get_mut::<T>(entity).expect("entity not found")
+        self.heap.get_mut::<T>(entity)
     }
 
     #[inline]
@@ -305,103 +303,49 @@ impl Runtime {
         S: Into<String>,
         T: Resource + ScriptResource + 'static,
     {
-        self.world.insert_resource(value);
-        self.resource_mut::<ScriptHerder>()
-            .insert_named_resource::<T>(name.into());
+        self.heap.insert_named_resource(name, value);
         self
     }
 
     #[inline]
     pub fn insert_resource<T: Resource>(&mut self, value: T) -> &mut Self {
-        self.world.insert_resource(value);
+        self.heap.insert_resource(value);
         self
     }
 
     #[inline]
     pub fn maybe_resource<T: Resource>(&self) -> Option<&T> {
-        self.world.get_resource()
+        self.heap.maybe_resource()
     }
 
     #[inline]
     pub fn resource<T: Resource>(&self) -> &T {
-        self.world.get_resource().expect("unset resource")
+        self.heap.resource::<T>()
     }
 
     #[inline]
     pub fn resource_mut<T: Resource>(&mut self) -> Mut<T> {
-        self.world.get_resource_mut().expect("unset resource")
+        self.heap.resource_mut::<T>()
     }
 
     #[inline]
     pub fn resource_by_name(&mut self, name: &str) -> &dyn ScriptResource {
-        if let Value::Resource(lookup) = self
-            .resource::<ScriptHerder>()
-            .lookup_resource(name)
-            .expect("unset named resource")
-        {
-            lookup(&mut self.world).unwrap_or_else(|| panic!("no such named resource: {}", name))
-        } else {
-            panic!("unable to access resoure by name")
-        }
+        self.heap.resource_by_name(name)
     }
 
     #[inline]
     pub fn remove_resource<T: Resource>(&mut self) -> Option<T> {
-        self.world.remove_resource()
+        self.heap.remove_resource::<T>()
     }
 
     #[inline]
     pub fn resource_names(&self) -> impl Iterator<Item = &str> {
-        self.resource::<ScriptHerder>().resource_names()
+        self.heap.resource_names()
     }
 
     #[inline]
-    pub fn run_sim_once(&mut self) {
-        self.sim_schedule.run_once(&mut self.world);
-    }
-
-    #[inline]
-    pub fn run_frame_once(&mut self) {
-        self.frame_schedule.run_once(&mut self.world);
-    }
-
-    #[inline]
-    pub fn run_startup(&mut self) {
-        self.startup_schedule.run_once(&mut self.world);
-
-        if self.dump_schedules {
-            self.dump_schedules = false;
-            self.dump_startup_schedule();
-            self.dump_sim_schedule();
-            self.dump_frame_schedule();
-        }
-    }
-
-    #[inline]
-    pub fn dump_startup_schedule(&self) {
-        dump_schedule(
-            &self.world,
-            &self.startup_schedule,
-            &PathBuf::from("startup_schedule.dot"),
-        );
-    }
-
-    #[inline]
-    pub fn dump_sim_schedule(&self) {
-        dump_schedule(
-            &self.world,
-            &self.sim_schedule,
-            &PathBuf::from("sim_schedule.dot"),
-        );
-    }
-
-    #[inline]
-    pub fn dump_frame_schedule(&self) {
-        dump_schedule(
-            &self.world,
-            &self.frame_schedule,
-            &PathBuf::from("frame_schedule.dot"),
-        );
+    pub fn resource_scope<T: Resource, U>(&mut self, f: impl FnOnce(HeapMut, Mut<T>) -> U) -> U {
+        self.heap.resource_scope(f)
     }
 }
 

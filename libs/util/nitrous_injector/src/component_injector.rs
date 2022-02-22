@@ -63,7 +63,7 @@ pub(crate) fn codegen(ir: Ir) -> TokenStream {
     let (impl_generics, _ty_generics, where_clause) = item.generics.split_for_impl();
     let ts2 = quote! {
         impl #impl_generics #ty #where_clause {
-            fn __call_method_inner__(&mut self, entity: Entity, name: &str, args: &[::nitrous::Value]) -> ::anyhow::Result<::nitrous::Value> {
+            fn __call_method_inner__(&mut self, entity: ::nitrous::reexport::Entity, name: &str, args: &[::nitrous::Value]) -> ::anyhow::Result<::nitrous::Value> {
                 match name {
                     #(#method_arms)*
                     _ => {
@@ -73,7 +73,7 @@ pub(crate) fn codegen(ir: Ir) -> TokenStream {
                 }
             }
 
-            fn __get_inner__(&self, entity: Entity, name: &str) -> ::anyhow::Result<::nitrous::Value> {
+            fn __get_inner__(&self, entity: ::nitrous::reexport::Entity, name: &str) -> ::anyhow::Result<::nitrous::Value> {
                 match name {
                     #(#get_arms)*
                     _ => {
@@ -83,7 +83,7 @@ pub(crate) fn codegen(ir: Ir) -> TokenStream {
                 }
             }
 
-            fn __put_inner__(&mut self, entity: Entity, name: &str, value: ::nitrous::Value) -> ::anyhow::Result<()> {
+            fn __put_inner__(&mut self, entity: ::nitrous::reexport::Entity, name: &str, value: ::nitrous::Value) -> ::anyhow::Result<()> {
                 match name {
                     #(#put_arms)*
                     _ => {

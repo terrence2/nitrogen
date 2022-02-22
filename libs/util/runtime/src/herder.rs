@@ -13,12 +13,12 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
-use bevy_ecs::{prelude::*, system::Resource};
-use itertools::Itertools;
+use bevy_ecs::prelude::*;
+use itertools::*;
 use log::{trace, warn};
 use nitrous::{
-    ComponentLookupMutFunc, ExecutionContext, LocalNamespace, NitrousExecutor, NitrousScript,
-    ScriptResource, Value, WorldIndex, YieldState,
+    ExecutionContext, HeapMut, HeapRef, LocalNamespace, NitrousExecutor, NitrousScript, Value,
+    YieldState,
 };
 use std::sync::Arc;
 
@@ -90,6 +90,37 @@ impl ExecutionMetadata {
     pub fn context(&self) -> &ExecutionContext {
         &self.context
     }
+
+    pub fn maybe_add_builtins(&mut self, heap: HeapRef) {
+        if self.context.has_started() {
+            // Don't repeat for yielded scripts
+            return;
+        }
+
+        self.context.locals_mut().put_if_absent(
+            "exit",
+            Value::RustMethod(Arc::new(|_args, mut heap| {
+                heap.resource_mut::<ExitRequest>().request_exit();
+                Ok(Value::True())
+            })),
+        );
+        if self.kind == ScriptRunKind::Interactive {
+            #[allow(unstable_name_collisions)]
+            let resource_list: Value = heap
+                .resource_names()
+                .intersperse("\n")
+                .collect::<String>()
+                .into();
+            self.context.locals_mut().put_if_absent(
+                "list",
+                Value::RustMethod(Arc::new(move |_, _| Ok(resource_list.clone()))),
+            );
+            self.context.locals_mut().put_if_absent(
+                "help",
+                Value::RustMethod(Arc::new(move |_, _| Ok(GUIDE.to_owned().into()))),
+            );
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -123,18 +154,9 @@ pub struct ScriptCompletion {
 pub type ScriptCompletions = Vec<ScriptCompletion>;
 
 /// Manage script execution state.
+#[derive(Default)]
 pub struct ScriptHerder {
     gthread: Vec<ExecutionMetadata>,
-    index: WorldIndex,
-}
-
-impl Default for ScriptHerder {
-    fn default() -> Self {
-        Self {
-            gthread: Vec::new(),
-            index: WorldIndex::empty(),
-        }
-    }
 }
 
 impl ScriptHerder {
@@ -167,143 +189,54 @@ impl ScriptHerder {
     #[inline]
     pub fn run_with_locals<N: Into<NitrousScript>>(
         &mut self,
-        mut locals: LocalNamespace,
+        locals: LocalNamespace,
         script: N,
         kind: ScriptRunKind,
     ) {
-        Self::add_builtins(kind, &self.index, &mut locals);
         self.gthread.push(ExecutionMetadata {
             context: ExecutionContext::new(locals, script.into()),
             kind,
         });
     }
 
-    pub fn add_builtins(kind: ScriptRunKind, index: &WorldIndex, locals: &mut LocalNamespace) {
-        locals.put_if_absent(
-            "exit",
-            Value::RustMethod(Arc::new(|_args, world| {
-                if let Some(mut exit) = world.get_resource_mut::<ExitRequest>() {
-                    exit.request_exit();
-                }
-                Value::True()
-            })),
-        );
-        if kind == ScriptRunKind::Interactive {
-            #[allow(unstable_name_collisions)]
-            let resource_list: Value = index
-                .resource_names()
-                .intersperse("\n")
-                .collect::<String>()
-                .into();
-            locals.put_if_absent(
-                "list",
-                Value::RustMethod(Arc::new(move |_, _| resource_list.clone())),
-            );
-            locals.put_if_absent(
-                "help",
-                Value::RustMethod(Arc::new(move |_, _| GUIDE.to_owned().into())),
-            );
-        }
-    }
-
-    #[inline]
-    pub fn resource_names(&self) -> impl Iterator<Item = &str> {
-        self.index.resource_names()
-    }
-
-    #[inline]
-    pub fn lookup_resource(&self, name: &str) -> Option<Value> {
-        self.index.lookup_resource(name)
-    }
-
-    #[inline]
-    pub fn attrs<'a>(&'a self, value: Value, world: &'a mut World) -> Result<Vec<&'a str>> {
-        value.attrs(&self.index, world)
-    }
-
-    #[inline]
-    pub(crate) fn insert_named_resource<T>(&mut self, name: String)
-    where
-        T: Resource + ScriptResource + 'static,
-    {
-        self.index.insert_named_resource::<T>(name);
-    }
-
-    pub fn entity_names(&self) -> impl Iterator<Item = &str> {
-        self.index.entity_names()
-    }
-
-    pub fn lookup_entity(&self, name: &str) -> Option<Value> {
-        self.index.lookup_entity(name)
-    }
-
-    pub fn entity_component_names(&self, entity: Entity) -> Option<impl Iterator<Item = &str>> {
-        self.index.entity_component_names(entity)
-    }
-
-    pub fn entity_component_attrs(
-        &self,
-        entity: Entity,
-        component_name: &str,
-        world: &mut World,
-    ) -> Option<Vec<String>> {
-        self.index
-            .entity_component_attrs(entity, component_name, world)
-    }
-
-    #[inline]
-    pub(crate) fn upsert_named_component(
-        &mut self,
-        entity_name: &str,
-        entity: Entity,
-        component_name: &str,
-        lookup: Arc<ComponentLookupMutFunc>,
-    ) -> Result<()> {
-        self.index
-            .upsert_named_component(entity_name, entity, component_name, lookup)
-    }
-
     #[inline]
     pub(crate) fn sys_run_startup_scripts(world: &mut World) {
         world.resource_scope(|world, mut herder: Mut<ScriptHerder>| {
-            herder.run_scripts(world, ScriptRunPhase::Startup);
+            herder.run_scripts(HeapMut::wrap(world), ScriptRunPhase::Startup);
         });
     }
 
     #[inline]
     pub(crate) fn sys_run_sim_scripts(world: &mut World) {
         world.resource_scope(|world, mut herder: Mut<ScriptHerder>| {
-            herder.run_scripts(world, ScriptRunPhase::Sim);
+            herder.run_scripts(HeapMut::wrap(world), ScriptRunPhase::Sim);
         });
     }
 
-    fn run_scripts(&mut self, world: &mut World, phase: ScriptRunPhase) {
-        world
-            .get_resource_mut::<ScriptCompletions>()
-            .unwrap()
-            .clear();
+    fn run_scripts(&mut self, mut heap: HeapMut, phase: ScriptRunPhase) {
+        // If there are any script completions left, dump them.
+        heap.resource_mut::<ScriptCompletions>().clear();
+
         let mut next_gthreads = Vec::with_capacity(self.gthread.capacity());
         for mut meta in self.gthread.drain(..) {
-            let mut executor = NitrousExecutor::new(&mut meta.context, &mut self.index, world);
+            meta.maybe_add_builtins(heap.as_ref());
+            let executor = NitrousExecutor::new(&mut meta.context, heap.as_mut());
             match executor.run_until_yield() {
                 Ok(yield_state) => match yield_state {
                     YieldState::Yielded => next_gthreads.push(meta),
                     YieldState::Finished(result) => {
                         trace!("{:?}: {} <- {}", phase, result, meta.context.script());
-                        world.get_resource_mut::<ScriptCompletions>().unwrap().push(
-                            ScriptCompletion {
+                        heap.resource_mut::<ScriptCompletions>()
+                            .push(ScriptCompletion {
                                 result: ScriptResult::Ok(result),
                                 phase,
                                 meta,
-                            },
-                        );
+                            });
                     }
                 },
                 Err(err) => {
                     warn!("script failed: {}", err);
-                    world
-                        .get_resource_mut::<ScriptCompletions>()
-                        .unwrap()
+                    heap.resource_mut::<ScriptCompletions>()
                         .push(ScriptCompletion {
                             result: ScriptResult::Err(format!("{}", err)),
                             phase,

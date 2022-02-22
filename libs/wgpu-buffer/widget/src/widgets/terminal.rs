@@ -21,12 +21,11 @@ use crate::{
     LineEdit, TextEdit, VerticalBox,
 };
 use anyhow::{Context, Result};
-use bevy_ecs::prelude::*;
 use gpu::Gpu;
 use input::{ElementState, InputEvent, VirtualKeyCode};
 use nitrous::{
     ir::{Expr, Stmt, Term},
-    NitrousAst, Value,
+    HeapMut, HeapRef, NitrousAst, Value,
 };
 use parking_lot::RwLock;
 use runtime::{ScriptCompletion, ScriptHerder, ScriptResult, ScriptRunKind};
@@ -154,12 +153,10 @@ impl Terminal {
         self.output.write().append_line(line);
     }
 
-    fn try_complete_resource(partial: &NitrousAst, world: &mut World) -> Option<String> {
+    fn try_complete_resource(partial: &NitrousAst, heap: HeapRef) -> Option<String> {
         if let Stmt::Expr(ref e) = partial.statements()[0].as_ref() {
             if let Expr::Term(Term::Symbol(sym)) = e.as_ref() {
-                let matching_resources = world
-                    .get_resource::<ScriptHerder>()
-                    .unwrap()
+                let matching_resources = heap
                     .resource_names()
                     .filter(|&s| s.starts_with(sym.as_str()))
                     .collect::<Vec<&str>>();
@@ -173,27 +170,17 @@ impl Terminal {
         None
     }
 
-    fn try_complete_resource_attrs(partial: &NitrousAst, world: &mut World) -> Option<String> {
+    fn try_complete_resource_attrs(partial: &NitrousAst, heap: HeapRef) -> Option<String> {
         if let Stmt::Expr(ref e) = partial.statements()[0].as_ref() {
             if let Expr::Attr(lhs_name_term, Term::Symbol(sym)) = e.as_ref() {
                 if let Expr::Term(Term::Symbol(res_name)) = lhs_name_term.as_ref() {
-                    if let Some(value) = world
-                        .get_resource::<ScriptHerder>()
-                        .unwrap()
-                        .lookup_resource(res_name)
-                    {
-                        let matching_attrs =
-                            world.resource_scope(|world, herder: Mut<ScriptHerder>| {
-                                if let Ok(attr_names) = herder.attrs(value, world) {
-                                    attr_names
-                                        .iter()
-                                        .filter(|&s| s.starts_with(sym.as_str()))
-                                        .map(|s| s.to_owned().to_owned())
-                                        .collect::<Vec<String>>()
-                                } else {
-                                    Vec::new()
-                                }
-                            });
+                    if let Some(resource) = heap.maybe_resource_by_name(res_name) {
+                        let matching_attrs = resource
+                            .names()
+                            .iter()
+                            .filter(|&s| s.starts_with(sym.as_str()))
+                            .map(|s| s.to_owned().to_owned())
+                            .collect::<Vec<String>>();
                         if matching_attrs.len() == 1 {
                             return Some(format!("{}.{}", res_name, matching_attrs[0]));
                         } else {
@@ -206,10 +193,10 @@ impl Terminal {
         None
     }
 
-    fn try_complete_entity(partial: &NitrousAst, herder: &ScriptHerder) -> Option<String> {
+    fn try_complete_entity(partial: &NitrousAst, heap: HeapRef) -> Option<String> {
         if let Stmt::Expr(ref e) = partial.statements()[0].as_ref() {
             if let Expr::Term(Term::AtSymbol(sym)) = e.as_ref() {
-                let matching_entities = herder
+                let matching_entities = heap
                     .entity_names()
                     .filter(|&s| s.starts_with(sym.as_str()))
                     .collect::<Vec<&str>>();
@@ -223,16 +210,13 @@ impl Terminal {
         None
     }
 
-    fn try_complete_entity_component(
-        partial: &NitrousAst,
-        herder: &ScriptHerder,
-    ) -> Option<String> {
+    fn try_complete_entity_component(partial: &NitrousAst, heap: HeapRef) -> Option<String> {
         if let Stmt::Expr(ref e) = partial.statements()[0].as_ref() {
             if let Expr::Attr(lhs_name_term, Term::Symbol(sym)) = e.as_ref() {
                 if let Expr::Term(Term::AtSymbol(ent_name)) = lhs_name_term.as_ref() {
-                    if let Some(Value::Entity(entity)) = herder.lookup_entity(ent_name) {
-                        if let Some(component_names) = herder.entity_component_names(entity) {
-                            let matching_components = component_names
+                    if let Some(entity) = heap.maybe_entity_by_name(ent_name) {
+                        if let Some(attrs) = heap.entity_component_names(entity) {
+                            let matching_components = attrs
                                 .filter(|&s| s.starts_with(sym.as_str()))
                                 .collect::<Vec<_>>();
                             if matching_components.len() == 1 {
@@ -248,26 +232,14 @@ impl Terminal {
         None
     }
 
-    fn try_complete_entity_component_attrs(
-        partial: &NitrousAst,
-        world: &mut World,
-    ) -> Option<String> {
+    fn try_complete_entity_component_attrs(partial: &NitrousAst, heap: HeapRef) -> Option<String> {
         if let Stmt::Expr(ref e) = partial.statements()[0].as_ref() {
             if let Expr::Attr(attr_term, Term::Symbol(attr_sym)) = e.as_ref() {
                 if let Expr::Attr(ent_term, Term::Symbol(comp_sym)) = attr_term.as_ref() {
                     if let Expr::Term(Term::AtSymbol(ent_sym)) = ent_term.as_ref() {
-                        if let Some(Value::Entity(entity)) = world
-                            .get_resource::<ScriptHerder>()
-                            .unwrap()
-                            .lookup_entity(ent_sym)
-                        {
-                            let maybe_attr_names =
-                                world.resource_scope(|world, herder: Mut<ScriptHerder>| {
-                                    herder.entity_component_attrs(entity, comp_sym, world)
-                                });
-                            if let Some(attr_names) = maybe_attr_names {
-                                let matching_attrs = attr_names
-                                    .iter()
+                        if let Some(entity) = heap.maybe_entity_by_name(ent_sym) {
+                            if let Some(attrs) = heap.entity_component_names(entity) {
+                                let matching_attrs = attrs
                                     .filter(|&s| s.starts_with(attr_sym.as_str()))
                                     .collect::<Vec<_>>();
                                 if matching_attrs.len() == 1 {
@@ -287,33 +259,32 @@ impl Terminal {
         None
     }
 
-    fn try_completion(&self, partial: NitrousAst, world: &mut World) -> Option<String> {
+    fn try_completion(&self, partial: NitrousAst, heap: HeapRef) -> Option<String> {
         if partial.statements().len() != 1 {
             return None;
         }
-        if let Some(s) = Self::try_complete_resource(&partial, world) {
+        if let Some(s) = Self::try_complete_resource(&partial, heap) {
             return Some(s);
         }
-        if let Some(s) = Self::try_complete_resource_attrs(&partial, world) {
+        if let Some(s) = Self::try_complete_resource_attrs(&partial, heap) {
             return Some(s);
         }
-        if let Some(s) = Self::try_complete_entity_component_attrs(&partial, world) {
+        if let Some(s) = Self::try_complete_entity_component_attrs(&partial, heap) {
             return Some(s);
         }
-        let herder = world.get_resource::<ScriptHerder>().unwrap();
-        if let Some(s) = Self::try_complete_entity(&partial, herder) {
+        if let Some(s) = Self::try_complete_entity(&partial, heap) {
             return Some(s);
         }
-        if let Some(s) = Self::try_complete_entity_component(&partial, herder) {
+        if let Some(s) = Self::try_complete_entity_component(&partial, heap) {
             return Some(s);
         }
         None
     }
 
-    fn on_tab_pressed(&mut self, world: &mut World) {
+    fn on_tab_pressed(&mut self, heap: HeapRef) {
         let incomplete = self.edit.read().line().flatten();
         if let Ok(partial) = NitrousAst::parse(&incomplete) {
-            if let Some(full) = self.try_completion(partial, world) {
+            if let Some(full) = self.try_completion(partial, heap) {
                 self.edit.write().line_mut().select_all();
                 self.edit.write().line_mut().insert(&full);
             }
@@ -446,7 +417,7 @@ impl Terminal {
     }
 
     // We need the world in order to do completions.
-    pub fn handle_terminal_events(&mut self, event: &InputEvent, world: &mut World) -> Result<()> {
+    pub fn handle_terminal_events(&mut self, event: &InputEvent, mut heap: HeapMut) -> Result<()> {
         // Intercept the enter key and process the command in edit into the terminal.
         if let InputEvent::KeyboardKey {
             virtual_keycode,
@@ -468,7 +439,7 @@ impl Terminal {
             if *press_state == ElementState::Pressed {
                 match (modifiers_state.ctrl(), virtual_keycode) {
                     (false, VirtualKeyCode::Tab) => {
-                        self.on_tab_pressed(world);
+                        self.on_tab_pressed(heap.as_ref());
                     }
                     (false, VirtualKeyCode::Up) => {
                         self.on_up_pressed();
@@ -477,7 +448,7 @@ impl Terminal {
                         self.on_down_pressed();
                     }
                     (false, VirtualKeyCode::Return | VirtualKeyCode::NumpadEnter) => {
-                        let herder = &mut world.get_resource_mut::<ScriptHerder>().unwrap();
+                        let herder = &mut heap.resource_mut::<ScriptHerder>();
                         self.on_enter_pressed(herder)?;
                     }
                     _ => {}
