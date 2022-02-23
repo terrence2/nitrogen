@@ -583,7 +583,7 @@ impl SphericalTileSetCommon {
             self.tile_state.insert(qtid, TileState::Reading(atlas_slot));
             self.tile_read_count += 1;
 
-            // Do the read in a disconnected greenthread and send it back on an mpsc queue.
+            // Do the read in a disconnected thread and send it back on an mpsc queue.
             let fid = self.tile_tree.file_id(&qtid);
             let compression = self.tile_tree.tile_compression(&qtid);
             let extent = self.tile_tree.file_extent(&qtid);

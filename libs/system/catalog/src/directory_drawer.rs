@@ -59,10 +59,10 @@ impl DirectoryDrawer {
         Ok(())
     }
 
-    pub fn from_directory_with_extension<S: AsRef<OsStr> + ?Sized>(
+    fn from_directory_internal<S: AsRef<OsStr> + ?Sized>(
         priority: i64,
         path_name: &S,
-        only_extension: &str,
+        only_extension: Option<&str>,
     ) -> Result<Box<dyn DrawerInterface>> {
         let path = PathBuf::from(path_name);
         let name = path
@@ -76,19 +76,23 @@ impl DirectoryDrawer {
             path,
             index: HashMap::new(),
         };
-        if only_extension.is_empty() {
-            dd.populate_from_directory(None)?;
-        } else {
-            dd.populate_from_directory(Some(only_extension))?;
-        }
+        dd.populate_from_directory(only_extension)?;
         Ok(Box::new(dd))
+    }
+
+    pub fn from_directory_with_extension<S: AsRef<OsStr> + ?Sized>(
+        priority: i64,
+        path_name: &S,
+        only_extension: &str,
+    ) -> Result<Box<dyn DrawerInterface>> {
+        Self::from_directory_internal(priority, path_name, Some(only_extension))
     }
 
     pub fn from_directory<S: AsRef<OsStr> + ?Sized>(
         priority: i64,
         path_name: &S,
     ) -> Result<Box<dyn DrawerInterface>> {
-        Self::from_directory_with_extension(priority, path_name, "")
+        Self::from_directory_internal(priority, path_name, None)
     }
 }
 
