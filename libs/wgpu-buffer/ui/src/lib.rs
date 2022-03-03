@@ -60,8 +60,9 @@ where
             .add_system(Self::sys_handle_display_config_change);
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_render_ui
-                .before("CompositeRenderPass")
-                .label("UiRenderPass"),
+                .label("UiRenderPass")
+                .after("GlobalParametersBuffer")
+                .before("CompositeRenderPass"),
         );
         Ok(())
     }

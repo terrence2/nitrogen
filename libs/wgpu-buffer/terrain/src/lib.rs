@@ -179,18 +179,22 @@ impl Extension for TerrainBuffer {
         runtime
             .frame_stage_mut(FrameStage::Render)
             .add_system(Self::sys_paint_atlas_indices.label("paint_atlas_indices"));
-        runtime
-            .frame_stage_mut(FrameStage::Render)
-            .add_system(Self::sys_tesselate.label("tesselate"));
+        runtime.frame_stage_mut(FrameStage::Render).add_system(
+            Self::sys_tesselate
+                .label("tesselate")
+                .after("GlobalParametersBuffer"),
+        );
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_deferred_texture
                 .label("deferred_texture")
+                .after("GlobalParametersBuffer")
                 .after("tesselate")
                 .after("paint_atlas_indices"),
         );
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_accumulate_normal_and_color
                 .label("accumulate_normal_and_color")
+                .after("GlobalParametersBuffer")
                 .after("deferred_texture")
                 .before("WorldRenderPass"),
         );

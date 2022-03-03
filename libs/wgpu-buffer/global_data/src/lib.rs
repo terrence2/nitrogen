@@ -17,7 +17,7 @@ use anyhow::Result;
 use bevy_ecs::prelude::*;
 use camera::Camera;
 use core::num::NonZeroU64;
-use gpu::{Gpu, UploadTracker};
+use gpu::Gpu;
 use nalgebra::{convert, Matrix3, Matrix4, Point3, Vector3, Vector4};
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use orrery::Orrery;
@@ -173,8 +173,8 @@ impl Extension for GlobalParametersBuffer {
             .frame_stage_mut(FrameStage::TrackStateChanges)
             .add_system(Self::sys_track_state_changes);
         runtime
-            .frame_stage_mut(FrameStage::EnsureGpuUpdated)
-            .add_system(Self::sys_ensure_uploaded);
+            .frame_stage_mut(FrameStage::Render)
+            .add_system(Self::sys_ensure_globals_updated.label("GlobalParametersBuffer"));
 
         Ok(())
     }
@@ -277,21 +277,27 @@ impl GlobalParametersBuffer {
         self.globals.set_window_info(win);
     }
 
-    fn sys_ensure_uploaded(
+    fn sys_ensure_globals_updated(
         globals: Res<GlobalParametersBuffer>,
         gpu: Res<Gpu>,
-        tracker: Res<UploadTracker>,
+        maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
-        globals.ensure_uploaded(&gpu, &tracker);
-    }
-
-    pub fn ensure_uploaded(&self, gpu: &Gpu, tracker: &UploadTracker) {
-        let buffer = gpu.push_data(
-            "global-upload-buffer",
-            &self.globals,
-            wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_SRC,
-        );
-        tracker.upload_ba(buffer, self.parameters_buffer.clone(), self.buffer_size);
+        if let Some(encoder) = maybe_encoder.into_inner() {
+            let buffer = gpu.push_data(
+                "global-upload-buffer",
+                &globals.globals,
+                wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_SRC,
+            );
+            // Note: we _could_ also recreate any bindings that refer to this buffer,
+            //       but that's _lots_ of bindings in many systems, so we copy instead.
+            encoder.copy_buffer_to_buffer(
+                &buffer,
+                0,
+                &globals.parameters_buffer,
+                0,
+                globals.buffer_size,
+            );
+        }
     }
 }
 
