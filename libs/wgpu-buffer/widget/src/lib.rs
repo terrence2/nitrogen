@@ -43,7 +43,7 @@ use anyhow::{ensure, Result};
 use bevy_ecs::prelude::*;
 use font_common::{FontAdvance, FontInterface};
 use font_ttf::TtfFont;
-use gpu::{Gpu, UploadTracker};
+use gpu::Gpu;
 use input::{ElementState, InputEvent, InputEventVec, InputFocus, ModifiersState, VirtualKeyCode};
 use log::{error, trace};
 use nitrous::{inject_nitrous_resource, method, HeapMut, NitrousResource, Value};
@@ -139,9 +139,12 @@ where
         runtime
             .frame_stage_mut(FrameStage::TrackStateChanges)
             .add_system(Self::sys_track_state_changes);
-        runtime
-            .frame_stage_mut(FrameStage::EnsureGpuUpdated)
-            .add_system(Self::sys_ensure_uploaded);
+        runtime.frame_stage_mut(FrameStage::Render).add_system(
+            Self::sys_ensure_uploaded
+                .label("WidgetBuffer::sys_ensure_uploaded")
+                .before("UiRenderPass")
+                .after("WidgetBuffer::maintain_font_atlas"),
+        );
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_maintain_font_atlas
                 .before("UiRenderPass")
@@ -486,11 +489,13 @@ where
         timestep: Res<TimeStep>,
         gpu: Res<Gpu>,
         window: Res<Window>,
-        tracker: Res<UploadTracker>,
+        maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
-        widget
-            .ensure_uploaded(*timestep.now(), &gpu, &window, &tracker)
-            .ok();
+        if let Some(encoder) = maybe_encoder.into_inner() {
+            widget
+                .ensure_uploaded(*timestep.now(), &gpu, &window, encoder)
+                .ok();
+        }
     }
 
     pub fn ensure_uploaded(
@@ -498,7 +503,7 @@ where
         now: Instant,
         gpu: &Gpu,
         win: &Window,
-        tracker: &UploadTracker,
+        encoder: &mut wgpu::CommandEncoder,
     ) -> Result<()> {
         // Draw into the paint context.
         self.paint_context.reset_for_frame();
@@ -508,41 +513,41 @@ where
 
         if !self.paint_context.widget_info_pool.is_empty() {
             ensure!(self.paint_context.widget_info_pool.len() <= Self::MAX_WIDGETS);
-            gpu.upload_slice_to(
+            gpu.upload_slice_to2(
                 "widget-info-upload",
                 &self.paint_context.widget_info_pool,
                 self.widget_info_buffer.clone(),
-                tracker,
+                encoder,
             );
         }
 
         if !self.paint_context.background_pool.is_empty() {
             ensure!(self.paint_context.background_pool.len() <= Self::MAX_BACKGROUND_VERTICES);
-            gpu.upload_slice_to(
+            gpu.upload_slice_to2(
                 "widget-bg-vertex-upload",
                 &self.paint_context.background_pool,
                 self.background_vertex_buffer.clone(),
-                tracker,
+                encoder,
             );
         }
 
         if !self.paint_context.image_pool.is_empty() {
             ensure!(self.paint_context.image_pool.len() <= Self::MAX_IMAGE_VERTICES);
-            gpu.upload_slice_to(
+            gpu.upload_slice_to2(
                 "widget-image-vertex-upload",
                 &self.paint_context.image_pool,
                 self.image_vertex_buffer.clone(),
-                tracker,
+                encoder,
             );
         }
 
         if !self.paint_context.text_pool.is_empty() {
             ensure!(self.paint_context.text_pool.len() <= Self::MAX_TEXT_VERTICES);
-            gpu.upload_slice_to(
+            gpu.upload_slice_to2(
                 "widget-text-vertex-upload",
                 &self.paint_context.text_pool,
                 self.text_vertex_buffer.clone(),
-                tracker,
+                encoder,
             );
         }
 
@@ -596,15 +601,6 @@ where
         if let Some(encoder) = maybe_encoder.into_inner() {
             widgets.paint_context.maintain_font_atlas(&gpu, encoder);
         }
-    }
-
-    pub fn maintain_font_atlas(
-        &mut self,
-        gpu: &Gpu,
-        mut encoder: wgpu::CommandEncoder,
-    ) -> Result<wgpu::CommandEncoder> {
-        self.paint_context.maintain_font_atlas(gpu, &mut encoder);
-        Ok(encoder)
     }
 }
 

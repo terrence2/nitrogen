@@ -636,6 +636,25 @@ impl Gpu {
         }
     }
 
+    pub fn upload_slice_to2<T: AsBytes>(
+        &self,
+        label: &'static str,
+        data: &[T],
+        target: Arc<wgpu::Buffer>,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        if let Some(source) = self.maybe_push_slice(label, data, wgpu::BufferUsages::COPY_SRC) {
+            encoder.copy_buffer_to_buffer(
+                &source,
+                0,
+                &target,
+                0,
+                (mem::size_of::<T>() * data.len()) as wgpu::BufferAddress,
+            );
+            //tracker.upload(source, target, mem::size_of::<T>() * data.len());
+        }
+    }
+
     // Copy of the old util method that went away.
     fn make_spirv(data: &[u8]) -> wgpu::ShaderSource {
         const MAGIC_NUMBER: u32 = 0x0723_0203;
