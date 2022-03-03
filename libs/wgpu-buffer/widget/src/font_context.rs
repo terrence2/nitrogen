@@ -22,12 +22,12 @@ use crate::{
 use anyhow::Result;
 use atlas::{AtlasPacker, Frame};
 use font_common::{FontAdvance, FontInterface};
-use gpu::{Gpu, UploadTracker};
+use gpu::Gpu;
 use image::Luma;
 use nitrous::Value;
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
-use std::{borrow::Borrow, collections::HashMap, env, sync::Arc};
+use std::{borrow::Borrow, collections::HashMap, env, path::PathBuf, sync::Arc};
 use window::{
     size::{AbsSize, LeftBound, RelSize, ScreenDir},
     Window,
@@ -73,11 +73,12 @@ pub struct FontContext {
     glyph_sheet: AtlasPacker<Luma<u8>>,
     trackers: HashMap<FontId, GlyphTracker>,
     name_manager: FontNameManager,
+    dump_texture_path: Option<PathBuf>,
 }
 
 impl FontContext {
-    pub fn new(gpu: &Gpu) -> Result<Self> {
-        Ok(Self {
+    pub fn new(gpu: &Gpu) -> Self {
+        Self {
             glyph_sheet: AtlasPacker::new(
                 "glyph_sheet",
                 gpu,
@@ -85,22 +86,23 @@ impl FontContext {
                 256,
                 wgpu::TextureFormat::R8Unorm,
                 wgpu::FilterMode::Linear,
-            )?,
+            ),
             trackers: HashMap::new(),
             name_manager: Default::default(),
-        })
-    }
-
-    pub fn make_upload_buffer(&mut self, gpu: &Gpu, tracker: &UploadTracker) -> Result<()> {
-        self.glyph_sheet.make_upload_buffer(gpu, tracker)
+            dump_texture_path: None,
+        }
     }
 
     pub fn handle_dump_texture(&mut self, gpu: &mut Gpu) -> Result<()> {
-        self.glyph_sheet.handle_dump_texture(gpu)
+        if let Some(dump_path) = &self.dump_texture_path {
+            self.glyph_sheet.dump_texture(gpu, dump_path)?;
+        }
+        self.dump_texture_path = None;
+        Ok(())
     }
 
-    pub fn maintain_font_atlas(&self, encoder: &mut wgpu::CommandEncoder) {
-        self.glyph_sheet.maintain_gpu_resources(encoder);
+    pub fn maintain_font_atlas(&mut self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder) {
+        self.glyph_sheet.encode_frame_uploads(gpu, encoder);
     }
 
     pub fn glyph_sheet_width(&self) -> u32 {
@@ -182,7 +184,7 @@ impl FontContext {
         let mut path = env::current_dir()?;
         path.push("__dump__");
         path.push("font_context_glyphs.png");
-        self.glyph_sheet.dump(path);
+        self.dump_texture_path = Some(path);
         Ok(())
     }
 

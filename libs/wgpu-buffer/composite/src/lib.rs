@@ -87,7 +87,7 @@ where
                     module: &gpu.create_shader_module(
                         "composite.vert",
                         include_bytes!("../target/composite.vert.spirv"),
-                    )?,
+                    ),
                     entry_point: "main",
                     buffers: &[FullscreenVertex::descriptor()],
                 },
@@ -95,7 +95,7 @@ where
                     module: &gpu.create_shader_module(
                         "composite.frag",
                         include_bytes!("../target/composite.frag.spirv"),
-                    )?,
+                    ),
                     entry_point: "main",
                     targets: &[wgpu::ColorTargetState {
                         format: Gpu::SCREEN_FORMAT,

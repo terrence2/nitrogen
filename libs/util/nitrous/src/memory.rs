@@ -274,6 +274,10 @@ impl WorldIndex {
             .flatten()
     }
 
+    pub fn get_entity(&self, name: &str) -> Option<Entity> {
+        self.named_entities.get(name).cloned()
+    }
+
     /// Look up a named entity in the index.
     pub fn lookup_entity(&self, name: &str) -> Option<Value> {
         self.named_entities

@@ -191,8 +191,8 @@ impl InputController {
         use winit::platform::{run_return::EventLoopExtRunReturn, unix::EventLoopExtUnix};
         let mut event_loop = EventLoop::<MetaEvent>::new_any_thread();
         let os_window = Window::new(&event_loop).unwrap();
-        let mut have_config = false;
-        while !have_config {
+        let mut have_config = 0;
+        while have_config <= 0 && have_config > -100 {
             event_loop.run_return(|evt, _tgt, flow| {
                 if matches!(
                     evt,
@@ -201,7 +201,9 @@ impl InputController {
                         ..
                     }
                 ) {
-                    have_config = true;
+                    have_config = 1;
+                } else {
+                    have_config -= 1;
                 }
                 *flow = winit::event_loop::ControlFlow::Exit;
             });
@@ -215,6 +217,9 @@ impl InputController {
             rx_system_event,
             &mut runtime,
         );
+        let event_loop = Arc::new(Mutex::new(event_loop));
+        runtime.insert_non_send(event_loop);
+        os_window.focus_window();
         runtime.insert_resource(os_window);
         Ok(runtime)
     }

@@ -63,7 +63,7 @@ impl SphericalHeightTileSet {
                     module: &gpu.create_shader_module(
                         "displace_spherical_height.comp",
                         include_bytes!("../../target/displace_spherical_height.comp.spirv"),
-                    )?,
+                    ),
                     entry_point: "main",
                 });
 
@@ -184,7 +184,7 @@ impl SphericalColorTileSet {
                     module: &gpu.create_shader_module(
                         "accumulate_spherical_colors.comp",
                         include_bytes!("../../target/accumulate_spherical_colors.comp.spirv"),
-                    )?,
+                    ),
                     entry_point: "main",
                 });
 
@@ -307,7 +307,7 @@ impl SphericalNormalsTileSet {
                     module: &gpu.create_shader_module(
                         "accumulate_spherical_normals.comp",
                         include_bytes!("../../target/accumulate_spherical_normals.comp.spirv"),
-                    )?,
+                    ),
                     entry_point: "main",
                 });
 

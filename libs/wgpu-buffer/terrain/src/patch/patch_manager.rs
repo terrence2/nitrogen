@@ -192,7 +192,7 @@ impl PatchManager {
         let subdivide_prepare_shader = gpu.create_shader_module(
             "subdivide_prepare.comp",
             include_bytes!("../../target/subdivide_prepare.comp.spirv"),
-        )?;
+        );
         let subdivide_prepare_pipeline =
             gpu.device()
                 .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -311,7 +311,7 @@ impl PatchManager {
         let subdivide_expand_shader = gpu.create_shader_module(
             "subdivide_expand.comp",
             include_bytes!("../../target/subdivide_expand.comp.spirv"),
-        )?;
+        );
         let subdivide_expand_pipeline =
             gpu.device()
                 .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
