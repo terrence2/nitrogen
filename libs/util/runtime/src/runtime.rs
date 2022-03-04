@@ -74,14 +74,10 @@ pub enum FrameStage {
     PostSystem,
     /// Transfer entity state into CPU-side GPU transfer buffers.
     TrackStateChanges,
-    /// Push non-render uploads into the frame update queue.
-    EnsureGpuUpdated,
     /// Create the target surface.
     CreateTargetSurface,
     /// Create the frame's encoder.
     CreateCommandEncoder,
-    /// Encode any uploads we queued up.
-    DispatchUploads,
     /// Everything that needs to use the command encoder and target surface.
     Render,
     /// Finish and submit commands to the GPU.
@@ -135,11 +131,9 @@ impl Default for Runtime {
             .with_stage(FrameStage::HandleDisplayChange, SS::parallel())
             .with_stage(FrameStage::PostSystem, SS::parallel())
             .with_stage(FrameStage::TrackStateChanges, SS::parallel())
-            .with_stage(FrameStage::EnsureGpuUpdated, SS::parallel())
             .with_stage(FrameStage::CreateTargetSurface, SS::single_threaded())
             .with_stage(FrameStage::HandleOutOfDateRenderer, SS::single_threaded())
             .with_stage(FrameStage::CreateCommandEncoder, SS::single_threaded())
-            .with_stage(FrameStage::DispatchUploads, SS::single_threaded())
             .with_stage(FrameStage::Render, SS::parallel())
             .with_stage(FrameStage::SubmitCommands, SS::single_threaded())
             .with_stage(FrameStage::PresentTargetSurface, SS::single_threaded())

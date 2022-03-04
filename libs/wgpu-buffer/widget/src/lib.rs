@@ -513,7 +513,7 @@ where
 
         if !self.paint_context.widget_info_pool.is_empty() {
             ensure!(self.paint_context.widget_info_pool.len() <= Self::MAX_WIDGETS);
-            gpu.upload_slice_to2(
+            gpu.upload_slice_to(
                 "widget-info-upload",
                 &self.paint_context.widget_info_pool,
                 self.widget_info_buffer.clone(),
@@ -523,7 +523,7 @@ where
 
         if !self.paint_context.background_pool.is_empty() {
             ensure!(self.paint_context.background_pool.len() <= Self::MAX_BACKGROUND_VERTICES);
-            gpu.upload_slice_to2(
+            gpu.upload_slice_to(
                 "widget-bg-vertex-upload",
                 &self.paint_context.background_pool,
                 self.background_vertex_buffer.clone(),
@@ -533,7 +533,7 @@ where
 
         if !self.paint_context.image_pool.is_empty() {
             ensure!(self.paint_context.image_pool.len() <= Self::MAX_IMAGE_VERTICES);
-            gpu.upload_slice_to2(
+            gpu.upload_slice_to(
                 "widget-image-vertex-upload",
                 &self.paint_context.image_pool,
                 self.image_vertex_buffer.clone(),
@@ -543,7 +543,7 @@ where
 
         if !self.paint_context.text_pool.is_empty() {
             ensure!(self.paint_context.text_pool.len() <= Self::MAX_TEXT_VERTICES);
-            gpu.upload_slice_to2(
+            gpu.upload_slice_to(
                 "widget-text-vertex-upload",
                 &self.paint_context.text_pool,
                 self.text_vertex_buffer.clone(),

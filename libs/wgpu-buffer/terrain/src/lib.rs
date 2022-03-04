@@ -30,7 +30,7 @@ use camera::Camera;
 use catalog::Catalog;
 use geodesy::{GeoCenter, Graticule};
 use global_data::GlobalParametersBuffer;
-use gpu::{CpuDetailLevel, DisplayConfig, Gpu, GpuDetailLevel, UploadTracker};
+use gpu::{CpuDetailLevel, DisplayConfig, Gpu, GpuDetailLevel};
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use parking_lot::RwLock;
 use runtime::{Extension, FrameStage, Runtime};
@@ -174,13 +174,10 @@ impl Extension for TerrainBuffer {
             .frame_stage_mut(FrameStage::TrackStateChanges)
             .add_system(Self::sys_track_state_changes);
         runtime
-            .frame_stage_mut(FrameStage::EnsureGpuUpdated)
-            .add_system(Self::sys_ensure_uploaded);
-        runtime
             .frame_stage_mut(FrameStage::Render)
             .add_system(Self::sys_paint_atlas_indices.label("paint_atlas_indices"));
         runtime.frame_stage_mut(FrameStage::Render).add_system(
-            Self::sys_tesselate
+            Self::sys_terrain_tesselate
                 .label("tesselate")
                 .after("GlobalParametersBuffer"),
         );
@@ -810,15 +807,6 @@ impl TerrainBuffer {
         terrain.tile_manager.handle_capture_snapshot(&mut gpu);
     }
 
-    fn sys_ensure_uploaded(
-        mut terrain: ResMut<TerrainBuffer>,
-        gpu: Res<Gpu>,
-        tracker: Res<UploadTracker>,
-    ) {
-        terrain.patch_manager.ensure_uploaded(&gpu, &tracker);
-        terrain.tile_manager.ensure_uploaded(&gpu, &tracker);
-    }
-
     fn sys_paint_atlas_indices(
         terrain: Res<TerrainBuffer>,
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
@@ -828,30 +816,26 @@ impl TerrainBuffer {
         }
     }
 
-    fn sys_tesselate(
-        terrain: Res<TerrainBuffer>,
+    fn sys_terrain_tesselate(
+        mut terrain: ResMut<TerrainBuffer>,
+        gpu: Res<Gpu>,
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
         if let Some(encoder) = maybe_encoder.into_inner() {
+            terrain.patch_manager.encode_uploads(&gpu, encoder);
+            terrain.tile_manager.encode_uploads(&gpu, encoder);
+
             let cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("compute-pass"),
+                label: Some("terrain-tessellate-compute-pass"),
             });
-            let _cpass = terrain.tessellate(cpass);
+
+            let cpass = terrain.patch_manager.tessellate(cpass);
+            let _ = terrain.tile_manager.displace_height(
+                terrain.patch_manager.target_vertex_count(),
+                terrain.patch_manager.displace_height_bind_group(),
+                cpass,
+            );
         }
-    }
-
-    fn tessellate<'a>(&'a self, mut cpass: wgpu::ComputePass<'a>) -> wgpu::ComputePass<'a> {
-        // Use the CPU input mesh to tessellate on the GPU.
-        cpass = self.patch_manager.tessellate(cpass);
-
-        // Use our height tiles to displace mesh.
-        cpass = self.tile_manager.displace_height(
-            self.patch_manager.target_vertex_count(),
-            self.patch_manager.displace_height_bind_group(),
-            cpass,
-        );
-
-        cpass
     }
 
     fn deferred_texture_target(

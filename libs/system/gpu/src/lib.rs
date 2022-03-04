@@ -13,15 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 mod detail;
-mod upload_tracker;
 
-pub use crate::{
-    detail::{CpuDetailLevel, DetailLevelOpts, GpuDetailLevel},
-    upload_tracker::{
-        texture_format_sample_type, texture_format_size, ArcTextureCopyView, OwnedBufferCopyView,
-        UploadTracker,
-    },
-};
+pub use crate::detail::{CpuDetailLevel, DetailLevelOpts, GpuDetailLevel};
 pub use window::DisplayConfig;
 
 // Note: re-export for use by FrameGraph when it is instantiated in other crates.
@@ -50,6 +43,16 @@ impl Default for RenderConfig {
             present_mode: wgpu::PresentMode::Mailbox,
         }
     }
+}
+
+pub fn texture_format_sample_type(texture_format: wgpu::TextureFormat) -> wgpu::TextureSampleType {
+    let info = texture_format.describe();
+    info.sample_type
+}
+
+pub fn texture_format_size(texture_format: wgpu::TextureFormat) -> u32 {
+    let info = texture_format.describe();
+    info.block_size as u32
 }
 
 #[derive(Debug, NitrousResource)]
@@ -105,11 +108,6 @@ impl Extension for Gpu {
         runtime
             .frame_stage_mut(FrameStage::SubmitCommands)
             .add_system(Self::sys_submit_frame_commands);
-
-        runtime.insert_resource(UploadTracker::default());
-        runtime
-            .frame_stage_mut(FrameStage::DispatchUploads)
-            .add_system(Self::sys_dispatch_uploads);
 
         Ok(())
     }
@@ -404,15 +402,6 @@ impl Gpu {
         }
     }
 
-    fn sys_dispatch_uploads(
-        upload_tracker: Res<UploadTracker>,
-        maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
-    ) {
-        if let Some(encoder) = maybe_encoder.into_inner() {
-            upload_tracker.dispatch_uploads_until_empty(encoder);
-        }
-    }
-
     fn sys_submit_frame_commands(
         mut gpu: ResMut<Gpu>,
         mut maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
@@ -625,18 +614,6 @@ impl Gpu {
     /// but this is not specified as of the time of writing. This is optimized under
     /// the hood and is supposed to be, I think, faster than creating a new bind group.
     pub fn upload_slice_to<T: AsBytes>(
-        &self,
-        label: &'static str,
-        data: &[T],
-        target: Arc<wgpu::Buffer>,
-        tracker: &UploadTracker,
-    ) {
-        if let Some(source) = self.maybe_push_slice(label, data, wgpu::BufferUsages::COPY_SRC) {
-            tracker.upload(source, target, mem::size_of::<T>() * data.len());
-        }
-    }
-
-    pub fn upload_slice_to2<T: AsBytes>(
         &self,
         label: &'static str,
         data: &[T],
