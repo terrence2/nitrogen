@@ -690,33 +690,6 @@ impl SphericalTileSetCommon {
                     depth_or_array_layers: 1,
                 },
             );
-            // tracker.copy_owned_buffer_to_arc_texture(
-            //     OwnedBufferCopyView {
-            //         buffer: texture_buffer,
-            //         layout: wgpu::ImageDataLayout {
-            //             offset: 0,
-            //             bytes_per_row: NonZeroU32::new(
-            //                 self.atlas_texture_extent.width
-            //                     * texture_format_size(self.atlas_texture_format),
-            //             ),
-            //             rows_per_image: NonZeroU32::new(self.atlas_texture_extent.height),
-            //         },
-            //     },
-            //     ArcTextureCopyView {
-            //         texture: self.atlas_texture.clone(),
-            //         mip_level: 0,
-            //         origin: wgpu::Origin3d {
-            //             x: 0,
-            //             y: 0,
-            //             z: atlas_slot as u32,
-            //         },
-            //     },
-            //     wgpu::Extent3d {
-            //         width: self.atlas_texture_extent.width,
-            //         height: self.atlas_texture_extent.height,
-            //         depth_or_array_layers: 1,
-            //     },
-            // );
 
             let (tile_base_lat_as, tile_base_lon_as) = self.tile_tree.base(&qtid);
             let tile_base = [tile_base_lat_as as f32, tile_base_lon_as as f32];
@@ -727,11 +700,6 @@ impl SphericalTileSetCommon {
                 &tile_info,
                 wgpu::BufferUsages::COPY_SRC,
             );
-            // tracker.upload_to_array_element::<TileInfo>(
-            //     info_buffer,
-            //     self.atlas_tile_info.clone(),
-            //     atlas_slot,
-            // );
             encoder.copy_buffer_to_buffer(
                 &info_buffer,
                 0,
