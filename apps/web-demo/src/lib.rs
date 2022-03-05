@@ -12,10 +12,9 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use absolute_unit::{meters, radians};
 use animate::{TimeStep, Timeline};
 use anyhow::Result;
-use camera::{ArcBallController, ArcBallSystem, Camera, CameraSystem};
+use camera::{ArcBallController, ArcBallSystem, CameraSystem, ScreenCameraController};
 use event_mapper::EventMapper;
 use global_data::GlobalParametersBuffer;
 use gpu::Gpu;
@@ -23,7 +22,7 @@ use input::{DemoFocus, InputController, InputSystem};
 use measure::WorldSpaceFrame;
 use orrery::Orrery;
 use runtime::Runtime;
-use std::{f32::consts::PI, time::Instant};
+use std::time::Instant;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::console;
@@ -93,17 +92,13 @@ async fn async_main() -> Result<()> {
         .load_extension::<CameraSystem>()?
         .load_extension::<ArcBallSystem>()?;
 
-    // But we need at least a camera and controller before the sim is ready to run.
-    let camera = Camera::new(
-        radians!(PI / 2.0),
-        runtime.resource::<Window>().render_aspect_ratio(),
-        meters!(0.5),
-    );
+    // We need at least one entity with a camera controller for the screen camera
+    // before the sim is fully ready to run.
     let _player_ent = runtime
         .spawn_named("player")?
         .insert(WorldSpaceFrame::default())
         .insert_scriptable(ArcBallController::default())?
-        .insert_scriptable(camera)?
+        .insert(ScreenCameraController::default())
         .id();
 
     runtime.run_startup();

@@ -12,12 +12,14 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use absolute_unit::{degrees, meters, radians};
+use absolute_unit::degrees;
 use animate::{TimeStep, Timeline};
 use anyhow::{anyhow, Result};
 use atmosphere::AtmosphereBuffer;
 use bevy_ecs::prelude::*;
-use camera::{ArcBallController, ArcBallSystem, Camera, CameraSystem};
+use camera::{
+    ArcBallController, ArcBallSystem, CameraSystem, ScreenCamera, ScreenCameraController,
+};
 use catalog::{Catalog, CatalogOpts};
 use composite::CompositeRenderPass;
 use event_mapper::EventMapper;
@@ -26,13 +28,13 @@ use global_data::GlobalParametersBuffer;
 use gpu::{DetailLevelOpts, Gpu};
 use input::{DemoFocus, InputSystem};
 use measure::WorldSpaceFrame;
-use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
+use nitrous::{inject_nitrous_resource, NitrousResource};
 use orrery::Orrery;
 use parking_lot::RwLock;
 use platform_dirs::AppDirs;
 use runtime::{ExitRequest, Extension, FrameStage, Runtime, StartupOpts};
 use stars::StarsBuffer;
-use std::{f32::consts::PI, fs::create_dir_all, sync::Arc, time::Instant};
+use std::{fs::create_dir_all, sync::Arc, time::Instant};
 use structopt::StructOpt;
 use terminal_size::{terminal_size, Width};
 use terrain::TerrainBuffer;
@@ -47,7 +49,7 @@ use window::{
 use world_render::WorldRenderPass;
 
 /// Demonstrate the capabilities of the Nitrogen engine
-#[derive(Debug, StructOpt)]
+#[derive(Clone, Debug, StructOpt)]
 #[structopt(set_term_width = if let Some((Width(w), _)) = terminal_size() { w as usize } else { 80 })]
 struct Opt {
     #[structopt(flatten)]
@@ -73,14 +75,14 @@ struct VisibleWidgets {
 }
 
 #[derive(Debug, NitrousResource)]
-struct System {
+struct DemoUx {
     visible_widgets: VisibleWidgets,
 }
 
-impl Extension for System {
+impl Extension for DemoUx {
     fn init(runtime: &mut Runtime) -> Result<()> {
         let widgets = runtime.resource::<WidgetBuffer<DemoFocus>>();
-        let system = System::new(widgets)?;
+        let system = DemoUx::new(widgets)?;
         runtime.insert_named_resource("system", system);
         runtime
             .frame_stage_mut(FrameStage::FrameEnd)
@@ -96,7 +98,7 @@ impl Extension for System {
 }
 
 #[inject_nitrous_resource]
-impl System {
+impl DemoUx {
     pub fn new(widgets: &WidgetBuffer<DemoFocus>) -> Result<Self> {
         let visible_widgets = Self::build_gui(widgets)?;
         Ok(Self { visible_widgets })
@@ -169,14 +171,15 @@ impl System {
     }
 
     fn sys_track_visible_state(
-        query: Query<(&ArcBallController, &Camera)>,
+        query: Query<(&ArcBallController, &ScreenCameraController)>,
+        camera: Res<ScreenCamera>,
         timestep: Res<TimeStep>,
         orrery: Res<Orrery>,
-        system: ResMut<System>,
+        system: ResMut<DemoUx>,
     ) {
-        for (arcball, camera) in query.iter() {
+        for (arcball, _) in query.iter() {
             system
-                .track_visible_state(*timestep.now(), &orrery, arcball, camera)
+                .track_visible_state(*timestep.now(), &orrery, arcball, &camera)
                 .ok();
         }
     }
@@ -186,7 +189,7 @@ impl System {
         now: Instant,
         orrery: &Orrery,
         arcball: &ArcBallController,
-        camera: &Camera,
+        camera: &ScreenCamera,
     ) -> Result<()> {
         self.visible_widgets
             .sim_time
@@ -213,31 +216,27 @@ impl System {
         self.visible_widgets.fps_label.write().set_text(ts);
         Ok(())
     }
-
-    #[method]
-    pub fn println(&self, message: Value) {
-        println!("{}", message);
-    }
 }
 
 fn main() -> Result<()> {
-    let _opt = Opt::from_args(); // process help before opening a window
+    // Note: process help before opening a window.
+    let opt = Opt::from_args();
     env_logger::init();
     InputSystem::run_forever(
+        opt,
         WindowBuilder::new().with_title("Nitrogen Demo"),
         simulation_main,
     )
 }
 
 fn simulation_main(mut runtime: Runtime) -> Result<()> {
-    let opt = Opt::from_args();
-
     // Make sure various config locations exist
     let app_dirs = AppDirs::new(Some("nitrogen"), true)
         .ok_or_else(|| anyhow!("unable to find app directories"))?;
     create_dir_all(&app_dirs.config_dir)?;
     create_dir_all(&app_dirs.state_dir)?;
 
+    let opt = runtime.resource::<Opt>().to_owned();
     runtime
         .insert_resource(opt.catalog_opts)
         .insert_resource(opt.display_opts)
@@ -260,29 +259,26 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .load_extension::<WidgetBuffer<DemoFocus>>()?
         .load_extension::<UiRenderPass<DemoFocus>>()?
         .load_extension::<CompositeRenderPass<DemoFocus>>()?
-        .load_extension::<System>()?
+        .load_extension::<DemoUx>()?
         .load_extension::<Orrery>()?
         .load_extension::<Timeline>()?
         .load_extension::<TimeStep>()?
         .load_extension::<CameraSystem>()?
         .load_extension::<ArcBallSystem>()?;
 
-    // But we need at least a camera and controller before the sim is ready to run.
-    let camera = Camera::new(
-        radians!(PI / 2.0),
-        runtime.resource::<Window>().render_aspect_ratio(),
-        meters!(0.5),
-    );
+    // We need at least one entity with a camera controller for the screen camera
+    // before the sim is fully ready to run.
     let _player_ent = runtime
         .spawn_named("player")?
         .insert(WorldSpaceFrame::default())
         .insert_scriptable(ArcBallController::default())?
-        .insert_scriptable(camera)?
+        .insert(ScreenCameraController::default())
         .id();
 
     runtime.run_startup();
     while runtime.resource::<ExitRequest>().still_running() {
-        // Catch monotonic sim time up to system time.
+        // Catch monotonic sim time up to system time. Nitrous uses a monotonic time-step game
+        // loop. Ideally the sim steps should be a multiple of the frame time.
         let frame_start = Instant::now();
         while runtime.resource::<TimeStep>().next_now() < frame_start {
             runtime.run_sim_once();

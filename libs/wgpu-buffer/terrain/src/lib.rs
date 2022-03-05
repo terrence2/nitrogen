@@ -26,7 +26,7 @@ pub use crate::{
 use absolute_unit::{Length, Meters};
 use anyhow::Result;
 use bevy_ecs::prelude::*;
-use camera::Camera;
+use camera::{HudCamera, ScreenCamera};
 use catalog::Catalog;
 use geodesy::{GeoCenter, Graticule};
 use global_data::GlobalParametersBuffer;
@@ -129,7 +129,7 @@ pub struct TerrainBuffer {
     tile_manager: TileManager,
 
     toggle_pin_camera: bool,
-    pinned_camera: Option<Camera>,
+    pinned_camera: Option<ScreenCamera>,
 
     // Cache allocation for transferring visible allocations from patches to tiles.
     visible_regions: Vec<VisiblePatch>,
@@ -764,19 +764,19 @@ impl TerrainBuffer {
     }
 
     fn sys_track_state_changes(
-        query: Query<&Camera>,
+        camera: Res<ScreenCamera>,
+        query: Query<&HudCamera>,
         catalog: Res<Arc<RwLock<Catalog>>>,
         mut terrain: ResMut<TerrainBuffer>,
     ) {
-        // FIXME: multiple camera support
-        for (i, camera) in query.iter().enumerate() {
-            assert_eq!(i, 0);
-            terrain.track_state_changes(camera, catalog.clone());
+        for _hud_camera in query.iter() {
+            // FIXME: multiple camera support
         }
+        terrain.track_state_changes(&camera, catalog.clone());
     }
 
     // Given the new camera position, update our internal CPU tracking.
-    fn track_state_changes(&mut self, camera: &Camera, catalog: Arc<RwLock<Catalog>>) {
+    fn track_state_changes(&mut self, camera: &ScreenCamera, catalog: Arc<RwLock<Catalog>>) {
         if self.toggle_pin_camera {
             self.toggle_pin_camera = false;
             self.pinned_camera = match self.pinned_camera {

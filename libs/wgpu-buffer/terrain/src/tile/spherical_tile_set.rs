@@ -17,7 +17,7 @@ use crate::{
     GpuDetail, VisiblePatch,
 };
 use anyhow::Result;
-use camera::Camera;
+use camera::ScreenCamera;
 use catalog::Catalog;
 use global_data::GlobalParametersBuffer;
 use gpu::wgpu::{BindGroup, CommandEncoder, ComputePass};
@@ -91,7 +91,7 @@ impl TileSet for SphericalHeightTileSet {
         self.common.note_required(visible_patch)
     }
 
-    fn finish_visibility_update(&mut self, _camera: &Camera, catalog: Arc<RwLock<Catalog>>) {
+    fn finish_visibility_update(&mut self, _camera: &ScreenCamera, catalog: Arc<RwLock<Catalog>>) {
         self.common.finish_visibility_update(catalog);
     }
 
@@ -212,7 +212,7 @@ impl TileSet for SphericalColorTileSet {
         self.common.note_required(visible_patch)
     }
 
-    fn finish_visibility_update(&mut self, _camera: &Camera, catalog: Arc<RwLock<Catalog>>) {
+    fn finish_visibility_update(&mut self, _camera: &ScreenCamera, catalog: Arc<RwLock<Catalog>>) {
         self.common.finish_visibility_update(catalog)
     }
 
@@ -335,7 +335,7 @@ impl TileSet for SphericalNormalsTileSet {
         self.common.note_required(visible_patch);
     }
 
-    fn finish_visibility_update(&mut self, _camera: &Camera, catalog: Arc<RwLock<Catalog>>) {
+    fn finish_visibility_update(&mut self, _camera: &ScreenCamera, catalog: Arc<RwLock<Catalog>>) {
         self.common.finish_visibility_update(catalog);
     }
 

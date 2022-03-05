@@ -98,7 +98,7 @@ impl FromStr for GpuDetailLevel {
     }
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Clone, Debug, StructOpt)]
 pub struct DetailLevelOpts {
     /// Set the CPU detail level (low, medium, high, or ultra)
     #[structopt(long)]

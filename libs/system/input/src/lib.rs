@@ -353,8 +353,13 @@ impl InputSystem {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn run_forever<M>(window_builder: WindowBuilder, mut window_main: M) -> Result<()>
+    pub fn run_forever<O, M>(
+        opt: O,
+        window_builder: WindowBuilder,
+        mut window_main: M,
+    ) -> Result<()>
     where
+        O: Clone + Send + Sync + 'static,
         M: 'static + Send + FnMut(Runtime) -> Result<()>,
     {
         let event_loop = EventLoop::<MetaEvent>::with_user_event();
@@ -366,6 +371,7 @@ impl InputSystem {
         // Spawn the game thread.
         std::thread::spawn(move || {
             let mut runtime = Runtime::default();
+            runtime.insert_resource(opt);
             runtime.insert_resource(window);
 
             let input_controller = InputController::new(

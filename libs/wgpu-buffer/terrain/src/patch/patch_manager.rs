@@ -19,7 +19,7 @@ use crate::{
 };
 use absolute_unit::{degrees, meters, radians, Angle, Kilometers, Radians};
 use anyhow::Result;
-use camera::Camera;
+use camera::ScreenCamera;
 use geodesy::{Cartesian, GeoCenter, Graticule};
 use gpu::Gpu;
 use nalgebra::{Matrix4, Point3};
@@ -503,8 +503,8 @@ impl PatchManager {
 
     pub fn track_state_changes(
         &mut self,
-        camera: &Camera,
-        optimize_camera: &Camera,
+        camera: &ScreenCamera,
+        optimize_camera: &ScreenCamera,
         visible_regions: &mut Vec<VisiblePatch>,
     ) {
         // Select optimal live patches from our coherent patch tree.

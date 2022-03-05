@@ -20,6 +20,7 @@ use std::time::{Duration, Instant};
 
 #[derive(Debug, NitrousResource)]
 pub struct TimeStep {
+    start: Instant,
     now: Instant,
     delta: Duration,
 }
@@ -38,10 +39,12 @@ impl Extension for TimeStep {
 impl TimeStep {
     pub fn new_60fps() -> Self {
         let delta = Duration::from_micros(1_000_000 / 60);
+        let start = Instant::now();
         Self {
+            start,
             // Note: start one tick behind now so that the sim schedule will always
             //       run at least once before the frame scheduler.
-            now: Instant::now() - delta,
+            now: start - delta,
             delta,
         }
     }
@@ -49,6 +52,10 @@ impl TimeStep {
     pub fn sys_tick_time(mut timestep: ResMut<TimeStep>) {
         let dt = timestep.delta;
         timestep.now += dt;
+    }
+
+    pub fn start(&self) -> &Instant {
+        &self.start
     }
 
     pub fn now(&self) -> &Instant {

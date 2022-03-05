@@ -55,6 +55,8 @@ pub enum SimStage {
     RunScript,
     /// Runs after scripts have processed.
     PostScript,
+    /// Run simulation actions.
+    Simulate,
 }
 
 // Copy from entities into buffers more suitable for upload to the GPU. Also, do heavier

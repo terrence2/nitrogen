@@ -21,7 +21,7 @@ use crate::patch::{
 
 use absolute_unit::Kilometers;
 use approx::assert_relative_eq;
-use camera::Camera;
+use camera::ScreenCamera;
 use geometry::{algorithm::bisect_edge, Plane};
 use log::trace;
 use nalgebra::{Point3, Vector3};
@@ -482,7 +482,7 @@ impl PatchTree {
 
     pub(crate) fn optimize_for_view(
         &mut self,
-        camera: &Camera,
+        camera: &ScreenCamera,
         live_patches: &mut Vec<(PatchIndex, PatchWinding)>,
     ) {
         assert!(live_patches.is_empty());
@@ -1108,14 +1108,14 @@ mod test {
     use super::*;
     use absolute_unit::{degrees, meters};
     use anyhow::Result;
-    use camera::{ArcBallController, Camera};
+    use camera::{ArcBallController, ScreenCamera};
     use geodesy::{GeoSurface, Graticule, Target};
 
     #[test]
     fn test_pathological() -> Result<()> {
         let mut tree = PatchTree::new(15, 150.0, 300);
         let mut live_patches = Vec::new();
-        let mut camera = Camera::new(degrees!(90), 16.0 / 9.0, meters!(0.1));
+        let mut camera = ScreenCamera::new(degrees!(90), 16.0 / 9.0, meters!(0.1));
         let mut arcball = ArcBallController::default();
         arcball.set_eye(Graticule::<Target>::new(
             degrees!(89),
@@ -1156,7 +1156,7 @@ mod test {
     fn test_zoom_in() -> Result<()> {
         let mut tree = PatchTree::new(15, 150.0, 300);
         let mut live_patches = Vec::new();
-        let mut camera = Camera::new(degrees!(90), 16.0 / 9.0, meters!(0.1));
+        let mut camera = ScreenCamera::new(degrees!(90), 16.0 / 9.0, meters!(0.1));
         let mut arcball = ArcBallController::default();
         arcball.set_target(Graticule::<GeoSurface>::new(
             degrees!(0),
@@ -1183,7 +1183,7 @@ mod test {
     fn test_fly_forward() -> Result<()> {
         let mut tree = PatchTree::new(15, 150.0, 300);
         let mut live_patches = Vec::new();
-        let mut camera = Camera::new(degrees!(90), 16.0 / 9.0, meters!(0.1));
+        let mut camera = ScreenCamera::new(degrees!(90), 16.0 / 9.0, meters!(0.1));
         let mut arcball = ArcBallController::default();
         arcball.set_target(Graticule::<GeoSurface>::new(
             degrees!(0),
