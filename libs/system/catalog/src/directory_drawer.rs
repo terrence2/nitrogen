@@ -15,6 +15,7 @@
 use crate::{DrawerFileId, DrawerFileMetadata, DrawerInterface};
 use anyhow::{ensure, Result};
 use async_trait::async_trait;
+use memmap::{Mmap, MmapOptions};
 use std::{
     borrow::Cow,
     collections::HashMap,
@@ -29,13 +30,16 @@ use tokio::{
     io::{AsyncReadExt, AsyncSeekExt},
 };
 
+const MIN_MAP_SIZE: u64 = 1_048_576;
+
 pub struct DirectoryDrawer {
     name: String,
     priority: i64,
     path: PathBuf,
     index: HashMap<DrawerFileId, String>,
-    // TODO: cache open files that we read_slice out of, in the expectation that we
-    //       will want to read other slices subsequently.
+    // cache open files that we read_slice out of, in the expectation that we
+    // will want to read other slices subsequently.
+    maps: HashMap<DrawerFileId, Mmap>,
 }
 
 impl DirectoryDrawer {
@@ -53,7 +57,13 @@ impl DirectoryDrawer {
                         continue;
                     }
                 }
-                self.index.insert(DrawerFileId::from_u32(i as u32), name);
+                let id = DrawerFileId::from_u32(i as u32);
+                self.index.insert(id, name);
+                if entry.metadata()?.len() > MIN_MAP_SIZE {
+                    let fp = fs::File::open(entry.path())?;
+                    let mmap = unsafe { MmapOptions::new().map(&fp) }?;
+                    self.maps.insert(id, mmap);
+                }
             }
         }
         Ok(())
@@ -75,6 +85,7 @@ impl DirectoryDrawer {
             priority,
             path,
             index: HashMap::new(),
+            maps: HashMap::new(),
         };
         dd.populate_from_directory(only_extension)?;
         Ok(Box::new(dd))
@@ -137,6 +148,9 @@ impl DrawerInterface for DirectoryDrawer {
 
     fn read_slice_sync(&self, id: DrawerFileId, extent: Range<usize>) -> Result<Cow<[u8]>> {
         ensure!(self.index.contains_key(&id), "file not found");
+        if let Some(map) = self.maps.get(&id) {
+            return Ok(Cow::from(&map[extent]));
+        }
         let mut global_path = self.path.clone();
         global_path.push(&self.index[&id]);
         let mut fp = fs::File::open(&global_path)?;
