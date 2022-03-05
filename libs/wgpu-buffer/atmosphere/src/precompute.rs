@@ -187,7 +187,7 @@ impl Precompute {
         let build_transmittance_lut_shader = gpu.create_shader_module(
             "build_transmittance_lut.comp",
             include_bytes!("../target/build_transmittance_lut.comp.spirv"),
-        )?;
+        );
         let build_transmittance_lut_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("atmosphere-build-transmittance-lut-bind-group"),
@@ -214,7 +214,7 @@ impl Precompute {
         let build_direct_irradiance_lut_shader = gpu.create_shader_module(
             "build_direct_irradiance_lut.comp",
             include_bytes!("../target/build_direct_irradiance_lut.comp.spirv"),
-        )?;
+        );
         let build_direct_irradiance_lut_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("atmosphere-build-direct-irradiance-lut-bind-group"),
@@ -243,7 +243,7 @@ impl Precompute {
         let build_single_scattering_lut_shader = gpu.create_shader_module(
             "build_single_scattering_lut.comp",
             include_bytes!("../target/build_single_scattering_lut.comp.spirv"),
-        )?;
+        );
         let build_single_scattering_lut_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("atmosphere-build-single-scattering-lut-bind-group"),
@@ -276,7 +276,7 @@ impl Precompute {
         let build_scattering_density_lut_shader = gpu.create_shader_module(
             "build_scattering_density_lut.comp",
             include_bytes!("../target/build_scattering_density_lut.comp.spirv"),
-        )?;
+        );
         let build_scattering_density_lut_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("atmosphere-build-scattering-density-lut-bind-group"),
@@ -314,7 +314,7 @@ impl Precompute {
         let build_indirect_irradiance_lut_shader = gpu.create_shader_module(
             "build_indirect_irradiance_lut.comp",
             include_bytes!("../target/build_indirect_irradiance_lut.comp.spirv"),
-        )?;
+        );
         let build_indirect_irradiance_lut_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("atmosphere-build-indirect-irradiance-lut-bind-group"),
@@ -350,7 +350,7 @@ impl Precompute {
         let build_multiple_scattering_lut_shader = gpu.create_shader_module(
             "build_multiple_scattering_lut.comp",
             include_bytes!("../target/build_multiple_scattering_lut.comp.spirv"),
-        )?;
+        );
         let build_multiple_scattering_lut_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("atmosphere-build-multiple-scattering-lut-bind-group"),

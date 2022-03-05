@@ -28,7 +28,7 @@ pub use winit::{
     window::{Window as OsWindow, WindowBuilder},
 };
 
-#[derive(Debug, Default, StructOpt)]
+#[derive(Clone, Debug, Default, StructOpt)]
 pub struct DisplayOpts {
     /// Set the render width
     #[structopt(short, long)]

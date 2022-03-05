@@ -91,8 +91,9 @@ impl Extension for WorldRenderPass {
             .add_system(Self::sys_handle_display_config_change);
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_render_world
-                .before("CompositeRenderPass")
-                .label("WorldRenderPass"),
+                .label("WorldRenderPass")
+                .after("GlobalParametersBuffer")
+                .before("CompositeRenderPass"),
         );
 
         // TODO: figure out debug bindings
@@ -170,7 +171,7 @@ impl WorldRenderPass {
         let fullscreen_shared_vert = gpu.create_shader_module(
             "fullscreen-shared.vert",
             include_bytes!("../target/fullscreen-shared.vert.spirv"),
-        )?;
+        );
         let fullscreen_layout =
             gpu.device()
                 .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -191,7 +192,7 @@ impl WorldRenderPass {
             &gpu.create_shader_module(
                 "world-composite-buffer.frag",
                 include_bytes!("../target/world-composite-buffer.frag.spirv"),
-            )?,
+            ),
         );
         let dbg_deferred_pipeline = Self::make_fullscreen_pipeline(
             gpu.device(),
@@ -200,7 +201,7 @@ impl WorldRenderPass {
             &gpu.create_shader_module(
                 "dbg-deferred-buffer.frag",
                 include_bytes!("../target/dbg-deferred-buffer.frag.spirv"),
-            )?,
+            ),
         );
         let dbg_depth_pipeline = Self::make_fullscreen_pipeline(
             gpu.device(),
@@ -209,7 +210,7 @@ impl WorldRenderPass {
             &gpu.create_shader_module(
                 "dbg-depth-buffer.frag",
                 include_bytes!("../target/dbg-depth-buffer.frag.spirv"),
-            )?,
+            ),
         );
         let dbg_color_pipeline = Self::make_fullscreen_pipeline(
             gpu.device(),
@@ -218,7 +219,7 @@ impl WorldRenderPass {
             &gpu.create_shader_module(
                 "dbg-color_acc-buffer.frag",
                 include_bytes!("../target/dbg-color_acc-buffer.frag.spirv"),
-            )?,
+            ),
         );
         let dbg_normal_local_pipeline = Self::make_fullscreen_pipeline(
             gpu.device(),
@@ -227,7 +228,7 @@ impl WorldRenderPass {
             &gpu.create_shader_module(
                 "dbg-normal_acc-buffer-local.frag",
                 include_bytes!("../target/dbg-normal_acc-buffer-local.frag.spirv"),
-            )?,
+            ),
         );
         let dbg_normal_global_pipeline = Self::make_fullscreen_pipeline(
             gpu.device(),
@@ -236,7 +237,7 @@ impl WorldRenderPass {
             &gpu.create_shader_module(
                 "dbg-normal_acc-buffer-global.frag",
                 include_bytes!("../target/dbg-normal_acc-buffer-global.frag.spirv"),
-            )?,
+            ),
         );
 
         let wireframe_pipeline =
@@ -254,7 +255,7 @@ impl WorldRenderPass {
                         module: &gpu.create_shader_module(
                             "dbg-wireframe.vert",
                             include_bytes!("../target/dbg-wireframe.vert.spirv"),
-                        )?,
+                        ),
                         entry_point: "main",
                         buffers: &[TerrainVertex::descriptor()],
                     },
@@ -262,7 +263,7 @@ impl WorldRenderPass {
                         module: &gpu.create_shader_module(
                             "dbg-wireframe.frag",
                             include_bytes!("../target/dbg-wireframe.frag.spirv"),
-                        )?,
+                        ),
                         entry_point: "main",
                         targets: &[wgpu::ColorTargetState {
                             format: Gpu::SCREEN_FORMAT,

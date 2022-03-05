@@ -54,10 +54,10 @@ use crate::{
     GpuDetail, VisiblePatch,
 };
 use anyhow::{anyhow, bail, Result};
-use camera::Camera;
+use camera::ScreenCamera;
 use catalog::{from_utf8_string, Catalog};
 use global_data::GlobalParametersBuffer;
-use gpu::{Gpu, UploadTracker};
+use gpu::Gpu;
 use parking_lot::RwLock;
 use rayon::prelude::*;
 use std::{any::Any, fmt::Debug, sync::Arc};
@@ -74,8 +74,8 @@ pub trait TileSet: Debug + Send + Sync + 'static {
     // from the global geometry calculations.
     fn begin_visibility_update(&mut self);
     fn note_required(&mut self, visible_patch: &VisiblePatch);
-    fn finish_visibility_update(&mut self, camera: &Camera, catalog: Arc<RwLock<Catalog>>);
-    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &UploadTracker);
+    fn finish_visibility_update(&mut self, camera: &ScreenCamera, catalog: Arc<RwLock<Catalog>>);
+    fn encode_uploads(&mut self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder);
 
     // Indicate that the current index should be written to the debug file.
     fn snapshot_index(&mut self, gpu: &mut Gpu);
@@ -230,7 +230,11 @@ impl TileManager {
         }
     }
 
-    pub fn finish_visibility_update(&mut self, camera: &Camera, catalog: Arc<RwLock<Catalog>>) {
+    pub fn finish_visibility_update(
+        &mut self,
+        camera: &ScreenCamera,
+        catalog: Arc<RwLock<Catalog>>,
+    ) {
         for ts in self.tile_sets.iter_mut() {
             ts.finish_visibility_update(camera, catalog.clone());
         }
@@ -245,9 +249,9 @@ impl TileManager {
         }
     }
 
-    pub fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &UploadTracker) {
+    pub fn encode_uploads(&mut self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder) {
         for ts in self.tile_sets.iter_mut() {
-            ts.ensure_uploaded(gpu, tracker);
+            ts.encode_uploads(gpu, encoder);
         }
     }
 

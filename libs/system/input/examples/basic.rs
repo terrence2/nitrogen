@@ -21,6 +21,7 @@ use winit::window::{Window, WindowBuilder};
 
 fn main() -> Result<()> {
     InputSystem::run_forever(
+        (),
         WindowBuilder::new().with_title("Input Example"),
         window_main,
     )

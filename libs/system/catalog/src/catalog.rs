@@ -48,7 +48,7 @@ pub struct FileId {
     drawer_id: DrawerId,
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Clone, Debug, StructOpt)]
 pub struct CatalogOpts {
     /// Extra directories to treat as libraries
     #[structopt(short, long)]

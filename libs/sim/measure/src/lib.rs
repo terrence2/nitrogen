@@ -15,7 +15,7 @@
 use absolute_unit::Meters;
 use bevy_ecs::prelude::*;
 use geodesy::{Cartesian, GeoCenter};
-use nalgebra::Vector3;
+use nalgebra::{convert, UnitQuaternion, Vector3};
 
 #[derive(Component, Debug, Default)]
 pub struct WorldSpaceFrame {
@@ -51,6 +51,14 @@ impl WorldSpaceFrame {
 
     pub fn up(&self) -> &Vector3<f64> {
         &self.up
+    }
+
+    pub fn quaternion(&self) -> UnitQuaternion<f64> {
+        UnitQuaternion::rotation_between(&Vector3::z_axis(), &self.forward).unwrap()
+    }
+
+    pub fn quaternion32(&self) -> UnitQuaternion<f32> {
+        convert(UnitQuaternion::rotation_between(&Vector3::z_axis(), &self.forward).unwrap())
     }
 }
 
