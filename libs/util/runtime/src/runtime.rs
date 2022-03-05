@@ -314,6 +314,12 @@ impl Runtime {
     }
 
     #[inline]
+    pub fn insert_non_send<T: 'static>(&mut self, value: T) -> &mut Self {
+        self.heap.insert_non_send(value);
+        self
+    }
+
+    #[inline]
     pub fn maybe_resource<T: Resource>(&self) -> Option<&T> {
         self.heap.maybe_resource()
     }

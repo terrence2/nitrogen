@@ -351,32 +351,32 @@ impl Terminal {
         Ok(())
     }
 
+    fn show_line(&self, line: &str) {
+        let screen = &mut self.output.write();
+        println!("{}", line);
+        screen.append_line(line);
+    }
+
     pub fn report_script_completions(&self, completions: &[ScriptCompletion]) {
         for completion in completions {
             if completion.meta.kind() == ScriptRunKind::Interactive {
                 match &completion.result {
-                    ScriptResult::Ok(v) => {
-                        let screen = &mut self.output.write();
-                        match v {
-                            Value::String(s) => {
-                                for line in s.lines() {
-                                    screen.append_line(line);
-                                }
-                            }
-                            Value::ResourceMethod(_, _) | Value::ComponentMethod(_, _, _) => {
-                                screen.append_line(&format!(
-                                    "{} is a method, did you mean to call it?",
-                                    v
-                                ));
-                                screen.append_line(
-                                    "Try using up-arrow to go back and add parentheses to the end.",
-                                );
-                            }
-                            _ => {
-                                screen.append_line(&v.to_string());
+                    ScriptResult::Ok(v) => match v {
+                        Value::String(s) => {
+                            for line in s.lines() {
+                                self.show_line(line);
                             }
                         }
-                    }
+                        Value::ResourceMethod(_, _) | Value::ComponentMethod(_, _, _) => {
+                            self.show_line(&format!("{v} is a method, did you mean to call it?",));
+                            self.show_line(
+                                "Try using up-arrow to go back and add parentheses to the end.",
+                            );
+                        }
+                        _ => {
+                            self.show_line(&v.to_string());
+                        }
+                    },
                     ScriptResult::Err(error) => {
                         self.show_script_error(completion, error);
                     }
@@ -396,7 +396,9 @@ impl Terminal {
 
         let prefix = "Script Failed: ";
         let script = command.to_owned();
-        screen.append_line(&format!("{}{}", prefix, script));
+        let line = format!("{prefix}{script}");
+        println!("{}", line);
+        screen.append_line(&line);
         screen.last_line_mut().unwrap().select_all();
         screen.last_line_mut().unwrap().change_color(Color::Yellow);
         screen
@@ -406,7 +408,9 @@ impl Terminal {
         screen.last_line_mut().unwrap().change_color(Color::Gray);
 
         let prefix = "  Error: ";
-        screen.append_line(&format!("{}{}", prefix, error));
+        let line = format!("{prefix}{error}");
+        println!("{}", line);
+        screen.append_line(&line);
         screen.last_line_mut().unwrap().select_all();
         screen.last_line_mut().unwrap().change_color(Color::Gray);
         screen

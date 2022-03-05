@@ -167,7 +167,7 @@ where
     pub fn new(gpu: &mut Gpu, state_dir: &Path) -> Result<Self> {
         trace!("WidgetBuffer::new");
 
-        let mut paint_context = PaintContext::new(gpu)?;
+        let mut paint_context = PaintContext::new(gpu);
         let fira_mono = TtfFont::from_bytes(FIRA_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
         let fira_sans = TtfFont::from_bytes(FIRA_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
         let dejavu_mono = TtfFont::from_bytes(DEJAVU_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
@@ -506,9 +506,6 @@ where
             .read()
             .upload(now, win, gpu, &mut self.paint_context)?;
 
-        // Upload: copy all of the CPU paint context to the GPU buffers we maintain.
-        self.paint_context.make_upload_buffer(gpu, tracker)?;
-
         if !self.paint_context.widget_info_pool.is_empty() {
             ensure!(self.paint_context.widget_info_pool.len() <= Self::MAX_WIDGETS);
             gpu.upload_slice_to(
@@ -592,19 +589,21 @@ where
     }
 
     fn sys_maintain_font_atlas(
-        widgets: Res<WidgetBuffer<T>>,
+        mut widgets: ResMut<WidgetBuffer<T>>,
+        gpu: Res<Gpu>,
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
         if let Some(encoder) = maybe_encoder.into_inner() {
-            widgets.paint_context.maintain_font_atlas(encoder);
+            widgets.paint_context.maintain_font_atlas(&gpu, encoder);
         }
     }
 
     pub fn maintain_font_atlas(
-        &self,
+        &mut self,
+        gpu: &Gpu,
         mut encoder: wgpu::CommandEncoder,
     ) -> Result<wgpu::CommandEncoder> {
-        self.paint_context.maintain_font_atlas(&mut encoder);
+        self.paint_context.maintain_font_atlas(gpu, &mut encoder);
         Ok(encoder)
     }
 }

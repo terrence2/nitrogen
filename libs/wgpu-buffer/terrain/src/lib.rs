@@ -242,7 +242,7 @@ impl TerrainBuffer {
                         module: &gpu.create_shader_module(
                             "draw_deferred_texture.vert",
                             include_bytes!("../target/draw_deferred_texture.vert.spirv"),
-                        )?,
+                        ),
                         entry_point: "main",
                         buffers: &[TerrainVertex::descriptor()],
                     },
@@ -250,7 +250,7 @@ impl TerrainBuffer {
                         module: &gpu.create_shader_module(
                             "draw_deferred_texture.frag",
                             include_bytes!("../target/draw_deferred_texture.frag.spirv"),
-                        )?,
+                        ),
                         entry_point: "main",
                         targets: &[wgpu::ColorTargetState {
                             format: Self::DEFERRED_TEXTURE_FORMAT,
@@ -475,7 +475,7 @@ impl TerrainBuffer {
                     module: &gpu.create_shader_module(
                         "accumulate_clear.comp",
                         include_bytes!("../target/accumulate_clear.comp.spirv"),
-                    )?,
+                    ),
                     entry_point: "main",
                 });
 

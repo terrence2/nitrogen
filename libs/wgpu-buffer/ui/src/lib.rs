@@ -150,7 +150,7 @@ where
                         module: &gpu.create_shader_module(
                             "ui-background.vert",
                             include_bytes!("../target/ui-background.vert.spirv"),
-                        )?,
+                        ),
                         entry_point: "main",
                         buffers: &[WidgetVertex::descriptor()],
                     },
@@ -158,7 +158,7 @@ where
                         module: &gpu.create_shader_module(
                             "ui-background.frag",
                             include_bytes!("../target/ui-background.frag.spirv"),
-                        )?,
+                        ),
                         entry_point: "main",
                         targets: &[wgpu::ColorTargetState {
                             format: Gpu::SCREEN_FORMAT,
@@ -215,7 +215,7 @@ where
                     module: &gpu.create_shader_module(
                         "ui-text.vert",
                         include_bytes!("../target/ui-text.vert.spirv"),
-                    )?,
+                    ),
                     entry_point: "main",
                     buffers: &[WidgetVertex::descriptor()],
                 },
@@ -223,7 +223,7 @@ where
                     module: &gpu.create_shader_module(
                         "ui-text.frag",
                         include_bytes!("../target/ui-text.frag.spirv"),
-                    )?,
+                    ),
                     entry_point: "main",
                     targets: &[wgpu::ColorTargetState {
                         format: Gpu::SCREEN_FORMAT,

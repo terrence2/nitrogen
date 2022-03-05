@@ -72,6 +72,29 @@ macro_rules! impl_immutable_heap_methods {
         }
 
         #[inline]
+        pub fn maybe_get<T: Component + 'static>(&self, entity: Entity) -> Option<&T> {
+            self.world.get::<T>(entity)
+        }
+
+        #[inline]
+        pub fn get_named<T: Component + 'static>(&self, name: &str) -> &T {
+            let entity = self
+                .resource::<WorldIndex>()
+                .get_entity(name)
+                .expect("named entity not found");
+            self.get::<T>(entity)
+        }
+
+        #[inline]
+        pub fn maybe_get_named<T: Component + 'static>(&self, name: &str) -> Option<&T> {
+            if let Some(entity) = self.resource::<WorldIndex>().get_entity(name) {
+                self.maybe_get::<T>(entity)
+            } else {
+                None
+            }
+        }
+
+        #[inline]
         pub fn maybe_entity_by_name(&self, name: &str) -> Option<Entity> {
             if let Some(Value::Entity(entity)) = self.resource::<WorldIndex>().lookup_entity(name) {
                 Some(entity)
@@ -186,6 +209,12 @@ macro_rules! impl_mutable_heap_methods {
         #[inline]
         pub fn insert_resource<T: Resource>(&mut self, value: T) -> &mut Self {
             self.world.insert_resource(value);
+            self
+        }
+
+        #[inline]
+        pub fn insert_non_send<T: 'static>(&mut self, value: T) -> &mut Self {
+            self.world.insert_non_send(value);
             self
         }
 

@@ -14,11 +14,10 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
 use geometry::Aabb;
-use gpu::{texture_format_size, ArcTextureCopyView, Gpu, OwnedBufferCopyView, UploadTracker};
+use gpu::{texture_format_size, Gpu};
 use image::{ImageBuffer, Luma, Pixel, Rgba};
 use log::debug;
-use std::{marker::PhantomData, mem, num::NonZeroU32, path::PathBuf, sync::Arc};
-use wgpu::Origin3d;
+use std::{marker::PhantomData, mem, num::NonZeroU32, path::Path, sync::Arc};
 use zerocopy::{AsBytes, FromBytes};
 
 #[repr(C)]
@@ -192,8 +191,6 @@ pub struct AtlasPacker<P: Pixel + 'static> {
     texture: Arc<wgpu::Texture>,
     texture_view: wgpu::TextureView,
     sampler: wgpu::Sampler,
-    dump_texture: Option<PathBuf>,
-    next_texture: Option<Arc<wgpu::Texture>>,
 
     // CPU-side list of buffers that need to be blit into the target texture these can either
     // get directly encoded for aligned upload-as-copy, or need to get deferred to a gpu compute
@@ -228,7 +225,7 @@ where
         initial_height: u32,
         format: wgpu::TextureFormat,
         filter: wgpu::FilterMode,
-    ) -> Result<Self> {
+    ) -> Self {
         let usage = wgpu::TextureUsages::TEXTURE_BINDING
             | wgpu::TextureUsages::COPY_SRC
             | wgpu::TextureUsages::COPY_DST
@@ -335,7 +332,7 @@ where
                         module: &gpu.create_shader_module(
                             "unaligned_blit.vert",
                             include_bytes!("../target/unaligned_blit.vert.spirv"),
-                        )?,
+                        ),
                         entry_point: "main",
                         buffers: &[BlitVertex::descriptor()],
                     },
@@ -343,7 +340,7 @@ where
                         module: &gpu.create_shader_module(
                             "unaligned_blit.frag",
                             include_bytes!("../target/unaligned_blit.frag.spirv"),
-                        )?,
+                        ),
                         entry_point: "main",
                         targets: &[wgpu::ColorTargetState {
                             format,
@@ -369,7 +366,7 @@ where
                     multiview: None,
                 });
 
-        Ok(Self {
+        Self {
             name: name.into(),
             initial_width,
             initial_height,
@@ -384,8 +381,6 @@ where
             texture,
             texture_view,
             sampler,
-            dump_texture: None,
-            next_texture: None,
 
             unaligned_blit_bind_group_layout: upload_unaligned_bind_group_layout,
             unaligned_blit_texture_sampler,
@@ -394,7 +389,7 @@ where
             unaligned_blit: Vec::new(),
 
             _phantom: PhantomData::default(),
-        })
+        }
     }
 
     pub fn align(v: u32) -> u32 {
@@ -416,10 +411,6 @@ where
     pub fn with_padding(mut self, padding: u32) -> Self {
         self.padding = padding;
         self
-    }
-
-    pub fn dump(&mut self, path: PathBuf) {
-        self.dump_texture = Some(path);
     }
 
     fn do_layout(&mut self, w: u32, h: u32) -> (u32, u32) {
@@ -595,26 +586,7 @@ where
 
     /// Upload the current contents to the GPU. Note that this is non-destructive. If needed,
     /// the builder can accumulate more textures and upload again later.
-    pub fn make_upload_buffer(&mut self, gpu: &Gpu, tracker: &UploadTracker) -> Result<()> {
-        // If we started a texture upload last frame, replace the prior texture with the new.
-        // Any glyphs in the new region will have an oob Frame for one frame, but that's better
-        // than having the entire glyph texture be noise for one frame.
-        if let Some(texture) = &self.next_texture {
-            debug!("{} transitioning to new texture", self.name);
-            self.texture = texture.to_owned();
-            self.texture_view = self.texture.create_view(&wgpu::TextureViewDescriptor {
-                label: Some("atlas-texture-view"),
-                format: None,
-                dimension: None,
-                aspect: wgpu::TextureAspect::All,
-                base_mip_level: 0,
-                mip_level_count: None, // mip_
-                base_array_layer: 0,
-                array_layer_count: None,
-            });
-        }
-        self.next_texture = None;
-
+    pub fn encode_frame_uploads(&mut self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder) {
         match self.dirty_region {
             DirtyState::Clean => {}
             DirtyState::RecreateTexture((hi_x, hi_y)) => {
@@ -622,13 +594,6 @@ where
                     "{} upload recreate {}x{} from {}x{}",
                     self.name, self.width, self.height, hi_x, hi_y
                 );
-                // We are not in upload when we need to resize.
-                // When we enter here, the CPU `buffer` is already resized. The width/height fields
-                // are updated with the new requested size. We need to copy from 0,0 up to whatever
-                // else has been packed this frame, which are tracked in hiX,hiY.
-                // We create a fresh binding every frame so that we can drop in a new texture
-                // here easily, however, the content is going to take a frame to upload, so we
-                // need to actually delay replacing it until the next frame.
                 let next_texture =
                     Arc::new(gpu.device().create_texture(&wgpu::TextureDescriptor {
                         label: Some("atlas-texture"),
@@ -643,25 +608,43 @@ where
                         format: self.format,
                         usage: self.usage,
                     }));
-                tracker.copy_texture_to_texture(
-                    self.texture.clone(),
-                    0,
-                    next_texture.clone(),
-                    0,
+                encoder.copy_texture_to_texture(
+                    wgpu::ImageCopyTexture {
+                        texture: &self.texture,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
+                    wgpu::ImageCopyTexture {
+                        texture: &next_texture,
+                        mip_level: 0,
+                        origin: wgpu::Origin3d::ZERO,
+                        aspect: wgpu::TextureAspect::All,
+                    },
                     wgpu::Extent3d {
                         width: hi_x,
                         height: hi_y,
                         depth_or_array_layers: 1,
                     },
                 );
-                self.next_texture = Some(next_texture);
+                self.texture = next_texture;
+                self.texture_view = self.texture.create_view(&wgpu::TextureViewDescriptor {
+                    label: Some("atlas-texture-view"),
+                    format: None,
+                    dimension: None,
+                    aspect: wgpu::TextureAspect::All,
+                    base_mip_level: 0,
+                    mip_level_count: None, // mip_
+                    base_array_layer: 0,
+                    array_layer_count: None,
+                });
             }
         }
         self.dirty_region = DirtyState::Clean;
 
         // Set up texture blits
         self.unaligned_blit.clear();
-        for item in self.blit_list.drain(..) {
+        for item in self.blit_list.iter() {
             let img_extent = wgpu::Extent3d {
                 width: item.width,
                 height: item.height,
@@ -676,19 +659,20 @@ where
                 format: self.format,
                 usage: wgpu::TextureUsages::COPY_DST | wgpu::TextureUsages::TEXTURE_BINDING,
             }));
-            tracker.copy_owned_buffer_to_arc_texture(
-                OwnedBufferCopyView {
-                    buffer: item.img_buffer,
+            encoder.copy_buffer_to_texture(
+                wgpu::ImageCopyBuffer {
+                    buffer: &item.img_buffer,
                     layout: wgpu::ImageDataLayout {
                         offset: 0,
                         bytes_per_row: NonZeroU32::new(item.stride_bytes),
                         rows_per_image: NonZeroU32::new(item.height),
                     },
                 },
-                ArcTextureCopyView {
-                    texture: img_texture.clone(),
+                wgpu::ImageCopyTexture {
+                    texture: &img_texture,
                     mip_level: 0,
-                    origin: Origin3d::ZERO,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect: wgpu::TextureAspect::All,
                 },
                 img_extent,
             );
@@ -727,66 +711,11 @@ where
             self.unaligned_blit.push((bind_group, vertex_buffer));
         }
 
-        Ok(())
-    }
-
-    pub fn handle_dump_texture(&mut self, gpu: &mut Gpu) -> Result<()> {
-        if let Some(path_ref) = self.dump_texture.as_ref() {
-            let path = path_ref.to_owned();
-            let write_img =
-                |extent: wgpu::Extent3d, fmt: wgpu::TextureFormat, data: Vec<u8>| match fmt {
-                    wgpu::TextureFormat::R8Unorm => {
-                        let img =
-                            ImageBuffer::<Luma<u8>, _>::from_raw(extent.width, extent.height, data)
-                                .expect("built image");
-                        println!("writing to {}", path.to_string_lossy());
-                        img.save(path).expect("wrote file");
-                    }
-                    wgpu::TextureFormat::Rgba8Unorm => {
-                        let img =
-                            ImageBuffer::<Rgba<u8>, _>::from_raw(extent.width, extent.height, data)
-                                .expect("built image");
-                        println!("writing to {}", path.to_string_lossy());
-                        img.save(path).expect("wrote file");
-                    }
-                    _ => panic!("don't know how to dump texture format: {:?}", fmt),
-                };
-            Gpu::dump_texture(
-                &self.texture,
-                wgpu::Extent3d {
-                    width: self.width,
-                    height: self.height,
-                    depth_or_array_layers: 1,
-                },
-                self.format,
-                gpu,
-                Box::new(write_img),
-            )?;
-        }
-        self.dump_texture = None;
-        Ok(())
-    }
-
-    pub fn maintain_gpu_resources(&self, encoder: &mut wgpu::CommandEncoder) {
-        let target_texture = if let Some(ref next_texture) = self.next_texture {
-            next_texture.clone()
-        } else {
-            self.texture.clone()
-        };
-        let target_view = target_texture.create_view(&wgpu::TextureViewDescriptor {
-            label: Some("atlas-texture-view"),
-            format: None,
-            dimension: None,
-            aspect: wgpu::TextureAspect::All,
-            base_mip_level: 0,
-            mip_level_count: None, // mip_
-            base_array_layer: 0,
-            array_layer_count: None,
-        });
+        // Encode unaligned texture blits, including unaligned.
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("atlas-finish-render-pass"),
             color_attachments: &[wgpu::RenderPassColorAttachment {
-                view: &target_view,
+                view: &self.texture_view,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Load,
@@ -803,28 +732,36 @@ where
         }
     }
 
-    /// Upload and then steal the texture. Useful when used as a one-shot atlas.
-    pub fn finish(
-        mut self,
-        gpu: &mut Gpu,
-        tracker: &UploadTracker,
-    ) -> Result<(Arc<wgpu::Texture>, wgpu::TextureView, wgpu::Sampler)> {
-        // Note: we need to crank make_upload_buffer twice because of the way
-        // we defer moving to a new texture to ensure in-flight uploads happen.
-        self.make_upload_buffer(gpu, tracker)?;
-
-        let mut encoder = gpu
-            .device()
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("atlas-finish"),
-            });
-        tracker.dispatch_uploads_until_empty(&mut encoder);
-        self.maintain_gpu_resources(&mut encoder);
-        gpu.queue_mut().submit(vec![encoder.finish()]);
-
-        self.make_upload_buffer(gpu, tracker)?;
-
-        Ok((self.texture, self.texture_view, self.sampler))
+    pub fn dump_texture(&self, gpu: &mut Gpu, path: &Path) -> Result<()> {
+        let path = path.to_owned();
+        let write_img = |extent: wgpu::Extent3d, fmt: wgpu::TextureFormat, data: Vec<u8>| match fmt
+        {
+            wgpu::TextureFormat::R8Unorm => {
+                let img = ImageBuffer::<Luma<u8>, _>::from_raw(extent.width, extent.height, data)
+                    .expect("built image");
+                println!("writing to {}", path.to_string_lossy());
+                img.save(path).expect("wrote file");
+            }
+            wgpu::TextureFormat::Rgba8Unorm => {
+                let img = ImageBuffer::<Rgba<u8>, _>::from_raw(extent.width, extent.height, data)
+                    .expect("built image");
+                println!("writing to {}", path.to_string_lossy());
+                img.save(path).expect("wrote file");
+            }
+            _ => panic!("don't know how to dump texture format: {:?}", fmt),
+        };
+        Gpu::dump_texture(
+            &self.texture,
+            wgpu::Extent3d {
+                width: self.width,
+                height: self.height,
+                depth_or_array_layers: 1,
+            },
+            self.format,
+            gpu,
+            Box::new(write_img),
+        )?;
+        Ok(())
     }
 
     fn grow(&mut self) {
@@ -878,9 +815,26 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use image::{GrayImage, Luma, Rgba, RgbaImage};
+    use image::{GrayImage, Luma, Pixel, Rgba, RgbaImage};
     use rand::prelude::*;
     use std::{env, time::Duration};
+
+    fn finish<P>(mut packer: AtlasPacker<P>, gpu: &mut Gpu) -> Result<Arc<wgpu::Texture>>
+    where
+        P: Pixel,
+        [<P as Pixel>::Subpixel]: AsRef<[u8]>,
+        <P as Pixel>::Subpixel: AsBytes,
+    {
+        let mut encoder = gpu
+            .device()
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("test-encoder"),
+            });
+        packer.encode_frame_uploads(gpu, &mut encoder);
+        gpu.queue_mut().submit(vec![encoder.finish()]);
+        gpu.device().poll(wgpu::Maintain::Wait);
+        Ok(packer.texture)
+    }
 
     #[cfg(unix)]
     #[test]
@@ -895,7 +849,7 @@ mod test {
             2048,
             wgpu::TextureFormat::Rgba8Unorm,
             wgpu::FilterMode::Linear,
-        )?;
+        );
         let minimum = 40;
         let maximum = 200;
 
@@ -926,7 +880,7 @@ mod test {
             height: packer.height(),
             depth_or_array_layers: 1,
         };
-        let (texture, _view, _sampler) = packer.finish(&mut gpu, &Default::default())?;
+        let texture = finish(packer, &mut gpu)?;
         if env::var("DUMP") == Ok("1".to_owned()) {
             Gpu::dump_texture(
                 &texture,
@@ -964,13 +918,13 @@ mod test {
             256,
             wgpu::TextureFormat::Rgba8Unorm,
             wgpu::FilterMode::Linear,
-        )?;
+        );
         let _ = packer.push_image(
             &RgbaImage::from_pixel(254, 254, *Rgba::from_slice(&[255, 0, 0, 255])),
             &gpu,
         )?;
 
-        let _ = packer.finish(&mut gpu, &Default::default());
+        let _ = finish(packer, &mut gpu)?;
         Ok(())
     }
 
@@ -987,13 +941,13 @@ mod test {
             256,
             wgpu::TextureFormat::R8Unorm,
             wgpu::FilterMode::Linear,
-        )?;
+        );
         let _ = packer.push_image(
             &GrayImage::from_pixel(254, 254, *Luma::from_slice(&[255])),
             &gpu,
         )?;
 
-        let _ = packer.finish(&mut gpu, &Default::default());
+        let _ = finish(packer, &mut gpu)?;
         Ok(())
     }
 
@@ -1010,14 +964,20 @@ mod test {
             256,
             wgpu::TextureFormat::Rgba8Unorm,
             wgpu::FilterMode::Linear,
-        )?;
+        );
+
+        let mut encoder = gpu
+            .device()
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("test-encoder"),
+            });
 
         // Base upload
         let _ = packer.push_image(
             &RgbaImage::from_pixel(254, 254, *Rgba::from_slice(&[255, 0, 0, 255])),
             gpu,
         )?;
-        packer.make_upload_buffer(gpu, &Default::default())?;
+        packer.encode_frame_uploads(gpu, &mut encoder);
         let _ = packer.texture();
 
         // Grow
@@ -1025,7 +985,7 @@ mod test {
             &RgbaImage::from_pixel(24, 254, *Rgba::from_slice(&[255, 0, 0, 255])),
             gpu,
         )?;
-        packer.make_upload_buffer(gpu, &Default::default())?;
+        packer.encode_frame_uploads(gpu, &mut encoder);
         let _ = packer.texture();
 
         // Reuse
@@ -1033,7 +993,7 @@ mod test {
             &RgbaImage::from_pixel(24, 254, *Rgba::from_slice(&[255, 0, 0, 255])),
             gpu,
         )?;
-        packer.make_upload_buffer(gpu, &Default::default())?;
+        packer.encode_frame_uploads(gpu, &mut encoder);
         let _ = packer.texture();
         Ok(())
     }

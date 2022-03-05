@@ -55,11 +55,11 @@ impl App {
         let vert_shader = gpu.create_shader_module(
             "example.vert",
             include_bytes!("../target/example.vert.spirv"),
-        )?;
+        );
         let frag_shader = gpu.create_shader_module(
             "example.frag",
             include_bytes!("../target/example.frag.spirv"),
-        )?;
+        );
 
         let empty_layout =
             gpu.device()

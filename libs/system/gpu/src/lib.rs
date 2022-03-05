@@ -669,14 +669,13 @@ impl Gpu {
         wgpu::ShaderSource::SpirV(words)
     }
 
-    pub fn create_shader_module(&self, name: &str, spirv: &[u8]) -> Result<wgpu::ShaderModule> {
+    pub fn create_shader_module(&self, name: &str, spirv: &[u8]) -> wgpu::ShaderModule {
         let spirv_words = Self::make_spirv(spirv);
-        Ok(self
-            .device
+        self.device
             .create_shader_module(&wgpu::ShaderModuleDescriptor {
                 label: Some(name),
                 source: spirv_words,
-            }))
+            })
     }
 
     pub const fn stride_for_row_size(size_in_bytes: u32) -> u32 {

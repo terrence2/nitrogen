@@ -226,11 +226,11 @@ impl SphericalTileSetCommon {
         let index_paint_vert_shader = gpu.create_shader_module(
             "index_paint.vert",
             include_bytes!("../../target/index_paint.vert.spirv"),
-        )?;
+        );
         let index_paint_frag_shader = gpu.create_shader_module(
             "index_paint.frag",
             include_bytes!("../../target/index_paint.frag.spirv"),
-        )?;
+        );
         let index_paint_pipeline =
             gpu.device()
                 .create_render_pipeline(&wgpu::RenderPipelineDescriptor {

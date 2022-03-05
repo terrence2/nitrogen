@@ -21,7 +21,7 @@ use crate::{
 };
 use anyhow::Result;
 use font_common::FontInterface;
-use gpu::{Gpu, UploadTracker};
+use gpu::Gpu;
 use parking_lot::RwLock;
 use std::{borrow::Borrow, sync::Arc};
 use window::{
@@ -45,15 +45,15 @@ impl PaintContext {
     pub const TEXT_DEPTH: RelSize = RelSize::from_percent(0.25);
     pub const BOX_DEPTH_SIZE: RelSize = RelSize::from_percent(1.);
 
-    pub fn new(gpu: &Gpu) -> Result<Self> {
-        Ok(Self {
+    pub fn new(gpu: &Gpu) -> Self {
+        Self {
             current_depth: RelSize::zero(),
-            font_context: FontContext::new(gpu)?,
+            font_context: FontContext::new(gpu),
             widget_info_pool: Vec::new(),
             background_pool: Vec::new(),
             image_pool: Vec::new(),
             text_pool: Vec::new(),
-        })
+        }
     }
 
     // Some data is frame-coherent, some is fresh for each frame. We mix them together in this
@@ -114,15 +114,11 @@ impl PaintContext {
         )
     }
 
-    pub fn make_upload_buffer(&mut self, gpu: &Gpu, tracker: &UploadTracker) -> Result<()> {
-        self.font_context.make_upload_buffer(gpu, tracker)
+    pub fn maintain_font_atlas(&mut self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder) {
+        self.font_context.maintain_font_atlas(gpu, encoder);
     }
 
     pub fn handle_dump_texture(&mut self, gpu: &mut Gpu) -> Result<()> {
         self.font_context.handle_dump_texture(gpu)
-    }
-
-    pub fn maintain_font_atlas(&self, encoder: &mut wgpu::CommandEncoder) {
-        self.font_context.maintain_font_atlas(encoder);
     }
 }
