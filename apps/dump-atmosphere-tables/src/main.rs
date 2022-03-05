@@ -24,7 +24,7 @@ use structopt::StructOpt;
 use window::{Window, WindowBuilder};
 
 /// Pre-compute atmosphere tables for embedding in code
-#[derive(Debug, StructOpt)]
+#[derive(Clone, Debug, StructOpt)]
 struct Opt {
     /// Write tables here
     #[structopt(short, long)]
@@ -32,15 +32,17 @@ struct Opt {
 }
 
 fn main() -> Result<()> {
+    let opt = Opt::from_args();
     env_logger::init();
     InputSystem::run_forever(
+        opt,
         WindowBuilder::new().with_title("Build Atmosphere Tables"),
         window_main,
     )
 }
 
 fn window_main(mut runtime: Runtime) -> Result<()> {
-    let opt = Opt::from_args();
+    let opt = runtime.resource::<Opt>().to_owned();
 
     runtime
         .load_extension::<Window>()?

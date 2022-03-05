@@ -16,7 +16,7 @@ use absolute_unit::{degrees, meters};
 use animate::TimeStep;
 use anyhow::Result;
 use bevy_ecs::prelude::*;
-use camera::{ArcBallController, ArcBallSystem, Camera, CameraSystem};
+use camera::{ArcBallController, ArcBallSystem, CameraSystem, ScreenCameraController};
 use event_mapper::EventMapper;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use geodesy::{GeoSurface, Graticule, Target};
@@ -149,6 +149,7 @@ impl App {
 
 fn main() -> Result<()> {
     InputSystem::run_forever(
+        (),
         WindowBuilder::new().with_title("Nitrogen Render Demo"),
         window_main,
     )
@@ -171,11 +172,6 @@ fn window_main(mut runtime: Runtime) -> Result<()> {
         .run_string(r#"bindings.bind("Escape", "exit()");"#)?;
 
     // But we need at least a camera and controller before the sim is ready to run.
-    let camera = Camera::new(
-        degrees!(90),
-        runtime.resource::<Window>().render_aspect_ratio(),
-        meters!(0.1),
-    );
     let mut arcball = ArcBallController::default();
     arcball.pan_view(true);
     arcball.set_eye(Graticule::<Target>::new(
@@ -193,7 +189,7 @@ fn window_main(mut runtime: Runtime) -> Result<()> {
         .spawn_named("player")?
         .insert(WorldSpaceFrame::default())
         .insert_scriptable(arcball)?
-        .insert_scriptable(camera)?
+        .insert(ScreenCameraController::default())
         .id();
 
     while runtime.resource::<ExitRequest>().still_running() {

@@ -34,7 +34,7 @@ use bzip2::read::BzDecoder;
 use catalog::Catalog;
 use crossbeam::channel::{self, Receiver, Sender};
 use geometry::Aabb;
-use gpu::{texture_format_size, ArcTextureCopyView, Gpu, OwnedBufferCopyView, UploadTracker};
+use gpu::{texture_format_size, Gpu};
 use image::{ImageBuffer, Rgb};
 use parking_lot::RwLock;
 use std::{
@@ -634,7 +634,7 @@ impl SphericalTileSetCommon {
         );
     }
 
-    pub(crate) fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &UploadTracker) {
+    pub(crate) fn encode_uploads(&mut self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder) {
         // FIXME: precompute this
         let raw_tile_size = self.atlas_texture_extent.width as usize
             * self.atlas_texture_extent.height as usize
@@ -662,9 +662,9 @@ impl SphericalTileSetCommon {
                 &data,
                 wgpu::BufferUsages::COPY_SRC,
             );
-            tracker.copy_owned_buffer_to_arc_texture(
-                OwnedBufferCopyView {
-                    buffer: texture_buffer,
+            encoder.copy_buffer_to_texture(
+                wgpu::ImageCopyBuffer {
+                    buffer: &texture_buffer,
                     layout: wgpu::ImageDataLayout {
                         offset: 0,
                         bytes_per_row: NonZeroU32::new(
@@ -674,14 +674,15 @@ impl SphericalTileSetCommon {
                         rows_per_image: NonZeroU32::new(self.atlas_texture_extent.height),
                     },
                 },
-                ArcTextureCopyView {
-                    texture: self.atlas_texture.clone(),
+                wgpu::ImageCopyTexture {
+                    texture: &self.atlas_texture,
                     mip_level: 0,
                     origin: wgpu::Origin3d {
                         x: 0,
                         y: 0,
                         z: atlas_slot as u32,
                     },
+                    aspect: wgpu::TextureAspect::All,
                 },
                 wgpu::Extent3d {
                     width: self.atlas_texture_extent.width,
@@ -689,6 +690,33 @@ impl SphericalTileSetCommon {
                     depth_or_array_layers: 1,
                 },
             );
+            // tracker.copy_owned_buffer_to_arc_texture(
+            //     OwnedBufferCopyView {
+            //         buffer: texture_buffer,
+            //         layout: wgpu::ImageDataLayout {
+            //             offset: 0,
+            //             bytes_per_row: NonZeroU32::new(
+            //                 self.atlas_texture_extent.width
+            //                     * texture_format_size(self.atlas_texture_format),
+            //             ),
+            //             rows_per_image: NonZeroU32::new(self.atlas_texture_extent.height),
+            //         },
+            //     },
+            //     ArcTextureCopyView {
+            //         texture: self.atlas_texture.clone(),
+            //         mip_level: 0,
+            //         origin: wgpu::Origin3d {
+            //             x: 0,
+            //             y: 0,
+            //             z: atlas_slot as u32,
+            //         },
+            //     },
+            //     wgpu::Extent3d {
+            //         width: self.atlas_texture_extent.width,
+            //         height: self.atlas_texture_extent.height,
+            //         depth_or_array_layers: 1,
+            //     },
+            // );
 
             let (tile_base_lat_as, tile_base_lon_as) = self.tile_tree.base(&qtid);
             let tile_base = [tile_base_lat_as as f32, tile_base_lon_as as f32];
@@ -699,10 +727,17 @@ impl SphericalTileSetCommon {
                 &tile_info,
                 wgpu::BufferUsages::COPY_SRC,
             );
-            tracker.upload_to_array_element::<TileInfo>(
-                info_buffer,
-                self.atlas_tile_info.clone(),
-                atlas_slot,
+            // tracker.upload_to_array_element::<TileInfo>(
+            //     info_buffer,
+            //     self.atlas_tile_info.clone(),
+            //     atlas_slot,
+            // );
+            encoder.copy_buffer_to_buffer(
+                &info_buffer,
+                0,
+                &self.atlas_tile_info,
+                (mem::size_of::<TileInfo>() * atlas_slot) as wgpu::BufferAddress,
+                mem::size_of::<TileInfo>() as wgpu::BufferAddress,
             );
         }
 
@@ -755,7 +790,7 @@ impl SphericalTileSetCommon {
             "index-paint-tris-upload",
             &tris,
             self.index_paint_vert_buffer.clone(),
-            tracker,
+            encoder,
         );
 
         log::trace!(

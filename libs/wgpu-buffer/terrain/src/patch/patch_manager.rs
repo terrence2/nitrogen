@@ -19,9 +19,9 @@ use crate::{
 };
 use absolute_unit::{degrees, meters, radians, Angle, Kilometers, Radians};
 use anyhow::Result;
-use camera::Camera;
+use camera::ScreenCamera;
 use geodesy::{Cartesian, GeoCenter, Graticule};
-use gpu::{Gpu, UploadTracker};
+use gpu::Gpu;
 use nalgebra::{Matrix4, Point3};
 use static_assertions::{assert_eq_align, assert_eq_size};
 use std::{f64::consts::FRAC_PI_2, fmt, mem, num::NonZeroU64, ops::Range, sync::Arc};
@@ -503,8 +503,8 @@ impl PatchManager {
 
     pub fn track_state_changes(
         &mut self,
-        camera: &Camera,
-        optimize_camera: &Camera,
+        camera: &ScreenCamera,
+        optimize_camera: &ScreenCamera,
         visible_regions: &mut Vec<VisiblePatch>,
     ) {
         // Select optimal live patches from our coherent patch tree.
@@ -577,12 +577,13 @@ impl PatchManager {
         //println!("dt: {:?}", Instant::now() - loop_start);
     }
 
-    pub fn ensure_uploaded(&self, gpu: &Gpu, tracker: &UploadTracker) {
+    pub fn encode_uploads(&self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder) {
+        // Upload the raw live vertices buffer in a single block for dispersal by "prepare".
         gpu.upload_slice_to(
             "terrain-geo-patch-vertex-upload-buffer",
             &self.live_vertices,
             self.patch_upload_buffer.clone(),
-            tracker,
+            encoder,
         );
     }
 

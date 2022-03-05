@@ -91,8 +91,9 @@ impl Extension for WorldRenderPass {
             .add_system(Self::sys_handle_display_config_change);
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_render_world
-                .before("CompositeRenderPass")
-                .label("WorldRenderPass"),
+                .label("WorldRenderPass")
+                .after("GlobalParametersBuffer")
+                .before("CompositeRenderPass"),
         );
 
         // TODO: figure out debug bindings

@@ -17,11 +17,11 @@ use crate::{
     GpuDetail, VisiblePatch,
 };
 use anyhow::Result;
-use camera::Camera;
+use camera::ScreenCamera;
 use catalog::Catalog;
 use global_data::GlobalParametersBuffer;
 use gpu::wgpu::{BindGroup, CommandEncoder, ComputePass};
-use gpu::{Gpu, UploadTracker};
+use gpu::Gpu;
 use parking_lot::RwLock;
 use shader_shared::Group;
 use std::{any::Any, sync::Arc};
@@ -91,12 +91,12 @@ impl TileSet for SphericalHeightTileSet {
         self.common.note_required(visible_patch)
     }
 
-    fn finish_visibility_update(&mut self, _camera: &Camera, catalog: Arc<RwLock<Catalog>>) {
+    fn finish_visibility_update(&mut self, _camera: &ScreenCamera, catalog: Arc<RwLock<Catalog>>) {
         self.common.finish_visibility_update(catalog);
     }
 
-    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &UploadTracker) {
-        self.common.ensure_uploaded(gpu, tracker);
+    fn encode_uploads(&mut self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder) {
+        self.common.encode_uploads(gpu, encoder);
     }
 
     fn snapshot_index(&mut self, gpu: &mut Gpu) {
@@ -212,12 +212,12 @@ impl TileSet for SphericalColorTileSet {
         self.common.note_required(visible_patch)
     }
 
-    fn finish_visibility_update(&mut self, _camera: &Camera, catalog: Arc<RwLock<Catalog>>) {
+    fn finish_visibility_update(&mut self, _camera: &ScreenCamera, catalog: Arc<RwLock<Catalog>>) {
         self.common.finish_visibility_update(catalog)
     }
 
-    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &UploadTracker) {
-        self.common.ensure_uploaded(gpu, tracker);
+    fn encode_uploads(&mut self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder) {
+        self.common.encode_uploads(gpu, encoder);
     }
 
     fn snapshot_index(&mut self, gpu: &mut Gpu) {
@@ -335,12 +335,12 @@ impl TileSet for SphericalNormalsTileSet {
         self.common.note_required(visible_patch);
     }
 
-    fn finish_visibility_update(&mut self, _camera: &Camera, catalog: Arc<RwLock<Catalog>>) {
+    fn finish_visibility_update(&mut self, _camera: &ScreenCamera, catalog: Arc<RwLock<Catalog>>) {
         self.common.finish_visibility_update(catalog);
     }
 
-    fn ensure_uploaded(&mut self, gpu: &Gpu, tracker: &UploadTracker) {
-        self.common.ensure_uploaded(gpu, tracker);
+    fn encode_uploads(&mut self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder) {
+        self.common.encode_uploads(gpu, encoder);
     }
 
     fn snapshot_index(&mut self, gpu: &mut Gpu) {

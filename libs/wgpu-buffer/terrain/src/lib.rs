@@ -26,11 +26,11 @@ pub use crate::{
 use absolute_unit::{Length, Meters};
 use anyhow::Result;
 use bevy_ecs::prelude::*;
-use camera::Camera;
+use camera::{HudCamera, ScreenCamera};
 use catalog::Catalog;
 use geodesy::{GeoCenter, Graticule};
 use global_data::GlobalParametersBuffer;
-use gpu::{CpuDetailLevel, DisplayConfig, Gpu, GpuDetailLevel, UploadTracker};
+use gpu::{CpuDetailLevel, DisplayConfig, Gpu, GpuDetailLevel};
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use parking_lot::RwLock;
 use runtime::{Extension, FrameStage, Runtime};
@@ -129,7 +129,7 @@ pub struct TerrainBuffer {
     tile_manager: TileManager,
 
     toggle_pin_camera: bool,
-    pinned_camera: Option<Camera>,
+    pinned_camera: Option<ScreenCamera>,
 
     // Cache allocation for transferring visible allocations from patches to tiles.
     visible_regions: Vec<VisiblePatch>,
@@ -174,23 +174,24 @@ impl Extension for TerrainBuffer {
             .frame_stage_mut(FrameStage::TrackStateChanges)
             .add_system(Self::sys_track_state_changes);
         runtime
-            .frame_stage_mut(FrameStage::EnsureGpuUpdated)
-            .add_system(Self::sys_ensure_uploaded);
-        runtime
             .frame_stage_mut(FrameStage::Render)
             .add_system(Self::sys_paint_atlas_indices.label("paint_atlas_indices"));
-        runtime
-            .frame_stage_mut(FrameStage::Render)
-            .add_system(Self::sys_tesselate.label("tesselate"));
+        runtime.frame_stage_mut(FrameStage::Render).add_system(
+            Self::sys_terrain_tesselate
+                .label("tesselate")
+                .after("GlobalParametersBuffer"),
+        );
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_deferred_texture
                 .label("deferred_texture")
+                .after("GlobalParametersBuffer")
                 .after("tesselate")
                 .after("paint_atlas_indices"),
         );
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_accumulate_normal_and_color
                 .label("accumulate_normal_and_color")
+                .after("GlobalParametersBuffer")
                 .after("deferred_texture")
                 .before("WorldRenderPass"),
         );
@@ -763,19 +764,19 @@ impl TerrainBuffer {
     }
 
     fn sys_track_state_changes(
-        query: Query<&Camera>,
+        camera: Res<ScreenCamera>,
+        query: Query<&HudCamera>,
         catalog: Res<Arc<RwLock<Catalog>>>,
         mut terrain: ResMut<TerrainBuffer>,
     ) {
-        // FIXME: multiple camera support
-        for (i, camera) in query.iter().enumerate() {
-            assert_eq!(i, 0);
-            terrain.track_state_changes(camera, catalog.clone());
+        for _hud_camera in query.iter() {
+            // FIXME: multiple camera support
         }
+        terrain.track_state_changes(&camera, catalog.clone());
     }
 
     // Given the new camera position, update our internal CPU tracking.
-    fn track_state_changes(&mut self, camera: &Camera, catalog: Arc<RwLock<Catalog>>) {
+    fn track_state_changes(&mut self, camera: &ScreenCamera, catalog: Arc<RwLock<Catalog>>) {
         if self.toggle_pin_camera {
             self.toggle_pin_camera = false;
             self.pinned_camera = match self.pinned_camera {
@@ -806,15 +807,6 @@ impl TerrainBuffer {
         terrain.tile_manager.handle_capture_snapshot(&mut gpu);
     }
 
-    fn sys_ensure_uploaded(
-        mut terrain: ResMut<TerrainBuffer>,
-        gpu: Res<Gpu>,
-        tracker: Res<UploadTracker>,
-    ) {
-        terrain.patch_manager.ensure_uploaded(&gpu, &tracker);
-        terrain.tile_manager.ensure_uploaded(&gpu, &tracker);
-    }
-
     fn sys_paint_atlas_indices(
         terrain: Res<TerrainBuffer>,
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
@@ -824,30 +816,26 @@ impl TerrainBuffer {
         }
     }
 
-    fn sys_tesselate(
-        terrain: Res<TerrainBuffer>,
+    fn sys_terrain_tesselate(
+        mut terrain: ResMut<TerrainBuffer>,
+        gpu: Res<Gpu>,
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
         if let Some(encoder) = maybe_encoder.into_inner() {
+            terrain.patch_manager.encode_uploads(&gpu, encoder);
+            terrain.tile_manager.encode_uploads(&gpu, encoder);
+
             let cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("compute-pass"),
+                label: Some("terrain-tessellate-compute-pass"),
             });
-            let _cpass = terrain.tessellate(cpass);
+
+            let cpass = terrain.patch_manager.tessellate(cpass);
+            let _ = terrain.tile_manager.displace_height(
+                terrain.patch_manager.target_vertex_count(),
+                terrain.patch_manager.displace_height_bind_group(),
+                cpass,
+            );
         }
-    }
-
-    fn tessellate<'a>(&'a self, mut cpass: wgpu::ComputePass<'a>) -> wgpu::ComputePass<'a> {
-        // Use the CPU input mesh to tessellate on the GPU.
-        cpass = self.patch_manager.tessellate(cpass);
-
-        // Use our height tiles to displace mesh.
-        cpass = self.tile_manager.displace_height(
-            self.patch_manager.target_vertex_count(),
-            self.patch_manager.displace_height_bind_group(),
-            cpass,
-        );
-
-        cpass
     }
 
     fn deferred_texture_target(

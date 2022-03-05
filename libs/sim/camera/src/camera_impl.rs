@@ -13,7 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{
-    degrees, radians, Angle, AngleUnit, Degrees, Kilometers, Length, LengthUnit, Meters, Radians,
+    degrees, meters, radians, Angle, AngleUnit, Degrees, Kilometers, Length, LengthUnit, Meters,
+    Radians,
 };
 use anyhow::Result;
 use bevy_ecs::prelude::*;
@@ -21,13 +22,21 @@ use geodesy::{Cartesian, GeoCenter};
 use geometry::Plane;
 use measure::WorldSpaceFrame;
 use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, UnitQuaternion, Vector3};
-use nitrous::{inject_nitrous_component, method, NitrousComponent};
+use nitrous::{
+    inject_nitrous_component, inject_nitrous_resource, method, NitrousComponent, NitrousResource,
+};
 use runtime::{Extension, FrameStage, Runtime, SimStage};
-use window::DisplayConfig;
+use std::f64::consts::PI;
+use window::{DisplayConfig, Window};
 
 pub struct CameraSystem;
 impl Extension for CameraSystem {
     fn init(runtime: &mut Runtime) -> Result<()> {
+        runtime.insert_resource(ScreenCamera::new(
+            radians!(PI / 2.0),
+            runtime.resource::<Window>().render_aspect_ratio(),
+            meters!(0.5),
+        ));
         runtime.run_string(
             r#"
                 bindings.bind("PageUp", "@player.camera.increase_fov(pressed)");
@@ -37,14 +46,14 @@ impl Extension for CameraSystem {
             "#,
         )?;
         runtime.sim_stage_mut(SimStage::PostInput).add_system(
-            Camera::sys_apply_input
+            ScreenCamera::sys_apply_input
                 .label("Camera::sys_apply_input")
                 .after("ArcBallController::sys_apply_input"),
         );
         runtime
             .frame_stage_mut(FrameStage::HandleDisplayChange)
             .add_system(
-                Camera::sys_apply_display_changes.label("Camera::sys_apply_display_changes"),
+                ScreenCamera::sys_apply_display_changes.label("Camera::sys_apply_display_changes"),
             );
         Ok(())
     }
@@ -57,7 +66,20 @@ struct InputState {
 
 #[derive(Clone, Debug, Component, NitrousComponent)]
 #[Name = "camera"]
-pub struct Camera {
+pub struct HudCamera {
+    _camera: ScreenCamera,
+}
+
+#[inject_nitrous_component]
+impl HudCamera {
+    // FIXME: passthrough, maybe? Implement Hud Camera support.
+}
+
+#[derive(Clone, Debug, Default, Component)]
+pub struct ScreenCameraController;
+
+#[derive(Clone, Debug, NitrousResource)]
+pub struct ScreenCamera {
     // Camera parameters
     fov_y: Angle<Radians>,
     aspect_ratio: f64,
@@ -73,8 +95,8 @@ pub struct Camera {
     right: Vector3<f64>,
 }
 
-#[inject_nitrous_component]
-impl Camera {
+#[inject_nitrous_resource]
+impl ScreenCamera {
     const INITIAL_EXPOSURE: f64 = 10e-5;
 
     // FIXME: aspect ratio is wrong. Should be 16:9 and not 9:16.
@@ -280,22 +302,22 @@ impl Camera {
     }
 
     // Apply interpreted inputs from prior stage; apply new world position.
-    fn sys_apply_input(mut query: Query<(&WorldSpaceFrame, &mut Camera)>) {
-        for (frame, mut camera) in query.iter_mut() {
-            camera.apply_input_state();
-            camera.update_frame(frame);
-        }
+    fn sys_apply_input(
+        mut camera: ResMut<ScreenCamera>,
+        query: Query<(&WorldSpaceFrame, &ScreenCameraController)>,
+    ) {
+        let (frame, _) = query.single();
+        camera.apply_input_state();
+        camera.update_frame(frame);
     }
 
     // Apply updated system config, e.g. aspect
     fn sys_apply_display_changes(
-        mut query: Query<&mut Camera>,
+        mut camera: ResMut<ScreenCamera>,
         updated_config: Res<Option<DisplayConfig>>,
     ) {
-        for mut camera in query.iter_mut() {
-            if let Some(config) = updated_config.as_ref() {
-                camera.on_display_config_updated(config);
-            }
+        if let Some(config) = updated_config.as_ref() {
+            camera.on_display_config_updated(config);
         }
     }
 }
@@ -312,7 +334,7 @@ mod test {
 
     #[test]
     fn test_perspective() {
-        let camera = Camera::new(degrees!(90), 9.0 / 11.0, meters!(0.3));
+        let camera = ScreenCamera::new(degrees!(90), 9.0 / 11.0, meters!(0.3));
         let p = camera.perspective::<Meters>().to_homogeneous();
         let wrld = Vector4::new(0000.0, 0.0, -10000.0, 1.0);
         let eye = camera.view::<Meters>().to_homogeneous() * wrld;
@@ -335,7 +357,7 @@ mod test {
     #[test]
     fn test_depth_restore() -> Result<()> {
         let aspect_ratio = 0.9488875526157546;
-        let mut camera = Camera::new(degrees!(90), aspect_ratio, meters!(0.5));
+        let mut camera = ScreenCamera::new(degrees!(90), aspect_ratio, meters!(0.5));
         let mut arcball = ArcBallController::default();
         arcball.set_target(Graticule::<GeoSurface>::new(
             degrees!(0),

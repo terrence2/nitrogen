@@ -46,9 +46,11 @@ where
             runtime.resource::<Gpu>(),
         )?;
         runtime.insert_resource(composite);
-        runtime
-            .frame_stage_mut(FrameStage::Render)
-            .add_system(Self::sys_composite_scene.label("CompositeRenderPass"));
+        runtime.frame_stage_mut(FrameStage::Render).add_system(
+            Self::sys_composite_scene
+                .label("CompositeRenderPass")
+                .after("GlobalParametersBuffer"),
+        );
         Ok(())
     }
 }
