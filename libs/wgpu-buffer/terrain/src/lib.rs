@@ -950,22 +950,23 @@ impl TerrainBuffer {
 
     fn sys_terrain_tesselate(
         mut terrain: ResMut<TerrainBuffer>,
-        gpu: Res<Gpu>,
+        heights_ts_query: Query<&HeightsTileSetComponent>,
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
         if let Some(encoder) = maybe_encoder.into_inner() {
-            // terrain.patch_manager.encode_uploads(&gpu, encoder);
-            // terrain.tile_manager.encode_uploads(&gpu, encoder);
+            terrain.patch_manager.tessellate(encoder);
 
-            let cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("terrain-tessellate-compute-pass"),
-            });
-
-            let cpass = terrain.patch_manager.tessellate(cpass);
-            let _ = terrain.tile_manager.displace_height(
+            for tile_set in heights_ts_query.iter() {
+                tile_set.0.displace_height(
+                    terrain.patch_manager.target_vertex_count(),
+                    terrain.patch_manager.displace_height_bind_group(),
+                    encoder,
+                );
+            }
+            terrain.tile_manager.displace_height(
                 terrain.patch_manager.target_vertex_count(),
                 terrain.patch_manager.displace_height_bind_group(),
-                cpass,
+                encoder,
             );
         }
     }
@@ -1040,51 +1041,85 @@ impl TerrainBuffer {
         rpass
     }
 
+    /// Use the offscreen texcoord buffer to build offscreen color and normals buffers.
+    /// These offscreen buffers will get fed into the `world` renderer with the atmosphere,
+    /// clouds, shadowmap, etc, to composite a final "world" image.
     fn sys_accumulate_normal_and_color(
         terrain: Res<TerrainBuffer>,
+        normals_ts_query: Query<&NormalsTileSetComponent>,
+        colors_ts_query: Query<&ColorsTileSetComponent>,
         globals: Res<GlobalParametersBuffer>,
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
         if let Some(encoder) = maybe_encoder.into_inner() {
-            let cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("compute-pass"),
-            });
-            let _cpass = terrain.accumulate_normal_and_color(cpass, &globals);
+            terrain.clear_accumulator(&globals, encoder);
+            terrain.accumulate_normals(normals_ts_query, &globals, encoder);
+            terrain.accumulate_colors(colors_ts_query, &globals, encoder);
         }
     }
 
-    /// Use the offscreen texcoord buffer to build offscreen color and normals buffers.
-    /// These offscreen buffers will get fed into the `world` renderer with the atmosphere,
-    /// clouds, shadowmap, etc, to composite a final "world" image.
-    fn accumulate_normal_and_color<'a>(
-        &'a self,
-        mut cpass: wgpu::ComputePass<'a>,
-        globals_buffer: &'a GlobalParametersBuffer,
-    ) -> wgpu::ComputePass<'a> {
+    fn clear_accumulator(
+        &self,
+        globals: &GlobalParametersBuffer,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("terrain-clear-acc-cpass"),
+        });
         cpass.set_pipeline(&self.accumulate_clear_pipeline);
-        cpass.set_bind_group(Group::Globals.index(), globals_buffer.bind_group(), &[]);
+        cpass.set_bind_group(Group::Globals.index(), globals.bind_group(), &[]);
         cpass.set_bind_group(
             Group::TerrainAccumulateCommon.index(),
             &self.accumulate_common_bind_group,
             &[],
         );
         cpass.dispatch(self.acc_extent.width / 8, self.acc_extent.height / 8, 1);
+    }
 
-        cpass = self.tile_manager.accumulate_normals(
-            cpass,
+    fn accumulate_normals(
+        &self,
+        normals_ts_query: Query<&NormalsTileSetComponent>,
+        globals: &GlobalParametersBuffer,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        for tile_set in normals_ts_query.iter() {
+            tile_set.0.accumulate_normals(
+                &self.acc_extent,
+                globals,
+                &self.accumulate_common_bind_group,
+                encoder,
+            );
+        }
+
+        self.tile_manager.accumulate_normals(
             &self.acc_extent,
-            globals_buffer,
+            globals,
             &self.accumulate_common_bind_group,
+            encoder,
         );
+    }
 
-        cpass = self.tile_manager.accumulate_colors(
-            cpass,
+    fn accumulate_colors(
+        &self,
+        colors_ts_query: Query<&ColorsTileSetComponent>,
+        globals: &GlobalParametersBuffer,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        for tile_set in colors_ts_query.iter() {
+            tile_set.0.accumulate_colors(
+                &self.acc_extent,
+                globals,
+                &self.accumulate_common_bind_group,
+                encoder,
+            );
+        }
+
+        self.tile_manager.accumulate_colors(
             &self.acc_extent,
-            globals_buffer,
+            globals,
             &self.accumulate_common_bind_group,
+            encoder,
         );
-
-        cpass
     }
 
     fn sys_handle_capture_snapshot(

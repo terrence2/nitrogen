@@ -102,12 +102,12 @@ pub trait HeightsTileSet: TileSet {
     //
     // The terrain may already have been updated by other passes. The implementor should be
     // sure to coordinate to make sure that all passes sum together nicely.
-    fn displace_height<'a>(
-        &'a self,
+    fn displace_height(
+        &self,
         vertex_count: u32,
-        mesh_bind_group: &'a wgpu::BindGroup,
-        cpass: wgpu::ComputePass<'a>,
-    ) -> wgpu::ComputePass<'a>;
+        mesh_bind_group: &wgpu::BindGroup,
+        encoder: &mut wgpu::CommandEncoder,
+    );
 }
 
 pub trait NormalsTileSet: TileSet {
@@ -115,13 +115,13 @@ pub trait NormalsTileSet: TileSet {
     // accumulate into the provided normal accumulation buffer. Accumulation buffers will be
     // automatically cleared at the start of each frame. TileSets should pre-arrange with each
     // other the relative weight of their contributions.
-    fn accumulate_normals<'a>(
-        &'a self,
+    fn accumulate_normals(
+        &self,
         extent: &wgpu::Extent3d,
-        globals_buffer: &'a GlobalParametersBuffer,
-        accumulate_common_bind_group: &'a wgpu::BindGroup,
-        cpass: wgpu::ComputePass<'a>,
-    ) -> wgpu::ComputePass<'a>;
+        globals: &GlobalParametersBuffer,
+        accumulate_common_bind_group: &wgpu::BindGroup,
+        encoder: &mut wgpu::CommandEncoder,
+    );
 }
 
 pub trait ColorsTileSet: TileSet {
@@ -129,13 +129,13 @@ pub trait ColorsTileSet: TileSet {
     // accumulate into the provided color accumulation buffer. Accumulation buffers will be
     // automatically cleared at the start of each frame. TileSets should pre-arrange with each
     // other the relative weight of their contributions.
-    fn accumulate_colors<'a>(
-        &'a self,
+    fn accumulate_colors(
+        &self,
         extent: &wgpu::Extent3d,
-        globals_buffer: &'a GlobalParametersBuffer,
-        accumulate_common_bind_group: &'a wgpu::BindGroup,
-        cpass: wgpu::ComputePass<'a>,
-    ) -> wgpu::ComputePass<'a>;
+        globals: &GlobalParametersBuffer,
+        accumulate_common_bind_group: &wgpu::BindGroup,
+        encoder: &mut wgpu::CommandEncoder,
+    );
 }
 
 // A collection of TileSet, potentially more than one per kind.
@@ -328,43 +328,38 @@ impl TileManager {
         }
     }
 
-    pub fn displace_height<'a>(
-        &'a self,
+    pub fn displace_height(
+        &self,
         vertex_count: u32,
-        mesh_bind_group: &'a wgpu::BindGroup,
-        mut cpass: wgpu::ComputePass<'a>,
-    ) -> wgpu::ComputePass<'a> {
+        mesh_bind_group: &wgpu::BindGroup,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
         for ts in self.heights_tile_sets.iter() {
-            cpass = ts.displace_height(vertex_count, mesh_bind_group, cpass);
+            ts.displace_height(vertex_count, mesh_bind_group, encoder);
         }
-        cpass
     }
 
-    pub fn accumulate_normals<'a>(
-        &'a self,
-        mut cpass: wgpu::ComputePass<'a>,
+    pub fn accumulate_normals(
+        &self,
         extent: &wgpu::Extent3d,
-        globals_buffer: &'a GlobalParametersBuffer,
-        accumulate_common_bind_group: &'a wgpu::BindGroup,
-    ) -> wgpu::ComputePass<'a> {
+        globals: &GlobalParametersBuffer,
+        accumulate_common_bind_group: &wgpu::BindGroup,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
         for ts in self.normals_tile_sets.iter() {
-            cpass =
-                ts.accumulate_normals(extent, globals_buffer, accumulate_common_bind_group, cpass);
+            ts.accumulate_normals(extent, globals, accumulate_common_bind_group, encoder);
         }
-        cpass
     }
 
-    pub fn accumulate_colors<'a>(
-        &'a self,
-        mut cpass: wgpu::ComputePass<'a>,
+    pub fn accumulate_colors(
+        &self,
         extent: &wgpu::Extent3d,
-        globals_buffer: &'a GlobalParametersBuffer,
-        accumulate_common_bind_group: &'a wgpu::BindGroup,
-    ) -> wgpu::ComputePass<'a> {
+        globals: &GlobalParametersBuffer,
+        accumulate_common_bind_group: &wgpu::BindGroup,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
         for ts in self.colors_tile_sets.iter() {
-            cpass =
-                ts.accumulate_colors(extent, globals_buffer, accumulate_common_bind_group, cpass);
+            ts.accumulate_colors(extent, globals, accumulate_common_bind_group, encoder);
         }
-        cpass
     }
 }

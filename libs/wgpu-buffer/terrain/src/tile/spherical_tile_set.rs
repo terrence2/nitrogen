@@ -24,7 +24,6 @@ use anyhow::Result;
 use camera::ScreenCamera;
 use catalog::Catalog;
 use global_data::GlobalParametersBuffer;
-use gpu::wgpu::{BindGroup, CommandEncoder, ComputePass};
 use gpu::Gpu;
 use parking_lot::RwLock;
 use shader_shared::Group;
@@ -107,18 +106,21 @@ impl TileSet for SphericalHeightTileSet {
         self.common.snapshot_index(gpu)
     }
 
-    fn paint_atlas_index(&self, encoder: &mut CommandEncoder) {
+    fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) {
         self.common.paint_atlas_index(encoder)
     }
 }
 
 impl HeightsTileSet for SphericalHeightTileSet {
-    fn displace_height<'a>(
-        &'a self,
+    fn displace_height(
+        &self,
         vertex_count: u32,
-        mesh_bind_group: &'a BindGroup,
-        mut cpass: ComputePass<'a>,
-    ) -> ComputePass<'a> {
+        mesh_bind_group: &wgpu::BindGroup,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("terrain-displace-height-cpass"),
+        });
         cpass.set_pipeline(&self.displace_height_pipeline);
         cpass.set_bind_group(Group::TerrainDisplaceMesh.index(), mesh_bind_group, &[]);
         cpass.set_bind_group(
@@ -130,7 +132,6 @@ impl HeightsTileSet for SphericalHeightTileSet {
         let wg_x = (vertex_count % WORKGROUP_WIDTH).max(1);
         let wg_y = (vertex_count / WORKGROUP_WIDTH).max(1);
         cpass.dispatch(wg_x, wg_y, 1);
-        cpass
     }
 }
 
@@ -210,21 +211,24 @@ impl TileSet for SphericalColorTileSet {
         self.common.snapshot_index(gpu)
     }
 
-    fn paint_atlas_index(&self, encoder: &mut CommandEncoder) {
+    fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) {
         self.common.paint_atlas_index(encoder)
     }
 }
 
 impl ColorsTileSet for SphericalColorTileSet {
-    fn accumulate_colors<'a>(
-        &'a self,
+    fn accumulate_colors(
+        &self,
         extent: &wgpu::Extent3d,
-        globals_buffer: &'a GlobalParametersBuffer,
-        accumulate_common_bind_group: &'a wgpu::BindGroup,
-        mut cpass: ComputePass<'a>,
-    ) -> ComputePass<'a> {
+        globals: &GlobalParametersBuffer,
+        accumulate_common_bind_group: &wgpu::BindGroup,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("terrain-spherical-colors-acc-cpass"),
+        });
         cpass.set_pipeline(&self.accumulate_spherical_colors_pipeline);
-        cpass.set_bind_group(Group::Globals.index(), globals_buffer.bind_group(), &[]);
+        cpass.set_bind_group(Group::Globals.index(), globals.bind_group(), &[]);
         cpass.set_bind_group(
             Group::TerrainAccumulateCommon.index(),
             accumulate_common_bind_group,
@@ -236,7 +240,6 @@ impl ColorsTileSet for SphericalColorTileSet {
             &[],
         );
         cpass.dispatch(extent.width / 8, extent.height / 8, 1);
-        cpass
     }
 }
 
@@ -316,21 +319,24 @@ impl TileSet for SphericalNormalsTileSet {
         self.common.snapshot_index(gpu)
     }
 
-    fn paint_atlas_index(&self, encoder: &mut CommandEncoder) {
+    fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) {
         self.common.paint_atlas_index(encoder)
     }
 }
 
 impl NormalsTileSet for SphericalNormalsTileSet {
-    fn accumulate_normals<'a>(
-        &'a self,
+    fn accumulate_normals(
+        &self,
         extent: &wgpu::Extent3d,
-        globals_buffer: &'a GlobalParametersBuffer,
-        accumulate_common_bind_group: &'a wgpu::BindGroup,
-        mut cpass: ComputePass<'a>,
-    ) -> ComputePass<'a> {
+        globals: &GlobalParametersBuffer,
+        accumulate_common_bind_group: &wgpu::BindGroup,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("terrain-spherical-normals-acc-cpass"),
+        });
         cpass.set_pipeline(&self.accumulate_spherical_normals_pipeline);
-        cpass.set_bind_group(Group::Globals.index(), globals_buffer.bind_group(), &[]);
+        cpass.set_bind_group(Group::Globals.index(), globals.bind_group(), &[]);
         cpass.set_bind_group(
             Group::TerrainAccumulateCommon.index(),
             accumulate_common_bind_group,
@@ -342,7 +348,5 @@ impl NormalsTileSet for SphericalNormalsTileSet {
             &[],
         );
         cpass.dispatch(extent.width / 8, extent.height / 8, 1);
-
-        cpass
     }
 }
