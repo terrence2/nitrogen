@@ -16,17 +16,13 @@ mod index_paint_vertex;
 mod layer_pack;
 mod quad_tree;
 mod spherical_common;
-mod spherical_tile_set;
+pub(crate) mod spherical_tile_set;
+pub(crate) mod tile_builder;
 mod tile_info;
-mod tile_manager;
 
 pub(crate) use layer_pack::LayerPack;
 pub use layer_pack::{LayerPackBuilder, LayerPackHeader, LayerPackIndexItem};
-pub(crate) use tile_manager::TileManager;
-pub use tile_manager::{
-    ColorsTileSet, ColorsTileSetComponent, HeightsTileSet, HeightsTileSetComponent, NormalsTileSet,
-    NormalsTileSetComponent, TileSet,
-};
+pub use tile_builder::{ColorsTileSet, HeightsTileSet, NormalsTileSet, TileSet};
 
 use absolute_unit::{arcseconds, meters, Angle, ArcSeconds};
 use anyhow::{bail, Result};

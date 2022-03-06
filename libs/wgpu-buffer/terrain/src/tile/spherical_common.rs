@@ -26,7 +26,7 @@ use crate::{
         tile_info::TileInfo,
         DataSetDataKind, TerrainLevel, TileCompression, TILE_PHYSICAL_SIZE,
     },
-    GpuDetail, VisiblePatch,
+    VisiblePatch,
 };
 use absolute_unit::arcseconds;
 use anyhow::Result;
@@ -39,10 +39,12 @@ use image::{ImageBuffer, Rgb};
 use parking_lot::RwLock;
 use std::{
     collections::{BTreeMap, BinaryHeap},
+    env,
     io::Read,
     mem,
     num::{NonZeroU32, NonZeroU64},
     ops::Range,
+    path::PathBuf,
     sync::Arc,
     time::Instant,
 };
@@ -146,6 +148,9 @@ pub(crate) struct SphericalTileSetCommon {
     // Tile transfer from the background read thread to the main thread.
     tile_sender: Sender<(QuadTreeId, Vec<u8>)>,
     tile_receiver: Receiver<(QuadTreeId, Vec<u8>)>,
+
+    // Set to some to capture the index as a png
+    maybe_snapshot_index: Option<PathBuf>,
 }
 
 impl SphericalTileSetCommon {
@@ -153,7 +158,7 @@ impl SphericalTileSetCommon {
         catalog: &Catalog,
         prefix: &str,
         kind: DataSetDataKind,
-        gpu_detail: &GpuDetail,
+        tile_cache_size: u32,
         gpu: &Gpu,
     ) -> Result<Self> {
         let qt_start = Instant::now();
@@ -215,10 +220,10 @@ impl SphericalTileSetCommon {
             anisotropy_clamp: None,
             border_color: None,
         });
-        let index_paint_range = 0u32..(6 * gpu_detail.tile_cache_size);
+        let index_paint_range = 0u32..(6 * tile_cache_size);
         let index_paint_vert_buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
             label: Some("index-paint-vert-buffer"),
-            size: (IndexPaintVertex::mem_size() * 6 * gpu_detail.tile_cache_size as usize)
+            size: (IndexPaintVertex::mem_size() * 6 * tile_cache_size as usize)
                 as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::VERTEX,
             mapped_at_creation: false,
@@ -282,7 +287,7 @@ impl SphericalTileSetCommon {
         let atlas_texture_extent = wgpu::Extent3d {
             width: TILE_SIZE,
             height: TILE_SIZE,
-            depth_or_array_layers: gpu_detail.tile_cache_size,
+            depth_or_array_layers: tile_cache_size,
         };
         let atlas_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
             label: Some("terrain-geo-tile-atlas-texture"),
@@ -301,7 +306,7 @@ impl SphericalTileSetCommon {
             base_mip_level: 0,
             mip_level_count: None,
             base_array_layer: 0,
-            array_layer_count: NonZeroU32::new(gpu_detail.tile_cache_size),
+            array_layer_count: NonZeroU32::new(tile_cache_size),
         });
         let atlas_texture_filter_mode = kind.filter_mode();
         let atlas_texture_sampler = gpu.device().create_sampler(&wgpu::SamplerDescriptor {
@@ -319,7 +324,7 @@ impl SphericalTileSetCommon {
             border_color: None,
         });
         let atlas_tile_info_buffer_size =
-            (mem::size_of::<TileInfo>() as u32 * gpu_detail.tile_cache_size) as wgpu::BufferAddress;
+            (mem::size_of::<TileInfo>() as u32 * tile_cache_size) as wgpu::BufferAddress;
         let atlas_tile_info = Arc::new(gpu.device().create_buffer(&wgpu::BufferDescriptor {
             label: Some("terrain-geo-tile-info-buffer"),
             size: atlas_tile_info_buffer_size,
@@ -440,8 +445,8 @@ impl SphericalTileSetCommon {
 
             kind,
 
-            atlas_tile_map: vec![None; gpu_detail.tile_cache_size as usize],
-            atlas_free_list: (0..gpu_detail.tile_cache_size as usize).collect(),
+            atlas_tile_map: vec![None; tile_cache_size as usize],
+            atlas_free_list: (0..tile_cache_size as usize).collect(),
 
             tile_tree,
             tile_state: BTreeMap::new(),
@@ -449,37 +454,45 @@ impl SphericalTileSetCommon {
             tile_read_count: 0,
             tile_sender,
             tile_receiver,
+
+            maybe_snapshot_index: None,
         })
     }
 
-    pub(crate) fn capture_and_save_index_snapshot(&mut self, gpu: &mut Gpu) -> Result<()> {
-        fn write_image(extent: wgpu::Extent3d, _: wgpu::TextureFormat, data: Vec<u8>) {
-            let pix_cnt = extent.width as usize * extent.height as usize;
-            let img_len = pix_cnt * 3;
-            let shorts = LayoutVerified::<&[u8], [u16]>::new_slice(&data).expect("as [u16]");
-            let mut data = vec![0u8; img_len];
-            for x in 0..extent.width as usize {
-                for y in 0..extent.height as usize {
-                    let src_offset = x + (y * extent.width as usize);
-                    let dst_offset = 3 * (x + (y * extent.width as usize));
-                    let a = (shorts[src_offset] & 0x00FF) as u8;
-                    data[dst_offset] = a;
-                    data[dst_offset + 1] = a;
-                    data[dst_offset + 2] = a;
-                }
-            }
-            let img = ImageBuffer::<Rgb<u8>, _>::from_raw(extent.width, extent.height, data)
-                .expect("built image");
-            println!("writing to __dump__/terrain_index_texture.png");
-            img.save("__dump__/terrain_index_texture.png")
-                .expect("wrote file");
-        }
+    pub(crate) fn capture_and_save_index_snapshot(
+        &mut self,
+        path: PathBuf,
+        gpu: &mut Gpu,
+    ) -> Result<()> {
         Gpu::dump_texture(
             &self.index_texture,
             self.index_texture_extent,
             self.index_texture_format,
             gpu,
-            Box::new(write_image),
+            Box::new(
+                move |extent: wgpu::Extent3d, _: wgpu::TextureFormat, data: Vec<u8>| {
+                    let pix_cnt = extent.width as usize * extent.height as usize;
+                    let img_len = pix_cnt * 3;
+                    let shorts =
+                        LayoutVerified::<&[u8], [u16]>::new_slice(&data).expect("as [u16]");
+                    let mut data = vec![0u8; img_len];
+                    for x in 0..extent.width as usize {
+                        for y in 0..extent.height as usize {
+                            let src_offset = x + (y * extent.width as usize);
+                            let dst_offset = 3 * (x + (y * extent.width as usize));
+                            let a = (shorts[src_offset] & 0x00FF) as u8;
+                            data[dst_offset] = a;
+                            data[dst_offset + 1] = a;
+                            data[dst_offset + 2] = a;
+                        }
+                    }
+                    let img =
+                        ImageBuffer::<Rgb<u8>, _>::from_raw(extent.width, extent.height, data)
+                            .expect("built image");
+                    println!("writing to {:?}", path);
+                    img.save(path).expect("wrote file");
+                },
+            ),
         )
     }
 
@@ -770,8 +783,22 @@ impl SphericalTileSetCommon {
         );
     }
 
+    pub(crate) fn dump_index(&mut self, path: &str) -> Result<()> {
+        let mut buf = env::current_dir()?;
+        buf.push("__dump__");
+        buf.push(path);
+        buf.set_extension("png");
+        self.maybe_snapshot_index = Some(buf);
+        Ok(())
+    }
+
     pub(crate) fn snapshot_index(&mut self, gpu: &mut Gpu) {
-        self.capture_and_save_index_snapshot(gpu).unwrap();
+        if self.maybe_snapshot_index.is_some() {
+            let mut path = None;
+            mem::swap(&mut path, &mut self.maybe_snapshot_index);
+            self.capture_and_save_index_snapshot(path.unwrap(), gpu)
+                .ok();
+        }
     }
 
     pub(crate) fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) {

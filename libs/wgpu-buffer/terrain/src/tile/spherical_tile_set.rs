@@ -15,39 +15,48 @@
 use crate::{
     tile::{
         spherical_common::SphericalTileSetCommon,
-        tile_manager::{ColorsTileSet, HeightsTileSet, NormalsTileSet, TileSet},
+        tile_builder::{ColorsTileSet, HeightsTileSet, NormalsTileSet, TileSet},
         DataSetDataKind,
     },
-    GpuDetail, VisiblePatch,
+    VisiblePatch,
 };
 use anyhow::Result;
+use bevy_ecs::prelude::*;
 use camera::ScreenCamera;
 use catalog::Catalog;
 use global_data::GlobalParametersBuffer;
 use gpu::Gpu;
+use nitrous::{inject_nitrous_component, method, NitrousComponent};
 use parking_lot::RwLock;
 use shader_shared::Group;
 use std::{any::Any, sync::Arc};
 
 // TODO: tweak load depth of each type of tile... we don't need as much height data as normal data
 
-#[derive(Debug)]
+#[derive(Debug, Component, NitrousComponent)]
+#[Name = "tile_set"]
 pub(crate) struct SphericalHeightTileSet {
     common: SphericalTileSetCommon,
     displace_height_pipeline: wgpu::ComputePipeline,
 }
 
+#[inject_nitrous_component]
 impl SphericalHeightTileSet {
     pub(crate) fn new(
         // Note: patch manager owns the vertex buffer, so owns the layout here
         displace_height_bind_group_layout: &wgpu::BindGroupLayout,
         catalog: &Catalog,
         prefix: &str,
-        gpu_detail: &GpuDetail,
+        tile_cache_size: u32,
         gpu: &Gpu,
     ) -> Result<Self> {
-        let common =
-            SphericalTileSetCommon::new(catalog, prefix, DataSetDataKind::Height, gpu_detail, gpu)?;
+        let common = SphericalTileSetCommon::new(
+            catalog,
+            prefix,
+            DataSetDataKind::Height,
+            tile_cache_size,
+            gpu,
+        )?;
 
         let displace_height_pipeline =
             gpu.device()
@@ -74,6 +83,11 @@ impl SphericalHeightTileSet {
             common,
             displace_height_pipeline,
         })
+    }
+
+    #[method]
+    pub fn dump_index(&mut self, path: &str) -> Result<()> {
+        self.common.dump_index(path)
     }
 }
 
@@ -135,23 +149,30 @@ impl HeightsTileSet for SphericalHeightTileSet {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Component, NitrousComponent)]
+#[Name = "tile_set"]
 pub(crate) struct SphericalColorTileSet {
     common: SphericalTileSetCommon,
     accumulate_spherical_colors_pipeline: wgpu::ComputePipeline,
 }
 
+#[inject_nitrous_component]
 impl SphericalColorTileSet {
     pub(crate) fn new(
         accumulate_common_bind_group_layout: &wgpu::BindGroupLayout,
         catalog: &Catalog,
         prefix: &str,
         globals_buffer: &GlobalParametersBuffer,
-        gpu_detail: &GpuDetail,
+        tile_cache_size: u32,
         gpu: &Gpu,
     ) -> Result<Self> {
-        let common =
-            SphericalTileSetCommon::new(catalog, prefix, DataSetDataKind::Color, gpu_detail, gpu)?;
+        let common = SphericalTileSetCommon::new(
+            catalog,
+            prefix,
+            DataSetDataKind::Color,
+            tile_cache_size,
+            gpu,
+        )?;
 
         let accumulate_spherical_colors_pipeline =
             gpu.device()
@@ -179,6 +200,11 @@ impl SphericalColorTileSet {
             common,
             accumulate_spherical_colors_pipeline,
         })
+    }
+
+    #[method]
+    pub fn dump_index(&mut self, path: &str) -> Result<()> {
+        self.common.dump_index(path)
     }
 }
 
@@ -243,23 +269,30 @@ impl ColorsTileSet for SphericalColorTileSet {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Component, NitrousComponent)]
+#[Name = "tile_set"]
 pub(crate) struct SphericalNormalsTileSet {
     common: SphericalTileSetCommon,
     accumulate_spherical_normals_pipeline: wgpu::ComputePipeline,
 }
 
+#[inject_nitrous_component]
 impl SphericalNormalsTileSet {
     pub(crate) fn new(
         accumulate_common_bind_group_layout: &wgpu::BindGroupLayout,
         catalog: &Catalog,
         prefix: &str,
         globals_buffer: &GlobalParametersBuffer,
-        gpu_detail: &GpuDetail,
+        tile_cache_size: u32,
         gpu: &Gpu,
     ) -> Result<Self> {
-        let common =
-            SphericalTileSetCommon::new(catalog, prefix, DataSetDataKind::Normal, gpu_detail, gpu)?;
+        let common = SphericalTileSetCommon::new(
+            catalog,
+            prefix,
+            DataSetDataKind::Normal,
+            tile_cache_size,
+            gpu,
+        )?;
 
         let accumulate_spherical_normals_pipeline =
             gpu.device()
@@ -287,6 +320,11 @@ impl SphericalNormalsTileSet {
             common,
             accumulate_spherical_normals_pipeline,
         })
+    }
+
+    #[method]
+    pub fn dump_index(&mut self, path: &str) -> Result<()> {
+        self.common.dump_index(path)
     }
 }
 

@@ -17,13 +17,18 @@ mod tables;
 
 pub mod tile;
 
-use crate::{patch::PatchManager, tile::TileManager};
+use crate::{
+    patch::PatchManager,
+    tile::{
+        spherical_tile_set::{
+            SphericalColorTileSet, SphericalHeightTileSet, SphericalNormalsTileSet,
+        },
+        tile_builder::TileSetBuilder,
+    },
+};
 pub use crate::{
     patch::{PatchWinding, TerrainVertex},
-    tile::{
-        ColorsTileSet, ColorsTileSetComponent, HeightsTileSet, HeightsTileSetComponent,
-        NormalsTileSet, NormalsTileSetComponent, TileSet,
-    },
+    tile::{ColorsTileSet, HeightsTileSet, NormalsTileSet, TileSet},
 };
 
 use absolute_unit::{Length, Meters};
@@ -148,7 +153,6 @@ pub struct VisiblePatch {
 #[derive(Debug, NitrousResource)]
 pub struct TerrainBuffer {
     patch_manager: PatchManager,
-    tile_manager: TileManager,
 
     toggle_pin_camera: bool,
     pinned_camera: Option<ScreenCamera>,
@@ -175,14 +179,25 @@ pub struct TerrainBuffer {
 
 impl Extension for TerrainBuffer {
     fn init(runtime: &mut Runtime) -> Result<()> {
-        let catalog_ref = runtime.resource::<Arc<RwLock<Catalog>>>().clone();
         let terrain = TerrainBuffer::new(
-            &catalog_ref.read(),
             *runtime.resource::<CpuDetailLevel>(),
             *runtime.resource::<GpuDetailLevel>(),
             runtime.resource::<GlobalParametersBuffer>(),
             runtime.resource::<Gpu>(),
         )?;
+
+        let builder =
+            TileSetBuilder::discover_tiles(&runtime.resource::<Arc<RwLock<Catalog>>>().read())?
+                .build_parallel(
+                    terrain.patch_manager.displace_height_bind_group_layout(),
+                    &terrain.accumulate_common_bind_group_layout,
+                    GpuDetail::for_level(*runtime.resource::<GpuDetailLevel>()).tile_cache_size,
+                    &runtime.resource::<Arc<RwLock<Catalog>>>().read(),
+                    runtime.resource::<GlobalParametersBuffer>(),
+                    runtime.resource::<Gpu>(),
+                )?;
+        builder.inject_into_runtime(runtime)?;
+
         runtime.insert_named_resource("terrain", terrain);
         runtime.run_string(
             r#"
@@ -261,7 +276,6 @@ impl TerrainBuffer {
     const COLOR_ACCUMULATION_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
     pub fn new(
-        catalog: &Catalog,
         cpu_detail_level: CpuDetailLevel,
         gpu_detail_level: GpuDetailLevel,
         globals_buffer: &GlobalParametersBuffer,
@@ -500,15 +514,6 @@ impl TerrainBuffer {
                     ],
                 });
 
-        let tile_manager = TileManager::new(
-            patch_manager.displace_height_bind_group_layout(),
-            &accumulate_common_bind_group_layout,
-            catalog,
-            globals_buffer,
-            &gpu_detail,
-            gpu,
-        )?;
-
         let accumulate_clear_pipeline =
             gpu.device()
                 .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -556,7 +561,6 @@ impl TerrainBuffer {
 
         Ok(Self {
             patch_manager,
-            tile_manager,
             toggle_pin_camera: false,
             pinned_camera: None,
             visible_regions: Vec::new(),
@@ -816,17 +820,16 @@ impl TerrainBuffer {
     fn sys_optimize_patches(
         camera: Res<ScreenCamera>,
         query: Query<&HudCamera>,
-        catalog: Res<Arc<RwLock<Catalog>>>,
         mut terrain: ResMut<TerrainBuffer>,
     ) {
         for _hud_camera in query.iter() {
             // FIXME: multiple camera support
         }
-        terrain.optimize_patches(&camera, catalog.clone());
+        terrain.optimize_patches(&camera);
     }
 
     // Given the new camera position, update our internal CPU tracking.
-    fn optimize_patches(&mut self, camera: &ScreenCamera, catalog: Arc<RwLock<Catalog>>) {
+    fn optimize_patches(&mut self, camera: &ScreenCamera) {
         if self.toggle_pin_camera {
             self.toggle_pin_camera = false;
             self.pinned_camera = match self.pinned_camera {
@@ -844,29 +847,20 @@ impl TerrainBuffer {
         self.visible_regions.clear();
         self.patch_manager
             .track_state_changes(camera, optimize_camera, &mut self.visible_regions);
-
-        // Dispatch visibility to tiles so that they can manage the actively loaded set.
-        self.tile_manager.begin_visibility_update();
-        for visible_patch in &self.visible_regions {
-            self.tile_manager.note_required(visible_patch);
-        }
-        self.tile_manager.finish_visibility_update(camera, catalog);
     }
 
     fn sys_apply_patches_to_height_tiles(
         terrain: Res<TerrainBuffer>,
         camera: Res<ScreenCamera>,
         catalog: Res<Arc<RwLock<Catalog>>>,
-        mut heights_ts_query: Query<&mut HeightsTileSetComponent>,
+        mut heights_ts_query: Query<&mut SphericalHeightTileSet>,
     ) {
         for mut tile_set in heights_ts_query.iter_mut() {
-            tile_set.0.begin_visibility_update();
+            tile_set.begin_visibility_update();
             for visible_patch in &terrain.visible_regions {
-                tile_set.0.note_required(visible_patch);
+                tile_set.note_required(visible_patch);
             }
-            tile_set
-                .0
-                .finish_visibility_update(&camera, catalog.clone());
+            tile_set.finish_visibility_update(&camera, catalog.clone());
         }
     }
 
@@ -874,16 +868,14 @@ impl TerrainBuffer {
         terrain: Res<TerrainBuffer>,
         camera: Res<ScreenCamera>,
         catalog: Res<Arc<RwLock<Catalog>>>,
-        mut normals_ts_query: Query<&mut NormalsTileSetComponent>,
+        mut normals_ts_query: Query<&mut SphericalNormalsTileSet>,
     ) {
         for mut tile_set in normals_ts_query.iter_mut() {
-            tile_set.0.begin_visibility_update();
+            tile_set.begin_visibility_update();
             for visible_patch in &terrain.visible_regions {
-                tile_set.0.note_required(visible_patch);
+                tile_set.note_required(visible_patch);
             }
-            tile_set
-                .0
-                .finish_visibility_update(&camera, catalog.clone());
+            tile_set.finish_visibility_update(&camera, catalog.clone());
         }
     }
 
@@ -891,83 +883,73 @@ impl TerrainBuffer {
         terrain: Res<TerrainBuffer>,
         camera: Res<ScreenCamera>,
         catalog: Res<Arc<RwLock<Catalog>>>,
-        mut colors_ts_query: Query<&mut ColorsTileSetComponent>,
+        mut colors_ts_query: Query<&mut SphericalColorTileSet>,
     ) {
         for mut tile_set in colors_ts_query.iter_mut() {
-            tile_set.0.begin_visibility_update();
+            tile_set.begin_visibility_update();
             for visible_patch in &terrain.visible_regions {
-                tile_set.0.note_required(visible_patch);
+                tile_set.note_required(visible_patch);
             }
-            tile_set
-                .0
-                .finish_visibility_update(&camera, catalog.clone());
+            tile_set.finish_visibility_update(&camera, catalog.clone());
         }
     }
 
     fn sys_encode_uploads(
-        mut terrain: ResMut<TerrainBuffer>,
-        mut heights_ts_query: Query<&mut HeightsTileSetComponent>,
-        mut normals_ts_query: Query<&mut NormalsTileSetComponent>,
-        mut colors_ts_query: Query<&mut ColorsTileSetComponent>,
+        terrain: ResMut<TerrainBuffer>,
+        mut heights_ts_query: Query<&mut SphericalHeightTileSet>,
+        mut normals_ts_query: Query<&mut SphericalNormalsTileSet>,
+        mut colors_ts_query: Query<&mut SphericalColorTileSet>,
         gpu: Res<Gpu>,
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
         if let Some(encoder) = maybe_encoder.into_inner() {
             terrain.patch_manager.encode_uploads(&gpu, encoder);
-            terrain.tile_manager.encode_uploads(&gpu, encoder);
             for mut tile_set in heights_ts_query.iter_mut() {
-                tile_set.0.encode_uploads(&gpu, encoder);
+                tile_set.encode_uploads(&gpu, encoder);
             }
             for mut tile_set in normals_ts_query.iter_mut() {
-                tile_set.0.encode_uploads(&gpu, encoder);
+                tile_set.encode_uploads(&gpu, encoder);
             }
             for mut tile_set in colors_ts_query.iter_mut() {
-                tile_set.0.encode_uploads(&gpu, encoder);
+                tile_set.encode_uploads(&gpu, encoder);
             }
         }
     }
 
     fn sys_paint_atlas_indices(
-        terrain: Res<TerrainBuffer>,
-        heights_ts_query: Query<&HeightsTileSetComponent>,
-        normals_ts_query: Query<&NormalsTileSetComponent>,
-        colors_ts_query: Query<&ColorsTileSetComponent>,
+        heights_ts_query: Query<&SphericalHeightTileSet>,
+        normals_ts_query: Query<&SphericalNormalsTileSet>,
+        colors_ts_query: Query<&SphericalColorTileSet>,
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
         if let Some(encoder) = maybe_encoder.into_inner() {
             for tile_set in heights_ts_query.iter() {
-                tile_set.0.paint_atlas_index(encoder);
+                tile_set.paint_atlas_index(encoder);
             }
             for tile_set in normals_ts_query.iter() {
-                tile_set.0.paint_atlas_index(encoder);
+                tile_set.paint_atlas_index(encoder);
             }
             for tile_set in colors_ts_query.iter() {
-                tile_set.0.paint_atlas_index(encoder);
+                tile_set.paint_atlas_index(encoder);
             }
-            terrain.tile_manager.paint_atlas_indices(encoder);
         }
     }
 
     fn sys_terrain_tesselate(
-        mut terrain: ResMut<TerrainBuffer>,
-        heights_ts_query: Query<&HeightsTileSetComponent>,
+        terrain: ResMut<TerrainBuffer>,
+        heights_ts_query: Query<&SphericalHeightTileSet>,
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
         if let Some(encoder) = maybe_encoder.into_inner() {
             terrain.patch_manager.tessellate(encoder);
 
             for tile_set in heights_ts_query.iter() {
-                tile_set.0.displace_height(
+                tile_set.displace_height(
                     terrain.patch_manager.target_vertex_count(),
                     terrain.patch_manager.displace_height_bind_group(),
                     encoder,
                 );
             }
-            terrain.tile_manager.displace_height(
-                terrain.patch_manager.target_vertex_count(),
-                terrain.patch_manager.displace_height_bind_group(),
-                encoder,
-            );
         }
     }
 
@@ -1046,8 +1028,8 @@ impl TerrainBuffer {
     /// clouds, shadowmap, etc, to composite a final "world" image.
     fn sys_accumulate_normal_and_color(
         terrain: Res<TerrainBuffer>,
-        normals_ts_query: Query<&NormalsTileSetComponent>,
-        colors_ts_query: Query<&ColorsTileSetComponent>,
+        normals_ts_query: Query<&SphericalNormalsTileSet>,
+        colors_ts_query: Query<&SphericalColorTileSet>,
         globals: Res<GlobalParametersBuffer>,
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
@@ -1078,88 +1060,56 @@ impl TerrainBuffer {
 
     fn accumulate_normals(
         &self,
-        normals_ts_query: Query<&NormalsTileSetComponent>,
+        normals_ts_query: Query<&SphericalNormalsTileSet>,
         globals: &GlobalParametersBuffer,
         encoder: &mut wgpu::CommandEncoder,
     ) {
         for tile_set in normals_ts_query.iter() {
-            tile_set.0.accumulate_normals(
+            tile_set.accumulate_normals(
                 &self.acc_extent,
                 globals,
                 &self.accumulate_common_bind_group,
                 encoder,
             );
         }
-
-        self.tile_manager.accumulate_normals(
-            &self.acc_extent,
-            globals,
-            &self.accumulate_common_bind_group,
-            encoder,
-        );
     }
 
     fn accumulate_colors(
         &self,
-        colors_ts_query: Query<&ColorsTileSetComponent>,
+        colors_ts_query: Query<&SphericalColorTileSet>,
         globals: &GlobalParametersBuffer,
         encoder: &mut wgpu::CommandEncoder,
     ) {
         for tile_set in colors_ts_query.iter() {
-            tile_set.0.accumulate_colors(
+            tile_set.accumulate_colors(
                 &self.acc_extent,
                 globals,
                 &self.accumulate_common_bind_group,
                 encoder,
             );
         }
-
-        self.tile_manager.accumulate_colors(
-            &self.acc_extent,
-            globals,
-            &self.accumulate_common_bind_group,
-            encoder,
-        );
     }
 
+    /// FIXME: maybe we can make these named components?
     fn sys_handle_capture_snapshot(
-        mut terrain: ResMut<TerrainBuffer>,
-        mut heights_ts_query: Query<&mut HeightsTileSetComponent>,
-        mut normals_ts_query: Query<&mut NormalsTileSetComponent>,
-        mut colors_ts_query: Query<&mut ColorsTileSetComponent>,
+        mut heights_ts_query: Query<&mut SphericalHeightTileSet>,
+        mut normals_ts_query: Query<&mut SphericalNormalsTileSet>,
+        mut colors_ts_query: Query<&mut SphericalColorTileSet>,
         mut gpu: ResMut<Gpu>,
     ) {
         for mut tile_set in heights_ts_query.iter_mut() {
-            tile_set.0.snapshot_index(&mut gpu);
+            tile_set.snapshot_index(&mut gpu);
         }
         for mut tile_set in normals_ts_query.iter_mut() {
-            tile_set.0.snapshot_index(&mut gpu);
+            tile_set.snapshot_index(&mut gpu);
         }
         for mut tile_set in colors_ts_query.iter_mut() {
-            tile_set.0.snapshot_index(&mut gpu);
+            tile_set.snapshot_index(&mut gpu);
         }
-        terrain.tile_manager.handle_capture_snapshot(&mut gpu);
     }
-
-    // pub fn add_tile_set(&mut self, tile_set: Box<dyn TileSet>) -> TileSetHandle {
-    //     self.tile_manager.add_tile_set(tile_set)
-    // }
-    //
-    // pub fn tile_set(&self, handle: TileSetHandle) -> &dyn TileSet {
-    //     self.tile_manager.tile_set(handle)
-    // }
-    //
-    // pub fn tile_set_mut(&mut self, handle: TileSetHandle) -> &mut dyn TileSet {
-    //     self.tile_manager.tile_set_mut(handle)
-    // }
 
     pub fn accumulate_common_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.accumulate_common_bind_group_layout
-    }
-
-    #[method]
-    pub fn capture_index_snapshot(&mut self) {
-        self.tile_manager.snapshot_index();
     }
 
     pub fn composite_bind_group_layout(&self) -> &wgpu::BindGroupLayout {

@@ -51,29 +51,17 @@ use crate::{
         },
         DataSetCoordinates, DataSetDataKind,
     },
-    GpuDetail, VisiblePatch,
+    VisiblePatch,
 };
-use anyhow::{anyhow, bail, Result};
-use bevy_ecs::prelude::*;
+use anyhow::{anyhow, Result};
 use camera::ScreenCamera;
 use catalog::{from_utf8_string, Catalog};
 use global_data::GlobalParametersBuffer;
 use gpu::Gpu;
 use parking_lot::RwLock;
 use rayon::prelude::*;
+use runtime::Runtime;
 use std::{any::Any, fmt::Debug, sync::Arc};
-
-// #[derive(Clone, Copy, Debug)]
-// pub struct TileSetHandle(usize);
-
-#[derive(Component)]
-pub struct HeightsTileSetComponent(pub Box<dyn HeightsTileSet>);
-
-#[derive(Component)]
-pub struct NormalsTileSetComponent(pub Box<dyn NormalsTileSet>);
-
-#[derive(Component)]
-pub struct ColorsTileSetComponent(pub Box<dyn ColorsTileSet>);
 
 pub trait TileSet: Debug + Send + Sync + 'static {
     // Allow downcast back into concrete types so we can stream data.
@@ -138,33 +126,42 @@ pub trait ColorsTileSet: TileSet {
     );
 }
 
-// A collection of TileSet, potentially more than one per kind.
 #[derive(Debug)]
-pub(crate) struct TileManager {
-    heights_tile_sets: Vec<Box<dyn HeightsTileSet>>,
-    normals_tile_sets: Vec<Box<dyn NormalsTileSet>>,
-    colors_tile_sets: Vec<Box<dyn ColorsTileSet>>,
-    take_index_snapshot: bool,
+#[allow(clippy::enum_variant_names)]
+enum GenericTileSet {
+    SphericalHeights(SphericalHeightTileSet),
+    SphericalNormals(SphericalNormalsTileSet),
+    SphericalColors(SphericalColorTileSet),
 }
 
-impl TileManager {
-    pub(crate) fn new(
-        displace_height_bind_group_layout: &wgpu::BindGroupLayout,
-        accumulate_common_bind_group_layout: &wgpu::BindGroupLayout,
-        catalog: &Catalog,
-        globals_buffer: &GlobalParametersBuffer,
-        gpu_detail: &GpuDetail,
-        gpu: &Gpu,
-    ) -> Result<Self> {
-        // TODO: figure out a way to track a single tree with multiple tile-sets under it; we're
-        //       wasting a ton of time recomputing the same visibility info for heights and normals
-        //       and not taking advantage of the different required resolutions for each. It would
-        //       be even more efficient to always load at the highest granularity and use the same
-        //       tree for all spherical tiles
-        // Scan catalog for all tile sets.
-        let mut heights_tile_sets = Vec::new();
-        let mut normals_tile_sets = Vec::new();
-        let mut colors_tile_sets = Vec::new();
+#[derive(Debug)]
+pub(crate) struct TileSetDescriptor {
+    prefix: String,
+    kind: DataSetDataKind,
+    coordinates: DataSetCoordinates,
+    tile_set: Option<GenericTileSet>,
+}
+
+impl TileSetDescriptor {
+    fn new(prefix: &str, kind: DataSetDataKind, coordinates: DataSetCoordinates) -> Self {
+        Self {
+            prefix: prefix.to_owned(),
+            kind,
+            coordinates,
+            tile_set: None,
+        }
+    }
+}
+
+// A collection of TileSet, potentially more than one per kind.
+#[derive(Debug)]
+pub(crate) struct TileSetBuilder {
+    descriptors: Vec<TileSetDescriptor>,
+}
+
+impl TileSetBuilder {
+    pub(crate) fn discover_tiles(catalog: &Catalog) -> Result<Self> {
+        let mut descriptors = Vec::new();
         for index_fid in catalog.find_glob_with_extension("*-index.json", Some("json"))? {
             // Parse the index to figure out what sort of TileSet to create.
             let index_data = from_utf8_string(catalog.read_sync(index_fid)?)?;
@@ -182,184 +179,85 @@ impl TileManager {
                     .as_str()
                     .ok_or_else(|| anyhow!("no coordinates listed in index"))?,
             )?;
+            descriptors.push(TileSetDescriptor::new(prefix, kind, coordinates));
+        }
+        Ok(Self { descriptors })
+    }
 
-            match coordinates {
-                DataSetCoordinates::Spherical => match kind {
-                    DataSetDataKind::Height => {
-                        heights_tile_sets.push(Box::new(SphericalHeightTileSet::new(
+    pub(crate) fn build_parallel(
+        mut self,
+        displace_height_bind_group_layout: &wgpu::BindGroupLayout,
+        accumulate_common_bind_group_layout: &wgpu::BindGroupLayout,
+        tile_cache_size: u32,
+        catalog: &Catalog,
+        globals_buffer: &GlobalParametersBuffer,
+        gpu: &Gpu,
+    ) -> Result<Self> {
+        self.descriptors
+            .par_iter_mut()
+            .for_each(|mut desc| match (desc.coordinates, desc.kind) {
+                (DataSetCoordinates::Spherical, DataSetDataKind::Height) => {
+                    let tile_set = GenericTileSet::SphericalHeights(
+                        SphericalHeightTileSet::new(
                             displace_height_bind_group_layout,
                             catalog,
-                            prefix,
-                            gpu_detail,
+                            &desc.prefix,
+                            tile_cache_size,
                             gpu,
-                        )?)
-                            as Box<dyn HeightsTileSet>)
-                    }
-                    DataSetDataKind::Normal => {
-                        normals_tile_sets.push(Box::new(SphericalNormalsTileSet::new(
-                            accumulate_common_bind_group_layout,
-                            catalog,
-                            prefix,
-                            globals_buffer,
-                            gpu_detail,
-                            gpu,
-                        )?)
-                            as Box<dyn NormalsTileSet>)
-                    }
-                    DataSetDataKind::Color => {
-                        colors_tile_sets.push(Box::new(SphericalColorTileSet::new(
-                            accumulate_common_bind_group_layout,
-                            catalog,
-                            prefix,
-                            globals_buffer,
-                            gpu_detail,
-                            gpu,
-                        )?) as Box<dyn ColorsTileSet>)
-                    }
-                },
-                DataSetCoordinates::CartesianPolar => {
-                    bail!("unimplemented polar tiles")
+                        )
+                        .unwrap(),
+                    );
+                    desc.tile_set = Some(tile_set);
                 }
-            }
-        }
-
-        Ok(Self {
-            heights_tile_sets,
-            normals_tile_sets,
-            colors_tile_sets,
-            take_index_snapshot: false,
-        })
+                (DataSetCoordinates::Spherical, DataSetDataKind::Normal) => {
+                    let tile_set = GenericTileSet::SphericalNormals(
+                        SphericalNormalsTileSet::new(
+                            accumulate_common_bind_group_layout,
+                            catalog,
+                            &desc.prefix,
+                            globals_buffer,
+                            tile_cache_size,
+                            gpu,
+                        )
+                        .unwrap(),
+                    );
+                    desc.tile_set = Some(tile_set);
+                }
+                (DataSetCoordinates::Spherical, DataSetDataKind::Color) => {
+                    let tile_set = GenericTileSet::SphericalColors(
+                        SphericalColorTileSet::new(
+                            accumulate_common_bind_group_layout,
+                            catalog,
+                            &desc.prefix,
+                            globals_buffer,
+                            tile_cache_size,
+                            gpu,
+                        )
+                        .unwrap(),
+                    );
+                    desc.tile_set = Some(tile_set);
+                }
+                (DataSetCoordinates::CartesianPolar, _) => {
+                    panic!("unimplemented polar tiles")
+                }
+            });
+        Ok(self)
     }
 
-    // pub fn add_tile_set(&mut self, tile_set: Box<dyn TileSet>) -> TileSetHandle {
-    //     let index = self.tile_sets.len();
-    //     self.tile_sets.push(tile_set);
-    //     TileSetHandle(index)
-    // }
-    //
-    // pub fn tile_set(&self, handle: TileSetHandle) -> &dyn TileSet {
-    //     self.tile_sets[handle.0].as_ref()
-    // }
-    //
-    // pub fn tile_set_mut(&mut self, handle: TileSetHandle) -> &mut dyn TileSet {
-    //     self.tile_sets[handle.0].as_mut()
-    // }
-
-    pub fn begin_visibility_update(&mut self) {
-        for ts in self.heights_tile_sets.iter_mut() {
-            ts.begin_visibility_update();
+    pub(crate) fn inject_into_runtime(mut self, runtime: &mut Runtime) -> Result<()> {
+        for desc in self.descriptors.drain(..) {
+            match desc.tile_set.unwrap() {
+                GenericTileSet::SphericalHeights(tile_set) => runtime
+                    .spawn_named(&desc.prefix.replace('-', "_"))?
+                    .insert_scriptable(tile_set)?,
+                GenericTileSet::SphericalNormals(tile_set) => runtime
+                    .spawn_named(&desc.prefix.replace('-', "_"))?
+                    .insert_scriptable(tile_set)?,
+                GenericTileSet::SphericalColors(tile_set) => runtime
+                    .spawn_named(&desc.prefix.replace('-', "_"))?
+                    .insert_scriptable(tile_set)?,
+            };
         }
-        for ts in self.normals_tile_sets.iter_mut() {
-            ts.begin_visibility_update();
-        }
-        for ts in self.colors_tile_sets.iter_mut() {
-            ts.begin_visibility_update();
-        }
-    }
-
-    pub fn note_required(&mut self, visible_patch: &VisiblePatch) {
-        for ts in self.heights_tile_sets.iter_mut() {
-            ts.note_required(visible_patch);
-        }
-        for ts in self.normals_tile_sets.iter_mut() {
-            ts.note_required(visible_patch);
-        }
-        for ts in self.colors_tile_sets.iter_mut() {
-            ts.note_required(visible_patch);
-        }
-    }
-
-    pub fn finish_visibility_update(
-        &mut self,
-        camera: &ScreenCamera,
-        catalog: Arc<RwLock<Catalog>>,
-    ) {
-        for ts in self.heights_tile_sets.iter_mut() {
-            ts.finish_visibility_update(camera, catalog.clone());
-        }
-        for ts in self.normals_tile_sets.iter_mut() {
-            ts.finish_visibility_update(camera, catalog.clone());
-        }
-        for ts in self.colors_tile_sets.iter_mut() {
-            ts.finish_visibility_update(camera, catalog.clone());
-        }
-    }
-
-    pub fn handle_capture_snapshot(&mut self, gpu: &mut Gpu) {
-        if self.take_index_snapshot {
-            for ts in self.heights_tile_sets.iter_mut() {
-                ts.snapshot_index(gpu);
-            }
-            for ts in self.normals_tile_sets.iter_mut() {
-                ts.snapshot_index(gpu);
-            }
-            for ts in self.colors_tile_sets.iter_mut() {
-                ts.snapshot_index(gpu);
-            }
-            self.take_index_snapshot = false;
-        }
-    }
-
-    pub fn encode_uploads(&mut self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder) {
-        for ts in self.heights_tile_sets.iter_mut() {
-            ts.encode_uploads(gpu, encoder);
-        }
-        for ts in self.normals_tile_sets.iter_mut() {
-            ts.encode_uploads(gpu, encoder);
-        }
-        for ts in self.colors_tile_sets.iter_mut() {
-            ts.encode_uploads(gpu, encoder);
-        }
-    }
-
-    pub fn snapshot_index(&mut self) {
-        self.take_index_snapshot = true;
-    }
-
-    pub fn paint_atlas_indices(&self, encoder: &mut wgpu::CommandEncoder) {
-        for ts in self.heights_tile_sets.iter() {
-            ts.paint_atlas_index(encoder);
-        }
-        for ts in self.normals_tile_sets.iter() {
-            ts.paint_atlas_index(encoder);
-        }
-        for ts in self.colors_tile_sets.iter() {
-            ts.paint_atlas_index(encoder);
-        }
-    }
-
-    pub fn displace_height(
-        &self,
-        vertex_count: u32,
-        mesh_bind_group: &wgpu::BindGroup,
-        encoder: &mut wgpu::CommandEncoder,
-    ) {
-        for ts in self.heights_tile_sets.iter() {
-            ts.displace_height(vertex_count, mesh_bind_group, encoder);
-        }
-    }
-
-    pub fn accumulate_normals(
-        &self,
-        extent: &wgpu::Extent3d,
-        globals: &GlobalParametersBuffer,
-        accumulate_common_bind_group: &wgpu::BindGroup,
-        encoder: &mut wgpu::CommandEncoder,
-    ) {
-        for ts in self.normals_tile_sets.iter() {
-            ts.accumulate_normals(extent, globals, accumulate_common_bind_group, encoder);
-        }
-    }
-
-    pub fn accumulate_colors(
-        &self,
-        extent: &wgpu::Extent3d,
-        globals: &GlobalParametersBuffer,
-        accumulate_common_bind_group: &wgpu::BindGroup,
-        encoder: &mut wgpu::CommandEncoder,
-    ) {
-        for ts in self.colors_tile_sets.iter() {
-            ts.accumulate_colors(extent, globals, accumulate_common_bind_group, encoder);
-        }
+        Ok(())
     }
 }
