@@ -244,7 +244,7 @@ impl Default for ScheduleGraphStyle {
 }
 
 pub fn dump_schedule(world: &World, schedule: &Schedule, path: &Path) {
-    let dot = schedule_graph_dot_styled_inner(world, schedule, None, &ScheduleGraphStyle::light());
+    let dot = schedule_graph_dot_styled_inner(world, schedule, &ScheduleGraphStyle::light());
     let mut fp = File::create(path).unwrap();
     fp.write_all(dot.as_bytes()).unwrap();
 }
@@ -252,7 +252,6 @@ pub fn dump_schedule(world: &World, schedule: &Schedule, path: &Path) {
 pub fn schedule_graph_dot_styled_inner(
     world: &World,
     schedule: &Schedule,
-    use_world_info_for_stages: Option<(&World, &[&dyn StageLabel])>,
     style: &ScheduleGraphStyle,
 ) -> String {
     let mut graph = DotGraph::digraph(
@@ -269,15 +268,7 @@ pub fn schedule_graph_dot_styled_inner(
     .node_attributes(&[("shape", "box"), ("margin", "0"), ("height", "0.4")])
     .edge_attributes(&[("color", &style.color_edge)]);
 
-    build_schedule_graph(
-        &mut graph,
-        world,
-        schedule,
-        "schedule",
-        None,
-        use_world_info_for_stages,
-        style,
-    );
+    build_schedule_graph(&mut graph, world, schedule, "schedule", style);
 
     graph.finish()
 }
@@ -287,60 +278,18 @@ fn build_schedule_graph(
     world: &World,
     schedule: &Schedule,
     schedule_name: &str,
-    marker_node_id: Option<&str>,
-    use_world_info_for_stages: Option<(&World, &[&dyn StageLabel])>,
     style: &ScheduleGraphStyle,
 ) {
-    if let Some(marker_id) = marker_node_id {
-        graph.add_invisible_node(marker_id);
-    }
-
     let is_startup_schedule =
         |stage_name: &dyn StageLabel| format!("{:?}", stage_name) == "Startup";
 
     for (stage_name, stage) in schedule.iter_stages() {
         if let Some(system_stage) = stage.downcast_ref::<SystemStage>() {
-            let subgraph = system_stage_subgraph(
-                world,
-                schedule_name,
-                stage_name,
-                system_stage,
-                use_world_info_for_stages,
-                style,
-            );
+            let subgraph =
+                system_stage_subgraph(world, schedule_name, stage_name, system_stage, style);
             graph.add_sub_graph(subgraph);
-        } else if let Some(schedule) = stage.downcast_ref::<Schedule>() {
-            if style.hide_startup_schedule && is_startup_schedule(stage_name) {
-                continue;
-            }
-
-            let name = format!("cluster_{:?}", stage_name);
-
-            let marker_id = marker_id(schedule_name, stage_name);
-            let stage_name_str = format!("{:?}", stage_name);
-
-            let mut schedule_sub_graph = DotGraph::subgraph(
-                &name,
-                &[
-                    ("label", &stage_name_str),
-                    ("fontsize", "20"),
-                    ("constraint", "false"),
-                    ("rankdir", "LR"),
-                    ("style", "rounded"),
-                    ("bgcolor", &style.bgcolor_nested_schedule),
-                ],
-            )
-            .edge_attributes(&[("color", &style.color_edge)]);
-            build_schedule_graph(
-                &mut schedule_sub_graph,
-                world,
-                schedule,
-                &name,
-                Some(&marker_id),
-                use_world_info_for_stages,
-                style,
-            );
-            graph.add_sub_graph(schedule_sub_graph);
+        } else if let Some(_schedule) = stage.downcast_ref::<Schedule>() {
+            panic!("Sub-schedules not supported");
         } else {
             eprintln!("Missing downcast: {:?}", stage_name);
         }
@@ -370,7 +319,6 @@ fn system_stage_subgraph(
     schedule_name: &str,
     stage_name: &dyn StageLabel,
     system_stage: &SystemStage,
-    use_world_info_for_stages: Option<(&World, &[&dyn StageLabel])>,
     style: &ScheduleGraphStyle,
 ) -> DotGraph {
     let stage_name_str = format!("{:?}", stage_name);
@@ -393,14 +341,9 @@ fn system_stage_subgraph(
 
     sub.add_invisible_node(&marker_id(schedule_name, stage_name));
 
-    let relevant_world = match use_world_info_for_stages {
-        Some((relevant_world, stages)) if stages.contains(&stage_name) => relevant_world,
-        _ => world,
-    };
-
     add_systems_to_graph(
         &mut sub,
-        relevant_world,
+        world,
         schedule_name,
         SystemKind::ExclusiveStart,
         system_stage.exclusive_at_start_systems(),
@@ -408,7 +351,7 @@ fn system_stage_subgraph(
     );
     add_systems_to_graph(
         &mut sub,
-        relevant_world,
+        world,
         schedule_name,
         SystemKind::ExclusiveBeforeCommands,
         system_stage.exclusive_before_commands_systems(),
@@ -416,7 +359,7 @@ fn system_stage_subgraph(
     );
     add_systems_to_graph(
         &mut sub,
-        relevant_world,
+        world,
         schedule_name,
         SystemKind::Parallel,
         system_stage.parallel_systems(),
@@ -424,7 +367,7 @@ fn system_stage_subgraph(
     );
     add_systems_to_graph(
         &mut sub,
-        relevant_world,
+        world,
         schedule_name,
         SystemKind::ExclusiveEnd,
         system_stage.exclusive_at_end_systems(),
@@ -468,8 +411,6 @@ fn add_systems_to_graph<T: SystemContainer>(
             }
         }
 
-        let short_system_name = pretty_type_name_str(&system_container.name());
-
         let kind = match kind {
             SystemKind::ExclusiveStart => Some("Exclusive at start"),
             SystemKind::ExclusiveEnd => Some("Exclusive at end"),
@@ -477,6 +418,7 @@ fn add_systems_to_graph<T: SystemContainer>(
             SystemKind::Parallel => None,
         };
 
+        let short_system_name = id["schedule_".len()..].to_owned();
         let label = match kind {
             Some(kind) => {
                 format!(

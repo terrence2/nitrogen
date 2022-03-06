@@ -127,6 +127,7 @@ pub enum TerrainRenderStep {
     ApplyPatchesToColorTiles,
 
     // Encoder
+    EncodeUploads,
     PaintAtlasIndices,
     Tesselate,
     RenderDeferredTexture,
@@ -188,9 +189,11 @@ impl Extension for TerrainBuffer {
                 bindings.bind("p", "terrain.toggle_pin_camera(pressed)");
             "#,
         )?;
+
         runtime
             .frame_stage_mut(FrameStage::HandleDisplayChange)
             .add_system(Self::sys_handle_display_config_change);
+
         runtime
             .frame_stage_mut(FrameStage::TrackStateChanges)
             .add_system(Self::sys_optimize_patches.label(TerrainRenderStep::OptimizePatches));
@@ -215,27 +218,33 @@ impl Extension for TerrainBuffer {
                     .label(TerrainRenderStep::ApplyPatchesToColorTiles)
                     .after(TerrainRenderStep::OptimizePatches),
             );
-        runtime
-            .frame_stage_mut(FrameStage::Render)
-            .add_system(Self::sys_paint_atlas_indices.label(TerrainRenderStep::PaintAtlasIndices));
+
+        runtime.frame_stage_mut(FrameStage::Render).add_system(
+            Self::sys_encode_uploads
+                .label(TerrainRenderStep::EncodeUploads)
+                .after(GlobalsRenderStep::EnsureUpdated),
+        );
+        runtime.frame_stage_mut(FrameStage::Render).add_system(
+            Self::sys_paint_atlas_indices
+                .label(TerrainRenderStep::PaintAtlasIndices)
+                .after(TerrainRenderStep::EncodeUploads),
+        );
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_terrain_tesselate
                 .label(TerrainRenderStep::Tesselate)
-                .after(GlobalsRenderStep::EnsureUpdated),
+                .after(TerrainRenderStep::PaintAtlasIndices),
         );
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_deferred_texture
                 .label(TerrainRenderStep::RenderDeferredTexture)
-                .after(GlobalsRenderStep::EnsureUpdated)
-                .after(TerrainRenderStep::Tesselate)
-                .after(TerrainRenderStep::PaintAtlasIndices),
+                .after(TerrainRenderStep::Tesselate),
         );
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_accumulate_normal_and_color
                 .label(TerrainRenderStep::AccumulateNormalsAndColor)
-                .after(GlobalsRenderStep::EnsureUpdated)
                 .after(TerrainRenderStep::RenderDeferredTexture),
         );
+
         runtime.frame_stage_mut(FrameStage::FrameEnd).add_system(
             Self::sys_handle_capture_snapshot.label(TerrainRenderStep::CaptureSnapshots),
         );
@@ -895,23 +904,27 @@ impl TerrainBuffer {
         }
     }
 
-    fn sys_handle_capture_snapshot(
+    fn sys_encode_uploads(
         mut terrain: ResMut<TerrainBuffer>,
         mut heights_ts_query: Query<&mut HeightsTileSetComponent>,
         mut normals_ts_query: Query<&mut NormalsTileSetComponent>,
         mut colors_ts_query: Query<&mut ColorsTileSetComponent>,
-        mut gpu: ResMut<Gpu>,
+        gpu: Res<Gpu>,
+        maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
-        for mut tile_set in heights_ts_query.iter_mut() {
-            tile_set.0.snapshot_index(&mut gpu);
+        if let Some(encoder) = maybe_encoder.into_inner() {
+            terrain.patch_manager.encode_uploads(&gpu, encoder);
+            terrain.tile_manager.encode_uploads(&gpu, encoder);
+            for mut tile_set in heights_ts_query.iter_mut() {
+                tile_set.0.encode_uploads(&gpu, encoder);
+            }
+            for mut tile_set in normals_ts_query.iter_mut() {
+                tile_set.0.encode_uploads(&gpu, encoder);
+            }
+            for mut tile_set in colors_ts_query.iter_mut() {
+                tile_set.0.encode_uploads(&gpu, encoder);
+            }
         }
-        for mut tile_set in normals_ts_query.iter_mut() {
-            tile_set.0.snapshot_index(&mut gpu);
-        }
-        for mut tile_set in colors_ts_query.iter_mut() {
-            tile_set.0.snapshot_index(&mut gpu);
-        }
-        terrain.tile_manager.handle_capture_snapshot(&mut gpu);
     }
 
     fn sys_paint_atlas_indices(
@@ -941,8 +954,8 @@ impl TerrainBuffer {
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
         if let Some(encoder) = maybe_encoder.into_inner() {
-            terrain.patch_manager.encode_uploads(&gpu, encoder);
-            terrain.tile_manager.encode_uploads(&gpu, encoder);
+            // terrain.patch_manager.encode_uploads(&gpu, encoder);
+            // terrain.tile_manager.encode_uploads(&gpu, encoder);
 
             let cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("terrain-tessellate-compute-pass"),
@@ -1072,6 +1085,25 @@ impl TerrainBuffer {
         );
 
         cpass
+    }
+
+    fn sys_handle_capture_snapshot(
+        mut terrain: ResMut<TerrainBuffer>,
+        mut heights_ts_query: Query<&mut HeightsTileSetComponent>,
+        mut normals_ts_query: Query<&mut NormalsTileSetComponent>,
+        mut colors_ts_query: Query<&mut ColorsTileSetComponent>,
+        mut gpu: ResMut<Gpu>,
+    ) {
+        for mut tile_set in heights_ts_query.iter_mut() {
+            tile_set.0.snapshot_index(&mut gpu);
+        }
+        for mut tile_set in normals_ts_query.iter_mut() {
+            tile_set.0.snapshot_index(&mut gpu);
+        }
+        for mut tile_set in colors_ts_query.iter_mut() {
+            tile_set.0.snapshot_index(&mut gpu);
+        }
+        terrain.tile_manager.handle_capture_snapshot(&mut gpu);
     }
 
     // pub fn add_tile_set(&mut self, tile_set: Box<dyn TileSet>) -> TileSetHandle {
