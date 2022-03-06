@@ -146,6 +146,12 @@ impl Globals {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum GlobalsRenderStep {
+    TrackStateChanges,
+    EnsureUpdated,
+}
+
 #[derive(Debug, NitrousResource)]
 pub struct GlobalParametersBuffer {
     bind_group_layout: wgpu::BindGroupLayout,
@@ -171,10 +177,10 @@ impl Extension for GlobalParametersBuffer {
         runtime.insert_named_resource("globals", globals);
         runtime
             .frame_stage_mut(FrameStage::TrackStateChanges)
-            .add_system(Self::sys_track_state_changes);
+            .add_system(Self::sys_track_state_changes.label(GlobalsRenderStep::TrackStateChanges));
         runtime
             .frame_stage_mut(FrameStage::Render)
-            .add_system(Self::sys_ensure_globals_updated.label("GlobalParametersBuffer"));
+            .add_system(Self::sys_ensure_globals_updated.label(GlobalsRenderStep::EnsureUpdated));
 
         Ok(())
     }

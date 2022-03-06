@@ -14,15 +14,20 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
 use bevy_ecs::prelude::*;
-use global_data::GlobalParametersBuffer;
+use global_data::{GlobalParametersBuffer, GlobalsRenderStep};
 use gpu::{DisplayConfig, Gpu};
 use input::InputFocus;
 use log::trace;
 use runtime::{Extension, FrameStage, Runtime};
 use shader_shared::Group;
 use std::marker::PhantomData;
-use widget::{WidgetBuffer, WidgetVertex};
+use widget::{WidgetBuffer, WidgetRenderStep, WidgetVertex};
 use world::WorldRenderPass;
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum UiRenderStep {
+    Render,
+}
 
 #[derive(Debug)]
 pub struct UiRenderPass<T>
@@ -60,9 +65,9 @@ where
             .add_system(Self::sys_handle_display_config_change);
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_render_ui
-                .label("UiRenderPass")
-                .after("GlobalParametersBuffer")
-                .before("CompositeRenderPass"),
+                .label(UiRenderStep::Render)
+                .after(GlobalsRenderStep::EnsureUpdated)
+                .after(WidgetRenderStep::EnsureUploaded),
         );
         Ok(())
     }

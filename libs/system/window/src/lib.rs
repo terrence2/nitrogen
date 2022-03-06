@@ -207,6 +207,11 @@ impl DisplayConfig {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum WindowSystemInputStep {
+    HandleEvents,
+}
+
 #[derive(Debug, NitrousResource)]
 pub struct Window {
     os_window: OsWindow,
@@ -229,7 +234,7 @@ impl Extension for Window {
         runtime.insert_resource(None as Option<DisplayConfig>);
         runtime
             .frame_stage_mut(FrameStage::HandleSystem)
-            .add_system(Self::sys_handle_system_events.label("Window::sys_handle_system_events"));
+            .add_system(Self::sys_handle_system_events.label(WindowSystemInputStep::HandleEvents));
         Ok(())
     }
 }
@@ -249,9 +254,9 @@ impl Window {
     }
 
     pub fn sys_handle_system_events(
-        events: Res<SystemEventVec>,
         mut window: ResMut<Window>,
         mut updated_config: ResMut<Option<DisplayConfig>>,
+        events: Res<SystemEventVec>,
     ) {
         *updated_config = window.handle_system_events(&events);
     }

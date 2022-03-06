@@ -3536,6 +3536,7 @@ dependencies = [
  "anyhow",
  "atlas",
  "bevy_ecs",
+ "event_mapper",
  "font_common",
  "font_ttf",
  "gpu",

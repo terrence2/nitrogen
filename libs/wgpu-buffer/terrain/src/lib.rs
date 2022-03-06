@@ -20,7 +20,10 @@ pub mod tile;
 use crate::{patch::PatchManager, tile::TileManager};
 pub use crate::{
     patch::{PatchWinding, TerrainVertex},
-    tile::{TileSet, TileSetHandle},
+    tile::{
+        ColorsTileSet, ColorsTileSetComponent, HeightsTileSet, HeightsTileSetComponent,
+        NormalsTileSet, NormalsTileSetComponent, TileSet,
+    },
 };
 
 use absolute_unit::{Length, Meters};
@@ -29,7 +32,7 @@ use bevy_ecs::prelude::*;
 use camera::{HudCamera, ScreenCamera};
 use catalog::Catalog;
 use geodesy::{GeoCenter, Graticule};
-use global_data::GlobalParametersBuffer;
+use global_data::{GlobalParametersBuffer, GlobalsRenderStep};
 use gpu::{CpuDetailLevel, DisplayConfig, Gpu, GpuDetailLevel};
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use parking_lot::RwLock;
@@ -115,6 +118,24 @@ impl GpuDetail {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum TerrainRenderStep {
+    // Pre-encoder
+    OptimizePatches,
+    ApplyPatchesToHeightTiles,
+    ApplyPatchesToNormalTiles,
+    ApplyPatchesToColorTiles,
+
+    // Encoder
+    PaintAtlasIndices,
+    Tesselate,
+    RenderDeferredTexture,
+    AccumulateNormalsAndColor,
+
+    // Post encoder
+    CaptureSnapshots,
+}
+
 #[derive(Debug)]
 pub struct VisiblePatch {
     g0: Graticule<GeoCenter>,
@@ -172,32 +193,52 @@ impl Extension for TerrainBuffer {
             .add_system(Self::sys_handle_display_config_change);
         runtime
             .frame_stage_mut(FrameStage::TrackStateChanges)
-            .add_system(Self::sys_track_state_changes);
+            .add_system(Self::sys_optimize_patches.label(TerrainRenderStep::OptimizePatches));
+        runtime
+            .frame_stage_mut(FrameStage::TrackStateChanges)
+            .add_system(
+                Self::sys_apply_patches_to_height_tiles
+                    .label(TerrainRenderStep::ApplyPatchesToHeightTiles)
+                    .after(TerrainRenderStep::OptimizePatches),
+            );
+        runtime
+            .frame_stage_mut(FrameStage::TrackStateChanges)
+            .add_system(
+                Self::sys_apply_patches_to_normal_tiles
+                    .label(TerrainRenderStep::ApplyPatchesToNormalTiles)
+                    .after(TerrainRenderStep::OptimizePatches),
+            );
+        runtime
+            .frame_stage_mut(FrameStage::TrackStateChanges)
+            .add_system(
+                Self::sys_apply_patches_to_color_tiles
+                    .label(TerrainRenderStep::ApplyPatchesToColorTiles)
+                    .after(TerrainRenderStep::OptimizePatches),
+            );
         runtime
             .frame_stage_mut(FrameStage::Render)
-            .add_system(Self::sys_paint_atlas_indices.label("paint_atlas_indices"));
+            .add_system(Self::sys_paint_atlas_indices.label(TerrainRenderStep::PaintAtlasIndices));
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_terrain_tesselate
-                .label("tesselate")
-                .after("GlobalParametersBuffer"),
+                .label(TerrainRenderStep::Tesselate)
+                .after(GlobalsRenderStep::EnsureUpdated),
         );
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_deferred_texture
-                .label("deferred_texture")
-                .after("GlobalParametersBuffer")
-                .after("tesselate")
-                .after("paint_atlas_indices"),
+                .label(TerrainRenderStep::RenderDeferredTexture)
+                .after(GlobalsRenderStep::EnsureUpdated)
+                .after(TerrainRenderStep::Tesselate)
+                .after(TerrainRenderStep::PaintAtlasIndices),
         );
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_accumulate_normal_and_color
-                .label("accumulate_normal_and_color")
-                .after("GlobalParametersBuffer")
-                .after("deferred_texture")
-                .before("WorldRenderPass"),
+                .label(TerrainRenderStep::AccumulateNormalsAndColor)
+                .after(GlobalsRenderStep::EnsureUpdated)
+                .after(TerrainRenderStep::RenderDeferredTexture),
         );
-        runtime
-            .frame_stage_mut(FrameStage::FrameEnd)
-            .add_system(Self::sys_handle_capture_snapshot);
+        runtime.frame_stage_mut(FrameStage::FrameEnd).add_system(
+            Self::sys_handle_capture_snapshot.label(TerrainRenderStep::CaptureSnapshots),
+        );
 
         Ok(())
     }
@@ -763,7 +804,7 @@ impl TerrainBuffer {
         })
     }
 
-    fn sys_track_state_changes(
+    fn sys_optimize_patches(
         camera: Res<ScreenCamera>,
         query: Query<&HudCamera>,
         catalog: Res<Arc<RwLock<Catalog>>>,
@@ -772,11 +813,11 @@ impl TerrainBuffer {
         for _hud_camera in query.iter() {
             // FIXME: multiple camera support
         }
-        terrain.track_state_changes(&camera, catalog.clone());
+        terrain.optimize_patches(&camera, catalog.clone());
     }
 
     // Given the new camera position, update our internal CPU tracking.
-    fn track_state_changes(&mut self, camera: &ScreenCamera, catalog: Arc<RwLock<Catalog>>) {
+    fn optimize_patches(&mut self, camera: &ScreenCamera, catalog: Arc<RwLock<Catalog>>) {
         if self.toggle_pin_camera {
             self.toggle_pin_camera = false;
             self.pinned_camera = match self.pinned_camera {
@@ -803,15 +844,93 @@ impl TerrainBuffer {
         self.tile_manager.finish_visibility_update(camera, catalog);
     }
 
-    fn sys_handle_capture_snapshot(mut terrain: ResMut<TerrainBuffer>, mut gpu: ResMut<Gpu>) {
+    fn sys_apply_patches_to_height_tiles(
+        terrain: Res<TerrainBuffer>,
+        camera: Res<ScreenCamera>,
+        catalog: Res<Arc<RwLock<Catalog>>>,
+        mut heights_ts_query: Query<&mut HeightsTileSetComponent>,
+    ) {
+        for mut tile_set in heights_ts_query.iter_mut() {
+            tile_set.0.begin_visibility_update();
+            for visible_patch in &terrain.visible_regions {
+                tile_set.0.note_required(visible_patch);
+            }
+            tile_set
+                .0
+                .finish_visibility_update(&camera, catalog.clone());
+        }
+    }
+
+    fn sys_apply_patches_to_normal_tiles(
+        terrain: Res<TerrainBuffer>,
+        camera: Res<ScreenCamera>,
+        catalog: Res<Arc<RwLock<Catalog>>>,
+        mut normals_ts_query: Query<&mut NormalsTileSetComponent>,
+    ) {
+        for mut tile_set in normals_ts_query.iter_mut() {
+            tile_set.0.begin_visibility_update();
+            for visible_patch in &terrain.visible_regions {
+                tile_set.0.note_required(visible_patch);
+            }
+            tile_set
+                .0
+                .finish_visibility_update(&camera, catalog.clone());
+        }
+    }
+
+    fn sys_apply_patches_to_color_tiles(
+        terrain: Res<TerrainBuffer>,
+        camera: Res<ScreenCamera>,
+        catalog: Res<Arc<RwLock<Catalog>>>,
+        mut colors_ts_query: Query<&mut ColorsTileSetComponent>,
+    ) {
+        for mut tile_set in colors_ts_query.iter_mut() {
+            tile_set.0.begin_visibility_update();
+            for visible_patch in &terrain.visible_regions {
+                tile_set.0.note_required(visible_patch);
+            }
+            tile_set
+                .0
+                .finish_visibility_update(&camera, catalog.clone());
+        }
+    }
+
+    fn sys_handle_capture_snapshot(
+        mut terrain: ResMut<TerrainBuffer>,
+        mut heights_ts_query: Query<&mut HeightsTileSetComponent>,
+        mut normals_ts_query: Query<&mut NormalsTileSetComponent>,
+        mut colors_ts_query: Query<&mut ColorsTileSetComponent>,
+        mut gpu: ResMut<Gpu>,
+    ) {
+        for mut tile_set in heights_ts_query.iter_mut() {
+            tile_set.0.snapshot_index(&mut gpu);
+        }
+        for mut tile_set in normals_ts_query.iter_mut() {
+            tile_set.0.snapshot_index(&mut gpu);
+        }
+        for mut tile_set in colors_ts_query.iter_mut() {
+            tile_set.0.snapshot_index(&mut gpu);
+        }
         terrain.tile_manager.handle_capture_snapshot(&mut gpu);
     }
 
     fn sys_paint_atlas_indices(
         terrain: Res<TerrainBuffer>,
+        heights_ts_query: Query<&HeightsTileSetComponent>,
+        normals_ts_query: Query<&NormalsTileSetComponent>,
+        colors_ts_query: Query<&ColorsTileSetComponent>,
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
         if let Some(encoder) = maybe_encoder.into_inner() {
+            for tile_set in heights_ts_query.iter() {
+                tile_set.0.paint_atlas_index(encoder);
+            }
+            for tile_set in normals_ts_query.iter() {
+                tile_set.0.paint_atlas_index(encoder);
+            }
+            for tile_set in colors_ts_query.iter() {
+                tile_set.0.paint_atlas_index(encoder);
+            }
             terrain.tile_manager.paint_atlas_indices(encoder);
         }
     }
@@ -955,17 +1074,17 @@ impl TerrainBuffer {
         cpass
     }
 
-    pub fn add_tile_set(&mut self, tile_set: Box<dyn TileSet>) -> TileSetHandle {
-        self.tile_manager.add_tile_set(tile_set)
-    }
-
-    pub fn tile_set(&self, handle: TileSetHandle) -> &dyn TileSet {
-        self.tile_manager.tile_set(handle)
-    }
-
-    pub fn tile_set_mut(&mut self, handle: TileSetHandle) -> &mut dyn TileSet {
-        self.tile_manager.tile_set_mut(handle)
-    }
+    // pub fn add_tile_set(&mut self, tile_set: Box<dyn TileSet>) -> TileSetHandle {
+    //     self.tile_manager.add_tile_set(tile_set)
+    // }
+    //
+    // pub fn tile_set(&self, handle: TileSetHandle) -> &dyn TileSet {
+    //     self.tile_manager.tile_set(handle)
+    // }
+    //
+    // pub fn tile_set_mut(&mut self, handle: TileSetHandle) -> &mut dyn TileSet {
+    //     self.tile_manager.tile_set_mut(handle)
+    // }
 
     pub fn accumulate_common_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.accumulate_common_bind_group_layout

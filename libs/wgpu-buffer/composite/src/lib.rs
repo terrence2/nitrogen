@@ -15,15 +15,20 @@
 use anyhow::Result;
 use bevy_ecs::prelude::*;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
-use global_data::GlobalParametersBuffer;
+use global_data::{GlobalParametersBuffer, GlobalsRenderStep};
 use gpu::Gpu;
 use input::InputFocus;
 use log::trace;
 use runtime::{Extension, FrameStage, Runtime};
 use shader_shared::Group;
 use std::marker::PhantomData;
-use ui::UiRenderPass;
-use world::WorldRenderPass;
+use ui::{UiRenderPass, UiRenderStep};
+use world::{WorldRenderPass, WorldRenderStep};
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum CompositeRenderStep {
+    Render,
+}
 
 #[derive(Debug)]
 pub struct CompositeRenderPass<T>
@@ -48,8 +53,10 @@ where
         runtime.insert_resource(composite);
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_composite_scene
-                .label("CompositeRenderPass")
-                .after("GlobalParametersBuffer"),
+                .label(CompositeRenderStep::Render)
+                .after(GlobalsRenderStep::EnsureUpdated)
+                .after(WorldRenderStep::Render)
+                .after(UiRenderStep::Render),
         );
         Ok(())
     }

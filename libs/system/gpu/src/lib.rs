@@ -83,12 +83,8 @@ impl Extension for Gpu {
         let gpu = Self::new(runtime.resource::<Window>(), Default::default())?;
         runtime.insert_named_resource("gpu", gpu);
         runtime
-            .frame_stage_mut(FrameStage::HandleSystem)
-            .add_system(
-                Self::sys_handle_display_config_change
-                    .label("Gpu::sys_handle_display_config_change")
-                    .after("Window::sys_handle_system_events"),
-            );
+            .frame_stage_mut(FrameStage::HandleDisplayChange)
+            .add_system(Self::sys_handle_display_config_change);
 
         runtime.insert_resource(None as Option<wgpu::SurfaceTexture>);
         runtime
@@ -422,8 +418,8 @@ impl Gpu {
     }
 
     fn sys_handle_display_config_change(
-        updated_config: Res<Option<DisplayConfig>>,
         mut gpu: ResMut<Gpu>,
+        updated_config: Res<Option<DisplayConfig>>,
     ) {
         if let Some(config) = updated_config.as_ref() {
             gpu.on_display_config_changed(config);

@@ -22,6 +22,11 @@ use nitrous::{inject_nitrous_component, method, NitrousComponent};
 use runtime::{Extension, Runtime, SimStage};
 use std::f64::consts::PI;
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum ArcBallInputStep {
+    ApplyInput,
+}
+
 /// The ArcBall system will, if the "player" entity has an ArcBallController
 /// will translate device events into relevant arcball updates on that player
 /// and apply those updates on each frame.
@@ -40,9 +45,9 @@ impl Extension for ArcBallSystem {
                 bindings.bind("Down", "@player.arcball.target_down(pressed)");
             "#,
         )?;
-        runtime.sim_stage_mut(SimStage::PostInput).add_system(
-            ArcBallController::sys_apply_input.label("ArcBallController::sys_apply_input"),
-        );
+        runtime
+            .sim_stage_mut(SimStage::PostInput)
+            .add_system(ArcBallController::sys_apply_input.label(ArcBallInputStep::ApplyInput));
         Ok(())
     }
 }

@@ -54,6 +54,7 @@ use crate::{
     GpuDetail, VisiblePatch,
 };
 use anyhow::{anyhow, bail, Result};
+use bevy_ecs::prelude::*;
 use camera::ScreenCamera;
 use catalog::{from_utf8_string, Catalog};
 use global_data::GlobalParametersBuffer;
@@ -62,8 +63,17 @@ use parking_lot::RwLock;
 use rayon::prelude::*;
 use std::{any::Any, fmt::Debug, sync::Arc};
 
-#[derive(Clone, Copy, Debug)]
-pub struct TileSetHandle(usize);
+// #[derive(Clone, Copy, Debug)]
+// pub struct TileSetHandle(usize);
+
+#[derive(Component)]
+pub struct HeightsTileSetComponent(pub Box<dyn HeightsTileSet>);
+
+#[derive(Component)]
+pub struct NormalsTileSetComponent(pub Box<dyn NormalsTileSet>);
+
+#[derive(Component)]
+pub struct ColorsTileSetComponent(pub Box<dyn ColorsTileSet>);
 
 pub trait TileSet: Debug + Send + Sync + 'static {
     // Allow downcast back into concrete types so we can stream data.
@@ -82,7 +92,9 @@ pub trait TileSet: Debug + Send + Sync + 'static {
 
     // Per-frame opportunity to update the index based on any visibility updates pushed above.
     fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder);
+}
 
+pub trait HeightsTileSet: TileSet {
     // The Terrain engine produces an optimal, gpu-tesselated mesh at the start of every frame
     // based on the current view. This mesh is at the terrain surface. This callback gives each
     // tile-set an opportunity to displace the terrain based on a shader and the height data we
@@ -96,7 +108,9 @@ pub trait TileSet: Debug + Send + Sync + 'static {
         mesh_bind_group: &'a wgpu::BindGroup,
         cpass: wgpu::ComputePass<'a>,
     ) -> wgpu::ComputePass<'a>;
+}
 
+pub trait NormalsTileSet: TileSet {
     // Implementors should read from the provided screen space world position coordinates and
     // accumulate into the provided normal accumulation buffer. Accumulation buffers will be
     // automatically cleared at the start of each frame. TileSets should pre-arrange with each
@@ -108,7 +122,9 @@ pub trait TileSet: Debug + Send + Sync + 'static {
         accumulate_common_bind_group: &'a wgpu::BindGroup,
         cpass: wgpu::ComputePass<'a>,
     ) -> wgpu::ComputePass<'a>;
+}
 
+pub trait ColorsTileSet: TileSet {
     // Implementors should read from the provided screen space world position coordinates and
     // accumulate into the provided color accumulation buffer. Accumulation buffers will be
     // automatically cleared at the start of each frame. TileSets should pre-arrange with each
@@ -125,7 +141,9 @@ pub trait TileSet: Debug + Send + Sync + 'static {
 // A collection of TileSet, potentially more than one per kind.
 #[derive(Debug)]
 pub(crate) struct TileManager {
-    tile_sets: Vec<Box<dyn TileSet>>,
+    heights_tile_sets: Vec<Box<dyn HeightsTileSet>>,
+    normals_tile_sets: Vec<Box<dyn NormalsTileSet>>,
+    colors_tile_sets: Vec<Box<dyn ColorsTileSet>>,
     take_index_snapshot: bool,
 }
 
@@ -144,88 +162,109 @@ impl TileManager {
         //       be even more efficient to always load at the highest granularity and use the same
         //       tree for all spherical tiles
         // Scan catalog for all tile sets.
-        let tile_sets = catalog
-            .find_glob_with_extension("*-index.json", Some("json"))?
-            .par_iter()
-            .map(|&index_fid| {
-                // Parse the index to figure out what sort of TileSet to create.
-                let index_data = from_utf8_string(catalog.read_sync(index_fid)?)?;
-                let index_json = json::parse(&index_data)?;
-                let prefix = index_json["prefix"]
+        let mut heights_tile_sets = Vec::new();
+        let mut normals_tile_sets = Vec::new();
+        let mut colors_tile_sets = Vec::new();
+        for index_fid in catalog.find_glob_with_extension("*-index.json", Some("json"))? {
+            // Parse the index to figure out what sort of TileSet to create.
+            let index_data = from_utf8_string(catalog.read_sync(index_fid)?)?;
+            let index_json = json::parse(index_data.as_ref())?;
+            let prefix = index_json["prefix"]
+                .as_str()
+                .ok_or_else(|| anyhow!("no prefix listed in index"))?;
+            let kind = DataSetDataKind::from_name(
+                index_json["kind"]
                     .as_str()
-                    .ok_or_else(|| anyhow!("no prefix listed in index"))?;
-                let kind = DataSetDataKind::from_name(
-                    index_json["kind"]
-                        .as_str()
-                        .ok_or_else(|| anyhow!("no kind listed in index"))?,
-                )?;
-                let coordinates = DataSetCoordinates::from_name(
-                    index_json["coordinates"]
-                        .as_str()
-                        .ok_or_else(|| anyhow!("no coordinates listed in index"))?,
-                )?;
+                    .ok_or_else(|| anyhow!("no kind listed in index"))?,
+            )?;
+            let coordinates = DataSetCoordinates::from_name(
+                index_json["coordinates"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("no coordinates listed in index"))?,
+            )?;
 
-                Ok(match coordinates {
-                    DataSetCoordinates::Spherical => match kind {
-                        DataSetDataKind::Height => Box::new(SphericalHeightTileSet::new(
+            match coordinates {
+                DataSetCoordinates::Spherical => match kind {
+                    DataSetDataKind::Height => {
+                        heights_tile_sets.push(Box::new(SphericalHeightTileSet::new(
                             displace_height_bind_group_layout,
                             catalog,
                             prefix,
                             gpu_detail,
                             gpu,
-                        )?) as Box<dyn TileSet>,
-                        DataSetDataKind::Color => Box::new(SphericalColorTileSet::new(
-                            accumulate_common_bind_group_layout,
-                            catalog,
-                            prefix,
-                            globals_buffer,
-                            gpu_detail,
-                            gpu,
-                        )?) as Box<dyn TileSet>,
-                        DataSetDataKind::Normal => Box::new(SphericalNormalsTileSet::new(
-                            accumulate_common_bind_group_layout,
-                            catalog,
-                            prefix,
-                            globals_buffer,
-                            gpu_detail,
-                            gpu,
-                        )?) as Box<dyn TileSet>,
-                    },
-                    DataSetCoordinates::CartesianPolar => {
-                        bail!("unimplemented polar tiles")
+                        )?)
+                            as Box<dyn HeightsTileSet>)
                     }
-                })
-            })
-            .collect::<Result<Vec<_>>>()?;
+                    DataSetDataKind::Normal => {
+                        normals_tile_sets.push(Box::new(SphericalNormalsTileSet::new(
+                            accumulate_common_bind_group_layout,
+                            catalog,
+                            prefix,
+                            globals_buffer,
+                            gpu_detail,
+                            gpu,
+                        )?)
+                            as Box<dyn NormalsTileSet>)
+                    }
+                    DataSetDataKind::Color => {
+                        colors_tile_sets.push(Box::new(SphericalColorTileSet::new(
+                            accumulate_common_bind_group_layout,
+                            catalog,
+                            prefix,
+                            globals_buffer,
+                            gpu_detail,
+                            gpu,
+                        )?) as Box<dyn ColorsTileSet>)
+                    }
+                },
+                DataSetCoordinates::CartesianPolar => {
+                    bail!("unimplemented polar tiles")
+                }
+            }
+        }
 
         Ok(Self {
-            tile_sets,
+            heights_tile_sets,
+            normals_tile_sets,
+            colors_tile_sets,
             take_index_snapshot: false,
         })
     }
 
-    pub fn add_tile_set(&mut self, tile_set: Box<dyn TileSet>) -> TileSetHandle {
-        let index = self.tile_sets.len();
-        self.tile_sets.push(tile_set);
-        TileSetHandle(index)
-    }
-
-    pub fn tile_set(&self, handle: TileSetHandle) -> &dyn TileSet {
-        self.tile_sets[handle.0].as_ref()
-    }
-
-    pub fn tile_set_mut(&mut self, handle: TileSetHandle) -> &mut dyn TileSet {
-        self.tile_sets[handle.0].as_mut()
-    }
+    // pub fn add_tile_set(&mut self, tile_set: Box<dyn TileSet>) -> TileSetHandle {
+    //     let index = self.tile_sets.len();
+    //     self.tile_sets.push(tile_set);
+    //     TileSetHandle(index)
+    // }
+    //
+    // pub fn tile_set(&self, handle: TileSetHandle) -> &dyn TileSet {
+    //     self.tile_sets[handle.0].as_ref()
+    // }
+    //
+    // pub fn tile_set_mut(&mut self, handle: TileSetHandle) -> &mut dyn TileSet {
+    //     self.tile_sets[handle.0].as_mut()
+    // }
 
     pub fn begin_visibility_update(&mut self) {
-        for ts in self.tile_sets.iter_mut() {
+        for ts in self.heights_tile_sets.iter_mut() {
+            ts.begin_visibility_update();
+        }
+        for ts in self.normals_tile_sets.iter_mut() {
+            ts.begin_visibility_update();
+        }
+        for ts in self.colors_tile_sets.iter_mut() {
             ts.begin_visibility_update();
         }
     }
 
     pub fn note_required(&mut self, visible_patch: &VisiblePatch) {
-        for ts in self.tile_sets.iter_mut() {
+        for ts in self.heights_tile_sets.iter_mut() {
+            ts.note_required(visible_patch);
+        }
+        for ts in self.normals_tile_sets.iter_mut() {
+            ts.note_required(visible_patch);
+        }
+        for ts in self.colors_tile_sets.iter_mut() {
             ts.note_required(visible_patch);
         }
     }
@@ -235,14 +274,26 @@ impl TileManager {
         camera: &ScreenCamera,
         catalog: Arc<RwLock<Catalog>>,
     ) {
-        for ts in self.tile_sets.iter_mut() {
+        for ts in self.heights_tile_sets.iter_mut() {
+            ts.finish_visibility_update(camera, catalog.clone());
+        }
+        for ts in self.normals_tile_sets.iter_mut() {
+            ts.finish_visibility_update(camera, catalog.clone());
+        }
+        for ts in self.colors_tile_sets.iter_mut() {
             ts.finish_visibility_update(camera, catalog.clone());
         }
     }
 
     pub fn handle_capture_snapshot(&mut self, gpu: &mut Gpu) {
         if self.take_index_snapshot {
-            for ts in self.tile_sets.iter_mut() {
+            for ts in self.heights_tile_sets.iter_mut() {
+                ts.snapshot_index(gpu);
+            }
+            for ts in self.normals_tile_sets.iter_mut() {
+                ts.snapshot_index(gpu);
+            }
+            for ts in self.colors_tile_sets.iter_mut() {
                 ts.snapshot_index(gpu);
             }
             self.take_index_snapshot = false;
@@ -250,7 +301,13 @@ impl TileManager {
     }
 
     pub fn encode_uploads(&mut self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder) {
-        for ts in self.tile_sets.iter_mut() {
+        for ts in self.heights_tile_sets.iter_mut() {
+            ts.encode_uploads(gpu, encoder);
+        }
+        for ts in self.normals_tile_sets.iter_mut() {
+            ts.encode_uploads(gpu, encoder);
+        }
+        for ts in self.colors_tile_sets.iter_mut() {
             ts.encode_uploads(gpu, encoder);
         }
     }
@@ -260,7 +317,13 @@ impl TileManager {
     }
 
     pub fn paint_atlas_indices(&self, encoder: &mut wgpu::CommandEncoder) {
-        for ts in self.tile_sets.iter() {
+        for ts in self.heights_tile_sets.iter() {
+            ts.paint_atlas_index(encoder);
+        }
+        for ts in self.normals_tile_sets.iter() {
+            ts.paint_atlas_index(encoder);
+        }
+        for ts in self.colors_tile_sets.iter() {
             ts.paint_atlas_index(encoder);
         }
     }
@@ -271,7 +334,7 @@ impl TileManager {
         mesh_bind_group: &'a wgpu::BindGroup,
         mut cpass: wgpu::ComputePass<'a>,
     ) -> wgpu::ComputePass<'a> {
-        for ts in self.tile_sets.iter() {
+        for ts in self.heights_tile_sets.iter() {
             cpass = ts.displace_height(vertex_count, mesh_bind_group, cpass);
         }
         cpass
@@ -284,7 +347,7 @@ impl TileManager {
         globals_buffer: &'a GlobalParametersBuffer,
         accumulate_common_bind_group: &'a wgpu::BindGroup,
     ) -> wgpu::ComputePass<'a> {
-        for ts in self.tile_sets.iter() {
+        for ts in self.normals_tile_sets.iter() {
             cpass =
                 ts.accumulate_normals(extent, globals_buffer, accumulate_common_bind_group, cpass);
         }
@@ -298,7 +361,7 @@ impl TileManager {
         globals_buffer: &'a GlobalParametersBuffer,
         accumulate_common_bind_group: &'a wgpu::BindGroup,
     ) -> wgpu::ComputePass<'a> {
-        for ts in self.tile_sets.iter() {
+        for ts in self.colors_tile_sets.iter() {
             cpass =
                 ts.accumulate_colors(extent, globals_buffer, accumulate_common_bind_group, cpass);
         }

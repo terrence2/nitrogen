@@ -19,6 +19,7 @@ wgpu = { version = "^ 0.12", features = ["spirv"] }
 zerocopy = "^ 0.5"
 animate = { path = "../../sim/animate" }
 atlas = { path = "../../wgpu-buffer/atlas" }
+event_mapper = { path = "../../sim/event_mapper" }
 font_common = { path = "../../wgpu-buffer/font_common" }
 font_ttf = { path = "../../wgpu-buffer/font_ttf" }
 gpu = { path = "../../system/gpu" }
