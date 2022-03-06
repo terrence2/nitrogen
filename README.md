@@ -4,7 +4,6 @@
 * Graphics / Input Engine
   * [x] Wgpu + Winit
   * [x] Simple frame management and buffer upload system
-  * [ ] Sophisticated frame graph
   * [x] Robust key binding support
   * [x] Basic command system
   * [ ] VR support
@@ -30,7 +29,8 @@
   * [x] Basic scripting engine
   * [x] drop-down console
   * [x] command history
-  * [ ] ECS Driven Memory System (Bevy ECS?)
+  * [x] ECS Driven Memory System
+  * [ ] pretty output and entities lists
   * [ ] Scripted Functions
 * Entity/Runtime System
   * [ ] Save/Load support
@@ -40,9 +40,10 @@
   * [x] Patch management
   * [x] Patch tesselation
   * [x] Heightmap generator
-  * [ ] Heightmap management
   * [x] Colormap generator
-  * [ ] Colormap memory manager
+  * [ ] L14+ data
+  * [ ] polar projection data
+  * [ ] web hosted data
   * [x] Atmospheric blending
   * [ ] Self shadowing
 * Text
