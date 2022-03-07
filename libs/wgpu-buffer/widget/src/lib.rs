@@ -41,6 +41,7 @@ use crate::font_context::FontContext;
 use animate::TimeStep;
 use anyhow::{ensure, Result};
 use bevy_ecs::prelude::*;
+use event_mapper::EventMapperInputStep;
 use font_common::{FontAdvance, FontInterface};
 use font_ttf::TtfFont;
 use gpu::Gpu;
@@ -84,6 +85,25 @@ const FIRA_SANS_REGULAR_TTF_DATA: &[u8] =
 const FIRA_MONO_REGULAR_TTF_DATA: &[u8] =
     include_bytes!("../../../../assets/font/FiraMono-Regular.ttf");
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum WidgetRenderStep {
+    // Pre-encoder
+    LayoutWidgets,
+
+    // Encoder
+    EnsureUploaded,
+    MaintainFontAtlas,
+
+    // Post-frame
+    DumpAtlas,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum WidgetInputStep {
+    ToggleTerminal,
+    HandleEvents,
+}
+
 #[derive(Debug, NitrousResource)]
 pub struct WidgetBuffer<T>
 where
@@ -125,12 +145,14 @@ where
             .sim_stage_mut(SimStage::HandleInput)
             .add_system(Self::sys_handle_terminal_events.exclusive_system());
         runtime.sim_stage_mut(SimStage::HandleInput).add_system(
-            Self::sys_handle_toggle_terminal.label("WidgetBuffer::sys_handle_toggle_terminal"),
+            Self::sys_handle_input_events
+                .label(WidgetInputStep::HandleEvents)
+                .after(EventMapperInputStep::HandleEvents),
         );
         runtime.sim_stage_mut(SimStage::HandleInput).add_system(
-            Self::sys_handle_input_events
-                .label("WidgetBuffer::sys_handle_input_events")
-                .before("WidgetBuffer::sys_handle_toggle_terminal"),
+            Self::sys_handle_toggle_terminal
+                .label(WidgetInputStep::ToggleTerminal)
+                .after(WidgetInputStep::HandleEvents),
         );
         runtime
             .sim_stage_mut(SimStage::PostScript)
@@ -138,17 +160,14 @@ where
 
         runtime
             .frame_stage_mut(FrameStage::TrackStateChanges)
-            .add_system(Self::sys_track_state_changes);
+            .add_system(Self::sys_layout_widgets.label(WidgetRenderStep::LayoutWidgets));
+        runtime
+            .frame_stage_mut(FrameStage::Render)
+            .add_system(Self::sys_maintain_font_atlas.label(WidgetRenderStep::MaintainFontAtlas));
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_ensure_uploaded
-                .label("WidgetBuffer::sys_ensure_uploaded")
-                .before("UiRenderPass")
-                .after("WidgetBuffer::maintain_font_atlas"),
-        );
-        runtime.frame_stage_mut(FrameStage::Render).add_system(
-            Self::sys_maintain_font_atlas
-                .before("UiRenderPass")
-                .label("WidgetBuffer::maintain_font_atlas"),
+                .label(WidgetRenderStep::EnsureUploaded)
+                .after(WidgetRenderStep::MaintainFontAtlas),
         );
         runtime
             .frame_stage_mut(FrameStage::FrameEnd)
@@ -459,17 +478,15 @@ where
             .report_script_completions(&completions);
     }
 
-    fn sys_track_state_changes(
+    fn sys_layout_widgets(
         step: Res<TimeStep>,
         window: Res<Window>,
         mut widgets: ResMut<WidgetBuffer<T>>,
     ) {
-        widgets
-            .track_state_changes(*step.now(), &window)
-            .expect("Widgets::track_state_changes");
+        widgets.layout_widgets(*step.now(), &window).ok();
     }
 
-    pub fn track_state_changes(&mut self, now: Instant, win: &Window) -> Result<()> {
+    fn layout_widgets(&mut self, now: Instant, win: &Window) -> Result<()> {
         // Perform recursive layout algorithm against retained state.
         self.root.write().layout(
             now,
@@ -484,7 +501,7 @@ where
         Ok(())
     }
 
-    pub fn sys_ensure_uploaded(
+    fn sys_ensure_uploaded(
         mut widget: ResMut<WidgetBuffer<T>>,
         timestep: Res<TimeStep>,
         gpu: Res<Gpu>,
@@ -498,7 +515,7 @@ where
         }
     }
 
-    pub fn ensure_uploaded(
+    fn ensure_uploaded(
         &mut self,
         now: Instant,
         gpu: &Gpu,

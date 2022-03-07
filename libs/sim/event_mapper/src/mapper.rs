@@ -36,6 +36,11 @@ pub struct State {
     pub active_chords: HashSet<InputSet>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum EventMapperInputStep {
+    HandleEvents,
+}
+
 #[derive(Default, Debug, NitrousResource)]
 pub struct EventMapper<T>
 where
@@ -54,9 +59,9 @@ where
 {
     fn init(runtime: &mut Runtime) -> Result<()> {
         runtime.insert_named_resource("bindings", EventMapper::<T>::new());
-        runtime.sim_stage_mut(SimStage::HandleInput).add_system(
-            Self::sys_handle_input_events.before("WidgetBuffer::sys_handle_input_events"),
-        );
+        runtime
+            .sim_stage_mut(SimStage::HandleInput)
+            .add_system(Self::sys_handle_input_events.label(EventMapperInputStep::HandleEvents));
         Ok(())
     }
 }

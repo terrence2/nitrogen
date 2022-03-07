@@ -12,6 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use crate::arc_ball_camera::ArcBallInputStep;
 use absolute_unit::{
     degrees, meters, radians, Angle, AngleUnit, Degrees, Kilometers, Length, LengthUnit, Meters,
     Radians,
@@ -28,6 +29,11 @@ use nitrous::{
 use runtime::{Extension, FrameStage, Runtime, SimStage};
 use std::f64::consts::PI;
 use window::{DisplayConfig, Window};
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum CameraInputStep {
+    ApplyInput,
+}
 
 pub struct CameraSystem;
 impl Extension for CameraSystem {
@@ -47,14 +53,12 @@ impl Extension for CameraSystem {
         )?;
         runtime.sim_stage_mut(SimStage::PostInput).add_system(
             ScreenCamera::sys_apply_input
-                .label("Camera::sys_apply_input")
-                .after("ArcBallController::sys_apply_input"),
+                .label(CameraInputStep::ApplyInput)
+                .after(ArcBallInputStep::ApplyInput),
         );
         runtime
             .frame_stage_mut(FrameStage::HandleDisplayChange)
-            .add_system(
-                ScreenCamera::sys_apply_display_changes.label("Camera::sys_apply_display_changes"),
-            );
+            .add_system(ScreenCamera::sys_apply_display_changes);
         Ok(())
     }
 }

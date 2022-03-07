@@ -17,10 +17,18 @@ mod tables;
 
 pub mod tile;
 
-use crate::{patch::PatchManager, tile::TileManager};
+use crate::{
+    patch::PatchManager,
+    tile::{
+        spherical_tile_set::{
+            SphericalColorTileSet, SphericalHeightTileSet, SphericalNormalsTileSet,
+        },
+        tile_builder::TileSetBuilder,
+    },
+};
 pub use crate::{
     patch::{PatchWinding, TerrainVertex},
-    tile::{TileSet, TileSetHandle},
+    tile::{ColorsTileSet, HeightsTileSet, NormalsTileSet, TileSet},
 };
 
 use absolute_unit::{Length, Meters};
@@ -29,7 +37,7 @@ use bevy_ecs::prelude::*;
 use camera::{HudCamera, ScreenCamera};
 use catalog::Catalog;
 use geodesy::{GeoCenter, Graticule};
-use global_data::GlobalParametersBuffer;
+use global_data::{GlobalParametersBuffer, GlobalsRenderStep};
 use gpu::{CpuDetailLevel, DisplayConfig, Gpu, GpuDetailLevel};
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use parking_lot::RwLock;
@@ -115,6 +123,25 @@ impl GpuDetail {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum TerrainRenderStep {
+    // Pre-encoder
+    OptimizePatches,
+    ApplyPatchesToHeightTiles,
+    ApplyPatchesToNormalTiles,
+    ApplyPatchesToColorTiles,
+
+    // Encoder
+    EncodeUploads,
+    PaintAtlasIndices,
+    Tesselate,
+    RenderDeferredTexture,
+    AccumulateNormalsAndColor,
+
+    // Post encoder
+    CaptureSnapshots,
+}
+
 #[derive(Debug)]
 pub struct VisiblePatch {
     g0: Graticule<GeoCenter>,
@@ -126,7 +153,6 @@ pub struct VisiblePatch {
 #[derive(Debug, NitrousResource)]
 pub struct TerrainBuffer {
     patch_manager: PatchManager,
-    tile_manager: TileManager,
 
     toggle_pin_camera: bool,
     pinned_camera: Option<ScreenCamera>,
@@ -153,51 +179,90 @@ pub struct TerrainBuffer {
 
 impl Extension for TerrainBuffer {
     fn init(runtime: &mut Runtime) -> Result<()> {
-        let catalog_ref = runtime.resource::<Arc<RwLock<Catalog>>>().clone();
         let terrain = TerrainBuffer::new(
-            &catalog_ref.read(),
             *runtime.resource::<CpuDetailLevel>(),
             *runtime.resource::<GpuDetailLevel>(),
             runtime.resource::<GlobalParametersBuffer>(),
             runtime.resource::<Gpu>(),
         )?;
+
+        let builder =
+            TileSetBuilder::discover_tiles(&runtime.resource::<Arc<RwLock<Catalog>>>().read())?
+                .build_parallel(
+                    terrain.patch_manager.displace_height_bind_group_layout(),
+                    &terrain.accumulate_common_bind_group_layout,
+                    GpuDetail::for_level(*runtime.resource::<GpuDetailLevel>()).tile_cache_size,
+                    &runtime.resource::<Arc<RwLock<Catalog>>>().read(),
+                    runtime.resource::<GlobalParametersBuffer>(),
+                    runtime.resource::<Gpu>(),
+                )?;
+        builder.inject_into_runtime(runtime)?;
+
         runtime.insert_named_resource("terrain", terrain);
         runtime.run_string(
             r#"
                 bindings.bind("p", "terrain.toggle_pin_camera(pressed)");
             "#,
         )?;
+
         runtime
             .frame_stage_mut(FrameStage::HandleDisplayChange)
             .add_system(Self::sys_handle_display_config_change);
+
         runtime
             .frame_stage_mut(FrameStage::TrackStateChanges)
-            .add_system(Self::sys_track_state_changes);
+            .add_system(Self::sys_optimize_patches.label(TerrainRenderStep::OptimizePatches));
         runtime
-            .frame_stage_mut(FrameStage::Render)
-            .add_system(Self::sys_paint_atlas_indices.label("paint_atlas_indices"));
+            .frame_stage_mut(FrameStage::TrackStateChanges)
+            .add_system(
+                Self::sys_apply_patches_to_height_tiles
+                    .label(TerrainRenderStep::ApplyPatchesToHeightTiles)
+                    .after(TerrainRenderStep::OptimizePatches),
+            );
+        runtime
+            .frame_stage_mut(FrameStage::TrackStateChanges)
+            .add_system(
+                Self::sys_apply_patches_to_normal_tiles
+                    .label(TerrainRenderStep::ApplyPatchesToNormalTiles)
+                    .after(TerrainRenderStep::OptimizePatches),
+            );
+        runtime
+            .frame_stage_mut(FrameStage::TrackStateChanges)
+            .add_system(
+                Self::sys_apply_patches_to_color_tiles
+                    .label(TerrainRenderStep::ApplyPatchesToColorTiles)
+                    .after(TerrainRenderStep::OptimizePatches),
+            );
+
+        runtime.frame_stage_mut(FrameStage::Render).add_system(
+            Self::sys_encode_uploads
+                .label(TerrainRenderStep::EncodeUploads)
+                .after(GlobalsRenderStep::EnsureUpdated),
+        );
+        runtime.frame_stage_mut(FrameStage::Render).add_system(
+            Self::sys_paint_atlas_indices
+                .label(TerrainRenderStep::PaintAtlasIndices)
+                .after(TerrainRenderStep::EncodeUploads),
+        );
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_terrain_tesselate
-                .label("tesselate")
-                .after("GlobalParametersBuffer"),
+                .label(TerrainRenderStep::Tesselate)
+                .after(TerrainRenderStep::PaintAtlasIndices),
         );
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_deferred_texture
-                .label("deferred_texture")
-                .after("GlobalParametersBuffer")
-                .after("tesselate")
-                .after("paint_atlas_indices"),
+                .label(TerrainRenderStep::RenderDeferredTexture)
+                .after(TerrainRenderStep::Tesselate),
         );
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_accumulate_normal_and_color
-                .label("accumulate_normal_and_color")
-                .after("GlobalParametersBuffer")
-                .after("deferred_texture")
-                .before("WorldRenderPass"),
+                .label(TerrainRenderStep::AccumulateNormalsAndColor)
+                .after(TerrainRenderStep::RenderDeferredTexture),
         );
-        runtime
-            .frame_stage_mut(FrameStage::FrameEnd)
-            .add_system(Self::sys_handle_capture_snapshot);
+
+        runtime.frame_stage_mut(FrameStage::FrameEnd).add_system(
+            Self::sys_handle_capture_snapshot.label(TerrainRenderStep::CaptureSnapshots),
+        );
 
         Ok(())
     }
@@ -211,7 +276,6 @@ impl TerrainBuffer {
     const COLOR_ACCUMULATION_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
     pub fn new(
-        catalog: &Catalog,
         cpu_detail_level: CpuDetailLevel,
         gpu_detail_level: GpuDetailLevel,
         globals_buffer: &GlobalParametersBuffer,
@@ -450,15 +514,6 @@ impl TerrainBuffer {
                     ],
                 });
 
-        let tile_manager = TileManager::new(
-            patch_manager.displace_height_bind_group_layout(),
-            &accumulate_common_bind_group_layout,
-            catalog,
-            globals_buffer,
-            &gpu_detail,
-            gpu,
-        )?;
-
         let accumulate_clear_pipeline =
             gpu.device()
                 .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -506,7 +561,6 @@ impl TerrainBuffer {
 
         Ok(Self {
             patch_manager,
-            tile_manager,
             toggle_pin_camera: false,
             pinned_camera: None,
             visible_regions: Vec::new(),
@@ -763,20 +817,19 @@ impl TerrainBuffer {
         })
     }
 
-    fn sys_track_state_changes(
+    fn sys_optimize_patches(
         camera: Res<ScreenCamera>,
         query: Query<&HudCamera>,
-        catalog: Res<Arc<RwLock<Catalog>>>,
         mut terrain: ResMut<TerrainBuffer>,
     ) {
         for _hud_camera in query.iter() {
             // FIXME: multiple camera support
         }
-        terrain.track_state_changes(&camera, catalog.clone());
+        terrain.optimize_patches(&camera);
     }
 
     // Given the new camera position, update our internal CPU tracking.
-    fn track_state_changes(&mut self, camera: &ScreenCamera, catalog: Arc<RwLock<Catalog>>) {
+    fn optimize_patches(&mut self, camera: &ScreenCamera) {
         if self.toggle_pin_camera {
             self.toggle_pin_camera = false;
             self.pinned_camera = match self.pinned_camera {
@@ -794,47 +847,109 @@ impl TerrainBuffer {
         self.visible_regions.clear();
         self.patch_manager
             .track_state_changes(camera, optimize_camera, &mut self.visible_regions);
-
-        // Dispatch visibility to tiles so that they can manage the actively loaded set.
-        self.tile_manager.begin_visibility_update();
-        for visible_patch in &self.visible_regions {
-            self.tile_manager.note_required(visible_patch);
-        }
-        self.tile_manager.finish_visibility_update(camera, catalog);
     }
 
-    fn sys_handle_capture_snapshot(mut terrain: ResMut<TerrainBuffer>, mut gpu: ResMut<Gpu>) {
-        terrain.tile_manager.handle_capture_snapshot(&mut gpu);
-    }
-
-    fn sys_paint_atlas_indices(
+    fn sys_apply_patches_to_height_tiles(
         terrain: Res<TerrainBuffer>,
-        maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+        camera: Res<ScreenCamera>,
+        catalog: Res<Arc<RwLock<Catalog>>>,
+        mut heights_ts_query: Query<&mut SphericalHeightTileSet>,
     ) {
-        if let Some(encoder) = maybe_encoder.into_inner() {
-            terrain.tile_manager.paint_atlas_indices(encoder);
+        for mut tile_set in heights_ts_query.iter_mut() {
+            tile_set.begin_visibility_update();
+            for visible_patch in &terrain.visible_regions {
+                tile_set.note_required(visible_patch);
+            }
+            tile_set.finish_visibility_update(&camera, catalog.clone());
         }
     }
 
-    fn sys_terrain_tesselate(
-        mut terrain: ResMut<TerrainBuffer>,
+    fn sys_apply_patches_to_normal_tiles(
+        terrain: Res<TerrainBuffer>,
+        camera: Res<ScreenCamera>,
+        catalog: Res<Arc<RwLock<Catalog>>>,
+        mut normals_ts_query: Query<&mut SphericalNormalsTileSet>,
+    ) {
+        for mut tile_set in normals_ts_query.iter_mut() {
+            tile_set.begin_visibility_update();
+            for visible_patch in &terrain.visible_regions {
+                tile_set.note_required(visible_patch);
+            }
+            tile_set.finish_visibility_update(&camera, catalog.clone());
+        }
+    }
+
+    fn sys_apply_patches_to_color_tiles(
+        terrain: Res<TerrainBuffer>,
+        camera: Res<ScreenCamera>,
+        catalog: Res<Arc<RwLock<Catalog>>>,
+        mut colors_ts_query: Query<&mut SphericalColorTileSet>,
+    ) {
+        for mut tile_set in colors_ts_query.iter_mut() {
+            tile_set.begin_visibility_update();
+            for visible_patch in &terrain.visible_regions {
+                tile_set.note_required(visible_patch);
+            }
+            tile_set.finish_visibility_update(&camera, catalog.clone());
+        }
+    }
+
+    fn sys_encode_uploads(
+        terrain: ResMut<TerrainBuffer>,
+        mut heights_ts_query: Query<&mut SphericalHeightTileSet>,
+        mut normals_ts_query: Query<&mut SphericalNormalsTileSet>,
+        mut colors_ts_query: Query<&mut SphericalColorTileSet>,
         gpu: Res<Gpu>,
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
         if let Some(encoder) = maybe_encoder.into_inner() {
             terrain.patch_manager.encode_uploads(&gpu, encoder);
-            terrain.tile_manager.encode_uploads(&gpu, encoder);
+            for mut tile_set in heights_ts_query.iter_mut() {
+                tile_set.encode_uploads(&gpu, encoder);
+            }
+            for mut tile_set in normals_ts_query.iter_mut() {
+                tile_set.encode_uploads(&gpu, encoder);
+            }
+            for mut tile_set in colors_ts_query.iter_mut() {
+                tile_set.encode_uploads(&gpu, encoder);
+            }
+        }
+    }
 
-            let cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("terrain-tessellate-compute-pass"),
-            });
+    fn sys_paint_atlas_indices(
+        heights_ts_query: Query<&SphericalHeightTileSet>,
+        normals_ts_query: Query<&SphericalNormalsTileSet>,
+        colors_ts_query: Query<&SphericalColorTileSet>,
+        maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+    ) {
+        if let Some(encoder) = maybe_encoder.into_inner() {
+            for tile_set in heights_ts_query.iter() {
+                tile_set.paint_atlas_index(encoder);
+            }
+            for tile_set in normals_ts_query.iter() {
+                tile_set.paint_atlas_index(encoder);
+            }
+            for tile_set in colors_ts_query.iter() {
+                tile_set.paint_atlas_index(encoder);
+            }
+        }
+    }
 
-            let cpass = terrain.patch_manager.tessellate(cpass);
-            let _ = terrain.tile_manager.displace_height(
-                terrain.patch_manager.target_vertex_count(),
-                terrain.patch_manager.displace_height_bind_group(),
-                cpass,
-            );
+    fn sys_terrain_tesselate(
+        terrain: ResMut<TerrainBuffer>,
+        heights_ts_query: Query<&SphericalHeightTileSet>,
+        maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
+    ) {
+        if let Some(encoder) = maybe_encoder.into_inner() {
+            terrain.patch_manager.tessellate(encoder);
+
+            for tile_set in heights_ts_query.iter() {
+                tile_set.displace_height(
+                    terrain.patch_manager.target_vertex_count(),
+                    terrain.patch_manager.displace_height_bind_group(),
+                    encoder,
+                );
+            }
         }
     }
 
@@ -908,72 +1023,93 @@ impl TerrainBuffer {
         rpass
     }
 
+    /// Use the offscreen texcoord buffer to build offscreen color and normals buffers.
+    /// These offscreen buffers will get fed into the `world` renderer with the atmosphere,
+    /// clouds, shadowmap, etc, to composite a final "world" image.
     fn sys_accumulate_normal_and_color(
         terrain: Res<TerrainBuffer>,
+        normals_ts_query: Query<&SphericalNormalsTileSet>,
+        colors_ts_query: Query<&SphericalColorTileSet>,
         globals: Res<GlobalParametersBuffer>,
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
         if let Some(encoder) = maybe_encoder.into_inner() {
-            let cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("compute-pass"),
-            });
-            let _cpass = terrain.accumulate_normal_and_color(cpass, &globals);
+            terrain.clear_accumulator(&globals, encoder);
+            terrain.accumulate_normals(normals_ts_query, &globals, encoder);
+            terrain.accumulate_colors(colors_ts_query, &globals, encoder);
         }
     }
 
-    /// Use the offscreen texcoord buffer to build offscreen color and normals buffers.
-    /// These offscreen buffers will get fed into the `world` renderer with the atmosphere,
-    /// clouds, shadowmap, etc, to composite a final "world" image.
-    fn accumulate_normal_and_color<'a>(
-        &'a self,
-        mut cpass: wgpu::ComputePass<'a>,
-        globals_buffer: &'a GlobalParametersBuffer,
-    ) -> wgpu::ComputePass<'a> {
+    fn clear_accumulator(
+        &self,
+        globals: &GlobalParametersBuffer,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("terrain-clear-acc-cpass"),
+        });
         cpass.set_pipeline(&self.accumulate_clear_pipeline);
-        cpass.set_bind_group(Group::Globals.index(), globals_buffer.bind_group(), &[]);
+        cpass.set_bind_group(Group::Globals.index(), globals.bind_group(), &[]);
         cpass.set_bind_group(
             Group::TerrainAccumulateCommon.index(),
             &self.accumulate_common_bind_group,
             &[],
         );
         cpass.dispatch(self.acc_extent.width / 8, self.acc_extent.height / 8, 1);
-
-        cpass = self.tile_manager.accumulate_normals(
-            cpass,
-            &self.acc_extent,
-            globals_buffer,
-            &self.accumulate_common_bind_group,
-        );
-
-        cpass = self.tile_manager.accumulate_colors(
-            cpass,
-            &self.acc_extent,
-            globals_buffer,
-            &self.accumulate_common_bind_group,
-        );
-
-        cpass
     }
 
-    pub fn add_tile_set(&mut self, tile_set: Box<dyn TileSet>) -> TileSetHandle {
-        self.tile_manager.add_tile_set(tile_set)
+    fn accumulate_normals(
+        &self,
+        normals_ts_query: Query<&SphericalNormalsTileSet>,
+        globals: &GlobalParametersBuffer,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        for tile_set in normals_ts_query.iter() {
+            tile_set.accumulate_normals(
+                &self.acc_extent,
+                globals,
+                &self.accumulate_common_bind_group,
+                encoder,
+            );
+        }
     }
 
-    pub fn tile_set(&self, handle: TileSetHandle) -> &dyn TileSet {
-        self.tile_manager.tile_set(handle)
+    fn accumulate_colors(
+        &self,
+        colors_ts_query: Query<&SphericalColorTileSet>,
+        globals: &GlobalParametersBuffer,
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        for tile_set in colors_ts_query.iter() {
+            tile_set.accumulate_colors(
+                &self.acc_extent,
+                globals,
+                &self.accumulate_common_bind_group,
+                encoder,
+            );
+        }
     }
 
-    pub fn tile_set_mut(&mut self, handle: TileSetHandle) -> &mut dyn TileSet {
-        self.tile_manager.tile_set_mut(handle)
+    /// FIXME: maybe we can make these named components?
+    fn sys_handle_capture_snapshot(
+        mut heights_ts_query: Query<&mut SphericalHeightTileSet>,
+        mut normals_ts_query: Query<&mut SphericalNormalsTileSet>,
+        mut colors_ts_query: Query<&mut SphericalColorTileSet>,
+        mut gpu: ResMut<Gpu>,
+    ) {
+        for mut tile_set in heights_ts_query.iter_mut() {
+            tile_set.snapshot_index(&mut gpu);
+        }
+        for mut tile_set in normals_ts_query.iter_mut() {
+            tile_set.snapshot_index(&mut gpu);
+        }
+        for mut tile_set in colors_ts_query.iter_mut() {
+            tile_set.snapshot_index(&mut gpu);
+        }
     }
 
     pub fn accumulate_common_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.accumulate_common_bind_group_layout
-    }
-
-    #[method]
-    pub fn capture_index_snapshot(&mut self) {
-        self.tile_manager.snapshot_index();
     }
 
     pub fn composite_bind_group_layout(&self) -> &wgpu::BindGroupLayout {

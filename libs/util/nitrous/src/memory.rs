@@ -254,24 +254,20 @@ impl WorldIndex {
         component_name: &str,
         world: &World,
     ) -> Option<Vec<String>> {
-        self.entity_metadata
-            .get(&entity)
-            .map(|components| {
-                components
-                    .components
-                    .get(component_name)
-                    .map(|lookup| {
-                        lookup.get_ref(entity, world).map(|attrs| {
-                            attrs
-                                .names()
-                                .iter()
-                                .map(|&s| s.to_owned())
-                                .collect::<Vec<String>>()
-                        })
+        self.entity_metadata.get(&entity).and_then(|components| {
+            components
+                .components
+                .get(component_name)
+                .and_then(|lookup| {
+                    lookup.get_ref(entity, world).map(|attrs| {
+                        attrs
+                            .names()
+                            .iter()
+                            .map(|&s| s.to_owned())
+                            .collect::<Vec<String>>()
                     })
-                    .flatten()
-            })
-            .flatten()
+                })
+        })
     }
 
     pub fn get_entity(&self, name: &str) -> Option<Entity> {
@@ -287,15 +283,12 @@ impl WorldIndex {
 
     /// Look up a named component within an entity.
     pub fn lookup_component(&self, entity: &Entity, name: &str) -> Option<Value> {
-        self.entity_metadata
-            .get(entity)
-            .map(|comps| {
-                comps
-                    .components
-                    .get(name)
-                    .map(|lookup| Value::new_component(*entity, lookup))
-            })
-            .flatten()
+        self.entity_metadata.get(entity).and_then(|comps| {
+            comps
+                .components
+                .get(name)
+                .map(|lookup| Value::new_component(*entity, lookup))
+        })
     }
 
     pub fn entity_components(&self, entity: &Entity) -> Option<impl Iterator<Item = &str>> {

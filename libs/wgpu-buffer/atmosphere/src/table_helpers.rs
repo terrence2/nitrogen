@@ -305,22 +305,19 @@ impl TableHelpers {
         single_mie_scatter_reader.await?;
         fs::write(
             transmittance_path,
-            &transmittance_buffer.slice(..).get_mapped_range().to_owned(),
+            &transmittance_buffer.slice(..).get_mapped_range(),
         )?;
         fs::write(
             irradiance_path,
-            &irradiance_buffer.slice(..).get_mapped_range().to_owned(),
+            &irradiance_buffer.slice(..).get_mapped_range(),
         )?;
         fs::write(
             scattering_path,
-            &scattering_buffer.slice(..).get_mapped_range().to_owned(),
+            &scattering_buffer.slice(..).get_mapped_range(),
         )?;
         fs::write(
             single_mie_scattering_path,
-            &single_mie_scattering_buffer
-                .slice(..)
-                .get_mapped_range()
-                .to_owned(),
+            &single_mie_scattering_buffer.slice(..).get_mapped_range(),
         )?;
 
         Ok(())

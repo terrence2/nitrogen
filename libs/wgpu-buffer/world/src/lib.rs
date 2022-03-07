@@ -16,14 +16,14 @@ use anyhow::Result;
 use atmosphere::AtmosphereBuffer;
 use bevy_ecs::prelude::*;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
-use global_data::GlobalParametersBuffer;
+use global_data::{GlobalParametersBuffer, GlobalsRenderStep};
 use gpu::{DisplayConfig, Gpu};
 use log::trace;
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use runtime::{Extension, FrameStage, Runtime};
 use shader_shared::Group;
 use stars::StarsBuffer;
-use terrain::{TerrainBuffer, TerrainVertex};
+use terrain::{TerrainBuffer, TerrainRenderStep, TerrainVertex};
 
 #[derive(Debug)]
 enum DebugMode {
@@ -46,6 +46,11 @@ impl DebugMode {
             _ => Self::None,
         }
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum WorldRenderStep {
+    Render,
 }
 
 #[derive(Debug, NitrousResource)]
@@ -91,9 +96,9 @@ impl Extension for WorldRenderPass {
             .add_system(Self::sys_handle_display_config_change);
         runtime.frame_stage_mut(FrameStage::Render).add_system(
             Self::sys_render_world
-                .label("WorldRenderPass")
-                .after("GlobalParametersBuffer")
-                .before("CompositeRenderPass"),
+                .label(WorldRenderStep::Render)
+                .after(GlobalsRenderStep::EnsureUpdated)
+                .after(TerrainRenderStep::AccumulateNormalsAndColor),
         );
 
         // TODO: figure out debug bindings

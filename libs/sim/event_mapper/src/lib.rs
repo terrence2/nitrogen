@@ -17,4 +17,7 @@ mod input;
 mod mapper;
 
 pub(crate) use crate::mapper::State;
-pub use crate::{bindings::Bindings, mapper::EventMapper};
+pub use crate::{
+    bindings::Bindings,
+    mapper::{EventMapper, EventMapperInputStep},
+};
