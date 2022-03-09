@@ -38,3 +38,11 @@ pub use nitrous_injector::{
     getter, inject_nitrous_component, inject_nitrous_resource, method, setter, NitrousComponent,
     NitrousResource,
 };
+
+pub fn make_symbol<S: Into<String>>(name: S) -> String {
+    let mut s = name.into();
+    s = s.replace('$', "_");
+    s = s.replace('~', "_");
+    s = s.replace('.', "_");
+    s
+}

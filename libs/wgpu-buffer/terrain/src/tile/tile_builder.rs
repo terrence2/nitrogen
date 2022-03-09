@@ -58,6 +58,7 @@ use camera::ScreenCamera;
 use catalog::{from_utf8_string, Catalog};
 use global_data::GlobalParametersBuffer;
 use gpu::Gpu;
+use nitrous::make_symbol;
 use parking_lot::RwLock;
 use rayon::prelude::*;
 use runtime::Runtime;
@@ -248,13 +249,13 @@ impl TileSetBuilder {
         for desc in self.descriptors.drain(..) {
             match desc.tile_set.unwrap() {
                 GenericTileSet::SphericalHeights(tile_set) => runtime
-                    .spawn_named(&desc.prefix.replace('-', "_"))?
+                    .spawn_named(&make_symbol(desc.prefix))?
                     .insert_scriptable(tile_set)?,
                 GenericTileSet::SphericalNormals(tile_set) => runtime
-                    .spawn_named(&desc.prefix.replace('-', "_"))?
+                    .spawn_named(&make_symbol(desc.prefix))?
                     .insert_scriptable(tile_set)?,
                 GenericTileSet::SphericalColors(tile_set) => runtime
-                    .spawn_named(&desc.prefix.replace('-', "_"))?
+                    .spawn_named(&make_symbol(desc.prefix))?
                     .insert_scriptable(tile_set)?,
             };
         }

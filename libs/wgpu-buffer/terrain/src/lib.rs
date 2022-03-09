@@ -1108,8 +1108,16 @@ impl TerrainBuffer {
         }
     }
 
+    pub fn accumulator_extent(&self) -> &wgpu::Extent3d {
+        &self.acc_extent
+    }
+
     pub fn accumulate_common_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.accumulate_common_bind_group_layout
+    }
+
+    pub fn accumulate_common_bind_group(&self) -> &wgpu::BindGroup {
+        &self.accumulate_common_bind_group
     }
 
     pub fn composite_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
@@ -1122,6 +1130,14 @@ impl TerrainBuffer {
 
     pub fn mesh_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         self.patch_manager.displace_height_bind_group_layout()
+    }
+
+    pub fn mesh_bind_group(&self) -> &wgpu::BindGroup {
+        self.patch_manager.displace_height_bind_group()
+    }
+
+    pub fn mesh_vertex_count(&self) -> u32 {
+        self.patch_manager.target_vertex_count()
     }
 
     pub fn num_patches(&self) -> i32 {
