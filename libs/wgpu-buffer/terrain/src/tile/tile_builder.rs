@@ -58,10 +58,10 @@ use camera::ScreenCamera;
 use catalog::{from_utf8_string, Catalog};
 use global_data::GlobalParametersBuffer;
 use gpu::Gpu;
-use parking_lot::RwLock;
+use nitrous::make_symbol;
 use rayon::prelude::*;
 use runtime::Runtime;
-use std::{any::Any, fmt::Debug, sync::Arc};
+use std::{any::Any, fmt::Debug};
 
 pub trait TileSet: Debug + Send + Sync + 'static {
     // Allow downcast back into concrete types so we can stream data.
@@ -72,7 +72,7 @@ pub trait TileSet: Debug + Send + Sync + 'static {
     // from the global geometry calculations.
     fn begin_visibility_update(&mut self);
     fn note_required(&mut self, visible_patch: &VisiblePatch);
-    fn finish_visibility_update(&mut self, camera: &ScreenCamera, catalog: Arc<RwLock<Catalog>>);
+    fn finish_visibility_update(&mut self, camera: &ScreenCamera, catalog: &mut Catalog);
     fn encode_uploads(&mut self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder);
 
     // Indicate that the current index should be written to the debug file.
@@ -80,6 +80,9 @@ pub trait TileSet: Debug + Send + Sync + 'static {
 
     // Per-frame opportunity to update the index based on any visibility updates pushed above.
     fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder);
+
+    // Safe any ongoing activity before the system starts dropping parts of itself.
+    fn shutdown_safely(&mut self);
 }
 
 pub trait HeightsTileSet: TileSet {
@@ -164,7 +167,7 @@ impl TileSetBuilder {
         let mut descriptors = Vec::new();
         for index_fid in catalog.find_glob_with_extension("*-index.json", Some("json"))? {
             // Parse the index to figure out what sort of TileSet to create.
-            let index_data = from_utf8_string(catalog.read_sync(index_fid)?)?;
+            let index_data = from_utf8_string(catalog.read(index_fid)?)?;
             let index_json = json::parse(index_data.as_ref())?;
             let prefix = index_json["prefix"]
                 .as_str()
@@ -248,13 +251,13 @@ impl TileSetBuilder {
         for desc in self.descriptors.drain(..) {
             match desc.tile_set.unwrap() {
                 GenericTileSet::SphericalHeights(tile_set) => runtime
-                    .spawn_named(&desc.prefix.replace('-', "_"))?
+                    .spawn_named(&make_symbol(desc.prefix))?
                     .insert_scriptable(tile_set)?,
                 GenericTileSet::SphericalNormals(tile_set) => runtime
-                    .spawn_named(&desc.prefix.replace('-', "_"))?
+                    .spawn_named(&make_symbol(desc.prefix))?
                     .insert_scriptable(tile_set)?,
                 GenericTileSet::SphericalColors(tile_set) => runtime
-                    .spawn_named(&desc.prefix.replace('-', "_"))?
+                    .spawn_named(&make_symbol(desc.prefix))?
                     .insert_scriptable(tile_set)?,
             };
         }

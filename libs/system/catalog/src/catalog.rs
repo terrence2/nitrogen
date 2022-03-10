@@ -16,7 +16,6 @@ use crate::{DirectoryDrawer, DrawerFileId, DrawerInterface, FileMetadata};
 use anyhow::{ensure, Result};
 use glob::{MatchOptions, Pattern};
 use log::debug;
-use parking_lot::RwLock;
 use runtime::{Extension, Runtime};
 use smallvec::SmallVec;
 use std::{
@@ -25,7 +24,6 @@ use std::{
     fmt::{Debug, Formatter},
     ops::Range,
     path::PathBuf,
-    sync::Arc,
 };
 use structopt::StructOpt;
 
@@ -89,7 +87,7 @@ impl Extension for Catalog {
                 catalog.add_drawer(DirectoryDrawer::from_directory(100 + i as i64, d)?)?;
             }
         }
-        runtime.insert_resource(Arc::new(RwLock::new(catalog)));
+        runtime.insert_resource(catalog);
         Ok(())
     }
 }
@@ -234,45 +232,40 @@ impl Catalog {
     }
 
     /// Get metadata about the given file by id.
-    pub fn stat_sync(&self, fid: FileId) -> Result<FileMetadata> {
-        let drawer_meta = self.drawers[&fid.drawer_id].stat_sync(fid.drawer_file_id)?;
+    pub fn stat(&self, fid: FileId) -> Result<FileMetadata> {
+        let drawer_meta = self.drawers[&fid.drawer_id].stat(fid.drawer_file_id)?;
         Ok(FileMetadata::from_drawer(fid, drawer_meta))
     }
 
     /// Get metadata about the given file by name.
-    pub fn stat_name_sync(&self, name: &str) -> Result<FileMetadata> {
+    pub fn stat_name(&self, name: &str) -> Result<FileMetadata> {
         ensure!(self.index.contains_key(name), "file not found");
-        self.stat_sync(self.index[name])
+        self.stat(self.index[name])
     }
 
     /// Read the given file id and return the contents. Blocks until complete.
-    pub fn read_sync(&self, fid: FileId) -> Result<Cow<[u8]>> {
-        self.drawers[&fid.drawer_id].read_sync(fid.drawer_file_id)
+    pub fn read(&self, fid: FileId) -> Result<Cow<[u8]>> {
+        self.drawers[&fid.drawer_id].read(fid.drawer_file_id)
     }
 
-    /// Read the given file id and return the contents. Blocks until complete.
-    pub fn read_slice_sync(&self, fid: FileId, extent: Range<usize>) -> Result<Cow<[u8]>> {
-        self.drawers[&fid.drawer_id].read_slice_sync(fid.drawer_file_id, extent)
-    }
-
-    /// Read the given file id and return a Future with the contents.
-    pub async fn read(&self, fid: FileId) -> Result<Vec<u8>> {
-        Ok(self.drawers[&fid.drawer_id]
-            .read(fid.drawer_file_id)
-            .await?)
-    }
-
-    /// Read the given file id and return a Future with the given slice from that file.
-    pub async fn read_slice(&self, fid: FileId, extent: Range<usize>) -> Result<Vec<u8>> {
-        Ok(self.drawers[&fid.drawer_id]
-            .read_slice(fid.drawer_file_id, extent)
-            .await?)
-    }
-
-    /// Read the given file name and return the contents. Blocks until complete.
-    pub fn read_name_sync(&self, name: &str) -> Result<Cow<[u8]>> {
+    /// Read the given named file and return the contents. Blocks until complete.
+    pub fn read_name(&self, name: &str) -> Result<Cow<[u8]>> {
         ensure!(self.index.contains_key(name), "file not found: {}", name);
-        self.read_sync(self.index[name])
+        self.read(self.index[name])
+    }
+
+    /// Read the given file id and return the requested slice. Blocks until complete.
+    pub fn read_slice(&self, fid: FileId, extent: Range<usize>) -> Result<Cow<[u8]>> {
+        self.drawers[&fid.drawer_id].read_slice(fid.drawer_file_id, extent)
+    }
+
+    /// Read the given file id and return a mapped slice of the contents. Blocks until complete.
+    /// Panics if the given file cannot be sliced; e.g. if it is stored compressed.
+    pub fn read_mapped_slice(&mut self, fid: FileId, extent: Range<usize>) -> Result<&[u8]> {
+        self.drawers
+            .get_mut(&fid.drawer_id)
+            .unwrap()
+            .read_mapped_slice(fid.drawer_file_id, extent)
     }
 
     /// Print out the structure of the catalog to stdout.
@@ -303,49 +296,35 @@ mod tests {
         )?;
 
         // Expect success
-        let meta = catalog.stat_name_sync("a.txt")?;
+        let meta = catalog.stat_name("a.txt")?;
         assert_eq!(meta.name(), "a.txt");
         assert_eq!(meta.path(), "./masking_test_data/a/a.txt");
-        let data = catalog.read_name_sync("a.txt")?;
+        let data = catalog.read_name("a.txt")?;
         assert_eq!(data, b"hello" as &[u8]);
 
         // Missing file
-        assert!(catalog.stat_name_sync("a_long_and_silly_name").is_err());
+        assert!(catalog.stat_name("a_long_and_silly_name").is_err());
         // Present, but a directory.
-        assert!(catalog.stat_name_sync("nested").is_err());
+        assert!(catalog.stat_name("nested").is_err());
 
         // Add a second drawer with lower priority.
         catalog.add_drawer(DirectoryDrawer::from_directory(
             -1,
             "./masking_test_data/b",
         )?)?;
-        let meta = catalog.stat_name_sync("a.txt")?;
+        let meta = catalog.stat_name("a.txt")?;
         assert_eq!(meta.name(), "a.txt");
         assert_eq!(meta.path(), "./masking_test_data/a/a.txt");
-        let data = catalog.read_name_sync("a.txt")?;
+        let data = catalog.read_name("a.txt")?;
         assert_eq!(data, b"hello" as &[u8]);
 
         // Add a third drawer with higher priority.
         catalog.add_drawer(DirectoryDrawer::from_directory(1, "./masking_test_data/b")?)?;
-        let meta = catalog.stat_name_sync("a.txt")?;
+        let meta = catalog.stat_name("a.txt")?;
         assert_eq!(meta.name(), "a.txt");
         assert_eq!(meta.path(), "./masking_test_data/b/a.txt");
-        let data = catalog.read_name_sync("a.txt")?;
+        let data = catalog.read_name("a.txt")?;
         assert_eq!(data, b"world" as &[u8]);
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_async_functionality() -> Result<()> {
-        let catalog = Catalog::with_drawers(
-            "main",
-            vec![DirectoryDrawer::from_directory(0, "./masking_test_data/a")?],
-        )?;
-
-        let meta = catalog.stat_name_sync("a.txt")?;
-        let data = catalog.read(meta.id()).await?;
-        assert_eq!(data, b"hello" as &[u8]);
 
         Ok(())
     }

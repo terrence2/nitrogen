@@ -40,10 +40,9 @@ use geodesy::{GeoCenter, Graticule};
 use global_data::{GlobalParametersBuffer, GlobalsRenderStep};
 use gpu::{CpuDetailLevel, DisplayConfig, Gpu, GpuDetailLevel};
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
-use parking_lot::RwLock;
-use runtime::{Extension, FrameStage, Runtime};
+use runtime::{Extension, FrameStage, Runtime, ShutdownStage};
 use shader_shared::Group;
-use std::{ops::Range, sync::Arc};
+use std::ops::Range;
 
 #[allow(unused)]
 const DBG_COLORS_BY_LEVEL: [[f32; 3]; 19] = [
@@ -186,16 +185,15 @@ impl Extension for TerrainBuffer {
             runtime.resource::<Gpu>(),
         )?;
 
-        let builder =
-            TileSetBuilder::discover_tiles(&runtime.resource::<Arc<RwLock<Catalog>>>().read())?
-                .build_parallel(
-                    terrain.patch_manager.displace_height_bind_group_layout(),
-                    &terrain.accumulate_common_bind_group_layout,
-                    GpuDetail::for_level(*runtime.resource::<GpuDetailLevel>()).tile_cache_size,
-                    &runtime.resource::<Arc<RwLock<Catalog>>>().read(),
-                    runtime.resource::<GlobalParametersBuffer>(),
-                    runtime.resource::<Gpu>(),
-                )?;
+        let builder = TileSetBuilder::discover_tiles(runtime.resource::<Catalog>())?
+            .build_parallel(
+                terrain.patch_manager.displace_height_bind_group_layout(),
+                &terrain.accumulate_common_bind_group_layout,
+                GpuDetail::for_level(*runtime.resource::<GpuDetailLevel>()).tile_cache_size,
+                runtime.resource::<Catalog>(),
+                runtime.resource::<GlobalParametersBuffer>(),
+                runtime.resource::<Gpu>(),
+            )?;
         builder.inject_into_runtime(runtime)?;
 
         runtime.insert_named_resource("terrain", terrain);
@@ -263,6 +261,10 @@ impl Extension for TerrainBuffer {
         runtime.frame_stage_mut(FrameStage::FrameEnd).add_system(
             Self::sys_handle_capture_snapshot.label(TerrainRenderStep::CaptureSnapshots),
         );
+
+        runtime
+            .shutdown_stage_mut(ShutdownStage::Cleanup)
+            .add_system(Self::sys_shutdown_safely);
 
         Ok(())
     }
@@ -852,7 +854,7 @@ impl TerrainBuffer {
     fn sys_apply_patches_to_height_tiles(
         terrain: Res<TerrainBuffer>,
         camera: Res<ScreenCamera>,
-        catalog: Res<Arc<RwLock<Catalog>>>,
+        mut catalog: ResMut<Catalog>,
         mut heights_ts_query: Query<&mut SphericalHeightTileSet>,
     ) {
         for mut tile_set in heights_ts_query.iter_mut() {
@@ -860,14 +862,14 @@ impl TerrainBuffer {
             for visible_patch in &terrain.visible_regions {
                 tile_set.note_required(visible_patch);
             }
-            tile_set.finish_visibility_update(&camera, catalog.clone());
+            tile_set.finish_visibility_update(&camera, &mut catalog);
         }
     }
 
     fn sys_apply_patches_to_normal_tiles(
         terrain: Res<TerrainBuffer>,
         camera: Res<ScreenCamera>,
-        catalog: Res<Arc<RwLock<Catalog>>>,
+        mut catalog: ResMut<Catalog>,
         mut normals_ts_query: Query<&mut SphericalNormalsTileSet>,
     ) {
         for mut tile_set in normals_ts_query.iter_mut() {
@@ -875,14 +877,14 @@ impl TerrainBuffer {
             for visible_patch in &terrain.visible_regions {
                 tile_set.note_required(visible_patch);
             }
-            tile_set.finish_visibility_update(&camera, catalog.clone());
+            tile_set.finish_visibility_update(&camera, &mut catalog);
         }
     }
 
     fn sys_apply_patches_to_color_tiles(
         terrain: Res<TerrainBuffer>,
         camera: Res<ScreenCamera>,
-        catalog: Res<Arc<RwLock<Catalog>>>,
+        mut catalog: ResMut<Catalog>,
         mut colors_ts_query: Query<&mut SphericalColorTileSet>,
     ) {
         for mut tile_set in colors_ts_query.iter_mut() {
@@ -890,7 +892,7 @@ impl TerrainBuffer {
             for visible_patch in &terrain.visible_regions {
                 tile_set.note_required(visible_patch);
             }
-            tile_set.finish_visibility_update(&camera, catalog.clone());
+            tile_set.finish_visibility_update(&camera, &mut catalog);
         }
     }
 
@@ -971,7 +973,7 @@ impl TerrainBuffer {
             Some(wgpu::RenderPassDepthStencilAttachment {
                 view: &self.deferred_depth.1,
                 depth_ops: Some(wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(-1f32),
+                    load: wgpu::LoadOp::Clear(0f32),
                     store: true,
                 }),
                 stencil_ops: None,
@@ -1007,6 +1009,7 @@ impl TerrainBuffer {
         rpass.set_pipeline(&self.deferred_texture_pipeline);
         rpass.set_bind_group(Group::Globals.index(), globals_buffer.bind_group(), &[]);
         rpass.set_vertex_buffer(0, self.patch_manager.vertex_buffer());
+        // FIXME: draw this indirect
         for i in 0..self.patch_manager.num_patches() {
             let winding = self.patch_manager.patch_winding(i);
             let base_vertex = self.patch_manager.patch_vertex_buffer_offset(i);
@@ -1090,7 +1093,6 @@ impl TerrainBuffer {
         }
     }
 
-    /// FIXME: maybe we can make these named components?
     fn sys_handle_capture_snapshot(
         mut heights_ts_query: Query<&mut SphericalHeightTileSet>,
         mut normals_ts_query: Query<&mut SphericalNormalsTileSet>,
@@ -1108,8 +1110,32 @@ impl TerrainBuffer {
         }
     }
 
+    fn sys_shutdown_safely(
+        mut heights_ts_query: Query<&mut SphericalHeightTileSet>,
+        mut normals_ts_query: Query<&mut SphericalNormalsTileSet>,
+        mut colors_ts_query: Query<&mut SphericalColorTileSet>,
+    ) {
+        for mut tile_set in heights_ts_query.iter_mut() {
+            tile_set.shutdown_safely();
+        }
+        for mut tile_set in normals_ts_query.iter_mut() {
+            tile_set.shutdown_safely();
+        }
+        for mut tile_set in colors_ts_query.iter_mut() {
+            tile_set.shutdown_safely();
+        }
+    }
+
+    pub fn accumulator_extent(&self) -> &wgpu::Extent3d {
+        &self.acc_extent
+    }
+
     pub fn accumulate_common_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.accumulate_common_bind_group_layout
+    }
+
+    pub fn accumulate_common_bind_group(&self) -> &wgpu::BindGroup {
+        &self.accumulate_common_bind_group
     }
 
     pub fn composite_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
@@ -1122,6 +1148,14 @@ impl TerrainBuffer {
 
     pub fn mesh_bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         self.patch_manager.displace_height_bind_group_layout()
+    }
+
+    pub fn mesh_bind_group(&self) -> &wgpu::BindGroup {
+        self.patch_manager.displace_height_bind_group()
+    }
+
+    pub fn mesh_vertex_count(&self) -> u32 {
+        self.patch_manager.target_vertex_count()
     }
 
     pub fn num_patches(&self) -> i32 {

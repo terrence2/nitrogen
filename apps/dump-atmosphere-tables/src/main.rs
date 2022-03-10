@@ -15,7 +15,7 @@
 
 use anyhow::Result;
 use atmosphere::{Precompute, TableHelpers};
-use futures::executor::block_on;
+use futures_lite::future::block_on;
 use gpu::Gpu;
 use input::InputSystem;
 use runtime::Runtime;

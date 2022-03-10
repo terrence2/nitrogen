@@ -35,6 +35,12 @@ pub enum StartupStage {
     PostScript,
 }
 
+/// Systems may be scheduled to run after the mainloop, for cleanup.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, StageLabel)]
+pub enum ShutdownStage {
+    Cleanup,
+}
+
 /// The simulation schedule should be used for "pure" entity to entity work and update of
 /// a handful of game related resources, rather than communicating with the GPU.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, StageLabel)]
@@ -97,6 +103,7 @@ pub struct Runtime {
     startup_schedule: Schedule,
     sim_schedule: Schedule,
     frame_schedule: Schedule,
+    shutdown_schedule: Schedule,
     dump_schedules: bool,
 }
 
@@ -141,11 +148,15 @@ impl Default for Runtime {
             .with_stage(FrameStage::PresentTargetSurface, SS::single_threaded())
             .with_stage(FrameStage::FrameEnd, SS::parallel());
 
+        let shutdown_schedule =
+            Schedule::default().with_stage(ShutdownStage::Cleanup, SystemStage::single_threaded());
+
         let mut runtime = Self {
             heap: Heap::default(),
             startup_schedule,
             sim_schedule,
             frame_schedule,
+            shutdown_schedule,
             dump_schedules: false,
         };
 
@@ -178,7 +189,13 @@ impl Runtime {
             self.dump_startup_schedule();
             self.dump_sim_schedule();
             self.dump_frame_schedule();
+            self.dump_shutdown_schedule();
         }
+    }
+
+    #[inline]
+    pub fn run_shutdown(&mut self) {
+        self.shutdown_schedule.run_once(self.heap.world_mut());
     }
 
     #[inline]
@@ -214,6 +231,15 @@ impl Runtime {
     }
 
     #[inline]
+    pub fn dump_shutdown_schedule(&self) {
+        dump_schedule(
+            self.heap.world(),
+            &self.shutdown_schedule,
+            &PathBuf::from("shutdown_schedule.dot"),
+        );
+    }
+
+    #[inline]
     pub fn load_extension<T: Extension>(&mut self) -> Result<&mut Self> {
         T::init(self)?;
         Ok(self)
@@ -238,6 +264,13 @@ impl Runtime {
     #[inline]
     pub fn startup_stage_mut(&mut self, startup_stage: StartupStage) -> &mut SystemStage {
         self.startup_schedule.get_stage_mut(&startup_stage).unwrap()
+    }
+
+    #[inline]
+    pub fn shutdown_stage_mut(&mut self, shutdown_stage: ShutdownStage) -> &mut SystemStage {
+        self.shutdown_schedule
+            .get_stage_mut(&shutdown_stage)
+            .unwrap()
     }
 
     // Script passthrough

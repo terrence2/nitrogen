@@ -22,4 +22,5 @@ main()
 {
     f_color = v_color;
     // Note: relying here on automatic depth writes.
+    // 0 is unwritten, 1 is near camera, 0 is far away
 }

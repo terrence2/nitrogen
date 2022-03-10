@@ -23,7 +23,7 @@ pub use winit::dpi::{LogicalSize, PhysicalSize};
 
 use anyhow::{anyhow, bail, Result};
 use bevy_ecs::prelude::*;
-use futures::executor::block_on;
+use futures_lite::future::block_on;
 use log::{info, trace};
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use runtime::{Extension, FrameStage, Runtime};
@@ -499,7 +499,7 @@ impl Gpu {
             depth_ops: Some(wgpu::Operations {
                 // Note: clear to *behind* the plane so that our skybox raytrace pass can check
                 // for pixels that have not yet been set.
-                load: wgpu::LoadOp::Clear(-1f32),
+                load: wgpu::LoadOp::Clear(0f32),
                 store: true,
             }),
             stencil_ops: Some(wgpu::Operations {

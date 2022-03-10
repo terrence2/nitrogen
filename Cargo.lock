@@ -172,17 +172,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e91831deabf0d6d7ec49552e489aed63b7456a7a3c46cff62adad428110b0af0"
 
 [[package]]
-name = "async-trait"
-version = "0.1.51"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44318e776df68115a881de9a8fd1b9e53368d7a4a5ce4cc48517da3393233a5e"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "atlas"
 version = "0.0.0"
 dependencies = [
@@ -417,12 +406,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "14c189c53d098945499cdfa7ecc63567cf3886b3332b312a5b4585d8d3a6a610"
 
 [[package]]
-name = "bytes"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4872d67bab6358e59559027aa3b9157c53d9358c51423c17554809a8858e0f8"
-
-[[package]]
 name = "bzip2"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -496,16 +479,13 @@ name = "catalog"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "bevy_ecs",
  "glob",
  "log",
  "memmap",
- "parking_lot",
  "runtime",
  "smallvec",
  "structopt",
- "tokio",
 ]
 
 [[package]]
@@ -990,7 +970,7 @@ dependencies = [
  "anyhow",
  "atmosphere",
  "env_logger",
- "futures",
+ "futures-lite",
  "gpu",
  "input",
  "nitrous",
@@ -1430,7 +1410,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "bevy_ecs",
- "futures",
+ "futures-lite",
  "input",
  "log",
  "nitrous",
@@ -1440,7 +1420,6 @@ dependencies = [
  "raw-window-handle",
  "runtime",
  "structopt",
- "tokio",
  "wgpu",
  "window",
  "winit",
@@ -3077,31 +3056,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c9d3793400a45f954c52e73d068316d76b6f4e36977e3fcebb13a2721e80237"
 dependencies = [
  "crunchy",
-]
-
-[[package]]
-name = "tokio"
-version = "1.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2c2416fdedca8443ae44b4527de1ea633af61d8f7169ffa6e72c5b53d24efcc"
-dependencies = [
- "autocfg",
- "bytes",
- "memchr",
- "num_cpus",
- "pin-project-lite",
- "tokio-macros",
-]
-
-[[package]]
-name = "tokio-macros"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2dd85aeaba7b68df939bd357c6afb36c87951be9e80bf9c859f2fc3e9fca0fd"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]

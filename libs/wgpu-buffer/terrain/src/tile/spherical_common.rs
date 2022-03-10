@@ -36,7 +36,6 @@ use crossbeam::channel::{self, Receiver, Sender};
 use geometry::Aabb;
 use gpu::{texture_format_size, Gpu};
 use image::{ImageBuffer, Rgb};
-use parking_lot::RwLock;
 use std::{
     collections::{BTreeMap, BinaryHeap},
     env,
@@ -558,7 +557,7 @@ impl SphericalTileSetCommon {
         self.tile_tree.note_required(&aabb, angular_resolution);
     }
 
-    pub(crate) fn finish_visibility_update(&mut self, catalog: Arc<RwLock<Catalog>>) {
+    pub(crate) fn finish_visibility_update(&mut self, catalog: &mut Catalog) {
         let mut additions = Vec::new();
         let mut removals = Vec::new();
         self.tile_tree
@@ -601,15 +600,18 @@ impl SphericalTileSetCommon {
             let compression = self.tile_tree.tile_compression(&qtid);
             let extent = self.tile_tree.file_extent(&qtid);
             let closure_kind = self.kind;
-            let closure_catalog = catalog.clone();
             let closer_sender = self.tile_sender.clone();
-            rayon::spawn(move || {
-                if let Ok(packed_data) = closure_catalog.read().read_slice_sync(fid, extent) {
+            if let Ok(packed_data) = catalog.read_mapped_slice(fid, extent) {
+                // SAFETY: The Catalog must not get dropped before the following thread is done.
+                // This is ensured by finish_safely below, run by the shutdown scheduler,
+                // after the main loop can call this method, but before resources are dropped.
+                let packed_data: &'static [u8] = unsafe { mem::transmute(packed_data) };
+                rayon::spawn(move || {
                     let data = match compression {
                         TileCompression::None => packed_data.to_vec(),
                         TileCompression::Bz2 => {
                             let mut decompressed = Vec::with_capacity(raw_tile_size);
-                            BzDecoder::new(&packed_data[..])
+                            BzDecoder::new(packed_data)
                                 .read_to_end(&mut decompressed)
                                 .expect("compress buffer");
                             assert_eq!(decompressed.len(), raw_tile_size);
@@ -631,10 +633,10 @@ impl SphericalTileSetCommon {
                         data
                     };
                     closer_sender.send((qtid, data)).ok();
-                } else {
-                    panic!("Read failed in {:?}", fid);
-                }
-            });
+                });
+            } else {
+                panic!("Read failed in {:?}", fid);
+            }
         }
 
         log::trace!(
@@ -781,6 +783,17 @@ impl SphericalTileSetCommon {
             active_atlas_slots,
             max_active_level
         );
+    }
+
+    pub(crate) fn shutdown_safely(&mut self) {
+        // We have entered shutdown, but the system is still running, so nothing reachable has yet
+        // been dropped. We need to pump our background jobs clean (including their unsafe mapped
+        // pointers) before the system starts dropping things (like the owning Mmaps) on the main
+        // thread.
+        while self.tile_read_count > 0 {
+            let _rv = self.tile_receiver.recv();
+            self.tile_read_count -= 1;
+        }
     }
 
     pub(crate) fn dump_index(&mut self, path: &str) -> Result<()> {
