@@ -287,6 +287,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         // Display a frame
         runtime.run_frame_once();
     }
+    runtime.run_shutdown();
 
     Ok(())
 }

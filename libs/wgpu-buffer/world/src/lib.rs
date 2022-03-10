@@ -438,7 +438,8 @@ impl WorldRenderPass {
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: Gpu::DEPTH_FORMAT,
                 depth_write_enabled: false,
-                depth_compare: wgpu::CompareFunction::Greater,
+                //depth_compare: wgpu::CompareFunction::GreaterEqual,
+                depth_compare: wgpu::CompareFunction::Always,
                 stencil: wgpu::StencilState {
                     front: wgpu::StencilFaceState::IGNORE,
                     back: wgpu::StencilFaceState::IGNORE,
@@ -528,7 +529,7 @@ impl WorldRenderPass {
     ) {
         self.offscreen_target_maybe_clear(
             wgpu::LoadOp::Clear(wgpu::Color::RED),
-            wgpu::LoadOp::Clear(-1f32),
+            wgpu::LoadOp::Clear(0f32),
         )
     }
 

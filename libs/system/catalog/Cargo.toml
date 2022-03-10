@@ -6,13 +6,10 @@ edition = "2021"
 
 [dependencies]
 anyhow = { version = "^ 1", features = ["backtrace"] }
-async-trait = "^ 0.1"
 bevy_ecs = "^ 0.6"
 glob = "^ 0.3"
 log = "^ 0.4"
 memmap = "^ 0.7"
-parking_lot = "^ 0.11"
 smallvec = "^ 1.4"
 structopt = "^ 0.3"
-tokio = { version = "^ 1.0", features = ["rt-multi-thread", "macros", "io-util", "fs", "sync"] }
 runtime = { path = "../../util/runtime" }

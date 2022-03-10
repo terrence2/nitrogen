@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
-use async_trait::async_trait;
 use std::{borrow::Cow, collections::HashMap, ops::Range};
 
 // Files are identified by an id internally.
@@ -41,7 +40,6 @@ pub struct DrawerFileMetadata {
 
 // A drawer is one related section of a catalog. It is a uniform interface for a group of files.
 // A game can implement this trait to expose their file grouping as part of a Catalog.
-#[async_trait]
 pub trait DrawerInterface: Send + Sync {
     // Index on a drawer lets us build an index over the entire catalog. This must return
     // every name that can be loaded from the drawer, even if it is not yet loadable. After
@@ -60,17 +58,15 @@ pub trait DrawerInterface: Send + Sync {
     fn name(&self) -> &str;
 
     // Stat must fill out the stat struct for the given file.
-    fn stat_sync(&self, id: DrawerFileId) -> Result<DrawerFileMetadata>;
+    fn stat(&self, id: DrawerFileId) -> Result<DrawerFileMetadata>;
 
     // Provide the content of the given file, blocking.
-    fn read_sync(&self, id: DrawerFileId) -> Result<Cow<[u8]>>;
+    fn read(&self, id: DrawerFileId) -> Result<Cow<[u8]>>;
 
     // Provide a slice of the content of the given file, blocking.
-    fn read_slice_sync(&self, id: DrawerFileId, extent: Range<usize>) -> Result<Cow<[u8]>>;
+    fn read_slice(&self, id: DrawerFileId, extent: Range<usize>) -> Result<Cow<[u8]>>;
 
-    // Provide the content of the given file, async.
-    async fn read(&self, id: DrawerFileId) -> Result<Vec<u8>>;
-
-    // Provide a slice of the content of the given file, async.
-    async fn read_slice(&self, id: DrawerFileId, extent: Range<usize>) -> Result<Vec<u8>>;
+    // Provide a slice of the content of the given file, as a reference, mapping the file to keep
+    // it live. Panics if the file cannot be mapped; e.g. if it has compressed content.
+    fn read_mapped_slice(&mut self, id: DrawerFileId, extent: Range<usize>) -> Result<&[u8]>;
 }

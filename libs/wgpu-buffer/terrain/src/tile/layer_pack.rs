@@ -72,7 +72,7 @@ pub struct LayerPack {
 impl LayerPack {
     pub fn new(layer_pack_fid: FileId, catalog: &Catalog) -> Result<Self> {
         let header_raw =
-            catalog.read_slice_sync(layer_pack_fid, 0..mem::size_of::<LayerPackHeader>())?;
+            catalog.read_slice(layer_pack_fid, 0..mem::size_of::<LayerPackHeader>())?;
         let header = LayerPackHeader::overlay(&header_raw)?;
         ensure!(header.magic() == HEADER_MAGIC);
         ensure!(header.version() == HEADER_VERSION);
@@ -92,7 +92,7 @@ impl LayerPack {
     }
 
     pub(crate) fn index_bytes<'a>(&self, catalog: &'a Catalog) -> Result<Cow<'a, [u8]>> {
-        catalog.read_slice_sync(self.layer_pack_fid, self.index_extent.clone())
+        catalog.read_slice(self.layer_pack_fid, self.index_extent.clone())
     }
 
     pub fn tile_compression(&self) -> TileCompression {

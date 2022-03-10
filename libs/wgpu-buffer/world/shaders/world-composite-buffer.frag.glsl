@@ -147,11 +147,15 @@ main()
     show_stars(camera_direction_w, star_radiance, star_alpha);
 
     vec3 radiance = sky_radiance + star_radiance * star_alpha;
-    radiance = mix(radiance, ground_radiance, ground_albedo.w);
 
-    float sun_area = clamp(dot(camera_direction_w, sun_direction_w) - cos(atmosphere.sun_angular_radius), 0, 1);
-    float showing_ground = clamp(-depth_sample, 0, 1);
-    radiance = mix(radiance, sun_lums, showing_ground * sun_area);
+    bool ray_intersects_sun = dot(camera_direction_w, sun_direction_w) - cos(atmosphere.sun_angular_radius) > 0;
+    if (ray_intersects_sun) {
+        radiance = sun_lums;
+    }
+
+    if (depth_sample > 0.0) {
+        radiance = ground_radiance;
+    }
 
     vec3 color = tone_mapping(radiance);
 

@@ -14,20 +14,15 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{DrawerFileId, DrawerFileMetadata, DrawerInterface};
 use anyhow::{ensure, Result};
-use async_trait::async_trait;
 use memmap::{Mmap, MmapOptions};
 use std::{
     borrow::Cow,
-    collections::HashMap,
+    collections::{hash_map::Entry, HashMap},
     ffi::OsStr,
     fs,
     io::{Read, Seek, SeekFrom},
     ops::Range,
     path::PathBuf,
-};
-use tokio::{
-    fs::File as TokioFile,
-    io::{AsyncReadExt, AsyncSeekExt},
 };
 
 const MIN_MAP_SIZE: u64 = 1_048_576;
@@ -107,7 +102,6 @@ impl DirectoryDrawer {
     }
 }
 
-#[async_trait]
 impl DrawerInterface for DirectoryDrawer {
     fn index(&self) -> Result<HashMap<DrawerFileId, String>> {
         Ok(self.index.clone())
@@ -121,7 +115,7 @@ impl DrawerInterface for DirectoryDrawer {
         &self.name
     }
 
-    fn stat_sync(&self, id: DrawerFileId) -> Result<DrawerFileMetadata> {
+    fn stat(&self, id: DrawerFileId) -> Result<DrawerFileMetadata> {
         ensure!(self.index.contains_key(&id), "file not found");
         let mut global_path = self.path.clone();
         global_path.push(&self.index[&id]);
@@ -136,7 +130,7 @@ impl DrawerInterface for DirectoryDrawer {
         })
     }
 
-    fn read_sync(&self, id: DrawerFileId) -> Result<Cow<[u8]>> {
+    fn read(&self, id: DrawerFileId) -> Result<Cow<[u8]>> {
         ensure!(self.index.contains_key(&id), "file not found");
         let mut global_path = self.path.clone();
         global_path.push(&self.index[&id]);
@@ -146,11 +140,8 @@ impl DrawerInterface for DirectoryDrawer {
         Ok(Cow::from(content))
     }
 
-    fn read_slice_sync(&self, id: DrawerFileId, extent: Range<usize>) -> Result<Cow<[u8]>> {
+    fn read_slice(&self, id: DrawerFileId, extent: Range<usize>) -> Result<Cow<[u8]>> {
         ensure!(self.index.contains_key(&id), "file not found");
-        if let Some(map) = self.maps.get(&id) {
-            return Ok(Cow::from(&map[extent]));
-        }
         let mut global_path = self.path.clone();
         global_path.push(&self.index[&id]);
         let mut fp = fs::File::open(&global_path)?;
@@ -160,24 +151,15 @@ impl DrawerInterface for DirectoryDrawer {
         Ok(Cow::from(content))
     }
 
-    async fn read(&self, id: DrawerFileId) -> Result<Vec<u8>> {
+    fn read_mapped_slice(&mut self, id: DrawerFileId, extent: Range<usize>) -> Result<&[u8]> {
         ensure!(self.index.contains_key(&id), "file not found");
-        let mut global_path = self.path.clone();
-        global_path.push(&self.index[&id]);
-        let mut fp = TokioFile::open(&global_path).await?;
-        let mut content = Vec::new();
-        fp.read_to_end(&mut content).await?;
-        Ok(content)
-    }
-
-    async fn read_slice(&self, id: DrawerFileId, extent: Range<usize>) -> Result<Vec<u8>> {
-        ensure!(self.index.contains_key(&id), "file not found");
-        let mut global_path = self.path.clone();
-        global_path.push(&self.index[&id]);
-        let mut fp = TokioFile::open(&global_path).await?;
-        fp.seek(SeekFrom::Start(extent.start as u64)).await?;
-        let mut content = vec![0u8; extent.end - extent.start];
-        fp.read_exact(&mut content).await?;
-        Ok(content)
+        if let Entry::Vacant(e) = self.maps.entry(id) {
+            let mut global_path = self.path.clone();
+            global_path.push(&self.index[&id]);
+            let fp = fs::File::open(&global_path)?;
+            let mmap = unsafe { MmapOptions::new().map(&fp) }?;
+            e.insert(mmap);
+        }
+        Ok(&self.maps[&id][extent])
     }
 }

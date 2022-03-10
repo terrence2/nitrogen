@@ -27,9 +27,8 @@ use catalog::Catalog;
 use global_data::GlobalParametersBuffer;
 use gpu::Gpu;
 use nitrous::{inject_nitrous_component, method, NitrousComponent};
-use parking_lot::RwLock;
 use shader_shared::Group;
-use std::{any::Any, sync::Arc};
+use std::any::Any;
 
 // TODO: tweak load depth of each type of tile... we don't need as much height data as normal data
 
@@ -108,7 +107,7 @@ impl TileSet for SphericalHeightTileSet {
         self.common.note_required(visible_patch)
     }
 
-    fn finish_visibility_update(&mut self, _camera: &ScreenCamera, catalog: Arc<RwLock<Catalog>>) {
+    fn finish_visibility_update(&mut self, _camera: &ScreenCamera, catalog: &mut Catalog) {
         self.common.finish_visibility_update(catalog);
     }
 
@@ -122,6 +121,10 @@ impl TileSet for SphericalHeightTileSet {
 
     fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) {
         self.common.paint_atlas_index(encoder)
+    }
+
+    fn shutdown_safely(&mut self) {
+        self.common.shutdown_safely();
     }
 }
 
@@ -225,7 +228,7 @@ impl TileSet for SphericalColorTileSet {
         self.common.note_required(visible_patch)
     }
 
-    fn finish_visibility_update(&mut self, _camera: &ScreenCamera, catalog: Arc<RwLock<Catalog>>) {
+    fn finish_visibility_update(&mut self, _camera: &ScreenCamera, catalog: &mut Catalog) {
         self.common.finish_visibility_update(catalog)
     }
 
@@ -239,6 +242,10 @@ impl TileSet for SphericalColorTileSet {
 
     fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) {
         self.common.paint_atlas_index(encoder)
+    }
+
+    fn shutdown_safely(&mut self) {
+        self.common.shutdown_safely();
     }
 }
 
@@ -345,7 +352,7 @@ impl TileSet for SphericalNormalsTileSet {
         self.common.note_required(visible_patch);
     }
 
-    fn finish_visibility_update(&mut self, _camera: &ScreenCamera, catalog: Arc<RwLock<Catalog>>) {
+    fn finish_visibility_update(&mut self, _camera: &ScreenCamera, catalog: &mut Catalog) {
         self.common.finish_visibility_update(catalog);
     }
 
@@ -359,6 +366,10 @@ impl TileSet for SphericalNormalsTileSet {
 
     fn paint_atlas_index(&self, encoder: &mut wgpu::CommandEncoder) {
         self.common.paint_atlas_index(encoder)
+    }
+
+    fn shutdown_safely(&mut self) {
+        self.common.shutdown_safely();
     }
 }
 
