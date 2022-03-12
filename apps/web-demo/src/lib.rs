@@ -97,7 +97,7 @@ async fn async_main() -> Result<()> {
     let _player_ent = runtime
         .spawn_named("player")?
         .insert(WorldSpaceFrame::default())
-        .insert_scriptable(ArcBallController::default())?
+        .insert_named(ArcBallController::default())?
         .insert(ScreenCameraController::default())
         .id();
 

@@ -18,6 +18,7 @@ use crate::{
 };
 use anyhow::Result;
 use bevy_ecs::{prelude::*, system::Resource, world::EntityMut};
+use bevy_tasks::TaskPool;
 use nitrous::{Heap, HeapMut, LocalNamespace, NamedEntityMut, NitrousScript, ScriptResource};
 use std::path::PathBuf;
 
@@ -163,7 +164,8 @@ impl Default for Runtime {
         runtime
             .insert_resource(ExitRequest::Continue)
             .insert_resource(ScriptHerder::default())
-            .insert_resource(ScriptCompletions::new());
+            .insert_resource(ScriptCompletions::new())
+            .insert_resource(TaskPool::default());
 
         runtime
     }

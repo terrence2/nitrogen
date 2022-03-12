@@ -48,9 +48,15 @@ pub struct FileId {
 
 #[derive(Clone, Debug, StructOpt)]
 pub struct CatalogOpts {
-    /// Extra directories to treat as libraries
-    #[structopt(short, long)]
-    lib_paths: Vec<PathBuf>,
+    /// Extra directories to make available
+    #[structopt(short = "-l", long)]
+    extra_paths: Vec<PathBuf>,
+}
+
+impl CatalogOpts {
+    pub fn from_extra_paths(extra_paths: Vec<PathBuf>) -> Self {
+        Self { extra_paths }
+    }
 }
 
 /// A catalog is a uniform, indexed interface to a collection of Drawers. This
@@ -83,7 +89,7 @@ impl Extension for Catalog {
     fn init(runtime: &mut Runtime) -> Result<()> {
         let mut catalog = Catalog::empty("main");
         if let Some(opt) = runtime.maybe_resource::<CatalogOpts>() {
-            for (i, d) in opt.lib_paths.iter().enumerate() {
+            for (i, d) in opt.extra_paths.iter().enumerate() {
                 catalog.add_drawer(DirectoryDrawer::from_directory(100 + i as i64, d)?)?;
             }
         }
