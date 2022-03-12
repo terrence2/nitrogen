@@ -38,6 +38,9 @@ pub use nitrous_injector::{
     getter, inject_nitrous_component, inject_nitrous_resource, method, setter, NitrousComponent,
     NitrousResource,
 };
+// Injector deps
+pub use anyhow;
+pub use log;
 
 pub fn make_symbol<S: Into<String>>(name: S) -> String {
     let mut s = name.into();

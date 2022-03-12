@@ -59,15 +59,15 @@ pub(crate) fn codegen(model: ComponentModel) -> TokenStream {
                 #component_name
             }
 
-            fn call_method(&mut self, entity: Entity, name: &str, args: &[::nitrous::Value]) -> ::anyhow::Result<::nitrous::Value> {
+            fn call_method(&mut self, entity: Entity, name: &str, args: &[::nitrous::Value]) -> ::nitrous::anyhow::Result<::nitrous::Value> {
                 self.__call_method_inner__(entity, name, args)
             }
 
-            fn put(&mut self, entity: Entity, name: &str, value: ::nitrous::Value) -> ::anyhow::Result<()> {
+            fn put(&mut self, entity: Entity, name: &str, value: ::nitrous::Value) -> ::nitrous::anyhow::Result<()> {
                 self.__put_inner__(entity, name, value)
             }
 
-            fn get(&self, entity: Entity, name: &str) -> ::anyhow::Result<::nitrous::Value> {
+            fn get(&self, entity: Entity, name: &str) -> ::nitrous::anyhow::Result<::nitrous::Value> {
                 self.__get_inner__(entity, name)
             }
 

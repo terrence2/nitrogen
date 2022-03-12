@@ -214,7 +214,7 @@ fn window_main(mut runtime: Runtime) -> Result<()> {
     let player_ent = runtime
         .spawn_named("player")?
         .insert(WorldSpaceFrame::default())
-        .insert_scriptable(arcball)?
+        .insert_named(arcball)?
         .insert(ScreenCameraController::default())
         .id();
 

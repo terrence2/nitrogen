@@ -54,15 +54,15 @@ pub(crate) fn codegen(model: ResourceModel) -> TokenStream {
                 name: &str,
                 args: &[::nitrous::Value],
                 heap: ::nitrous::HeapMut
-            ) -> ::anyhow::Result<::nitrous::Value> {
+            ) -> ::nitrous::anyhow::Result<::nitrous::Value> {
                 self.__call_method_inner__(::nitrous::reexport::Entity::from_bits(0), name, args, heap)
             }
 
-            fn put(&mut self, name: &str, value: ::nitrous::Value) -> ::anyhow::Result<()> {
+            fn put(&mut self, name: &str, value: ::nitrous::Value) -> ::nitrous::anyhow::Result<()> {
                 self.__put_inner__(::nitrous::reexport::Entity::from_bits(0), name, value)
             }
 
-            fn get(&self, name: &str) -> ::anyhow::Result<::nitrous::Value> {
+            fn get(&self, name: &str) -> ::nitrous::anyhow::Result<::nitrous::Value> {
                 self.__get_inner__(::nitrous::reexport::Entity::from_bits(0), name)
             }
 

@@ -17,7 +17,11 @@ use crate::{
     value::Value,
 };
 use anyhow::Result;
-use bevy_ecs::{prelude::*, system::Resource, world::EntityMut};
+use bevy_ecs::{
+    prelude::*,
+    system::Resource,
+    world::{EntityMut, EntityRef},
+};
 
 /// Wraps an EntityMut to provide named creation methods
 pub struct NamedEntityMut<'w> {
@@ -37,7 +41,7 @@ impl<'w> NamedEntityMut<'w> {
         self
     }
 
-    pub fn insert_scriptable<T>(&mut self, value: T) -> Result<&mut Self>
+    pub fn insert_named<T>(&mut self, value: T) -> Result<&mut Self>
     where
         T: Component + ScriptComponent + 'static,
     {
@@ -95,6 +99,12 @@ macro_rules! impl_immutable_heap_methods {
         }
 
         #[inline]
+        pub fn maybe_component_value_by_name(&self, entity: Entity, name: &str) -> Option<Value> {
+            self.resource::<WorldIndex>()
+                .lookup_component(&entity, name)
+        }
+
+        #[inline]
         pub fn maybe_entity_by_name(&self, name: &str) -> Option<Entity> {
             if let Some(Value::Entity(entity)) = self.resource::<WorldIndex>().lookup_entity(name) {
                 Some(entity)
@@ -104,9 +114,8 @@ macro_rules! impl_immutable_heap_methods {
         }
 
         #[inline]
-        pub fn maybe_component_value_by_name(&self, entity: Entity, name: &str) -> Option<Value> {
-            self.resource::<WorldIndex>()
-                .lookup_component(&entity, name)
+        pub fn entity(&self, entity: Entity) -> EntityRef {
+            self.world.entity(entity)
         }
 
         #[inline]
@@ -192,6 +201,18 @@ macro_rules! impl_mutable_heap_methods {
         #[inline]
         pub fn get_mut<T: Component + 'static>(&mut self, entity: Entity) -> Mut<T> {
             self.world.get_mut::<T>(entity).expect("entity not found")
+        }
+
+        #[inline]
+        pub fn entity_mut(&mut self, entity: Entity) -> EntityMut {
+            self.world.entity_mut(entity)
+        }
+
+        #[inline]
+        pub fn named_entity_mut(&mut self, entity: Entity) -> NamedEntityMut {
+            NamedEntityMut {
+                entity: self.world.entity_mut(entity),
+            }
         }
 
         #[inline]

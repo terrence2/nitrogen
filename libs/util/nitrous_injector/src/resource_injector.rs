@@ -59,32 +59,32 @@ pub(crate) fn codegen(ir: Ir) -> TokenStream {
     let (impl_generics, _ty_generics, where_clause) = item.generics.split_for_impl();
     let ts2 = quote! {
         impl #impl_generics #ty #where_clause {
-            fn __call_method_inner__(&mut self, entity: ::nitrous::reexport::Entity, name: &str, args: &[::nitrous::Value], heap: ::nitrous::HeapMut) -> ::anyhow::Result<::nitrous::Value> {
+            fn __call_method_inner__(&mut self, entity: ::nitrous::reexport::Entity, name: &str, args: &[::nitrous::Value], heap: ::nitrous::HeapMut) -> ::nitrous::anyhow::Result<::nitrous::Value> {
                 match name {
                     #(#method_arms)*
                     _ => {
-                        log::warn!("Unknown call_method '{}' passed to {}", name, stringify!(#ty));
-                        ::anyhow::bail!("Unknown call_method '{}' passed to {}", name, stringify!(#ty))
+                        ::nitrous::log::warn!("Unknown call_method '{}' passed to {}", name, stringify!(#ty));
+                        ::nitrous::anyhow::bail!("Unknown call_method '{}' passed to {}", name, stringify!(#ty))
                     }
                 }
             }
 
-            fn __get_inner__(&self, entity: ::nitrous::reexport::Entity, name: &str) -> ::anyhow::Result<::nitrous::Value> {
+            fn __get_inner__(&self, entity: ::nitrous::reexport::Entity, name: &str) -> ::nitrous::anyhow::Result<::nitrous::Value> {
                 match name {
                     #(#get_arms)*
                     _ => {
-                        log::warn!("Unknown get '{}' passed to {}", name, stringify!(#ty));
-                        ::anyhow::bail!("Unknown get '{}' passed to {}", name, stringify!(#ty));
+                        ::nitrous::log::warn!("Unknown get '{}' passed to {}", name, stringify!(#ty));
+                        ::nitrous::anyhow::bail!("Unknown get '{}' passed to {}", name, stringify!(#ty));
                     }
                 }
             }
 
-            fn __put_inner__(&mut self, entity: ::nitrous::reexport::Entity, name: &str, value: ::nitrous::Value) -> ::anyhow::Result<()> {
+            fn __put_inner__(&mut self, entity: ::nitrous::reexport::Entity, name: &str, value: ::nitrous::Value) -> ::nitrous::anyhow::Result<()> {
                 match name {
                     #(#put_arms)*
                     _ => {
-                        log::warn!("Unknown put '{}' passed to {}", name, stringify!(#ty));
-                        ::anyhow::bail!("Unknown put '{}' passed to {}", name, stringify!(#ty));
+                        ::nitrous::log::warn!("Unknown put '{}' passed to {}", name, stringify!(#ty));
+                        ::nitrous::anyhow::bail!("Unknown put '{}' passed to {}", name, stringify!(#ty));
                     }
                 }
             }
@@ -93,7 +93,7 @@ pub(crate) fn codegen(ir: Ir) -> TokenStream {
                 vec![#(#names),*]
             }
 
-            fn __show_list__(&self) -> ::anyhow::Result<::nitrous::Value> {
+            fn __show_list__(&self) -> ::nitrous::anyhow::Result<::nitrous::Value> {
                 let items = vec![#(#list_items),*];
                 let out = items.join("\n");
                 Ok(::nitrous::Value::String(out))

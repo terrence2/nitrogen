@@ -1743,6 +1743,7 @@ dependencies = [
  "bevy_ecs",
  "geodesy",
  "nalgebra",
+ "nitrous",
 ]
 
 [[package]]

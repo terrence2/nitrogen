@@ -252,13 +252,13 @@ impl TileSetBuilder {
             match desc.tile_set.unwrap() {
                 GenericTileSet::SphericalHeights(tile_set) => runtime
                     .spawn_named(&make_symbol(desc.prefix))?
-                    .insert_scriptable(tile_set)?,
+                    .insert_named(tile_set)?,
                 GenericTileSet::SphericalNormals(tile_set) => runtime
                     .spawn_named(&make_symbol(desc.prefix))?
-                    .insert_scriptable(tile_set)?,
+                    .insert_named(tile_set)?,
                 GenericTileSet::SphericalColors(tile_set) => runtime
                     .spawn_named(&make_symbol(desc.prefix))?
-                    .insert_scriptable(tile_set)?,
+                    .insert_named(tile_set)?,
             };
         }
         Ok(())

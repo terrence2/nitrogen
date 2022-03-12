@@ -300,9 +300,10 @@ impl ScreenCamera {
 
     pub fn update_frame(&mut self, frame: &WorldSpaceFrame) {
         self.position = *frame.position();
-        self.forward = *frame.forward();
-        self.right = *frame.right();
-        self.up = *frame.up();
+        let basis = frame.basis();
+        self.forward = basis.forward;
+        self.right = basis.right;
+        self.up = -basis.up;
     }
 
     // Apply interpreted inputs from prior stage; apply new world position.
