@@ -19,6 +19,7 @@ use crate::{
 use anyhow::Result;
 use bevy_ecs::{
     prelude::*,
+    query::WorldQuery,
     system::Resource,
     world::{EntityMut, EntityRef},
 };
@@ -261,6 +262,14 @@ macro_rules! impl_mutable_heap_methods {
         ) -> U {
             self.world
                 .resource_scope(|world, t: Mut<T>| f(HeapMut::wrap(world), t))
+        }
+
+        #[inline]
+        pub fn query<Q>(&mut self) -> QueryState<Q, ()>
+        where
+            Q: WorldQuery,
+        {
+            self.world.query::<Q>()
         }
     };
 }
