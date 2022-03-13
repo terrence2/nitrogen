@@ -17,7 +17,7 @@ use crate::{
     herder::{ExitRequest, ScriptCompletions, ScriptHerder, ScriptRunKind},
 };
 use anyhow::Result;
-use bevy_ecs::{prelude::*, system::Resource, world::EntityMut};
+use bevy_ecs::{prelude::*, query::WorldQuery, system::Resource, world::EntityMut};
 use bevy_tasks::TaskPool;
 use nitrous::{Heap, HeapMut, LocalNamespace, NamedEntityMut, NitrousScript, ScriptResource};
 use std::path::PathBuf;
@@ -383,6 +383,14 @@ impl Runtime {
     #[inline]
     pub fn resource_scope<T: Resource, U>(&mut self, f: impl FnOnce(HeapMut, Mut<T>) -> U) -> U {
         self.heap.resource_scope(f)
+    }
+
+    #[inline]
+    pub fn query<Q>(&mut self) -> QueryState<Q, ()>
+    where
+        Q: WorldQuery,
+    {
+        self.heap.query::<Q>()
     }
 }
 
