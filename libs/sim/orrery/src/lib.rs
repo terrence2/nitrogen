@@ -314,7 +314,7 @@ impl Extension for Orrery {
             .add_system(Self::sys_step_time);
         runtime.run_string(
             r#"
-                bindings.bind("mouse2", "orrery.move_sun(pressed)");
+                bindings.bind("+mouse2", "orrery.move_sun(pressed)");
                 bindings.bind("mouseMotion", "orrery.handle_mousemove(dx)");
             "#,
         )?;

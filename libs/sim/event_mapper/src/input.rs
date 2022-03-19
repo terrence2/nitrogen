@@ -300,19 +300,40 @@ impl Input {
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct InputSet {
-    pub keys: SmallVec<[Input; 2]>,
-    pub modifiers: ModifiersState,
+    pub(crate) keys: SmallVec<[Input; 2]>,
+    pub(crate) modifiers: ModifiersState,
+    pub(crate) trigger_on_down: bool,
+    pub(crate) trigger_on_up: bool,
 }
 
 impl InputSet {
     // Parse keysets of the form a+b+c; e.g. LControl+RControl+Space into
     // a discreet keyset.
     //
+    // Prefixing with a - will cause the binding to be called only on keyup.
+    //
+    // Prefixing with a + will cause the binding to fire on both keyup and keydown events.
+    //
     // Note that there is a special case for the 4 modifiers in which we
     // expect to be able to refer to "Control" and not care what key it is.
     // In this case we emit all possible keysets, combinatorially.
     pub fn from_binding(keyset: &str) -> Result<Vec<Self>> {
         let mut out = vec![SmallVec::<[Input; 2]>::new()];
+        let mut trigger_on_down = true;
+        let mut trigger_on_up = false;
+        ensure!(keyset.len() > 0, "must specify a key to bind");
+        let keyset = keyset.trim();
+        let first = keyset.chars().next().unwrap();
+        let keyset = if first == '+' {
+            trigger_on_up = true;
+            &keyset[1..]
+        } else if first == '-' {
+            trigger_on_down = false;
+            trigger_on_up = true;
+            &keyset[1..]
+        } else {
+            keyset
+        };
         for keyname in keyset.split('+') {
             if let Ok(key) = Input::from_binding(keyname) {
                 for tmp in &mut out {
@@ -341,6 +362,8 @@ impl InputSet {
                     modifiers | k.modifier()
                 }),
                 keys: v,
+                trigger_on_down,
+                trigger_on_up,
             })
             .collect::<Vec<_>>())
     }

@@ -77,6 +77,28 @@ impl TextEdit {
         self
     }
 
+    pub fn default_color(&self) -> Color {
+        self.default_color
+    }
+
+    pub fn default_font(&self) -> FontId {
+        self.default_font
+    }
+
+    pub fn default_size(&self) -> Size {
+        self.default_size
+    }
+
+    pub fn set_font_size(&mut self, size: Size) {
+        for line in &mut self.lines {
+            line.set_default_size(size);
+            line.select_all();
+            line.change_size(size);
+            line.select_none();
+        }
+        self.default_size = size;
+    }
+
     pub fn with_text(mut self, text: &str) -> Self {
         self.replace_content(text);
         self

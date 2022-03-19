@@ -249,6 +249,10 @@ impl TextRun {
         self.default_font_id = font_id;
     }
 
+    pub fn default_font(&self) -> FontId {
+        self.default_font_id
+    }
+
     pub fn with_default_size(mut self, size: Size) -> Self {
         self.default_size = size;
         self
@@ -256,6 +260,10 @@ impl TextRun {
 
     pub fn set_default_size(&mut self, size: Size) {
         self.default_size = size;
+    }
+
+    pub fn default_size(&self) -> Size {
+        self.default_size
     }
 
     pub fn from_text(text: &str) -> Self {

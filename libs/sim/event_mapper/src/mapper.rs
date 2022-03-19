@@ -274,8 +274,8 @@ mod test {
             .load_extension::<EventMapper<DemoFocus>>()?;
         runtime.resource_mut::<ScriptHerder>().run_string(
             r#"
-                bindings.bind("w", "player.walk(pressed)");
-                bindings.bind("shift+w", "player.run(pressed)");
+                bindings.bind("+w", "player.walk(pressed)");
+                bindings.bind("+shift+w", "player.run(pressed)");
             "#,
         )?;
         runtime.run_startup();

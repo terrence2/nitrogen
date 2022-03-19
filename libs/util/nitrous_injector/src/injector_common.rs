@@ -155,7 +155,7 @@ fn lower_method_call(name: &str, item: Ident, arg_exprs: &[Expr], ret: RetType) 
                 quote! { #name => { Ok(::nitrous::Value::Integer(self.#item( #(#arg_exprs),* ))) } }
             }
             Scalar::Float => {
-                quote! { #name => { Ok(::nitrous::Value::Float(::ordered_float::OrderedFloat(self.#item( #(#arg_exprs),* )))) } }
+                quote! { #name => { Ok(::nitrous::Value::Float(::nitrous::ordered_float::OrderedFloat(self.#item( #(#arg_exprs),* )))) } }
             }
             Scalar::String => {
                 quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_exprs),* ))) } }
@@ -187,7 +187,7 @@ fn lower_method_call(name: &str, item: Ident, arg_exprs: &[Expr], ret: RetType) 
                 quote! { #name => { Ok(::nitrous::Value::Integer(self.#item( #(#arg_exprs),* )?)) } }
             }
             Scalar::Float => {
-                quote! { #name => { Ok(::nitrous::Value::Float(::ordered_float::OrderedFloat(self.#item( #(#arg_exprs),* )?))) } }
+                quote! { #name => { Ok(::nitrous::Value::Float(::nitrous::ordered_float::OrderedFloat(self.#item( #(#arg_exprs),* )?))) } }
             }
             Scalar::String => {
                 quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_exprs),* )?)) } }

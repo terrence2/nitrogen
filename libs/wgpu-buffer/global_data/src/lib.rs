@@ -169,8 +169,8 @@ impl Extension for GlobalParametersBuffer {
         // TODO:  move to configuration, once that's a thing
         runtime.run_string(
             r#"
-                bindings.bind("LBracket", "globals.decrease_gamma(pressed)");
-                bindings.bind("RBracket", "globals.increase_gamma(pressed)");
+                bindings.bind("LBracket", "globals.decrease_gamma()");
+                bindings.bind("RBracket", "globals.increase_gamma()");
             "#,
         )?;
 
@@ -237,17 +237,13 @@ impl GlobalParametersBuffer {
     }
 
     #[method]
-    pub fn increase_gamma(&mut self, pressed: bool) {
-        if pressed {
-            self.tone_gamma *= 1.1;
-        }
+    pub fn increase_gamma(&mut self) {
+        self.tone_gamma *= 1.1;
     }
 
     #[method]
-    pub fn decrease_gamma(&mut self, pressed: bool) {
-        if pressed {
-            self.tone_gamma /= 1.1;
-        }
+    pub fn decrease_gamma(&mut self) {
+        self.tone_gamma /= 1.1;
     }
 
     #[method]

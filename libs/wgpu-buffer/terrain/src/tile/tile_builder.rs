@@ -131,7 +131,7 @@ pub trait ColorsTileSet: TileSet {
 
 #[derive(Debug)]
 #[allow(clippy::enum_variant_names)]
-enum GenericTileSet {
+pub(crate) enum GenericTileSet {
     SphericalHeights(SphericalHeightTileSet),
     SphericalNormals(SphericalNormalsTileSet),
     SphericalColors(SphericalColorTileSet),
@@ -139,10 +139,10 @@ enum GenericTileSet {
 
 #[derive(Debug)]
 pub(crate) struct TileSetDescriptor {
-    prefix: String,
-    kind: DataSetDataKind,
-    coordinates: DataSetCoordinates,
-    tile_set: Option<GenericTileSet>,
+    pub(crate) prefix: String,
+    pub(crate) kind: DataSetDataKind,
+    pub(crate) coordinates: DataSetCoordinates,
+    pub(crate) tile_set: Option<GenericTileSet>,
 }
 
 impl TileSetDescriptor {
@@ -193,7 +193,7 @@ impl TileSetBuilder {
         accumulate_common_bind_group_layout: &wgpu::BindGroupLayout,
         tile_cache_size: u32,
         catalog: &Catalog,
-        globals_buffer: &GlobalParametersBuffer,
+        globals: &GlobalParametersBuffer,
         gpu: &Gpu,
     ) -> Result<Self> {
         self.descriptors
@@ -218,7 +218,7 @@ impl TileSetBuilder {
                             accumulate_common_bind_group_layout,
                             catalog,
                             &desc.prefix,
-                            globals_buffer,
+                            globals,
                             tile_cache_size,
                             gpu,
                         )
@@ -232,7 +232,7 @@ impl TileSetBuilder {
                             accumulate_common_bind_group_layout,
                             catalog,
                             &desc.prefix,
-                            globals_buffer,
+                            globals,
                             tile_cache_size,
                             gpu,
                         )

@@ -164,13 +164,13 @@ impl Bindings {
         for masked in &masked_chords {
             state.active_chords.remove(masked);
             if let Some(scripts) = self.script_map.get(masked) {
-                self.deactiveate_chord(locals, scripts, herder)?;
+                self.deactiveate_chord(masked, locals, scripts, herder);
             }
         }
 
         // Activate the chord and run the command.
         state.active_chords.insert(chord.to_owned());
-        self.activate_chord(locals, &self.script_map[chord], herder)?;
+        self.activate_chord(chord, locals, &self.script_map[chord], herder);
 
         Ok(())
     }
@@ -189,7 +189,7 @@ impl Bindings {
                 // Note: unlike with press, we do not implicitly filter out keys we don't care about.
                 if let Some(scripts) = self.script_map.get(active_chord) {
                     released_chords.push(active_chord.to_owned());
-                    self.deactiveate_chord(locals, scripts, herder)?;
+                    self.deactiveate_chord(active_chord, locals, scripts, herder);
                 }
             }
         }
@@ -203,7 +203,7 @@ impl Bindings {
             for (chord, scripts) in &self.script_map {
                 if chord.is_subset_of(released_chord) && chord.is_pressed(None, state) {
                     state.active_chords.insert(chord.to_owned());
-                    self.activate_chord(locals, scripts, herder)?;
+                    self.activate_chord(chord, locals, scripts, herder);
                 }
             }
         }
@@ -213,29 +213,35 @@ impl Bindings {
 
     fn activate_chord(
         &self,
+        chord: &InputSet,
         locals: &LocalNamespace,
         scripts: &[NitrousScript],
         herder: &mut ScriptHerder,
-    ) -> Result<()> {
+    ) {
+        if !chord.trigger_on_down {
+            return;
+        }
         for script in scripts {
             let mut locals = locals.to_owned();
             locals.put("pressed", Value::True());
             herder.run_binding(locals, script);
         }
-        Ok(())
     }
 
     fn deactiveate_chord(
         &self,
+        chord: &InputSet,
         locals: &LocalNamespace,
         scripts: &[NitrousScript],
         herder: &mut ScriptHerder,
-    ) -> Result<()> {
+    ) {
+        if !chord.trigger_on_up {
+            return;
+        }
         for script in scripts {
             let mut locals = locals.to_owned();
             locals.put("pressed", Value::False());
             herder.run_binding(locals, script);
         }
-        Ok(())
     }
 }
