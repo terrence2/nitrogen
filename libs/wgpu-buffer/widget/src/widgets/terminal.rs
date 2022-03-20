@@ -365,6 +365,9 @@ impl Terminal {
         let screen = &mut self.output.write();
         println!("{}", line);
         screen.append_line(line);
+        if screen.line_count() > 80 {
+            screen.remove_first_line();
+        }
     }
 
     pub fn report_script_completions(&self, completions: &[ScriptCompletion]) {
