@@ -26,6 +26,7 @@ use camera::ScreenCamera;
 use geodesy::{Cartesian, GeoCenter, Graticule};
 use gpu::Gpu;
 use nalgebra::{Matrix4, Point3};
+use shader_shared::DrawIndexedIndirect;
 use static_assertions::{assert_eq_align, assert_eq_size};
 use std::{f64::consts::FRAC_PI_2, fmt, mem, num::NonZeroU64, ops::Range, sync::Arc};
 use zerocopy::{AsBytes, FromBytes};
@@ -98,6 +99,9 @@ pub(crate) struct PatchManager {
     wireframe_index_ranges: Vec<Range<u32>>,
     tristrip_index_buffer: wgpu::Buffer,
     tristrip_index_ranges: Vec<Range<u32>>,
+
+    // Indirect command builder and target buffer
+    indirect_commands: Vec<DrawIndexedIndirect>,
 }
 
 impl fmt::Debug for PatchManager {
@@ -448,6 +452,8 @@ impl PatchManager {
             .map(|&winding| get_tri_strip_index_range(max_subdivisions, winding))
             .collect::<Vec<_>>();
 
+        let indirect_commands = Vec::with_capacity(desired_patch_count);
+
         let live_patches = Vec::with_capacity(desired_patch_count);
         let live_vertices = Vec::with_capacity(3 * desired_patch_count);
 
@@ -470,6 +476,7 @@ impl PatchManager {
             wireframe_index_ranges,
             tristrip_index_buffer,
             tristrip_index_ranges,
+            indirect_commands,
         })
     }
 
@@ -510,14 +517,25 @@ impl PatchManager {
         assert!(self.live_patches.len() <= self.desired_patch_count);
 
         // Build CPU vertices for upload. Make sure to track visibility for our tile loader.
+        self.indirect_commands.clear();
         self.live_vertices.clear();
         let scale = Matrix4::new_scaling(1_000.0);
         let view = camera.view::<Kilometers>();
-        for (offset, (i, _)) in self.live_patches.iter().enumerate() {
+        for (offset, (i, winding)) in self.live_patches.iter().enumerate() {
             if offset >= self.desired_patch_count {
                 continue;
             }
             let patch = self.patch_tree.get_patch(*i);
+            let draw_range = self.tristrip_index_range(*winding);
+            let base_vertex = self.patch_vertex_buffer_offset(offset as i32);
+
+            self.indirect_commands.push(DrawIndexedIndirect {
+                vertex_count: draw_range.end - draw_range.start,
+                instance_count: 1,
+                base_index: draw_range.start,
+                vertex_offset: base_vertex,
+                base_instance: 0,
+            });
 
             // Points in geocenter KM f64 for precision reasons.
             let [pw0, pw1, pw2] = patch.points();
@@ -661,5 +679,9 @@ impl PatchManager {
 
     pub fn tristrip_index_range(&self, winding: PatchWinding) -> Range<u32> {
         self.tristrip_index_ranges[winding.index()].clone()
+    }
+
+    pub fn draw_indirect_commands(&self) -> &[DrawIndexedIndirect] {
+        &self.indirect_commands
     }
 }

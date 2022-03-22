@@ -2697,6 +2697,9 @@ dependencies = [
 [[package]]
 name = "shader_shared"
 version = "0.0.0"
+dependencies = [
+ "zerocopy",
+]
 
 [[package]]
 name = "shaderc"

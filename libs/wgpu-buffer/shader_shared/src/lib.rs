@@ -12,6 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use zerocopy::{AsBytes, FromBytes};
 
 // Our shared shader includes expect certain bind groups to be in certain spots.
 // Note that these are not unique because we need to stay under 4 and thus re-use heavily.
@@ -46,4 +47,15 @@ impl Group {
             Self::OffScreenWorld => 2,
         }
     }
+}
+
+/// As per the documentation on draw_indexed_indirect
+#[repr(C)]
+#[derive(AsBytes, FromBytes, Copy, Clone, Default)]
+pub struct DrawIndexedIndirect {
+    pub vertex_count: u32,   // The number of vertices to draw.
+    pub instance_count: u32, // The number of instances to draw.
+    pub base_index: u32,     // The base index within the index buffer.
+    pub vertex_offset: i32, // The value added to the vertex index before indexing into the vertex buffer.
+    pub base_instance: u32, // The instance ID of the first instance to draw.
 }

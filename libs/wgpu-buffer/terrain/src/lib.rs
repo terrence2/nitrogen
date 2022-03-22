@@ -1011,16 +1011,16 @@ impl TerrainBuffer {
             self.patch_manager.tristrip_index_buffer(),
             wgpu::IndexFormat::Uint32,
         );
-        // FIXME: draw this indirect
-        for i in 0..self.patch_manager.num_patches() {
-            let winding = self.patch_manager.patch_winding(i);
-            let base_vertex = self.patch_manager.patch_vertex_buffer_offset(i);
+
+        //rpass.draw_indexed_indirect(self.patch_manager.draw_indirect_buffer(), 0);
+        for cmd in self.patch_manager.draw_indirect_commands() {
             rpass.draw_indexed(
-                self.patch_manager.tristrip_index_range(winding),
-                base_vertex,
-                0..1,
-            );
+                cmd.base_index..cmd.base_index + cmd.vertex_count,
+                cmd.vertex_offset,
+                cmd.base_instance..cmd.base_instance + cmd.instance_count,
+            )
         }
+
         rpass
     }
 
