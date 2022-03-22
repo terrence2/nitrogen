@@ -1012,14 +1012,18 @@ impl TerrainBuffer {
             wgpu::IndexFormat::Uint32,
         );
 
-        //rpass.draw_indexed_indirect(self.patch_manager.draw_indirect_buffer(), 0);
-        for cmd in self.patch_manager.draw_indirect_commands() {
-            rpass.draw_indexed(
-                cmd.base_index..cmd.base_index + cmd.vertex_count,
-                cmd.vertex_offset,
-                cmd.base_instance..cmd.base_instance + cmd.instance_count,
-            )
-        }
+        rpass.multi_draw_indexed_indirect(
+            self.patch_manager.draw_indirect_buffer(),
+            0,
+            self.patch_manager.num_patches() as u32,
+        );
+        // for cmd in self.patch_manager.draw_indirect_commands() {
+        //     rpass.draw_indexed(
+        //         cmd.base_index..cmd.base_index + cmd.vertex_count,
+        //         cmd.vertex_offset,
+        //         cmd.base_instance..cmd.base_instance + cmd.instance_count,
+        //     )
+        // }
 
         rpass
     }

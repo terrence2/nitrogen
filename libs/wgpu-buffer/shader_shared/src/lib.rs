@@ -53,7 +53,7 @@ impl Group {
 #[repr(C)]
 #[derive(AsBytes, FromBytes, Copy, Clone, Default)]
 pub struct DrawIndexedIndirect {
-    pub vertex_count: u32,   // The number of vertices to draw.
+    pub index_count: u32,    // The number of vertices to draw.
     pub instance_count: u32, // The number of instances to draw.
     pub base_index: u32,     // The base index within the index buffer.
     pub vertex_offset: i32, // The value added to the vertex index before indexing into the vertex buffer.

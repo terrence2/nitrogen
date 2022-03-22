@@ -102,6 +102,7 @@ pub(crate) struct PatchManager {
 
     // Indirect command builder and target buffer
     indirect_commands: Vec<DrawIndexedIndirect>,
+    indirect_buffer: wgpu::Buffer,
 }
 
 impl fmt::Debug for PatchManager {
@@ -453,6 +454,14 @@ impl PatchManager {
             .collect::<Vec<_>>();
 
         let indirect_commands = Vec::with_capacity(desired_patch_count);
+        let indirect_buffer_size =
+            (mem::size_of::<DrawIndexedIndirect>() * desired_patch_count) as wgpu::BufferAddress;
+        let indirect_buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
+            label: Some("terrain-geo-indirect-buffer"),
+            size: indirect_buffer_size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::INDIRECT,
+            mapped_at_creation: false,
+        });
 
         let live_patches = Vec::with_capacity(desired_patch_count);
         let live_vertices = Vec::with_capacity(3 * desired_patch_count);
@@ -477,6 +486,7 @@ impl PatchManager {
             tristrip_index_buffer,
             tristrip_index_ranges,
             indirect_commands,
+            indirect_buffer,
         })
     }
 
@@ -526,11 +536,11 @@ impl PatchManager {
                 continue;
             }
             let patch = self.patch_tree.get_patch(*i);
+
             let draw_range = self.tristrip_index_range(*winding);
             let base_vertex = self.patch_vertex_buffer_offset(offset as i32);
-
             self.indirect_commands.push(DrawIndexedIndirect {
-                vertex_count: draw_range.end - draw_range.start,
+                index_count: draw_range.end - draw_range.start,
                 instance_count: 1,
                 base_index: draw_range.start,
                 vertex_offset: base_vertex,
@@ -584,6 +594,9 @@ impl PatchManager {
             self.live_vertices
                 .push(TerrainUploadVertex::new(&pv2, &nv2.xyz(), &g2));
         }
+        while self.indirect_commands.len() < self.desired_patch_count {
+            self.indirect_commands.push(DrawIndexedIndirect::default());
+        }
         while self.live_vertices.len() < 3 * self.desired_patch_count {
             self.live_vertices.push(TerrainUploadVertex::empty());
         }
@@ -599,6 +612,14 @@ impl PatchManager {
             self.patch_upload_buffer.clone(),
             encoder,
         );
+
+        // Upload the indirect buffer for drawing the eventual patches
+        gpu.upload_slice_to_owned(
+            "terrain-geo-indirect-upload-buffer",
+            &self.indirect_commands,
+            &self.indirect_buffer,
+            encoder,
+        )
     }
 
     pub fn tessellate(&self, encoder: &mut wgpu::CommandEncoder) {
@@ -683,5 +704,9 @@ impl PatchManager {
 
     pub fn draw_indirect_commands(&self) -> &[DrawIndexedIndirect] {
         &self.indirect_commands
+    }
+
+    pub fn draw_indirect_buffer(&self) -> &wgpu::Buffer {
+        &self.indirect_buffer
     }
 }
