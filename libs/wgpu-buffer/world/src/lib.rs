@@ -104,8 +104,8 @@ impl Extension for WorldRenderPass {
         // TODO: figure out debug bindings
         runtime.run_string(
             r#"
-                bindings.bind("w", "world.toggle_wireframe_mode(pressed)");
-                bindings.bind("r", "world.change_debug_mode(pressed)");
+                bindings.bind("w", "world.toggle_wireframe_mode()");
+                bindings.bind("r", "world.change_debug_mode()");
             "#,
         )?;
 
@@ -486,25 +486,21 @@ impl WorldRenderPass {
     }
 
     #[method]
-    pub fn toggle_wireframe_mode(&mut self, pressed: bool) {
-        if pressed {
-            self.show_wireframe = !self.show_wireframe;
-        }
+    pub fn toggle_wireframe_mode(&mut self) {
+        self.show_wireframe = !self.show_wireframe;
     }
 
     #[method]
-    pub fn change_debug_mode(&mut self, pressed: bool) {
-        if pressed {
-            self.debug_mode = match self.debug_mode {
-                DebugMode::None => DebugMode::Deferred,
-                DebugMode::Deferred => DebugMode::Depth,
-                DebugMode::Depth => DebugMode::Color,
-                DebugMode::Color => DebugMode::NormalLocal,
-                DebugMode::NormalLocal => DebugMode::NormalGlobal,
-                DebugMode::NormalGlobal => DebugMode::None,
-            };
-            println!("Debug Mode is now: {:?}", self.debug_mode);
-        }
+    pub fn change_debug_mode(&mut self) {
+        self.debug_mode = match self.debug_mode {
+            DebugMode::None => DebugMode::Deferred,
+            DebugMode::Deferred => DebugMode::Depth,
+            DebugMode::Depth => DebugMode::Color,
+            DebugMode::Color => DebugMode::NormalLocal,
+            DebugMode::NormalLocal => DebugMode::NormalGlobal,
+            DebugMode::NormalGlobal => DebugMode::None,
+        };
+        println!("Debug Mode is now: {:?}", self.debug_mode);
     }
 
     #[method]

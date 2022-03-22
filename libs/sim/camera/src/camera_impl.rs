@@ -38,17 +38,20 @@ pub enum CameraInputStep {
 pub struct CameraSystem;
 impl Extension for CameraSystem {
     fn init(runtime: &mut Runtime) -> Result<()> {
-        runtime.insert_resource(ScreenCamera::new(
-            radians!(PI / 2.0),
-            runtime.resource::<Window>().render_aspect_ratio(),
-            meters!(0.5),
-        ));
+        runtime.insert_named_resource(
+            "camera",
+            ScreenCamera::new(
+                radians!(PI / 2.0),
+                runtime.resource::<Window>().render_aspect_ratio(),
+                meters!(0.5),
+            ),
+        );
         runtime.run_string(
             r#"
-                bindings.bind("PageUp", "@player.camera.increase_fov(pressed)");
-                bindings.bind("PageDown", "@player.camera.decrease_fov(pressed)");
-                bindings.bind("Shift+LBracket", "@player.camera.decrease_exposure(pressed)");
-                bindings.bind("Shift+RBracket", "@player.camera.increase_exposure(pressed)");
+                bindings.bind("+PageUp", "camera.increase_fov(pressed)");
+                bindings.bind("+PageDown", "camera.decrease_fov(pressed)");
+                bindings.bind("Shift+LBracket", "camera.decrease_exposure()");
+                bindings.bind("Shift+RBracket", "camera.increase_exposure()");
             "#,
         )?;
         runtime.sim_stage_mut(SimStage::PostInput).add_system(
@@ -152,17 +155,13 @@ impl ScreenCamera {
     }
 
     #[method]
-    pub fn increase_exposure(&mut self, pressed: bool) {
-        if pressed {
-            self.exposure *= 1.1;
-        }
+    pub fn increase_exposure(&mut self) {
+        self.exposure *= 1.1;
     }
 
     #[method]
-    pub fn decrease_exposure(&mut self, pressed: bool) {
-        if pressed {
-            self.exposure /= 1.1;
-        }
+    pub fn decrease_exposure(&mut self) {
+        self.exposure /= 1.1;
     }
 
     pub fn fov_y(&self) -> Angle<Radians> {

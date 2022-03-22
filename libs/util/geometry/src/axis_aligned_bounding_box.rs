@@ -12,7 +12,11 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use std::{fmt::Debug, ops::Sub};
+use num_traits::cast::FromPrimitive;
+use std::{
+    fmt::{Debug, Display},
+    ops::Sub,
+};
 
 #[derive(Clone, Debug)]
 pub struct Aabb<T, const N: usize> {
@@ -20,7 +24,18 @@ pub struct Aabb<T, const N: usize> {
     hi: [T; N],
 }
 
-impl<T: Copy + Debug + PartialOrd + Sub<Output = T>, const N: usize> Aabb<T, N> {
+impl<T, const N: usize> Aabb<T, N>
+where
+    T: Copy
+        + Clone
+        + Debug
+        + Display
+        + PartialEq
+        + PartialOrd
+        + Sub<Output = T>
+        + FromPrimitive
+        + 'static,
+{
     pub fn new(lo: [T; N], hi: [T; N]) -> Self {
         assert!((0..N).all(|i| lo[i] <= hi[i]));
         Self { lo, hi }

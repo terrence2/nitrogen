@@ -58,7 +58,7 @@ impl Terminal {
     const WIDTH: Size = Size::from_percent(100.);
     const HEIGHT: Size = Size::from_percent(40.);
 
-    pub fn new(font_context: &FontContext, state_dir: &Path) -> Result<Self> {
+    pub fn new(font_context: &mut FontContext, state_dir: &Path, gpu: &Gpu) -> Result<Self> {
         let output = TextEdit::new("")
             .with_default_font(font_context.font_id_for_name("dejavu-mono"))
             .with_default_color(Color::Green)
@@ -67,7 +67,6 @@ impl Terminal {
         let edit = LineEdit::empty()
             .with_default_font(font_context.font_id_for_name("mono"))
             .with_default_color(Color::White)
-            .with_default_size(Size::from_pts(12.0))
             .with_text("help()")
             .wrapped();
         edit.write().line_mut().select_all();
@@ -77,6 +76,13 @@ impl Terminal {
             .with_overridden_extent(Extent::new(Self::WIDTH, Self::HEIGHT))
             .with_fill(0)
             .wrapped();
+
+        font_context.cache_ascii_glyphs(output.read().default_font(), AbsSize::Pts(12.0), gpu)?;
+        font_context.cache_ascii_glyphs(
+            edit.read().line().default_font(),
+            AbsSize::Pts(12.0),
+            gpu,
+        )?;
 
         // Load command history from state dir
         let mut history_path = state_dir.to_owned();
@@ -109,6 +115,10 @@ impl Terminal {
             history_file,
             history_cursor,
         })
+    }
+
+    pub fn set_font_size(&mut self, size: AbsSize) {
+        self.output.write().set_font_size(size.into());
     }
 
     fn add_command_to_history(&mut self, command: &str) -> Result<()> {
@@ -355,6 +365,9 @@ impl Terminal {
         let screen = &mut self.output.write();
         println!("{}", line);
         screen.append_line(line);
+        if screen.line_count() > 80 {
+            screen.remove_first_line();
+        }
     }
 
     pub fn report_script_completions(&self, completions: &[ScriptCompletion]) {

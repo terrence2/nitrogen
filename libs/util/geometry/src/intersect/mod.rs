@@ -14,6 +14,8 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 mod circle_plane;
 mod sphere_plane;
+mod sphere_ray;
 
 pub use circle_plane::{circle_vs_plane, CirclePlaneIntersection};
 pub use sphere_plane::{sphere_vs_plane, PlaneSide, SpherePlaneIntersection};
+pub use sphere_ray::sphere_vs_ray;

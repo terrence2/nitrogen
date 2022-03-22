@@ -12,21 +12,31 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use nalgebra::{Point3, RealField, Vector3};
+use num_traits::cast::FromPrimitive;
+use std::fmt::{Debug, Display};
 
-pub mod algorithm;
-mod arrow;
-mod axis_aligned_bounding_box;
-mod circle;
-mod ico_sphere;
-pub mod intersect;
-mod plane;
-mod ray;
-mod sphere;
+pub struct Ray<T>
+where
+    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
+{
+    origin: Point3<T>,
+    direction: Vector3<T>,
+}
 
-pub use arrow::Arrow;
-pub use axis_aligned_bounding_box::Aabb;
-pub use circle::Circle;
-pub use ico_sphere::IcoSphere;
-pub use plane::Plane;
-pub use ray::Ray;
-pub use sphere::Sphere;
+impl<T> Ray<T>
+where
+    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
+{
+    pub fn new(origin: Point3<T>, direction: Vector3<T>) -> Self {
+        Self { origin, direction }
+    }
+
+    pub fn origin(&self) -> &Point3<T> {
+        &self.origin
+    }
+
+    pub fn direction(&self) -> &Vector3<T> {
+        &self.direction
+    }
+}

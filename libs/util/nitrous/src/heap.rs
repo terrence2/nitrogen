@@ -24,6 +24,15 @@ use bevy_ecs::{
     world::{EntityMut, EntityRef},
 };
 
+#[derive(Component, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct EntityName(String);
+
+impl EntityName {
+    pub fn name(&self) -> &str {
+        &self.0
+    }
+}
+
 /// Wraps an EntityMut to provide named creation methods
 pub struct NamedEntityMut<'w> {
     entity: EntityMut<'w>,
@@ -185,9 +194,12 @@ macro_rules! impl_mutable_heap_methods {
         where
             S: Into<String>,
         {
+            let name = name.into();
+
             // World is borrowed mutably here, so we can't reborrow anything in either
             // world or self, annoyingly.
             let mut ent_mut = self.world.spawn();
+            ent_mut.insert(EntityName(name.clone()));
             let entity = ent_mut.id();
 
             // But we can go through ent_mut to get the already-borrowed world, as long as

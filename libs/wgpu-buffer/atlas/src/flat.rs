@@ -644,7 +644,7 @@ where
 
         // Set up texture blits
         self.unaligned_blit.clear();
-        for item in self.blit_list.iter() {
+        for item in self.blit_list.drain(..) {
             let img_extent = wgpu::Extent3d {
                 width: item.width,
                 height: item.height,
@@ -805,7 +805,7 @@ where
         let mut prior = &self.columns[0];
         for c in self.columns.iter().skip(1) {
             assert!(c.x_end > prior.x_end);
-            assert!(c.x_end <= self.width);
+            assert!(c.x_end <= self.width, "{} <= {}", c.x_end, self.width);
             assert!(c.fill_height <= self.height);
             prior = c;
         }

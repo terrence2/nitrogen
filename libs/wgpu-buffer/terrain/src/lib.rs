@@ -199,7 +199,7 @@ impl Extension for TerrainBuffer {
         runtime.insert_named_resource("terrain", terrain);
         runtime.run_string(
             r#"
-                bindings.bind("p", "terrain.toggle_pin_camera(pressed)");
+                bindings.bind("p", "terrain.toggle_pin_camera()");
             "#,
         )?;
 
@@ -280,7 +280,7 @@ impl TerrainBuffer {
     pub fn new(
         cpu_detail_level: CpuDetailLevel,
         gpu_detail_level: GpuDetailLevel,
-        globals_buffer: &GlobalParametersBuffer,
+        globals: &GlobalParametersBuffer,
         gpu: &Gpu,
     ) -> Result<Self> {
         let cpu_detail = CpuDetail::for_level(cpu_detail_level);
@@ -302,7 +302,7 @@ impl TerrainBuffer {
                         &wgpu::PipelineLayoutDescriptor {
                             label: Some("deferred-texture-pipeline-layout"),
                             push_constant_ranges: &[],
-                            bind_group_layouts: &[globals_buffer.bind_group_layout()],
+                            bind_group_layouts: &[globals.bind_group_layout()],
                         },
                     )),
                     vertex: wgpu::VertexState {
@@ -525,7 +525,7 @@ impl TerrainBuffer {
                             label: Some("terrain-accumulate-pipeline-layout"),
                             push_constant_ranges: &[],
                             bind_group_layouts: &[
-                                globals_buffer.bind_group_layout(),
+                                globals.bind_group_layout(),
                                 &accumulate_common_bind_group_layout,
                             ],
                         },
@@ -583,10 +583,8 @@ impl TerrainBuffer {
     }
 
     #[method]
-    fn toggle_pin_camera(&mut self, pressed: bool) {
-        if pressed {
-            self.toggle_pin_camera = true;
-        }
+    fn toggle_pin_camera(&mut self) {
+        self.toggle_pin_camera = true;
     }
 
     pub fn sys_handle_display_config_change(

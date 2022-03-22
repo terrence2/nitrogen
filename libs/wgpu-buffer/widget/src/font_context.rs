@@ -165,6 +165,13 @@ impl FontContext {
         Ok(frame)
     }
 
+    pub fn cache_ascii_glyphs(&mut self, fid: FontId, scale: AbsSize, gpu: &Gpu) -> Result<()> {
+        for c in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789`-=[[]\\;',./!@#$%^&*()_+{}|:\"<>?".chars() {
+            self.load_glyph(fid, c, scale, gpu)?;
+        }
+        Ok(())
+    }
+
     pub fn font_id_for_name(&self, font_name: &str) -> FontId {
         if let Some(fid) = self.name_manager.get_by_name(font_name) {
             return fid;
@@ -256,9 +263,10 @@ impl FontContext {
         let phys_w = win.width() as f32;
 
         // The font system expects scales in pixels.
-        let scale_px = (span.size() * win.dpi_scale_factor() as f32)
-            .as_abs(win, ScreenDir::Horizontal)
-            .ceil();
+        // let scale_px = (span.size() * win.dpi_scale_factor() as f32)
+        //     .as_abs(win, ScreenDir::Horizontal)
+        //     .ceil();
+        let scale_px = span.size().as_abs(win, ScreenDir::Horizontal).ceil();
 
         // Font rendering is based around the baseline. We want it based around the top-left
         // corner instead, so move down by the ascent.

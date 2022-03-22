@@ -26,7 +26,7 @@ use gpu::Gpu;
 use input::InputEvent;
 use parking_lot::RwLock;
 use runtime::ScriptHerder;
-use std::{sync::Arc, time::Instant};
+use std::{collections::VecDeque, sync::Arc, time::Instant};
 use window::{
     size::{AbsSize, LeftBound, Size},
     Window,
@@ -34,7 +34,7 @@ use window::{
 
 #[derive(Debug)]
 pub struct TextEdit {
-    lines: Vec<TextRun>,
+    lines: VecDeque<TextRun>,
     read_only: bool,
     default_color: Color,
     default_font: FontId,
@@ -48,7 +48,7 @@ pub struct TextEdit {
 impl TextEdit {
     pub fn new(markup: &str) -> Self {
         let mut obj = Self {
-            lines: vec![],
+            lines: VecDeque::new(),
             read_only: true, // NOTE: writable text edits not supported yet.
             default_color: Color::Black,
             default_font: SANS_FONT_ID,
@@ -77,6 +77,28 @@ impl TextEdit {
         self
     }
 
+    pub fn default_color(&self) -> Color {
+        self.default_color
+    }
+
+    pub fn default_font(&self) -> FontId {
+        self.default_font
+    }
+
+    pub fn default_size(&self) -> Size {
+        self.default_size
+    }
+
+    pub fn set_font_size(&mut self, size: Size) {
+        for line in &mut self.lines {
+            line.set_default_size(size);
+            line.select_all();
+            line.change_size(size);
+            line.select_none();
+        }
+        self.default_size = size;
+    }
+
     pub fn with_text(mut self, text: &str) -> Self {
         self.replace_content(text);
         self
@@ -90,16 +112,24 @@ impl TextEdit {
         let lines = markup
             .split('\n')
             .map(|markup| self.make_run(markup))
-            .collect::<Vec<TextRun>>();
+            .collect::<VecDeque<TextRun>>();
         self.lines = lines;
     }
 
     pub fn append_line(&mut self, markup: &str) {
-        self.lines.push(self.make_run(markup));
+        self.lines.push_back(self.make_run(markup));
     }
 
     pub fn last_line_mut(&mut self) -> Option<&mut TextRun> {
-        self.lines.last_mut()
+        self.lines.back_mut()
+    }
+
+    pub fn line_count(&self) -> usize {
+        self.lines.len()
+    }
+
+    pub fn remove_first_line(&mut self) {
+        self.lines.remove(0);
     }
 
     fn make_run(&self, text: &str) -> TextRun {

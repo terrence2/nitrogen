@@ -28,7 +28,7 @@ pub mod reexport {
 pub use crate::{
     ast::NitrousAst,
     exec::{ExecutionContext, NitrousExecutor, YieldState},
-    heap::{Heap, HeapMut, HeapRef, NamedEntityMut},
+    heap::{EntityName, Heap, HeapMut, HeapRef, NamedEntityMut},
     lower::{Instr, NitrousCode},
     memory::{LocalNamespace, ScriptComponent, ScriptResource, WorldIndex},
     script::NitrousScript,
@@ -41,6 +41,7 @@ pub use nitrous_injector::{
 // Injector deps
 pub use anyhow;
 pub use log;
+pub use ordered_float;
 
 pub fn make_symbol<S: Into<String>>(name: S) -> String {
     let mut s = name.into();

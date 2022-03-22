@@ -270,7 +270,7 @@ where
                 });
 
         let root = FloatBox::new();
-        let terminal = Terminal::new(&paint_context.font_context, state_dir)?
+        let terminal = Terminal::new(&mut paint_context.font_context, state_dir, gpu)?
             .with_visible(false)
             .wrapped();
         root.write().add_child("terminal", terminal.clone());
@@ -330,6 +330,13 @@ where
         self.paint_context.dump_glyphs()
     }
 
+    #[method]
+    pub fn set_terminal_font_size(&mut self, size: i64) {
+        self.terminal
+            .write()
+            .set_font_size(AbsSize::Pts(size as f32))
+    }
+
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.bind_group_layout
     }
@@ -361,10 +368,8 @@ where
     }
 
     #[method]
-    pub fn toggle_terminal(&mut self, pressed: bool) {
-        if pressed {
-            self.request_toggle_terminal = true;
-        }
+    pub fn toggle_terminal(&mut self) {
+        self.request_toggle_terminal = true;
     }
 
     // Since terminal-active mode consumes all keys instead of our bindings,
@@ -379,7 +384,7 @@ where
         {
             if self.show_terminal && *virtual_keycode == VirtualKeyCode::Escape
                 || *virtual_keycode == VirtualKeyCode::Grave
-                    && *modifiers_state == ModifiersState::SHIFT
+                    && *modifiers_state == ModifiersState::CTRL
                     && *press_state == ElementState::Pressed
             {
                 return true;
