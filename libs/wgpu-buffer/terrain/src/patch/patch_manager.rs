@@ -14,7 +14,10 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     patch::{PatchIndex, PatchTree, PatchWinding, TerrainUploadVertex, TerrainVertex},
-    tables::{get_index_dependency_lut, get_tri_strip_index_buffer, get_wireframe_index_buffer},
+    tables::{
+        get_index_dependency_lut, get_tri_strip_index_range, get_tri_strip_indices,
+        get_wireframe_index_buffer,
+    },
     GpuDetail, VisiblePatch,
 };
 use absolute_unit::{degrees, meters, radians, Angle, Kilometers, Radians};
@@ -93,7 +96,7 @@ pub(crate) struct PatchManager {
     // Index buffers for each patch size and winding.
     wireframe_index_buffers: Vec<wgpu::Buffer>,
     wireframe_index_ranges: Vec<Range<u32>>,
-    tristrip_index_buffers: Vec<wgpu::Buffer>,
+    tristrip_index_buffer: wgpu::Buffer,
     tristrip_index_ranges: Vec<Range<u32>>,
 }
 
@@ -434,22 +437,15 @@ impl PatchManager {
             .collect::<Vec<_>>();
 
         // Create each of the 4 tristrip index buffers at this subdivision level.
-        let tristrip_index_buffers = PatchWinding::all_windings()
-            .iter()
-            .map(|&winding| {
-                gpu.push_slice(
-                    "terrain-geo-tristrip-indices-SUB",
-                    get_tri_strip_index_buffer(max_subdivisions, winding),
-                    wgpu::BufferUsages::INDEX,
-                )
-            })
-            .collect::<Vec<_>>();
+        let tristrip_index_buffer = gpu.push_slice(
+            "terrain-geo-tristrip-indices",
+            get_tri_strip_indices(),
+            wgpu::BufferUsages::INDEX,
+        );
 
         let tristrip_index_ranges = PatchWinding::all_windings()
             .iter()
-            .map(|&winding| {
-                0u32..get_tri_strip_index_buffer(max_subdivisions, winding).len() as u32
-            })
+            .map(|&winding| get_tri_strip_index_range(max_subdivisions, winding))
             .collect::<Vec<_>>();
 
         let live_patches = Vec::with_capacity(desired_patch_count);
@@ -472,7 +468,7 @@ impl PatchManager {
             target_vertex_buffer,
             wireframe_index_buffers,
             wireframe_index_ranges,
-            tristrip_index_buffers,
+            tristrip_index_buffer,
             tristrip_index_ranges,
         })
     }
@@ -659,8 +655,8 @@ impl PatchManager {
         self.wireframe_index_ranges[winding.index()].clone()
     }
 
-    pub fn tristrip_index_buffer(&self, winding: PatchWinding) -> wgpu::BufferSlice {
-        self.tristrip_index_buffers[winding.index()].slice(..)
+    pub fn tristrip_index_buffer(&self) -> wgpu::BufferSlice {
+        self.tristrip_index_buffer.slice(..)
     }
 
     pub fn tristrip_index_range(&self, winding: PatchWinding) -> Range<u32> {

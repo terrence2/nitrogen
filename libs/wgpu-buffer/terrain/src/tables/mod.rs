@@ -17,6 +17,7 @@ mod tri_strip_indices;
 mod wireframe_indices;
 
 pub(crate) use crate::tables::{
-    index_dependency_lut::get_index_dependency_lut, tri_strip_indices::get_tri_strip_index_buffer,
+    index_dependency_lut::get_index_dependency_lut,
+    tri_strip_indices::{get_tri_strip_index_range, get_tri_strip_indices},
     wireframe_indices::get_wireframe_index_buffer,
 };

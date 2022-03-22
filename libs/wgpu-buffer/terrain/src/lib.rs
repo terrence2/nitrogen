@@ -1007,14 +1007,14 @@ impl TerrainBuffer {
         rpass.set_pipeline(&self.deferred_texture_pipeline);
         rpass.set_bind_group(Group::Globals.index(), globals_buffer.bind_group(), &[]);
         rpass.set_vertex_buffer(0, self.patch_manager.vertex_buffer());
+        rpass.set_index_buffer(
+            self.patch_manager.tristrip_index_buffer(),
+            wgpu::IndexFormat::Uint32,
+        );
         // FIXME: draw this indirect
         for i in 0..self.patch_manager.num_patches() {
             let winding = self.patch_manager.patch_winding(i);
             let base_vertex = self.patch_manager.patch_vertex_buffer_offset(i);
-            rpass.set_index_buffer(
-                self.patch_manager.tristrip_index_buffer(winding),
-                wgpu::IndexFormat::Uint32,
-            );
             rpass.draw_indexed(
                 self.patch_manager.tristrip_index_range(winding),
                 base_vertex,
