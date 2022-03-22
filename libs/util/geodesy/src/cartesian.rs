@@ -48,11 +48,7 @@ where
     }
 
     pub fn convert<UnitB: LengthUnit>(&self) -> Cartesian<Origin, UnitB> {
-        Cartesian::new(
-            self.coords[0].into(),
-            self.coords[1].into(),
-            self.coords[2].into(),
-        )
+        Cartesian::new(self.coords[0], self.coords[1], self.coords[2])
     }
 
     pub fn vec64(&self) -> Vector3<f64> {

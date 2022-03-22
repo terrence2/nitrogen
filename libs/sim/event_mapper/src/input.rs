@@ -321,7 +321,7 @@ impl InputSet {
         let mut out = vec![SmallVec::<[Input; 2]>::new()];
         let mut trigger_on_down = true;
         let mut trigger_on_up = false;
-        ensure!(keyset.len() > 0, "must specify a key to bind");
+        ensure!(!keyset.is_empty(), "must specify a key to bind");
         let keyset = keyset.trim();
         let first = keyset.chars().next().unwrap();
         let keyset = if first == '+' {
