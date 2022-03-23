@@ -46,12 +46,9 @@ pub enum ShutdownStage {
 /// a handful of game related resources, rather than communicating with the GPU.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, StageLabel)]
 pub enum SimStage {
-    /// Apply delta-t from TimeStep to whatever systems want to track time.
-    TimeStep,
+    Main,
     /// Consume any input that has accumulated.
     ReadInput,
-    /// Run anything that should run with last frame's inputs. TODO: necessary?
-    PreInput,
     /// Use the input event vec in any systems that need to.
     HandleInput,
     /// Runs after input is processed, with new values.
@@ -120,8 +117,7 @@ impl Default for Runtime {
             .with_stage(StartupStage::PostScript, SystemStage::parallel());
 
         let sim_schedule = Schedule::default()
-            .with_stage(SimStage::TimeStep, SystemStage::parallel())
-            .with_stage(SimStage::PreInput, SystemStage::parallel())
+            .with_stage(SimStage::Main, SystemStage::parallel())
             .with_stage(SimStage::ReadInput, SystemStage::parallel())
             .with_stage(SimStage::HandleInput, SystemStage::parallel())
             .with_stage(SimStage::PostInput, SystemStage::parallel())

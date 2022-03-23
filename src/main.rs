@@ -38,6 +38,7 @@ use std::{fs::create_dir_all, sync::Arc, time::Instant};
 use structopt::StructOpt;
 use terminal_size::{terminal_size, Width};
 use terrain::TerrainBuffer;
+use tracelog::TraceLog;
 use ui::UiRenderPass;
 use widget::{
     Border, Color, Expander, Label, Labeled, PositionH, PositionV, VerticalBox, WidgetBuffer,
@@ -245,6 +246,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .insert_resource(opt.detail_opts.gpu_detail())
         .insert_resource(app_dirs)
         .insert_resource(DemoFocus::Demo)
+        .load_extension::<TraceLog>()?
         .load_extension::<StartupOpts>()?
         .load_extension::<Catalog>()?
         .load_extension::<EventMapper<DemoFocus>>()?

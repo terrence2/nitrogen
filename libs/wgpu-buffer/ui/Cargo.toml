@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = { version = "^ 1", features = ["backtrace"] }
-bevy_ecs = "^ 0.6"
+bevy_ecs = { version = "^ 0.6", features = ["trace"] }
 log = "^ 0.4"
 wgpu = { version = "^ 0.12", features = ["spirv"] }
 global_data = { path = "../../wgpu-buffer/global_data" }

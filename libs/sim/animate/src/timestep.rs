@@ -18,6 +18,11 @@ use nitrous::{inject_nitrous_resource, NitrousResource};
 use runtime::{Extension, Runtime, SimStage};
 use std::time::{Duration, Instant};
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum TimeStepStep {
+    Tick,
+}
+
 #[derive(Debug, NitrousResource)]
 pub struct TimeStep {
     start: Instant,
@@ -29,8 +34,8 @@ impl Extension for TimeStep {
     fn init(runtime: &mut Runtime) -> Result<()> {
         runtime.insert_named_resource("time", TimeStep::new_60fps());
         runtime
-            .sim_stage_mut(SimStage::TimeStep)
-            .add_system(Self::sys_tick_time);
+            .sim_stage_mut(SimStage::Main)
+            .add_system(Self::sys_tick_time.label(TimeStepStep::Tick));
         Ok(())
     }
 }

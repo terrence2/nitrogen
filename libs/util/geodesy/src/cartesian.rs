@@ -90,6 +90,7 @@ where
     Origin: CartesianOrigin,
     Unit: LengthUnit,
 {
+    #[inline]
     fn from(v: Vector3<f64>) -> Self {
         Self {
             coords: [
@@ -107,6 +108,7 @@ where
     Origin: CartesianOrigin,
     Unit: LengthUnit,
 {
+    #[inline]
     fn from(v: Point3<f64>) -> Self {
         Self {
             coords: [
@@ -123,6 +125,7 @@ impl<Unit> From<Graticule<GeoCenter>> for Cartesian<GeoCenter, Unit>
 where
     Unit: LengthUnit,
 {
+    #[inline]
     fn from(graticule: Graticule<GeoCenter>) -> Self {
         let lat = graticule.lat::<Radians>().f64();
         let lon = graticule.lon::<Radians>().f64();
@@ -142,6 +145,7 @@ impl<Unit> From<Graticule<Target>> for Cartesian<Target, Unit>
 where
     Unit: LengthUnit,
 {
+    #[inline]
     fn from(graticule: Graticule<Target>) -> Self {
         let lat = f64::from(graticule.latitude);
         let lon = f64::from(graticule.longitude);

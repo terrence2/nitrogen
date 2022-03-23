@@ -530,7 +530,8 @@ impl PatchManager {
         self.indirect_commands.clear();
         self.live_vertices.clear();
         let scale = Matrix4::new_scaling(1_000.0);
-        let view = camera.view::<Kilometers>();
+        let view = camera.view::<Kilometers>().to_homogeneous();
+        let scale_view = scale * view;
         for (offset, (i, winding)) in self.live_patches.iter().enumerate() {
             if offset >= self.desired_patch_count {
                 continue;
@@ -551,14 +552,14 @@ impl PatchManager {
             let [pw0, pw1, pw2] = patch.points();
 
             // Move normals into view space, still in KM f64.
-            let nv0 = view.to_homogeneous() * pw0.coords.normalize().to_homogeneous();
-            let nv1 = view.to_homogeneous() * pw1.coords.normalize().to_homogeneous();
-            let nv2 = view.to_homogeneous() * pw2.coords.normalize().to_homogeneous();
+            let nv0 = view * pw0.coords.normalize().to_homogeneous();
+            let nv1 = view * pw1.coords.normalize().to_homogeneous();
+            let nv2 = view * pw2.coords.normalize().to_homogeneous();
 
             // Move verts from global coordinates into view space, meters in f64.
-            let vv0 = scale * view.to_homogeneous() * pw0.to_homogeneous();
-            let vv1 = scale * view.to_homogeneous() * pw1.to_homogeneous();
-            let vv2 = scale * view.to_homogeneous() * pw2.to_homogeneous();
+            let vv0 = scale_view * pw0.to_homogeneous();
+            let vv1 = scale_view * pw1.to_homogeneous();
+            let vv2 = scale_view * pw2.to_homogeneous();
             let pv0 = Point3::from(vv0.xyz());
             let pv1 = Point3::from(vv1.xyz());
             let pv2 = Point3::from(vv2.xyz());
@@ -600,8 +601,6 @@ impl PatchManager {
         while self.live_vertices.len() < 3 * self.desired_patch_count {
             self.live_vertices.push(TerrainUploadVertex::empty());
         }
-
-        //println!("dt: {:?}", Instant::now() - loop_start);
     }
 
     pub fn encode_uploads(&self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder) {
@@ -669,11 +668,13 @@ impl PatchManager {
         }
     }
 
+    #[inline]
     pub fn patch_vertex_buffer_offset(&self, patch_number: i32) -> i32 {
-        assert!(patch_number >= 0);
+        debug_assert!(patch_number >= 0);
         (patch_number as u32 * self.subdivide_context.target_stride) as i32
     }
 
+    #[inline]
     pub fn target_patch_subdivision_level(&self) -> u32 {
         self.subdivide_context.target_subdivision_level
     }
@@ -698,6 +699,7 @@ impl PatchManager {
         self.tristrip_index_buffer.slice(..)
     }
 
+    #[inline]
     pub fn tristrip_index_range(&self, winding: PatchWinding) -> Range<u32> {
         self.tristrip_index_ranges[winding.index()].clone()
     }

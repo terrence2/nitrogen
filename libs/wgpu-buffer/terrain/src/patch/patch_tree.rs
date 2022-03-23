@@ -234,6 +234,7 @@ impl PatchTree {
         }
     }
 
+    #[inline]
     pub(crate) fn get_patch(&self, index: PatchIndex) -> &Patch {
         &self.patches[poff(index)]
     }
