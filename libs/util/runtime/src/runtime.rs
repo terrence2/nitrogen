@@ -48,9 +48,9 @@ pub enum ShutdownStage {
 pub enum SimStage {
     Main,
     /// Consume any input that has accumulated.
-    ReadInput,
+    // ReadInput,
     /// Use the input event vec in any systems that need to.
-    HandleInput,
+    // HandleInput,
     /// Runs after input is processed, with new values.
     PostInput,
     /// Runs before the serial scripting phase.
@@ -118,8 +118,8 @@ impl Default for Runtime {
 
         let sim_schedule = Schedule::default()
             .with_stage(SimStage::Main, SystemStage::parallel())
-            .with_stage(SimStage::ReadInput, SystemStage::parallel())
-            .with_stage(SimStage::HandleInput, SystemStage::parallel())
+            // .with_stage(SimStage::ReadInput, SystemStage::parallel())
+            // .with_stage(SimStage::HandleInput, SystemStage::parallel())
             .with_stage(SimStage::PostInput, SystemStage::parallel())
             .with_stage(SimStage::PreScript, SystemStage::parallel())
             .with_stage(

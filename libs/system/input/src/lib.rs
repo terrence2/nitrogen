@@ -123,6 +123,12 @@ pub struct InputState {
     window_focused: bool,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum InputStep {
+    ReadInput,
+    ReadSystem,
+}
+
 pub struct InputController {
     proxy: EventLoopProxy<MetaEvent>,
     input_event_source: Receiver<InputEvent>,
@@ -151,11 +157,11 @@ impl InputController {
         runtime.insert_resource(SystemEventVec::new());
 
         runtime
-            .sim_stage_mut(SimStage::ReadInput)
-            .add_system(Self::sys_read_input_events);
+            .sim_stage_mut(SimStage::Main)
+            .add_system(Self::sys_read_input_events.label(InputStep::ReadInput));
         runtime
             .frame_stage_mut(FrameStage::ReadSystem)
-            .add_system(Self::sys_read_system_events);
+            .add_system(Self::sys_read_system_events.label(InputStep::ReadSystem));
 
         input_controller
     }

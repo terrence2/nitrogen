@@ -41,11 +41,13 @@ use crate::font_context::FontContext;
 use animate::TimeStep;
 use anyhow::{ensure, Result};
 use bevy_ecs::prelude::*;
-use event_mapper::EventMapperInputStep;
+use event_mapper::EventMapperStep;
 use font_common::{FontAdvance, FontInterface};
 use font_ttf::TtfFont;
 use gpu::Gpu;
-use input::{ElementState, InputEvent, InputEventVec, InputFocus, ModifiersState, VirtualKeyCode};
+use input::{
+    ElementState, InputEvent, InputEventVec, InputFocus, InputStep, ModifiersState, VirtualKeyCode,
+};
 use log::{error, trace};
 use nitrous::{inject_nitrous_resource, method, HeapMut, NitrousResource, Value};
 use parking_lot::RwLock;
@@ -99,7 +101,8 @@ pub enum WidgetRenderStep {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
-pub enum WidgetInputStep {
+pub enum WidgetStep {
+    HandleTerminal,
     ToggleTerminal,
     HandleEvents,
 }
@@ -141,18 +144,23 @@ where
         let widget = WidgetBuffer::<T>::new(&mut runtime.resource_mut::<Gpu>(), &state_dir)?;
         runtime.insert_named_resource("widget", widget);
 
-        runtime
-            .sim_stage_mut(SimStage::HandleInput)
-            .add_system(Self::sys_handle_terminal_events.exclusive_system());
-        runtime.sim_stage_mut(SimStage::HandleInput).add_system(
-            Self::sys_handle_input_events
-                .label(WidgetInputStep::HandleEvents)
-                .after(EventMapperInputStep::HandleEvents),
+        runtime.sim_stage_mut(SimStage::Main).add_system(
+            Self::sys_handle_terminal_events
+                .exclusive_system()
+                .label(WidgetStep::HandleTerminal)
+                .after(InputStep::ReadInput),
         );
-        runtime.sim_stage_mut(SimStage::HandleInput).add_system(
+
+        runtime.sim_stage_mut(SimStage::Main).add_system(
+            Self::sys_handle_input_events
+                .label(WidgetStep::HandleEvents)
+                .after(EventMapperStep::HandleEvents),
+        );
+        runtime.sim_stage_mut(SimStage::Main).add_system(
             Self::sys_handle_toggle_terminal
-                .label(WidgetInputStep::ToggleTerminal)
-                .after(WidgetInputStep::HandleEvents),
+                .label(WidgetStep::ToggleTerminal)
+                .after(WidgetStep::HandleTerminal)
+                .after(WidgetStep::HandleEvents),
         );
         runtime
             .sim_stage_mut(SimStage::PostScript)
