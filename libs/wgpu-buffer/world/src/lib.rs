@@ -20,7 +20,7 @@ use global_data::{GlobalParametersBuffer, GlobalsStep};
 use gpu::{DisplayConfig, Gpu, GpuStep};
 use log::trace;
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
-use runtime::{Extension, FrameStage, Runtime};
+use runtime::{Extension, Runtime};
 use shader_shared::Group;
 use stars::StarsBuffer;
 use terrain::{TerrainBuffer, TerrainStep, TerrainVertex};
@@ -93,12 +93,12 @@ impl Extension for WorldRenderPass {
             runtime.resource::<Gpu>(),
         )?;
         runtime.insert_named_resource("world", world);
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_handle_display_config_change
                 .label(WorldStep::HandleDisplayChange)
                 .after(WindowStep::HandleEvents),
         );
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_render_world
                 .label(WorldStep::Render)
                 .after(GlobalsStep::EnsureUpdated)

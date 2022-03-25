@@ -15,7 +15,7 @@
 use anyhow::Result;
 use bevy_ecs::prelude::*;
 use nitrous::{inject_nitrous_resource, NitrousResource};
-use runtime::{Extension, Runtime, SimStage};
+use runtime::{Extension, Runtime};
 use std::time::{Duration, Instant};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
@@ -33,9 +33,7 @@ pub struct TimeStep {
 impl Extension for TimeStep {
     fn init(runtime: &mut Runtime) -> Result<()> {
         runtime.insert_named_resource("time", TimeStep::new_60fps());
-        runtime
-            .sim_stage_mut(SimStage::Main)
-            .add_system(Self::sys_tick_time.label(TimeStepStep::Tick));
+        runtime.add_sim_system(Self::sys_tick_time.label(TimeStepStep::Tick));
         Ok(())
     }
 }

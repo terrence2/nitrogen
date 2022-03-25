@@ -21,7 +21,7 @@ use gpu::{Gpu, GpuStep};
 use nalgebra::{convert, Matrix3, Matrix4, Point3, Vector3, Vector4};
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use orrery::Orrery;
-use runtime::{Extension, FrameStage, Runtime};
+use runtime::{Extension, Runtime};
 use std::{mem, sync::Arc};
 use window::{Window, WindowStep};
 use zerocopy::{AsBytes, FromBytes};
@@ -175,13 +175,13 @@ impl Extension for GlobalParametersBuffer {
         )?;
 
         runtime.insert_named_resource("globals", globals);
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_track_state_changes
                 .label(GlobalsStep::TrackStateChanges)
                 .after(WindowStep::HandleEvents)
                 .after(CameraStep::HandleDisplayChange),
         );
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_ensure_globals_updated
                 .label(GlobalsStep::EnsureUpdated)
                 .after(GlobalsStep::TrackStateChanges)

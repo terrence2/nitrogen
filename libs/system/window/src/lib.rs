@@ -19,7 +19,7 @@ use bevy_ecs::prelude::*;
 use input::{InputStep, SystemEvent, SystemEventVec};
 use log::info;
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
-use runtime::{Extension, FrameStage, Runtime};
+use runtime::{Extension, Runtime};
 use std::{fmt::Debug, str::FromStr, string::ToString};
 use structopt::StructOpt;
 
@@ -232,7 +232,7 @@ impl Extension for Window {
         let window = Window::new(os_window, display_config);
         runtime.insert_named_resource("window", window);
         runtime.insert_resource(None as Option<DisplayConfig>);
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_handle_system_events
                 .label(WindowStep::HandleEvents)
                 .after(InputStep::ReadSystem),

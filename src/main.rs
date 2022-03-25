@@ -25,20 +25,20 @@ use composite::CompositeRenderPass;
 use event_mapper::EventMapper;
 use fullscreen::FullscreenBuffer;
 use global_data::GlobalParametersBuffer;
-use gpu::{DetailLevelOpts, Gpu};
+use gpu::{DetailLevelOpts, Gpu, GpuStep};
 use input::{DemoFocus, InputSystem};
 use measure::WorldSpaceFrame;
 use nitrous::{inject_nitrous_resource, NitrousResource};
 use orrery::Orrery;
 use parking_lot::RwLock;
 use platform_dirs::AppDirs;
-use runtime::{ExitRequest, Extension, FrameStage, Runtime, StartupOpts};
+use runtime::{ExitRequest, Extension, Runtime, StartupOpts};
 use stars::StarsBuffer;
 use std::{fs::create_dir_all, sync::Arc, time::Instant};
 use structopt::StructOpt;
 use terminal_size::{terminal_size, Width};
 use terrain::TerrainBuffer;
-use tracelog::TraceLog;
+use tracelog::{TraceLog, TraceLogOpts};
 use ui::UiRenderPass;
 use widget::{
     Border, Color, Expander, Label, Labeled, PositionH, PositionV, VerticalBox, WidgetBuffer,
@@ -64,6 +64,9 @@ struct Opt {
 
     #[structopt(flatten)]
     startup_opts: StartupOpts,
+
+    #[structopt(flatten)]
+    tracelog_opts: TraceLogOpts,
 }
 
 #[derive(Debug)]
@@ -86,8 +89,7 @@ impl Extension for DemoUx {
         let system = DemoUx::new(widgets)?;
         runtime.insert_named_resource("system", system);
         runtime
-            .frame_stage_mut(FrameStage::FrameEnd)
-            .add_system(Self::sys_track_visible_state);
+            .add_frame_system(Self::sys_track_visible_state.after(GpuStep::PresentTargetSurface));
         runtime.run_string(
             r#"
                 bindings.bind("Escape", "exit()");
@@ -242,6 +244,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .insert_resource(opt.catalog_opts)
         .insert_resource(opt.display_opts)
         .insert_resource(opt.startup_opts)
+        .insert_resource(opt.tracelog_opts)
         .insert_resource(opt.detail_opts.cpu_detail())
         .insert_resource(opt.detail_opts.gpu_detail())
         .insert_resource(app_dirs)

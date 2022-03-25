@@ -50,7 +50,7 @@ use log::{error, trace};
 use nitrous::{inject_nitrous_resource, method, HeapMut, NitrousResource, Value};
 use parking_lot::RwLock;
 use platform_dirs::AppDirs;
-use runtime::{Extension, FrameStage, Runtime, ScriptCompletions, ScriptHerder, SimStage};
+use runtime::{Extension, Runtime, ScriptCompletions, ScriptHerder};
 use std::{
     borrow::Borrow, marker::PhantomData, mem, num::NonZeroU64, ops::Range, path::Path, sync::Arc,
     time::Instant,
@@ -143,45 +143,46 @@ where
         let widget = WidgetBuffer::<T>::new(&mut runtime.resource_mut::<Gpu>(), &state_dir)?;
         runtime.insert_named_resource("widget", widget);
 
-        runtime.sim_stage_mut(SimStage::RunScript).add_system(
+        runtime.add_sim_system(
             Self::sys_handle_terminal_events
                 .exclusive_system()
                 .label(WidgetSimStep::HandleTerminal),
         );
-        runtime.sim_stage_mut(SimStage::Main).add_system(
+        runtime.add_sim_system(
             Self::sys_handle_input_events
                 .label(WidgetSimStep::HandleEvents)
                 .after(EventMapperStep::HandleEvents),
         );
-        runtime.sim_stage_mut(SimStage::Main).add_system(
+        runtime.add_sim_system(
             Self::sys_handle_toggle_terminal
                 .label(WidgetSimStep::ToggleTerminal)
                 .after(WidgetSimStep::HandleEvents),
         );
-        runtime.sim_stage_mut(SimStage::RunScript).add_system(
+
+        runtime.add_frame_system(
             Self::sys_report_script_completions.label(WidgetSimStep::ReportScriptCompletions),
         );
 
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_layout_widgets
                 .label(WidgetRenderStep::LayoutWidgets)
                 .after(WindowStep::HandleEvents),
         );
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_maintain_font_atlas
                 .label(WidgetRenderStep::MaintainFontAtlas)
                 .after(WidgetRenderStep::LayoutWidgets)
                 .after(GpuStep::CreateCommandEncoder)
                 .before(GpuStep::SubmitCommands),
         );
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_ensure_uploaded
                 .label(WidgetRenderStep::EnsureUploaded)
                 .after(WidgetRenderStep::MaintainFontAtlas)
                 .after(GpuStep::CreateCommandEncoder)
                 .before(GpuStep::SubmitCommands),
         );
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_handle_dump_texture
                 .label(WidgetRenderStep::DumpAtlas)
                 .after(GpuStep::PresentTargetSurface),

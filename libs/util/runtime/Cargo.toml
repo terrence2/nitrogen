@@ -1,7 +1,7 @@
 [package]
 name = "runtime"
 description = "A wrapper around BevyECS that enable it to be used as the memory for a scripting engine."
-version = "0.1.0"
+version = "0.0.0"
 edition = "2021"
 
 [dependencies]

@@ -27,7 +27,7 @@ use nalgebra::{Isometry3, Matrix4, Perspective3, Point3, UnitQuaternion, Vector3
 use nitrous::{
     inject_nitrous_component, inject_nitrous_resource, method, NitrousComponent, NitrousResource,
 };
-use runtime::{Extension, FrameStage, Runtime, SimStage};
+use runtime::{Extension, Runtime};
 use std::f64::consts::PI;
 use window::{DisplayConfig, Window, WindowStep};
 
@@ -56,13 +56,13 @@ impl Extension for CameraSystem {
                 bindings.bind("Shift+RBracket", "camera.increase_exposure()");
             "#,
         )?;
-        runtime.sim_stage_mut(SimStage::Main).add_system(
+        runtime.add_sim_system(
             ScreenCamera::sys_apply_input
                 .label(CameraStep::ApplyInput)
                 .after(EventMapperStep::HandleEvents)
                 .after(ArcBallStep::ApplyInput),
         );
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             ScreenCamera::sys_apply_display_changes
                 .label(CameraStep::HandleDisplayChange)
                 .after(WindowStep::HandleEvents),

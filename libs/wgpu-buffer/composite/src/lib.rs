@@ -19,7 +19,7 @@ use global_data::{GlobalParametersBuffer, GlobalsStep};
 use gpu::{Gpu, GpuStep};
 use input::InputFocus;
 use log::trace;
-use runtime::{Extension, FrameStage, Runtime};
+use runtime::{Extension, Runtime};
 use shader_shared::Group;
 use std::marker::PhantomData;
 use ui::{UiRenderPass, UiStep};
@@ -51,7 +51,7 @@ where
             runtime.resource::<Gpu>(),
         )?;
         runtime.insert_resource(composite);
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_composite_scene
                 .label(CompositeRenderStep::Render)
                 .after(GlobalsStep::EnsureUpdated)

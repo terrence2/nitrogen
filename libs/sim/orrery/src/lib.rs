@@ -19,7 +19,7 @@ use chrono::{prelude::*, Duration};
 use lazy_static::lazy_static;
 use nalgebra::{Point3, Unit, UnitQuaternion, Vector3, Vector4};
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
-use runtime::{Extension, Runtime, SimStage};
+use runtime::{Extension, Runtime};
 use std::f64::consts::PI;
 
 /**
@@ -314,7 +314,7 @@ impl Extension for Orrery {
     fn init(runtime: &mut Runtime) -> Result<()> {
         let orrery = Orrery::new_current_time()?;
         runtime.insert_named_resource("orrery", orrery);
-        runtime.sim_stage_mut(SimStage::Main).add_system(
+        runtime.add_sim_system(
             Self::sys_step_time
                 .label(OrreryStep::StepTime)
                 .after(TimeStepStep::Tick),

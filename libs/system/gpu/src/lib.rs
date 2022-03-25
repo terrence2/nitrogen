@@ -26,7 +26,7 @@ use bevy_ecs::prelude::*;
 use futures_lite::future::block_on;
 use log::{info, trace};
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
-use runtime::{Extension, FrameStage, Runtime};
+use runtime::{Extension, Runtime};
 use std::{borrow::Cow, fmt::Debug, fs, mem, num::NonZeroU32, path::PathBuf, ptr, sync::Arc};
 use wgpu::util::DeviceExt;
 use window::{Window, WindowStep};
@@ -92,35 +92,35 @@ impl Extension for Gpu {
     fn init(runtime: &mut Runtime) -> Result<()> {
         let gpu = Self::new(runtime.resource::<Window>(), Default::default())?;
         runtime.insert_named_resource("gpu", gpu);
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_handle_display_config_change
                 .label(GpuStep::HandleDisplayChange)
                 .after(WindowStep::HandleEvents),
         );
 
         runtime.insert_resource(None as Option<wgpu::SurfaceTexture>);
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_create_target_surface
                 .label(GpuStep::CreateTargetSurface)
                 .after(GpuStep::HandleDisplayChange),
         );
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_handle_out_of_date_renderer
                 .label(GpuStep::HandleOutOfDateRenderer)
                 .after(GpuStep::CreateTargetSurface),
         );
         runtime.insert_resource(None as Option<wgpu::CommandEncoder>);
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_create_command_encoder
                 .label(GpuStep::CreateCommandEncoder)
                 .after(GpuStep::CreateTargetSurface),
         );
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_submit_frame_commands
                 .label(GpuStep::SubmitCommands)
                 .after(GpuStep::CreateTargetSurface),
         );
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_present_target_surface
                 .label(GpuStep::PresentTargetSurface)
                 .after(GpuStep::SubmitCommands),

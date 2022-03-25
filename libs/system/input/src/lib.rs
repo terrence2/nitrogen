@@ -21,7 +21,7 @@ use anyhow::{bail, Result};
 use bevy_ecs::prelude::*;
 use log::warn;
 use parking_lot::Mutex;
-use runtime::{FrameStage, Runtime, SimStage};
+use runtime::Runtime;
 use smallvec::SmallVec;
 use std::{
     collections::HashMap,
@@ -156,12 +156,8 @@ impl InputController {
         runtime.insert_resource(InputEventVec::new());
         runtime.insert_resource(SystemEventVec::new());
 
-        runtime
-            .sim_stage_mut(SimStage::Main)
-            .add_system(Self::sys_read_input_events.label(InputStep::ReadInput));
-        runtime
-            .frame_stage_mut(FrameStage::Main)
-            .add_system(Self::sys_read_system_events.label(InputStep::ReadSystem));
+        runtime.add_sim_system(Self::sys_read_input_events.label(InputStep::ReadInput));
+        runtime.add_frame_system(Self::sys_read_system_events.label(InputStep::ReadSystem));
 
         input_controller
     }

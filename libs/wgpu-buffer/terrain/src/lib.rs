@@ -40,7 +40,7 @@ use geodesy::{GeoCenter, Graticule};
 use global_data::{GlobalParametersBuffer, GlobalsStep};
 use gpu::{CpuDetailLevel, DisplayConfig, Gpu, GpuDetailLevel, GpuStep};
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
-use runtime::{Extension, FrameStage, Runtime, ShutdownStage};
+use runtime::{Extension, Runtime, ShutdownStage};
 use shader_shared::Group;
 use std::ops::Range;
 
@@ -204,32 +204,32 @@ impl Extension for TerrainBuffer {
             "#,
         )?;
 
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_handle_display_config_change.label(TerrainStep::HandleDisplayChange),
         );
 
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_optimize_patches
                 .label(TerrainStep::OptimizePatches)
                 .after(CameraStep::HandleDisplayChange),
         );
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_apply_patches_to_height_tiles
                 .label(TerrainStep::ApplyPatchesToHeightTiles)
                 .after(TerrainStep::OptimizePatches),
         );
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_apply_patches_to_normal_tiles
                 .label(TerrainStep::ApplyPatchesToNormalTiles)
                 .after(TerrainStep::OptimizePatches),
         );
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_apply_patches_to_color_tiles
                 .label(TerrainStep::ApplyPatchesToColorTiles)
                 .after(TerrainStep::OptimizePatches),
         );
 
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_encode_uploads
                 .label(TerrainStep::EncodeUploads)
                 .after(GlobalsStep::EnsureUpdated)
@@ -239,28 +239,28 @@ impl Extension for TerrainBuffer {
                 .after(GpuStep::CreateCommandEncoder)
                 .before(GpuStep::SubmitCommands),
         );
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_paint_atlas_indices
                 .label(TerrainStep::PaintAtlasIndices)
                 .after(TerrainStep::EncodeUploads)
                 .after(GpuStep::CreateCommandEncoder)
                 .before(GpuStep::SubmitCommands),
         );
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_terrain_tesselate
                 .label(TerrainStep::Tesselate)
                 .after(TerrainStep::PaintAtlasIndices)
                 .after(GpuStep::CreateCommandEncoder)
                 .before(GpuStep::SubmitCommands),
         );
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_deferred_texture
                 .label(TerrainStep::RenderDeferredTexture)
                 .after(TerrainStep::Tesselate)
                 .after(GpuStep::CreateCommandEncoder)
                 .before(GpuStep::SubmitCommands),
         );
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_accumulate_normal_and_color
                 .label(TerrainStep::AccumulateNormalsAndColor)
                 .after(TerrainStep::RenderDeferredTexture)
@@ -268,7 +268,7 @@ impl Extension for TerrainBuffer {
                 .before(GpuStep::SubmitCommands),
         );
 
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_handle_capture_snapshot
                 .label(TerrainStep::CaptureSnapshots)
                 .after(GpuStep::PresentTargetSurface),

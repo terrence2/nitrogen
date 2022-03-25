@@ -21,7 +21,7 @@ use bevy_ecs::prelude::*;
 use input::{ElementState, InputEvent, InputEventVec, InputFocus, InputStep, ModifiersState};
 use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
 use ordered_float::OrderedFloat;
-use runtime::{Extension, Runtime, ScriptHerder, SimStage};
+use runtime::{Extension, Runtime, ScriptHerder};
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
@@ -59,7 +59,7 @@ where
 {
     fn init(runtime: &mut Runtime) -> Result<()> {
         runtime.insert_named_resource("bindings", EventMapper::<T>::new());
-        runtime.sim_stage_mut(SimStage::Main).add_system(
+        runtime.add_sim_system(
             Self::sys_handle_input_events
                 .label(EventMapperStep::HandleEvents)
                 .after(InputStep::ReadInput),

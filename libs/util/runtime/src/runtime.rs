@@ -17,7 +17,10 @@ use crate::{
     herder::{ExitRequest, ScriptCompletions, ScriptHerder, ScriptRunKind},
 };
 use anyhow::Result;
-use bevy_ecs::{prelude::*, query::WorldQuery, system::Resource, world::EntityMut};
+use bevy_ecs::{
+    prelude::*, query::WorldQuery, schedule::IntoSystemDescriptor, system::Resource,
+    world::EntityMut,
+};
 use bevy_tasks::TaskPool;
 use nitrous::{Heap, HeapMut, LocalNamespace, NamedEntityMut, NitrousScript, ScriptResource};
 use std::path::PathBuf;
@@ -48,8 +51,6 @@ pub enum SimStage {
     Main,
     /// Fully serial phase where scripts run.
     RunScript,
-    /// Run simulation actions in parallel.
-    Simulate,
 }
 
 // Copy from entities into buffers more suitable for upload to the GPU. Also, do heavier
@@ -57,10 +58,7 @@ pub enum SimStage {
 // from the current cameras. Not generally for actually writing to the GPU.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, StageLabel)]
 pub enum FrameStage {
-    /// Transfer entity state into CPU-side GPU transfer buffers.
     Main,
-    // Right before frame end.
-    FrameEnd,
 }
 
 pub struct Runtime {
@@ -86,13 +84,10 @@ impl Default for Runtime {
                 SimStage::RunScript,
                 SystemStage::single_threaded()
                     .with_system(ScriptHerder::sys_run_sim_scripts.exclusive_system()),
-            )
-            .with_stage(SimStage::Simulate, SystemStage::parallel());
+            );
 
-        use SystemStage as SS;
-        let frame_schedule = Schedule::default()
-            .with_stage(FrameStage::Main, SS::parallel())
-            .with_stage(FrameStage::FrameEnd, SS::parallel());
+        let frame_schedule =
+            Schedule::default().with_stage(FrameStage::Main, SystemStage::parallel());
 
         let shutdown_schedule =
             Schedule::default().with_stage(ShutdownStage::Cleanup, SystemStage::single_threaded());
@@ -203,9 +198,31 @@ impl Runtime {
         self.sim_schedule.get_stage_mut(&sim_stage).unwrap()
     }
 
+    pub fn add_sim_system<Params>(
+        &mut self,
+        system: impl IntoSystemDescriptor<Params>,
+    ) -> &mut Self {
+        self.sim_schedule
+            .get_stage_mut::<SystemStage>(&SimStage::Main)
+            .unwrap()
+            .add_system(system);
+        self
+    }
+
     #[inline]
     pub fn frame_stage_mut(&mut self, frame_stage: FrameStage) -> &mut SystemStage {
         self.frame_schedule.get_stage_mut(&frame_stage).unwrap()
+    }
+
+    pub fn add_frame_system<Params>(
+        &mut self,
+        system: impl IntoSystemDescriptor<Params>,
+    ) -> &mut Self {
+        self.frame_schedule
+            .get_stage_mut::<SystemStage>(&FrameStage::Main)
+            .unwrap()
+            .add_system(system);
+        self
     }
 
     #[inline]

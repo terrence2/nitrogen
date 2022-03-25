@@ -22,7 +22,7 @@ use log::error;
 use lyon_geom::{cubic_bezier::CubicBezierSegment, Point};
 use nitrous::{inject_nitrous_resource, method, HeapMut, NitrousResource, Value};
 use parking_lot::RwLock;
-use runtime::{Extension, Runtime, SimStage};
+use runtime::{Extension, Runtime};
 use std::{
     sync::Arc,
     time::{Duration, Instant},
@@ -178,7 +178,7 @@ pub struct Timeline {
 impl Extension for Timeline {
     fn init(runtime: &mut Runtime) -> Result<()> {
         runtime.insert_named_resource("timeline", Timeline::default());
-        runtime.sim_stage_mut(SimStage::RunScript).add_system(
+        runtime.add_sim_system(
             Self::sys_animate
                 .exclusive_system()
                 .label(TimelineStep::Animate),

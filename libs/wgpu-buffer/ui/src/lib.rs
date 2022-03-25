@@ -18,7 +18,7 @@ use global_data::{GlobalParametersBuffer, GlobalsStep};
 use gpu::{DisplayConfig, Gpu, GpuStep};
 use input::InputFocus;
 use log::trace;
-use runtime::{Extension, FrameStage, Runtime};
+use runtime::{Extension, Runtime};
 use shader_shared::Group;
 use std::marker::PhantomData;
 use widget::{WidgetBuffer, WidgetRenderStep, WidgetVertex};
@@ -62,12 +62,12 @@ where
             runtime.resource::<Gpu>(),
         )?;
         runtime.insert_resource(ui);
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_handle_display_config_change
                 .label(UiStep::HandleDisplayChange)
                 .after(WindowStep::HandleEvents),
         );
-        runtime.frame_stage_mut(FrameStage::Main).add_system(
+        runtime.add_frame_system(
             Self::sys_render_ui
                 .label(UiStep::Render)
                 .after(UiStep::HandleDisplayChange)

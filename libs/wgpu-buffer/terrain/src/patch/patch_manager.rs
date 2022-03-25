@@ -699,15 +699,16 @@ impl PatchManager {
         self.tristrip_index_buffer.slice(..)
     }
 
-    #[inline]
     pub fn tristrip_index_range(&self, winding: PatchWinding) -> Range<u32> {
         self.tristrip_index_ranges[winding.index()].clone()
     }
 
+    #[allow(unused)]
     pub fn draw_indirect_commands(&self) -> &[DrawIndexedIndirect] {
         &self.indirect_commands
     }
 
+    #[allow(unused)]
     pub fn draw_indirect_buffer(&self) -> &wgpu::Buffer {
         &self.indirect_buffer
     }

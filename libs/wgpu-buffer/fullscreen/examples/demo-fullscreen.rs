@@ -21,11 +21,11 @@ use event_mapper::EventMapper;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
-use gpu::Gpu;
+use gpu::{Gpu, GpuStep};
 use input::{DemoFocus, InputSystem};
 use measure::WorldSpaceFrame;
 use orrery::Orrery;
-use runtime::{ExitRequest, Extension, FrameStage, Runtime};
+use runtime::{ExitRequest, Extension, Runtime};
 use std::time::Instant;
 use window::{DisplayOpts, Window, WindowBuilder};
 
@@ -40,9 +40,11 @@ impl Extension for App {
             runtime.resource::<Gpu>(),
         )?;
         runtime.insert_resource(app);
-        runtime
-            .frame_stage_mut(FrameStage::Render)
-            .add_system(Self::sys_render);
+        runtime.add_frame_system(
+            Self::sys_render
+                .after(GpuStep::CreateCommandEncoder)
+                .before(GpuStep::SubmitCommands),
+        );
         Ok(())
     }
 }
