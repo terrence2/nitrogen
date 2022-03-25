@@ -44,10 +44,8 @@ use bevy_ecs::prelude::*;
 use event_mapper::EventMapperStep;
 use font_common::{FontAdvance, FontInterface};
 use font_ttf::TtfFont;
-use gpu::Gpu;
-use input::{
-    ElementState, InputEvent, InputEventVec, InputFocus, InputStep, ModifiersState, VirtualKeyCode,
-};
+use gpu::{Gpu, GpuStep};
+use input::{ElementState, InputEvent, InputEventVec, InputFocus, ModifiersState, VirtualKeyCode};
 use log::{error, trace};
 use nitrous::{inject_nitrous_resource, method, HeapMut, NitrousResource, Value};
 use parking_lot::RwLock;
@@ -59,7 +57,7 @@ use std::{
 };
 use window::{
     size::{AbsSize, Size},
-    Window,
+    Window, WindowStep,
 };
 
 // Drawing UI efficiently:
@@ -101,10 +99,11 @@ pub enum WidgetRenderStep {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
-pub enum WidgetStep {
+pub enum WidgetSimStep {
     HandleTerminal,
     ToggleTerminal,
     HandleEvents,
+    ReportScriptCompletions,
 }
 
 #[derive(Debug, NitrousResource)]
@@ -144,42 +143,49 @@ where
         let widget = WidgetBuffer::<T>::new(&mut runtime.resource_mut::<Gpu>(), &state_dir)?;
         runtime.insert_named_resource("widget", widget);
 
-        runtime.sim_stage_mut(SimStage::Main).add_system(
+        runtime.sim_stage_mut(SimStage::RunScript).add_system(
             Self::sys_handle_terminal_events
                 .exclusive_system()
-                .label(WidgetStep::HandleTerminal)
-                .after(InputStep::ReadInput),
+                .label(WidgetSimStep::HandleTerminal),
         );
-
         runtime.sim_stage_mut(SimStage::Main).add_system(
             Self::sys_handle_input_events
-                .label(WidgetStep::HandleEvents)
+                .label(WidgetSimStep::HandleEvents)
                 .after(EventMapperStep::HandleEvents),
         );
         runtime.sim_stage_mut(SimStage::Main).add_system(
             Self::sys_handle_toggle_terminal
-                .label(WidgetStep::ToggleTerminal)
-                .after(WidgetStep::HandleTerminal)
-                .after(WidgetStep::HandleEvents),
+                .label(WidgetSimStep::ToggleTerminal)
+                .after(WidgetSimStep::HandleEvents),
         );
-        runtime
-            .sim_stage_mut(SimStage::PostScript)
-            .add_system(Self::sys_report_script_completions);
+        runtime.sim_stage_mut(SimStage::RunScript).add_system(
+            Self::sys_report_script_completions.label(WidgetSimStep::ReportScriptCompletions),
+        );
 
-        runtime
-            .frame_stage_mut(FrameStage::TrackStateChanges)
-            .add_system(Self::sys_layout_widgets.label(WidgetRenderStep::LayoutWidgets));
-        runtime
-            .frame_stage_mut(FrameStage::Render)
-            .add_system(Self::sys_maintain_font_atlas.label(WidgetRenderStep::MaintainFontAtlas));
-        runtime.frame_stage_mut(FrameStage::Render).add_system(
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
+            Self::sys_layout_widgets
+                .label(WidgetRenderStep::LayoutWidgets)
+                .after(WindowStep::HandleEvents),
+        );
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
+            Self::sys_maintain_font_atlas
+                .label(WidgetRenderStep::MaintainFontAtlas)
+                .after(WidgetRenderStep::LayoutWidgets)
+                .after(GpuStep::CreateCommandEncoder)
+                .before(GpuStep::SubmitCommands),
+        );
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
             Self::sys_ensure_uploaded
                 .label(WidgetRenderStep::EnsureUploaded)
-                .after(WidgetRenderStep::MaintainFontAtlas),
+                .after(WidgetRenderStep::MaintainFontAtlas)
+                .after(GpuStep::CreateCommandEncoder)
+                .before(GpuStep::SubmitCommands),
         );
-        runtime
-            .frame_stage_mut(FrameStage::FrameEnd)
-            .add_system(Self::sys_handle_dump_texture);
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
+            Self::sys_handle_dump_texture
+                .label(WidgetRenderStep::DumpAtlas)
+                .after(GpuStep::PresentTargetSurface),
+        );
         Ok(())
     }
 }

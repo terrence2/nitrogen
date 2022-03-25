@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{TimeStep, TimeStepStep};
+use crate::TimeStep;
 use absolute_unit::{meters, radians};
 use anyhow::{ensure, Result};
 use bevy_ecs::prelude::*;
@@ -178,11 +178,10 @@ pub struct Timeline {
 impl Extension for Timeline {
     fn init(runtime: &mut Runtime) -> Result<()> {
         runtime.insert_named_resource("timeline", Timeline::default());
-        runtime.sim_stage_mut(SimStage::Main).add_system(
+        runtime.sim_stage_mut(SimStage::RunScript).add_system(
             Self::sys_animate
                 .exclusive_system()
-                .label(TimelineStep::Animate)
-                .after(TimeStepStep::Tick),
+                .label(TimelineStep::Animate),
         );
         Ok(())
     }

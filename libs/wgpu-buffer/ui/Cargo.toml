@@ -15,6 +15,7 @@ input = { path = "../../system/input" }
 runtime = { path = "../../util/runtime" }
 shader_shared = { path = "../../wgpu-buffer/shader_shared" }
 widget = { path = "../../wgpu-buffer/widget" }
+window = { path = "../../system/window" }
 world = { path = "../../wgpu-buffer/world" }
 
 [build-dependencies]

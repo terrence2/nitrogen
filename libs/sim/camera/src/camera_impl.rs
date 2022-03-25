@@ -12,13 +12,14 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::arc_ball_camera::ArcBallInputStep;
+use crate::arc_ball_camera::ArcBallStep;
 use absolute_unit::{
     degrees, meters, radians, Angle, AngleUnit, Degrees, Kilometers, Length, LengthUnit, Meters,
     Radians,
 };
 use anyhow::Result;
 use bevy_ecs::prelude::*;
+use event_mapper::EventMapperStep;
 use geodesy::{Cartesian, GeoCenter};
 use geometry::Plane;
 use measure::WorldSpaceFrame;
@@ -28,11 +29,12 @@ use nitrous::{
 };
 use runtime::{Extension, FrameStage, Runtime, SimStage};
 use std::f64::consts::PI;
-use window::{DisplayConfig, Window};
+use window::{DisplayConfig, Window, WindowStep};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
-pub enum CameraInputStep {
+pub enum CameraStep {
     ApplyInput,
+    HandleDisplayChange,
 }
 
 pub struct CameraSystem;
@@ -54,14 +56,17 @@ impl Extension for CameraSystem {
                 bindings.bind("Shift+RBracket", "camera.increase_exposure()");
             "#,
         )?;
-        runtime.sim_stage_mut(SimStage::PostInput).add_system(
+        runtime.sim_stage_mut(SimStage::Main).add_system(
             ScreenCamera::sys_apply_input
-                .label(CameraInputStep::ApplyInput)
-                .after(ArcBallInputStep::ApplyInput),
+                .label(CameraStep::ApplyInput)
+                .after(EventMapperStep::HandleEvents)
+                .after(ArcBallStep::ApplyInput),
         );
-        runtime
-            .frame_stage_mut(FrameStage::HandleDisplayChange)
-            .add_system(ScreenCamera::sys_apply_display_changes);
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
+            ScreenCamera::sys_apply_display_changes
+                .label(CameraStep::HandleDisplayChange)
+                .after(WindowStep::HandleEvents),
+        );
         Ok(())
     }
 }

@@ -31,9 +31,7 @@ pub trait Extension {
 /// The startup scripts run in RunScript.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, StageLabel)]
 pub enum StartupStage {
-    PreScript,
-    RunScript,
-    PostScript,
+    Main,
 }
 
 /// Systems may be scheduled to run after the mainloop, for cleanup.
@@ -46,20 +44,11 @@ pub enum ShutdownStage {
 /// a handful of game related resources, rather than communicating with the GPU.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, StageLabel)]
 pub enum SimStage {
+    /// Pre-script parallel phase.
     Main,
-    /// Consume any input that has accumulated.
-    // ReadInput,
-    /// Use the input event vec in any systems that need to.
-    // HandleInput,
-    /// Runs after input is processed, with new values.
-    PostInput,
-    /// Runs before the serial scripting phase.
-    PreScript,
     /// Fully serial phase where scripts run.
     RunScript,
-    /// Runs after scripts have processed.
-    PostScript,
-    /// Run simulation actions.
+    /// Run simulation actions in parallel.
     Simulate,
 }
 
@@ -68,31 +57,9 @@ pub enum SimStage {
 // from the current cameras. Not generally for actually writing to the GPU.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, StageLabel)]
 pub enum FrameStage {
-    /// Run anything that should run with last frame system state.
-    PreInput,
-    /// Read values from the system event queue.
-    ReadSystem,
-    /// Do anything needed with system events this frame.
-    HandleSystem,
-    /// Respond to system events, like display config changes.
-    HandleDisplayChange,
-    /// Do anything needed that uses the after-change settings.
-    PostSystem,
     /// Transfer entity state into CPU-side GPU transfer buffers.
-    TrackStateChanges,
-    /// Create the target surface.
-    CreateTargetSurface,
-    /// Create the frame's encoder.
-    CreateCommandEncoder,
-    /// Everything that needs to use the command encoder and target surface.
-    Render,
-    /// Finish and submit commands to the GPU.
-    SubmitCommands,
-    /// Present our target surface.
-    PresentTargetSurface,
-    /// Recreate display if out-of-date.
-    HandleOutOfDateRenderer,
-    /// Right before frame end.
+    Main,
+    // Right before frame end.
     FrameEnd,
 }
 
@@ -107,42 +74,24 @@ pub struct Runtime {
 
 impl Default for Runtime {
     fn default() -> Self {
-        let startup_schedule = Schedule::default()
-            .with_stage(StartupStage::PreScript, SystemStage::parallel())
-            .with_stage(
-                StartupStage::RunScript,
-                SystemStage::single_threaded()
-                    .with_system(ScriptHerder::sys_run_startup_scripts.exclusive_system()),
-            )
-            .with_stage(StartupStage::PostScript, SystemStage::parallel());
+        let startup_schedule = Schedule::default().with_stage(
+            StartupStage::Main,
+            SystemStage::single_threaded()
+                .with_system(ScriptHerder::sys_run_startup_scripts.exclusive_system()),
+        );
 
         let sim_schedule = Schedule::default()
             .with_stage(SimStage::Main, SystemStage::parallel())
-            // .with_stage(SimStage::ReadInput, SystemStage::parallel())
-            // .with_stage(SimStage::HandleInput, SystemStage::parallel())
-            .with_stage(SimStage::PostInput, SystemStage::parallel())
-            .with_stage(SimStage::PreScript, SystemStage::parallel())
             .with_stage(
                 SimStage::RunScript,
                 SystemStage::single_threaded()
                     .with_system(ScriptHerder::sys_run_sim_scripts.exclusive_system()),
             )
-            .with_stage(SimStage::PostScript, SystemStage::parallel());
+            .with_stage(SimStage::Simulate, SystemStage::parallel());
 
         use SystemStage as SS;
         let frame_schedule = Schedule::default()
-            .with_stage(FrameStage::PreInput, SS::parallel())
-            .with_stage(FrameStage::ReadSystem, SS::parallel())
-            .with_stage(FrameStage::HandleSystem, SS::parallel())
-            .with_stage(FrameStage::HandleDisplayChange, SS::parallel())
-            .with_stage(FrameStage::PostSystem, SS::parallel())
-            .with_stage(FrameStage::TrackStateChanges, SS::parallel())
-            .with_stage(FrameStage::CreateTargetSurface, SS::single_threaded())
-            .with_stage(FrameStage::HandleOutOfDateRenderer, SS::single_threaded())
-            .with_stage(FrameStage::CreateCommandEncoder, SS::single_threaded())
-            .with_stage(FrameStage::Render, SS::parallel())
-            .with_stage(FrameStage::SubmitCommands, SS::single_threaded())
-            .with_stage(FrameStage::PresentTargetSurface, SS::single_threaded())
+            .with_stage(FrameStage::Main, SS::parallel())
             .with_stage(FrameStage::FrameEnd, SS::parallel());
 
         let shutdown_schedule =

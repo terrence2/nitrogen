@@ -19,7 +19,8 @@ nitrous = { path = "../../util/nitrous" }
 runtime = { path = "../../util/runtime" }
 shader_shared = { path = "../../wgpu-buffer/shader_shared" }
 stars = { path = "../../wgpu-buffer/stars" }
-terrain= { path = "../../wgpu-buffer/terrain" }
+terrain = { path = "../../wgpu-buffer/terrain" }
+window = { path = "../../system/window" }
 
 [build-dependencies]
 build_shaders = { path = "../../util/build_shaders" }

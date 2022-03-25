@@ -29,7 +29,7 @@ use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use runtime::{Extension, FrameStage, Runtime};
 use std::{borrow::Cow, fmt::Debug, fs, mem, num::NonZeroU32, path::PathBuf, ptr, sync::Arc};
 use wgpu::util::DeviceExt;
-use window::Window;
+use window::{Window, WindowStep};
 use zerocopy::AsBytes;
 
 #[derive(Debug)]
@@ -53,6 +53,16 @@ pub fn texture_format_sample_type(texture_format: wgpu::TextureFormat) -> wgpu::
 pub fn texture_format_size(texture_format: wgpu::TextureFormat) -> u32 {
     let info = texture_format.describe();
     info.block_size as u32
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum GpuStep {
+    HandleDisplayChange,
+    CreateTargetSurface,
+    HandleOutOfDateRenderer,
+    CreateCommandEncoder,
+    SubmitCommands,
+    PresentTargetSurface,
 }
 
 #[derive(Debug, NitrousResource)]
@@ -82,28 +92,39 @@ impl Extension for Gpu {
     fn init(runtime: &mut Runtime) -> Result<()> {
         let gpu = Self::new(runtime.resource::<Window>(), Default::default())?;
         runtime.insert_named_resource("gpu", gpu);
-        runtime
-            .frame_stage_mut(FrameStage::HandleDisplayChange)
-            .add_system(Self::sys_handle_display_config_change);
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
+            Self::sys_handle_display_config_change
+                .label(GpuStep::HandleDisplayChange)
+                .after(WindowStep::HandleEvents),
+        );
 
         runtime.insert_resource(None as Option<wgpu::SurfaceTexture>);
-        runtime
-            .frame_stage_mut(FrameStage::CreateTargetSurface)
-            .add_system(Self::sys_create_target_surface);
-        runtime
-            .frame_stage_mut(FrameStage::HandleOutOfDateRenderer)
-            .add_system(Self::sys_handle_out_of_date_renderer);
-        runtime
-            .frame_stage_mut(FrameStage::PresentTargetSurface)
-            .add_system(Self::sys_present_target_surface);
-
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
+            Self::sys_create_target_surface
+                .label(GpuStep::CreateTargetSurface)
+                .after(GpuStep::HandleDisplayChange),
+        );
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
+            Self::sys_handle_out_of_date_renderer
+                .label(GpuStep::HandleOutOfDateRenderer)
+                .after(GpuStep::CreateTargetSurface),
+        );
         runtime.insert_resource(None as Option<wgpu::CommandEncoder>);
-        runtime
-            .frame_stage_mut(FrameStage::CreateCommandEncoder)
-            .add_system(Self::sys_create_command_encoder);
-        runtime
-            .frame_stage_mut(FrameStage::SubmitCommands)
-            .add_system(Self::sys_submit_frame_commands);
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
+            Self::sys_create_command_encoder
+                .label(GpuStep::CreateCommandEncoder)
+                .after(GpuStep::CreateTargetSurface),
+        );
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
+            Self::sys_submit_frame_commands
+                .label(GpuStep::SubmitCommands)
+                .after(GpuStep::CreateTargetSurface),
+        );
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
+            Self::sys_present_target_surface
+                .label(GpuStep::PresentTargetSurface)
+                .after(GpuStep::SubmitCommands),
+        );
 
         Ok(())
     }

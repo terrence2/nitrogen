@@ -459,6 +459,7 @@ dependencies = [
  "anyhow",
  "approx",
  "bevy_ecs",
+ "event_mapper",
  "geodesy",
  "geometry",
  "log",
@@ -3277,6 +3278,7 @@ dependencies = [
  "shader_shared",
  "wgpu",
  "widget",
+ "window",
  "world",
 ]
 
@@ -3753,6 +3755,7 @@ dependencies = [
  "stars",
  "terrain",
  "wgpu",
+ "window",
 ]
 
 [[package]]

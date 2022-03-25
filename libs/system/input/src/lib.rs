@@ -160,7 +160,7 @@ impl InputController {
             .sim_stage_mut(SimStage::Main)
             .add_system(Self::sys_read_input_events.label(InputStep::ReadInput));
         runtime
-            .frame_stage_mut(FrameStage::ReadSystem)
+            .frame_stage_mut(FrameStage::Main)
             .add_system(Self::sys_read_system_events.label(InputStep::ReadSystem));
 
         input_controller

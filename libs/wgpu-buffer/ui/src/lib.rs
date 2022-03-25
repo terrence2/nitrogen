@@ -14,18 +14,20 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
 use bevy_ecs::prelude::*;
-use global_data::{GlobalParametersBuffer, GlobalsRenderStep};
-use gpu::{DisplayConfig, Gpu};
+use global_data::{GlobalParametersBuffer, GlobalsStep};
+use gpu::{DisplayConfig, Gpu, GpuStep};
 use input::InputFocus;
 use log::trace;
 use runtime::{Extension, FrameStage, Runtime};
 use shader_shared::Group;
 use std::marker::PhantomData;
 use widget::{WidgetBuffer, WidgetRenderStep, WidgetVertex};
-use world::WorldRenderPass;
+use window::WindowStep;
+use world::{WorldRenderPass, WorldStep};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
-pub enum UiRenderStep {
+pub enum UiStep {
+    HandleDisplayChange,
     Render,
 }
 
@@ -60,14 +62,20 @@ where
             runtime.resource::<Gpu>(),
         )?;
         runtime.insert_resource(ui);
-        runtime
-            .frame_stage_mut(FrameStage::HandleDisplayChange)
-            .add_system(Self::sys_handle_display_config_change);
-        runtime.frame_stage_mut(FrameStage::Render).add_system(
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
+            Self::sys_handle_display_config_change
+                .label(UiStep::HandleDisplayChange)
+                .after(WindowStep::HandleEvents),
+        );
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
             Self::sys_render_ui
-                .label(UiRenderStep::Render)
-                .after(GlobalsRenderStep::EnsureUpdated)
-                .after(WidgetRenderStep::EnsureUploaded),
+                .label(UiStep::Render)
+                .after(UiStep::HandleDisplayChange)
+                .after(GlobalsStep::EnsureUpdated)
+                .after(WidgetRenderStep::EnsureUploaded)
+                .after(WorldStep::Render)
+                .after(GpuStep::CreateCommandEncoder)
+                .before(GpuStep::SubmitCommands),
         );
         Ok(())
     }

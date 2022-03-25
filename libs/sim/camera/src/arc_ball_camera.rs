@@ -15,6 +15,7 @@
 use absolute_unit::{degrees, meters, radians, Degrees, Length, LengthUnit, Meters, Radians};
 use anyhow::{bail, ensure, Result};
 use bevy_ecs::prelude::*;
+use event_mapper::EventMapperStep;
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
 use measure::WorldSpaceFrame;
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
@@ -23,7 +24,7 @@ use runtime::{Extension, Runtime, SimStage};
 use std::f64::consts::PI;
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
-pub enum ArcBallInputStep {
+pub enum ArcBallStep {
     ApplyInput,
 }
 
@@ -45,9 +46,11 @@ impl Extension for ArcBallSystem {
                 bindings.bind("+Down", "@player.arcball.target_down(pressed)");
             "#,
         )?;
-        runtime
-            .sim_stage_mut(SimStage::PostInput)
-            .add_system(ArcBallController::sys_apply_input.label(ArcBallInputStep::ApplyInput));
+        runtime.sim_stage_mut(SimStage::Main).add_system(
+            ArcBallController::sys_apply_input
+                .label(ArcBallStep::ApplyInput)
+                .after(EventMapperStep::HandleEvents),
+        );
         Ok(())
     }
 }

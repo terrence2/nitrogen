@@ -16,14 +16,15 @@ use anyhow::Result;
 use atmosphere::AtmosphereBuffer;
 use bevy_ecs::prelude::*;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
-use global_data::{GlobalParametersBuffer, GlobalsRenderStep};
-use gpu::{DisplayConfig, Gpu};
+use global_data::{GlobalParametersBuffer, GlobalsStep};
+use gpu::{DisplayConfig, Gpu, GpuStep};
 use log::trace;
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use runtime::{Extension, FrameStage, Runtime};
 use shader_shared::Group;
 use stars::StarsBuffer;
-use terrain::{TerrainBuffer, TerrainRenderStep, TerrainVertex};
+use terrain::{TerrainBuffer, TerrainStep, TerrainVertex};
+use window::WindowStep;
 
 #[derive(Debug)]
 enum DebugMode {
@@ -49,7 +50,8 @@ impl DebugMode {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
-pub enum WorldRenderStep {
+pub enum WorldStep {
+    HandleDisplayChange,
     Render,
 }
 
@@ -91,14 +93,18 @@ impl Extension for WorldRenderPass {
             runtime.resource::<Gpu>(),
         )?;
         runtime.insert_named_resource("world", world);
-        runtime
-            .frame_stage_mut(FrameStage::HandleDisplayChange)
-            .add_system(Self::sys_handle_display_config_change);
-        runtime.frame_stage_mut(FrameStage::Render).add_system(
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
+            Self::sys_handle_display_config_change
+                .label(WorldStep::HandleDisplayChange)
+                .after(WindowStep::HandleEvents),
+        );
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
             Self::sys_render_world
-                .label(WorldRenderStep::Render)
-                .after(GlobalsRenderStep::EnsureUpdated)
-                .after(TerrainRenderStep::AccumulateNormalsAndColor),
+                .label(WorldStep::Render)
+                .after(GlobalsStep::EnsureUpdated)
+                .after(TerrainStep::AccumulateNormalsAndColor)
+                .after(GpuStep::CreateCommandEncoder)
+                .before(GpuStep::SubmitCommands),
         );
 
         // TODO: figure out debug bindings

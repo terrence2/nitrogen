@@ -34,11 +34,11 @@ pub use crate::{
 use absolute_unit::{Length, Meters};
 use anyhow::Result;
 use bevy_ecs::prelude::*;
-use camera::{HudCamera, ScreenCamera};
+use camera::{CameraStep, HudCamera, ScreenCamera};
 use catalog::Catalog;
 use geodesy::{GeoCenter, Graticule};
-use global_data::{GlobalParametersBuffer, GlobalsRenderStep};
-use gpu::{CpuDetailLevel, DisplayConfig, Gpu, GpuDetailLevel};
+use global_data::{GlobalParametersBuffer, GlobalsStep};
+use gpu::{CpuDetailLevel, DisplayConfig, Gpu, GpuDetailLevel, GpuStep};
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use runtime::{Extension, FrameStage, Runtime, ShutdownStage};
 use shader_shared::Group;
@@ -123,8 +123,9 @@ impl GpuDetail {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
-pub enum TerrainRenderStep {
+pub enum TerrainStep {
     // Pre-encoder
+    HandleDisplayChange,
     OptimizePatches,
     ApplyPatchesToHeightTiles,
     ApplyPatchesToNormalTiles,
@@ -203,63 +204,74 @@ impl Extension for TerrainBuffer {
             "#,
         )?;
 
-        runtime
-            .frame_stage_mut(FrameStage::HandleDisplayChange)
-            .add_system(Self::sys_handle_display_config_change);
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
+            Self::sys_handle_display_config_change.label(TerrainStep::HandleDisplayChange),
+        );
 
-        runtime
-            .frame_stage_mut(FrameStage::TrackStateChanges)
-            .add_system(Self::sys_optimize_patches.label(TerrainRenderStep::OptimizePatches));
-        runtime
-            .frame_stage_mut(FrameStage::TrackStateChanges)
-            .add_system(
-                Self::sys_apply_patches_to_height_tiles
-                    .label(TerrainRenderStep::ApplyPatchesToHeightTiles)
-                    .after(TerrainRenderStep::OptimizePatches),
-            );
-        runtime
-            .frame_stage_mut(FrameStage::TrackStateChanges)
-            .add_system(
-                Self::sys_apply_patches_to_normal_tiles
-                    .label(TerrainRenderStep::ApplyPatchesToNormalTiles)
-                    .after(TerrainRenderStep::OptimizePatches),
-            );
-        runtime
-            .frame_stage_mut(FrameStage::TrackStateChanges)
-            .add_system(
-                Self::sys_apply_patches_to_color_tiles
-                    .label(TerrainRenderStep::ApplyPatchesToColorTiles)
-                    .after(TerrainRenderStep::OptimizePatches),
-            );
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
+            Self::sys_optimize_patches
+                .label(TerrainStep::OptimizePatches)
+                .after(CameraStep::HandleDisplayChange),
+        );
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
+            Self::sys_apply_patches_to_height_tiles
+                .label(TerrainStep::ApplyPatchesToHeightTiles)
+                .after(TerrainStep::OptimizePatches),
+        );
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
+            Self::sys_apply_patches_to_normal_tiles
+                .label(TerrainStep::ApplyPatchesToNormalTiles)
+                .after(TerrainStep::OptimizePatches),
+        );
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
+            Self::sys_apply_patches_to_color_tiles
+                .label(TerrainStep::ApplyPatchesToColorTiles)
+                .after(TerrainStep::OptimizePatches),
+        );
 
-        runtime.frame_stage_mut(FrameStage::Render).add_system(
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
             Self::sys_encode_uploads
-                .label(TerrainRenderStep::EncodeUploads)
-                .after(GlobalsRenderStep::EnsureUpdated),
+                .label(TerrainStep::EncodeUploads)
+                .after(GlobalsStep::EnsureUpdated)
+                .after(TerrainStep::ApplyPatchesToHeightTiles)
+                .after(TerrainStep::ApplyPatchesToNormalTiles)
+                .after(TerrainStep::ApplyPatchesToColorTiles)
+                .after(GpuStep::CreateCommandEncoder)
+                .before(GpuStep::SubmitCommands),
         );
-        runtime.frame_stage_mut(FrameStage::Render).add_system(
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
             Self::sys_paint_atlas_indices
-                .label(TerrainRenderStep::PaintAtlasIndices)
-                .after(TerrainRenderStep::EncodeUploads),
+                .label(TerrainStep::PaintAtlasIndices)
+                .after(TerrainStep::EncodeUploads)
+                .after(GpuStep::CreateCommandEncoder)
+                .before(GpuStep::SubmitCommands),
         );
-        runtime.frame_stage_mut(FrameStage::Render).add_system(
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
             Self::sys_terrain_tesselate
-                .label(TerrainRenderStep::Tesselate)
-                .after(TerrainRenderStep::PaintAtlasIndices),
+                .label(TerrainStep::Tesselate)
+                .after(TerrainStep::PaintAtlasIndices)
+                .after(GpuStep::CreateCommandEncoder)
+                .before(GpuStep::SubmitCommands),
         );
-        runtime.frame_stage_mut(FrameStage::Render).add_system(
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
             Self::sys_deferred_texture
-                .label(TerrainRenderStep::RenderDeferredTexture)
-                .after(TerrainRenderStep::Tesselate),
+                .label(TerrainStep::RenderDeferredTexture)
+                .after(TerrainStep::Tesselate)
+                .after(GpuStep::CreateCommandEncoder)
+                .before(GpuStep::SubmitCommands),
         );
-        runtime.frame_stage_mut(FrameStage::Render).add_system(
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
             Self::sys_accumulate_normal_and_color
-                .label(TerrainRenderStep::AccumulateNormalsAndColor)
-                .after(TerrainRenderStep::RenderDeferredTexture),
+                .label(TerrainStep::AccumulateNormalsAndColor)
+                .after(TerrainStep::RenderDeferredTexture)
+                .after(GpuStep::CreateCommandEncoder)
+                .before(GpuStep::SubmitCommands),
         );
 
-        runtime.frame_stage_mut(FrameStage::FrameEnd).add_system(
-            Self::sys_handle_capture_snapshot.label(TerrainRenderStep::CaptureSnapshots),
+        runtime.frame_stage_mut(FrameStage::Main).add_system(
+            Self::sys_handle_capture_snapshot
+                .label(TerrainStep::CaptureSnapshots)
+                .after(GpuStep::PresentTargetSurface),
         );
 
         runtime
