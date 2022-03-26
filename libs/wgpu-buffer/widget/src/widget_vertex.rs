@@ -19,7 +19,7 @@ use crate::{
 use memoffset::offset_of;
 use std::mem;
 use window::{
-    size::{AspectMath, ScreenDir, Size},
+    size::{AbsSize, AspectMath, ScreenDir, Size},
     Window,
 };
 use zerocopy::{AsBytes, FromBytes};
@@ -102,6 +102,62 @@ impl WidgetVertex {
         let y0 = y0.as_gpu(win, ScreenDir::Vertical);
         let x1 = x1.as_gpu(win, ScreenDir::Horizontal);
         let y1 = y1.as_gpu(win, ScreenDir::Vertical);
+
+        // Build 4 corner vertices.
+        let v00 = WidgetVertex {
+            position: [x0, y0, z],
+            tex_coord: [s0, t0],
+            color: color.to_u8_array(),
+            widget_info_index,
+        };
+        let v01 = WidgetVertex {
+            position: [x0, y1, z],
+            tex_coord: [s0, t1],
+            color: color.to_u8_array(),
+            widget_info_index,
+        };
+        let v10 = WidgetVertex {
+            position: [x1, y0, z],
+            tex_coord: [s1, t0],
+            color: color.to_u8_array(),
+            widget_info_index,
+        };
+        let v11 = WidgetVertex {
+            position: [x1, y1, z],
+            tex_coord: [s1, t1],
+            color: color.to_u8_array(),
+            widget_info_index,
+        };
+
+        // Push 2 triangles
+        pool.push(v00);
+        pool.push(v10);
+        pool.push(v01);
+        pool.push(v01);
+        pool.push(v10);
+        pool.push(v11);
+    }
+
+    pub fn push_partial_quad(
+        [x0, y0]: [AbsSize; 2],
+        [x1, y1]: [AbsSize; 2],
+        color: &Color,
+        pool: &mut Vec<WidgetVertex>,
+    ) {
+        // let x0 = x0.as_gpu(win, ScreenDir::Horizontal);
+        // let y0 = y0.as_gpu(win, ScreenDir::Vertical);
+        // let x1 = x1.as_gpu(win, ScreenDir::Horizontal);
+        // let y1 = y1.as_gpu(win, ScreenDir::Vertical);
+        let x0 = x0.as_px();
+        let y0 = y0.as_px();
+        let x1 = x1.as_px();
+        let y1 = y1.as_px();
+        let z = 0f32;
+        let s0 = 0f32;
+        let s1 = 0f32;
+        let t0 = 0f32;
+        let t1 = 0f32;
+        let widget_info_index = 0;
 
         // Build 4 corner vertices.
         let v00 = WidgetVertex {

@@ -27,6 +27,7 @@ use image::Luma;
 use nitrous::Value;
 use ordered_float::OrderedFloat;
 use parking_lot::RwLock;
+use std::hint::unreachable_unchecked;
 use std::{borrow::Borrow, collections::HashMap, env, path::PathBuf, sync::Arc};
 use window::{
     size::{AbsSize, LeftBound, RelSize, ScreenDir},
@@ -52,7 +53,7 @@ impl GlyphTracker {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct TextSpanMetrics {
     // The width of the span.
     pub width: AbsSize,
@@ -199,28 +200,40 @@ impl FontContext {
         *x_pos = AbsSize::from_px((x_pos.as_px() * phys_w).floor() / phys_w);
     }
 
-    pub fn measure_text(&mut self, span: &TextSpan, win: &Window) -> Result<TextSpanMetrics> {
+    pub fn measure_text(&mut self, span: &mut TextSpan, win: &Window) -> Result<TextSpanMetrics> {
+        if let Some(metrics) = span.metrics() {
+            debug_assert_eq!(
+                span.layout_cache().len(),
+                span.content().chars().count() * 6
+            );
+            return Ok(metrics.to_owned());
+        }
+        debug_assert_eq!(span.layout_cache().len(), 0);
+
         let phys_w = win.width() as f32;
-        let scale_px = (span.size() * win.dpi_scale_factor() as f32)
-            .as_abs(win, ScreenDir::Horizontal)
-            .ceil();
+        // let scale_px = (span.size() * win.dpi_scale_factor() as f32)
+        //     .as_abs(win, ScreenDir::Horizontal)
+        //     .ceil();
+        let scale_px = span.size().as_abs(win, ScreenDir::Horizontal).ceil();
 
         // Font rendering is based around the baseline. We want it based around the top-left
         // corner instead, so move down by the ascent.
-        let font = self.get_font(span.font());
-        let descent = font.read().descent(scale_px);
-        let ascent = font.read().ascent(scale_px);
-        let line_gap = font.read().line_gap(scale_px);
-        let advance = font.read().advance_style();
+        let font_p = self.get_font(span.font());
+        let font = font_p.read();
+        let descent = font.descent(scale_px);
+        let ascent = font.ascent(scale_px);
+        let line_gap = font.line_gap(scale_px);
+        let advance = font.advance_style();
 
         let mut x_pos = AbsSize::from_px(0.);
         let mut prior = None;
+        let mut cache = Vec::new();
         for c in span.content().chars() {
-            let font = self.get_font(span.font());
-            let lsb = font.read().left_side_bearing(c, scale_px);
-            let adv = font.read().advance_width(c, scale_px);
+            let ((lo_x, lo_y), (mut hi_x, hi_y)) = font.pixel_bounding_box(c, scale_px);
+            let lsb = font.left_side_bearing(c, scale_px);
+            let adv = font.advance_width(c, scale_px);
             let kerning = prior
-                .map(|p| font.read().pair_kerning(p, c, scale_px))
+                .map(|p| font.pair_kerning(p, c, scale_px))
                 .unwrap_or_else(AbsSize::zero);
             prior = Some(c);
 
@@ -229,19 +242,35 @@ impl FontContext {
             }
             Self::align_to_px(phys_w, &mut x_pos);
 
+            // Since we use the start and end span, make sure that our degenerate rect is
+            // at least wide enough to serve as a placeholder char.
+            if c == ' ' {
+                hi_x += adv;
+            }
+
+            let x0 = x_pos + lo_x;
+            let x1 = x_pos + hi_x;
+            let y0 = lo_y;
+            let y1 = hi_y;
+
+            WidgetVertex::push_partial_quad([x0, y0], [x1, y1], span.color(), &mut cache);
+
             x_pos += match advance {
                 FontAdvance::Mono => adv,
                 FontAdvance::Sans => adv - lsb,
             };
         }
 
-        Ok(TextSpanMetrics {
+        let metrics = TextSpanMetrics {
             width: x_pos,
             height: ascent - descent,
             ascent,
             descent,
             line_gap,
-        })
+        };
+        span.set_metrics(&metrics);
+        span.layout_cache_mut().append(&mut cache);
+        Ok(metrics)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -255,7 +284,7 @@ impl FontContext {
         gpu: &Gpu,
         text_pool: &mut Vec<WidgetVertex>,
         background_pool: &mut Vec<WidgetVertex>,
-    ) -> Result<TextSpanMetrics> {
+    ) -> Result<()> {
         let gs_width = self.glyph_sheet_width();
         let gs_height = self.glyph_sheet_height();
 
@@ -270,54 +299,65 @@ impl FontContext {
 
         // Font rendering is based around the baseline. We want it based around the top-left
         // corner instead, so move down by the ascent.
-        let font = self.get_font(span.font());
-        let descent = font.read().descent(scale_px);
-        let ascent = font.read().ascent(scale_px);
-        let line_gap = font.read().line_gap(scale_px);
-        let advance = font.read().advance_style();
+        let ascent = span.metrics().unwrap().ascent;
+        let descent = span.metrics().unwrap().descent;
 
-        let mut x_pos = offset.left();
+        let mut sel_range_start = None;
+        let mut sel_range_end = None;
+        let mut bx0 = AbsSize::zero();
+        let mut bx1 = AbsSize::zero();
+        let x_base = offset.left();
         let y_pos = offset.bottom();
-        let mut prior = None;
+        let z_depth = offset.depth().as_depth();
+        let mut cache_offset = 0;
         for (i, c) in span.content().chars().enumerate() {
             let frame = self.load_glyph(span.font(), c, scale_px, gpu)?;
-            let font = self.get_font(span.font());
-            let ((lo_x, lo_y), (hi_x, hi_y)) = font.read().pixel_bounding_box(c, scale_px);
-            let lsb = font.read().left_side_bearing(c, scale_px);
-            let adv = font.read().advance_width(c, scale_px);
-            let kerning = prior
-                .map(|p| font.read().pair_kerning(p, c, scale_px))
-                .unwrap_or_else(AbsSize::zero);
-            prior = Some(c);
 
-            if advance != FontAdvance::Mono {
-                x_pos += kerning;
+            let s0 = frame.s0(gs_width);
+            let t0 = frame.t0(gs_height);
+            let s1 = frame.s1(gs_width);
+            let t1 = frame.t1(gs_height);
+            for j in 0..6 {
+                let mut v = span.layout_cache()[cache_offset + j];
+
+                v.position[0] += x_base.as_px();
+                if j == 0 {
+                    bx0 = AbsSize::from_px(v.position[0]);
+                }
+                if j == 5 {
+                    bx1 = AbsSize::from_px(v.position[0]);
+                }
+                v.position[0] = AbsSize::from_px(v.position[0])
+                    .as_rel(win, ScreenDir::Horizontal)
+                    .as_gpu();
+
+                v.position[1] += y_pos.as_px();
+                v.position[1] = AbsSize::from_px(v.position[1])
+                    .as_rel(win, ScreenDir::Vertical)
+                    .as_gpu();
+
+                v.position[2] = z_depth;
+
+                v.widget_info_index = widget_info_index;
+                v.tex_coord = match j {
+                    0 => [s0, t0],
+                    1 => [s1, t0],
+                    2 => [s0, t1],
+                    3 => [s0, t1],
+                    4 => [s1, t0],
+                    5 => [s1, t1],
+                    _ => unsafe { unreachable_unchecked() },
+                };
+                text_pool.push(v);
             }
-            Self::align_to_px(phys_w, &mut x_pos);
-
-            let x0 = x_pos + lo_x;
-            let x1 = x_pos + hi_x;
-            let y0 = y_pos + lo_y;
-            let y1 = y_pos + hi_y;
-
-            WidgetVertex::push_textured_quad(
-                [x0.into(), y0.into()],
-                [x1.into(), y1.into()],
-                offset.depth().as_depth(),
-                [frame.s0(gs_width), frame.t0(gs_height)],
-                [frame.s1(gs_width), frame.t1(gs_height)],
-                span.color(),
-                widget_info_index,
-                win,
-                text_pool,
-            );
+            cache_offset += 6;
 
             // Apply cursor or selection
             if let SpanSelection::Cursor { position } = selection_area {
                 if i == position {
                     // Draw cursor, pixel aligned.
-                    let mut bx0 = offset.left() + x_pos;
                     Self::align_to_px(phys_w, &mut bx0);
+                    bx0 -= AbsSize::from_px(1.);
                     let bx1 = bx0 + AbsSize::from_px(2.);
                     let by0 = offset.bottom() + descent;
                     let by1 = offset.bottom() + ascent;
@@ -327,7 +367,7 @@ impl FontContext {
                         [bx0.into(), by0.into()],
                         [bx1.into(), by1.into()],
                         bz.as_depth(),
-                        &Color::White,
+                        &Color::White.opacity(0.8),
                         widget_info_index,
                         win,
                         background_pool,
@@ -335,36 +375,41 @@ impl FontContext {
                 }
             }
             if let SpanSelection::Select { range } = &selection_area {
-                if range.contains(&i) {
-                    let bx0 = offset.left() + x_pos;
-                    let bx1 = offset.left() + x_pos + kerning + lo_x + adv;
-                    let by0 = offset.bottom() + descent;
-                    let by1 = offset.bottom() + ascent;
-                    let bz = offset.depth() - RelSize::from_percent(0.1);
-
-                    WidgetVertex::push_quad(
-                        [bx0.into(), by0.into()],
-                        [bx1.into(), by1.into()],
-                        bz.as_depth(),
-                        &Color::Blue,
-                        widget_info_index,
-                        win,
-                        background_pool,
-                    );
+                if i == range.start {
+                    sel_range_start = Some(bx0);
+                }
+                if i == range.end - 1 {
+                    sel_range_end = Some(bx1);
+                }
+                if i == range.end {
+                    sel_range_end = Some(bx0);
                 }
             }
+        }
 
-            x_pos += match advance {
-                FontAdvance::Mono => adv,
-                FontAdvance::Sans => adv - lsb,
-            };
+        if let Some(bx0) = sel_range_start {
+            if let Some(bx1) = sel_range_end {
+                let by0 = offset.bottom() + descent;
+                let by1 = offset.bottom() + ascent;
+                let bz = offset.depth() - RelSize::from_percent(0.1);
+                WidgetVertex::push_quad(
+                    [bx0.into(), by0.into()],
+                    [bx1.into(), by1.into()],
+                    bz.as_depth(),
+                    &Color::Blue,
+                    widget_info_index,
+                    win,
+                    background_pool,
+                );
+            }
         }
 
         if let SpanSelection::Cursor { position } = selection_area {
             if position == span.content().len() {
                 // Draw cursor, pixel aligned.
-                let mut bx0 = offset.left() + x_pos;
+                bx0 = bx1;
                 Self::align_to_px(phys_w, &mut bx0);
+                bx0 -= AbsSize::from_px(1.);
                 let bx1 = bx0 + AbsSize::from_px(2.);
                 let by0 = offset.bottom() + descent;
                 let by1 = offset.bottom() + ascent;
@@ -382,13 +427,7 @@ impl FontContext {
             }
         }
 
-        Ok(TextSpanMetrics {
-            width: x_pos,
-            height: ascent - descent,
-            ascent,
-            descent,
-            line_gap,
-        })
+        Ok(())
     }
 }
 

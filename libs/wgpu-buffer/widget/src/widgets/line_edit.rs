@@ -113,7 +113,7 @@ impl LineEdit {
 
 impl Widget for LineEdit {
     fn measure(&mut self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>> {
-        self.metrics = self.line.measure(win, font_context)?;
+        self.metrics = self.line.measure(win, font_context)?.to_owned();
         Ok(Extent::<Size>::new(
             self.metrics.width.into(),
             (self.metrics.height - self.metrics.descent).into(),
