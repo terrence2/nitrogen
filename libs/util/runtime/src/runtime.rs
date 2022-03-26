@@ -230,6 +230,17 @@ impl Runtime {
         self.startup_schedule.get_stage_mut(&startup_stage).unwrap()
     }
 
+    pub fn add_startup_system<Params>(
+        &mut self,
+        system: impl IntoSystemDescriptor<Params>,
+    ) -> &mut Self {
+        self.startup_schedule
+            .get_stage_mut::<SystemStage>(&StartupStage::Main)
+            .unwrap()
+            .add_system(system);
+        self
+    }
+
     #[inline]
     pub fn shutdown_stage_mut(&mut self, shutdown_stage: ShutdownStage) -> &mut SystemStage {
         self.shutdown_schedule

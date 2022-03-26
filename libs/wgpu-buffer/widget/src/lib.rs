@@ -159,6 +159,9 @@ where
                 .after(WidgetSimStep::HandleEvents),
         );
 
+        runtime.add_startup_system(
+            Self::sys_report_script_completions.label(WidgetSimStep::ReportScriptCompletions),
+        );
         runtime.add_frame_system(
             Self::sys_report_script_completions.label(WidgetSimStep::ReportScriptCompletions),
         );
