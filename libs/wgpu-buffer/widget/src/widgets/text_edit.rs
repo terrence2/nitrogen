@@ -146,9 +146,10 @@ impl Widget for TextEdit {
     fn measure(&mut self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>> {
         let mut width = AbsSize::zero();
         let mut height_offset = AbsSize::zero();
-        for (i, line) in self.lines.iter().enumerate() {
+        let line_count = self.lines.len();
+        for (i, line) in self.lines.iter_mut().enumerate() {
             let span_metrics = line.measure(win, font_context)?;
-            if i != self.lines.len() - 1 {
+            if i != line_count - 1 {
                 height_offset += span_metrics.line_gap;
             }
             height_offset += span_metrics.height;
@@ -182,12 +183,19 @@ impl Widget for TextEdit {
 
         let mut pos = self.layout_position.as_abs(win);
         *pos.bottom_mut() += self.measured_extent.height();
+        let line_count = self.lines.len();
         for (i, line) in self.lines.iter().enumerate() {
-            let span_metrics = line.measure(win, &mut context.font_context)?;
-            *pos.bottom_mut() -= span_metrics.height;
-            let span_metrics = line.upload(pos.into(), widget_info_index, win, gpu, context)?;
-            if i != self.lines.len() - 1 {
-                *pos.bottom_mut() -= span_metrics.line_gap;
+            let line_metrics = line.measure_cached();
+            // TODO: aabb bounds check against the cached region
+            if pos.bottom() < AbsSize::Px(0f32)
+                && pos.bottom() - line_metrics.height < AbsSize::Px(0f32)
+            {
+                continue;
+            }
+            *pos.bottom_mut() -= line_metrics.height;
+            line.upload(pos.into(), widget_info_index, win, gpu, context)?;
+            if i != line_count - 1 {
+                *pos.bottom_mut() -= line_metrics.line_gap;
             }
         }
 

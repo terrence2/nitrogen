@@ -42,6 +42,9 @@ use window::{
     Window,
 };
 
+// TODO: expand this once we have scroll bars
+const HISTORY_SIZE: usize = 80;
+
 // Items packed from top to bottom.
 #[derive(Debug)]
 pub struct Terminal {
@@ -365,7 +368,7 @@ impl Terminal {
         let screen = &mut self.output.write();
         println!("{}", line);
         screen.append_line(line);
-        if screen.line_count() > 80 {
+        if screen.line_count() > HISTORY_SIZE {
             screen.remove_first_line();
         }
     }

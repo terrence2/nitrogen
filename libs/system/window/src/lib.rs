@@ -16,10 +16,10 @@ pub mod size;
 
 use anyhow::{bail, Result};
 use bevy_ecs::prelude::*;
-use input::{SystemEvent, SystemEventVec};
+use input::{InputStep, SystemEvent, SystemEventVec};
 use log::info;
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
-use runtime::{Extension, FrameStage, Runtime};
+use runtime::{Extension, Runtime};
 use std::{fmt::Debug, str::FromStr, string::ToString};
 use structopt::StructOpt;
 
@@ -208,7 +208,7 @@ impl DisplayConfig {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
-pub enum WindowSystemInputStep {
+pub enum WindowStep {
     HandleEvents,
 }
 
@@ -232,9 +232,11 @@ impl Extension for Window {
         let window = Window::new(os_window, display_config);
         runtime.insert_named_resource("window", window);
         runtime.insert_resource(None as Option<DisplayConfig>);
-        runtime
-            .frame_stage_mut(FrameStage::HandleSystem)
-            .add_system(Self::sys_handle_system_events.label(WindowSystemInputStep::HandleEvents));
+        runtime.add_frame_system(
+            Self::sys_handle_system_events
+                .label(WindowStep::HandleEvents)
+                .after(InputStep::ReadSystem),
+        );
         Ok(())
     }
 }

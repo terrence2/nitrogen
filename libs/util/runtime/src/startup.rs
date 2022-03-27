@@ -35,7 +35,7 @@ pub struct StartupOpts {
 impl Extension for StartupOpts {
     fn init(runtime: &mut Runtime) -> Result<()> {
         if let Ok(code) = std::fs::read_to_string("autoexec.n2o") {
-            runtime.run_string(&code)?;
+            runtime.run_interactive(&code)?;
         }
         if let Some(opts) = runtime.maybe_resource::<StartupOpts>() {
             let opts = opts.to_owned();

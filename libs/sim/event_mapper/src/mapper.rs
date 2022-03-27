@@ -18,10 +18,10 @@ use crate::{
 };
 use anyhow::{bail, Result};
 use bevy_ecs::prelude::*;
-use input::{ElementState, InputEvent, InputEventVec, InputFocus, ModifiersState};
+use input::{ElementState, InputEvent, InputEventVec, InputFocus, InputStep, ModifiersState};
 use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
 use ordered_float::OrderedFloat;
-use runtime::{Extension, Runtime, ScriptHerder, SimStage};
+use runtime::{Extension, Runtime, ScriptHerder};
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
@@ -37,7 +37,7 @@ pub struct State {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
-pub enum EventMapperInputStep {
+pub enum EventMapperStep {
     HandleEvents,
 }
 
@@ -59,9 +59,11 @@ where
 {
     fn init(runtime: &mut Runtime) -> Result<()> {
         runtime.insert_named_resource("bindings", EventMapper::<T>::new());
-        runtime
-            .sim_stage_mut(SimStage::HandleInput)
-            .add_system(Self::sys_handle_input_events.label(EventMapperInputStep::HandleEvents));
+        runtime.add_sim_system(
+            Self::sys_handle_input_events
+                .label(EventMapperStep::HandleEvents)
+                .after(InputStep::ReadInput),
+        );
         Ok(())
     }
 }

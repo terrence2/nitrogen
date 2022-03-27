@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = { version = "^ 1", features = ["backtrace"] }
-bevy_ecs = "^ 0.6"
+bevy_ecs = { version = "^ 0.6", features = ["trace"] }
 log = "^ 0.4"
 parking_lot = "^ 0.11"
 wgpu = { version = "^ 0.12", features = ["spirv"] }
@@ -19,7 +19,8 @@ nitrous = { path = "../../util/nitrous" }
 runtime = { path = "../../util/runtime" }
 shader_shared = { path = "../../wgpu-buffer/shader_shared" }
 stars = { path = "../../wgpu-buffer/stars" }
-terrain= { path = "../../wgpu-buffer/terrain" }
+terrain = { path = "../../wgpu-buffer/terrain" }
+window = { path = "../../system/window" }
 
 [build-dependencies]
 build_shaders = { path = "../../util/build_shaders" }

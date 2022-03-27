@@ -32,6 +32,7 @@ members = [
     "libs/system/catalog",
     "libs/system/gpu",
     "libs/system/input",
+    "libs/system/tracelog",
     "libs/system/window",
 
     # Only external, util, and system dependencies. Generally concerned
@@ -62,7 +63,7 @@ members = [
 chrono = "^ 0.4"
 env_logger = "^ 0.8"
 anyhow = { version = "^ 1", features = ["backtrace"] }
-bevy_ecs = "^ 0.6"
+bevy_ecs = { version = "^ 0.6", features = ["trace"] }
 image = "^ 0.23"
 log = "^ 0.4"
 nalgebra = "^ 0.29"
@@ -91,6 +92,7 @@ orrery = { path = "libs/sim/orrery" }
 runtime = { path = "libs/util/runtime" }
 stars = { path = "libs/wgpu-buffer/stars" }
 terrain = { path = "libs/wgpu-buffer/terrain" }
+tracelog = { path = "libs/system/tracelog" }
 ui = { path = "libs/wgpu-buffer/ui" }
 widget = { path = "libs/wgpu-buffer/widget" }
 window = { path = "libs/system/window" }

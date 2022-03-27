@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    font_context::{FontContext, TextSpanMetrics},
+    font_context::FontContext,
     region::Position,
     text_run::{SpanSelection, TextSpan},
     widget_info::WidgetInfo,
@@ -101,7 +101,7 @@ impl PaintContext {
         selection_area: SpanSelection,
         win: &Window,
         gpu: &Gpu,
-    ) -> Result<TextSpanMetrics> {
+    ) -> Result<()> {
         self.font_context.layout_text(
             span,
             widget_info_index,

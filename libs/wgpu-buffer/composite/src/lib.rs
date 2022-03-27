@@ -15,15 +15,15 @@
 use anyhow::Result;
 use bevy_ecs::prelude::*;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
-use global_data::{GlobalParametersBuffer, GlobalsRenderStep};
-use gpu::Gpu;
+use global_data::{GlobalParametersBuffer, GlobalsStep};
+use gpu::{Gpu, GpuStep};
 use input::InputFocus;
 use log::trace;
-use runtime::{Extension, FrameStage, Runtime};
+use runtime::{Extension, Runtime};
 use shader_shared::Group;
 use std::marker::PhantomData;
-use ui::{UiRenderPass, UiRenderStep};
-use world::{WorldRenderPass, WorldRenderStep};
+use ui::{UiRenderPass, UiStep};
+use world::{WorldRenderPass, WorldStep};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
 pub enum CompositeRenderStep {
@@ -51,12 +51,14 @@ where
             runtime.resource::<Gpu>(),
         )?;
         runtime.insert_resource(composite);
-        runtime.frame_stage_mut(FrameStage::Render).add_system(
+        runtime.add_frame_system(
             Self::sys_composite_scene
                 .label(CompositeRenderStep::Render)
-                .after(GlobalsRenderStep::EnsureUpdated)
-                .after(WorldRenderStep::Render)
-                .after(UiRenderStep::Render),
+                .after(GlobalsStep::EnsureUpdated)
+                .after(WorldStep::Render)
+                .after(UiStep::Render)
+                .after(GpuStep::CreateCommandEncoder)
+                .before(GpuStep::SubmitCommands),
         );
         Ok(())
     }

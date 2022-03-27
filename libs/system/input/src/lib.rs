@@ -21,7 +21,7 @@ use anyhow::{bail, Result};
 use bevy_ecs::prelude::*;
 use log::warn;
 use parking_lot::Mutex;
-use runtime::{FrameStage, Runtime, SimStage};
+use runtime::Runtime;
 use smallvec::SmallVec;
 use std::{
     collections::HashMap,
@@ -123,6 +123,12 @@ pub struct InputState {
     window_focused: bool,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum InputStep {
+    ReadInput,
+    ReadSystem,
+}
+
 pub struct InputController {
     proxy: EventLoopProxy<MetaEvent>,
     input_event_source: Receiver<InputEvent>,
@@ -150,12 +156,8 @@ impl InputController {
         runtime.insert_resource(InputEventVec::new());
         runtime.insert_resource(SystemEventVec::new());
 
-        runtime
-            .sim_stage_mut(SimStage::ReadInput)
-            .add_system(Self::sys_read_input_events);
-        runtime
-            .frame_stage_mut(FrameStage::ReadSystem)
-            .add_system(Self::sys_read_system_events);
+        runtime.add_sim_system(Self::sys_read_input_events.label(InputStep::ReadInput));
+        runtime.add_frame_system(Self::sys_read_system_events.label(InputStep::ReadSystem));
 
         input_controller
     }

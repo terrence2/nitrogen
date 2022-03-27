@@ -15,15 +15,15 @@
 use absolute_unit::{Kilometers, Meters};
 use anyhow::Result;
 use bevy_ecs::prelude::*;
-use camera::{HudCamera, ScreenCamera};
+use camera::{CameraStep, HudCamera, ScreenCamera};
 use core::num::NonZeroU64;
-use gpu::Gpu;
+use gpu::{Gpu, GpuStep};
 use nalgebra::{convert, Matrix3, Matrix4, Point3, Vector3, Vector4};
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use orrery::Orrery;
-use runtime::{Extension, FrameStage, Runtime};
+use runtime::{Extension, Runtime};
 use std::{mem, sync::Arc};
-use window::Window;
+use window::{Window, WindowStep};
 use zerocopy::{AsBytes, FromBytes};
 
 pub fn m2v(m: &Matrix4<f32>) -> [[f32; 4]; 4] {
@@ -147,7 +147,7 @@ impl Globals {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
-pub enum GlobalsRenderStep {
+pub enum GlobalsStep {
     TrackStateChanges,
     EnsureUpdated,
 }
@@ -175,12 +175,19 @@ impl Extension for GlobalParametersBuffer {
         )?;
 
         runtime.insert_named_resource("globals", globals);
-        runtime
-            .frame_stage_mut(FrameStage::TrackStateChanges)
-            .add_system(Self::sys_track_state_changes.label(GlobalsRenderStep::TrackStateChanges));
-        runtime
-            .frame_stage_mut(FrameStage::Render)
-            .add_system(Self::sys_ensure_globals_updated.label(GlobalsRenderStep::EnsureUpdated));
+        runtime.add_frame_system(
+            Self::sys_track_state_changes
+                .label(GlobalsStep::TrackStateChanges)
+                .after(WindowStep::HandleEvents)
+                .after(CameraStep::HandleDisplayChange),
+        );
+        runtime.add_frame_system(
+            Self::sys_ensure_globals_updated
+                .label(GlobalsStep::EnsureUpdated)
+                .after(GlobalsStep::TrackStateChanges)
+                .after(GpuStep::CreateCommandEncoder)
+                .before(GpuStep::SubmitCommands),
+        );
 
         Ok(())
     }

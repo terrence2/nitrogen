@@ -18,6 +18,6 @@ mod timestep;
 
 pub use crate::{
     animation::{Animation, LinearAnimationTemplate},
-    timeline::Timeline,
-    timestep::TimeStep,
+    timeline::{Timeline, TimelineStep},
+    timestep::{TimeStep, TimeStepStep},
 };

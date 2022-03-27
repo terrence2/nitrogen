@@ -14,7 +14,10 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     patch::{PatchIndex, PatchTree, PatchWinding, TerrainUploadVertex, TerrainVertex},
-    tables::{get_index_dependency_lut, get_tri_strip_index_buffer, get_wireframe_index_buffer},
+    tables::{
+        get_index_dependency_lut, get_tri_strip_index_range, get_tri_strip_indices,
+        get_wireframe_index_buffer,
+    },
     GpuDetail, VisiblePatch,
 };
 use absolute_unit::{degrees, meters, radians, Angle, Kilometers, Radians};
@@ -23,6 +26,7 @@ use camera::ScreenCamera;
 use geodesy::{Cartesian, GeoCenter, Graticule};
 use gpu::Gpu;
 use nalgebra::{Matrix4, Point3};
+use shader_shared::DrawIndexedIndirect;
 use static_assertions::{assert_eq_align, assert_eq_size};
 use std::{f64::consts::FRAC_PI_2, fmt, mem, num::NonZeroU64, ops::Range, sync::Arc};
 use zerocopy::{AsBytes, FromBytes};
@@ -93,8 +97,12 @@ pub(crate) struct PatchManager {
     // Index buffers for each patch size and winding.
     wireframe_index_buffers: Vec<wgpu::Buffer>,
     wireframe_index_ranges: Vec<Range<u32>>,
-    tristrip_index_buffers: Vec<wgpu::Buffer>,
+    tristrip_index_buffer: wgpu::Buffer,
     tristrip_index_ranges: Vec<Range<u32>>,
+
+    // Indirect command builder and target buffer
+    indirect_commands: Vec<DrawIndexedIndirect>,
+    indirect_buffer: wgpu::Buffer,
 }
 
 impl fmt::Debug for PatchManager {
@@ -434,23 +442,26 @@ impl PatchManager {
             .collect::<Vec<_>>();
 
         // Create each of the 4 tristrip index buffers at this subdivision level.
-        let tristrip_index_buffers = PatchWinding::all_windings()
-            .iter()
-            .map(|&winding| {
-                gpu.push_slice(
-                    "terrain-geo-tristrip-indices-SUB",
-                    get_tri_strip_index_buffer(max_subdivisions, winding),
-                    wgpu::BufferUsages::INDEX,
-                )
-            })
-            .collect::<Vec<_>>();
+        let tristrip_index_buffer = gpu.push_slice(
+            "terrain-geo-tristrip-indices",
+            get_tri_strip_indices(),
+            wgpu::BufferUsages::INDEX,
+        );
 
         let tristrip_index_ranges = PatchWinding::all_windings()
             .iter()
-            .map(|&winding| {
-                0u32..get_tri_strip_index_buffer(max_subdivisions, winding).len() as u32
-            })
+            .map(|&winding| get_tri_strip_index_range(max_subdivisions, winding))
             .collect::<Vec<_>>();
+
+        let indirect_commands = Vec::with_capacity(desired_patch_count);
+        let indirect_buffer_size =
+            (mem::size_of::<DrawIndexedIndirect>() * desired_patch_count) as wgpu::BufferAddress;
+        let indirect_buffer = gpu.device().create_buffer(&wgpu::BufferDescriptor {
+            label: Some("terrain-geo-indirect-buffer"),
+            size: indirect_buffer_size,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::INDIRECT,
+            mapped_at_creation: false,
+        });
 
         let live_patches = Vec::with_capacity(desired_patch_count);
         let live_vertices = Vec::with_capacity(3 * desired_patch_count);
@@ -472,8 +483,10 @@ impl PatchManager {
             target_vertex_buffer,
             wireframe_index_buffers,
             wireframe_index_ranges,
-            tristrip_index_buffers,
+            tristrip_index_buffer,
             tristrip_index_ranges,
+            indirect_commands,
+            indirect_buffer,
         })
     }
 
@@ -514,27 +527,39 @@ impl PatchManager {
         assert!(self.live_patches.len() <= self.desired_patch_count);
 
         // Build CPU vertices for upload. Make sure to track visibility for our tile loader.
+        self.indirect_commands.clear();
         self.live_vertices.clear();
         let scale = Matrix4::new_scaling(1_000.0);
-        let view = camera.view::<Kilometers>();
-        for (offset, (i, _)) in self.live_patches.iter().enumerate() {
+        let view = camera.view::<Kilometers>().to_homogeneous();
+        let scale_view = scale * view;
+        for (offset, (i, winding)) in self.live_patches.iter().enumerate() {
             if offset >= self.desired_patch_count {
                 continue;
             }
             let patch = self.patch_tree.get_patch(*i);
 
+            let draw_range = self.tristrip_index_range(*winding);
+            let base_vertex = self.patch_vertex_buffer_offset(offset as i32);
+            self.indirect_commands.push(DrawIndexedIndirect {
+                index_count: draw_range.end - draw_range.start,
+                instance_count: 1,
+                base_index: draw_range.start,
+                vertex_offset: base_vertex,
+                base_instance: 0,
+            });
+
             // Points in geocenter KM f64 for precision reasons.
             let [pw0, pw1, pw2] = patch.points();
 
             // Move normals into view space, still in KM f64.
-            let nv0 = view.to_homogeneous() * pw0.coords.normalize().to_homogeneous();
-            let nv1 = view.to_homogeneous() * pw1.coords.normalize().to_homogeneous();
-            let nv2 = view.to_homogeneous() * pw2.coords.normalize().to_homogeneous();
+            let nv0 = view * pw0.coords.normalize().to_homogeneous();
+            let nv1 = view * pw1.coords.normalize().to_homogeneous();
+            let nv2 = view * pw2.coords.normalize().to_homogeneous();
 
             // Move verts from global coordinates into view space, meters in f64.
-            let vv0 = scale * view.to_homogeneous() * pw0.to_homogeneous();
-            let vv1 = scale * view.to_homogeneous() * pw1.to_homogeneous();
-            let vv2 = scale * view.to_homogeneous() * pw2.to_homogeneous();
+            let vv0 = scale_view * pw0.to_homogeneous();
+            let vv1 = scale_view * pw1.to_homogeneous();
+            let vv2 = scale_view * pw2.to_homogeneous();
             let pv0 = Point3::from(vv0.xyz());
             let pv1 = Point3::from(vv1.xyz());
             let pv2 = Point3::from(vv2.xyz());
@@ -570,11 +595,12 @@ impl PatchManager {
             self.live_vertices
                 .push(TerrainUploadVertex::new(&pv2, &nv2.xyz(), &g2));
         }
+        while self.indirect_commands.len() < self.desired_patch_count {
+            self.indirect_commands.push(DrawIndexedIndirect::default());
+        }
         while self.live_vertices.len() < 3 * self.desired_patch_count {
             self.live_vertices.push(TerrainUploadVertex::empty());
         }
-
-        //println!("dt: {:?}", Instant::now() - loop_start);
     }
 
     pub fn encode_uploads(&self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder) {
@@ -585,6 +611,14 @@ impl PatchManager {
             self.patch_upload_buffer.clone(),
             encoder,
         );
+
+        // Upload the indirect buffer for drawing the eventual patches
+        gpu.upload_slice_to_owned(
+            "terrain-geo-indirect-upload-buffer",
+            &self.indirect_commands,
+            &self.indirect_buffer,
+            encoder,
+        )
     }
 
     pub fn tessellate(&self, encoder: &mut wgpu::CommandEncoder) {
@@ -634,11 +668,13 @@ impl PatchManager {
         }
     }
 
+    #[inline]
     pub fn patch_vertex_buffer_offset(&self, patch_number: i32) -> i32 {
-        assert!(patch_number >= 0);
+        debug_assert!(patch_number >= 0);
         (patch_number as u32 * self.subdivide_context.target_stride) as i32
     }
 
+    #[inline]
     pub fn target_patch_subdivision_level(&self) -> u32 {
         self.subdivide_context.target_subdivision_level
     }
@@ -659,11 +695,21 @@ impl PatchManager {
         self.wireframe_index_ranges[winding.index()].clone()
     }
 
-    pub fn tristrip_index_buffer(&self, winding: PatchWinding) -> wgpu::BufferSlice {
-        self.tristrip_index_buffers[winding.index()].slice(..)
+    pub fn tristrip_index_buffer(&self) -> wgpu::BufferSlice {
+        self.tristrip_index_buffer.slice(..)
     }
 
     pub fn tristrip_index_range(&self, winding: PatchWinding) -> Range<u32> {
         self.tristrip_index_ranges[winding.index()].clone()
+    }
+
+    #[allow(unused)]
+    pub fn draw_indirect_commands(&self) -> &[DrawIndexedIndirect] {
+        &self.indirect_commands
+    }
+
+    #[allow(unused)]
+    pub fn draw_indirect_buffer(&self) -> &wgpu::Buffer {
+        &self.indirect_buffer
     }
 }

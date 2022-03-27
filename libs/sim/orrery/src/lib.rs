@@ -12,14 +12,14 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use animate::TimeStep;
+use animate::{TimeStep, TimeStepStep};
 use anyhow::{anyhow, Result};
 use bevy_ecs::prelude::*;
 use chrono::{prelude::*, Duration};
 use lazy_static::lazy_static;
 use nalgebra::{Point3, Unit, UnitQuaternion, Vector3, Vector4};
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
-use runtime::{Extension, Runtime, SimStage};
+use runtime::{Extension, Runtime};
 use std::f64::consts::PI;
 
 /**
@@ -297,6 +297,11 @@ lazy_static! {
     };
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum OrreryStep {
+    StepTime,
+}
+
 #[derive(Debug, NitrousResource)]
 pub struct Orrery {
     earth_moon_barycenter: KeplerianElements,
@@ -309,9 +314,11 @@ impl Extension for Orrery {
     fn init(runtime: &mut Runtime) -> Result<()> {
         let orrery = Orrery::new_current_time()?;
         runtime.insert_named_resource("orrery", orrery);
-        runtime
-            .sim_stage_mut(SimStage::TimeStep)
-            .add_system(Self::sys_step_time);
+        runtime.add_sim_system(
+            Self::sys_step_time
+                .label(OrreryStep::StepTime)
+                .after(TimeStepStep::Tick),
+        );
         runtime.run_string(
             r#"
                 bindings.bind("+mouse2", "orrery.move_sun(pressed)");
