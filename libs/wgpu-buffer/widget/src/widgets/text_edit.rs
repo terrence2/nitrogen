@@ -186,6 +186,12 @@ impl Widget for TextEdit {
         let line_count = self.lines.len();
         for (i, line) in self.lines.iter().enumerate() {
             let line_metrics = line.measure_cached();
+            // TODO: aabb bounds check against the cached region
+            if pos.bottom() < AbsSize::Px(0f32)
+                && pos.bottom() - line_metrics.height < AbsSize::Px(0f32)
+            {
+                continue;
+            }
             *pos.bottom_mut() -= line_metrics.height;
             line.upload(pos.into(), widget_info_index, win, gpu, context)?;
             if i != line_count - 1 {
