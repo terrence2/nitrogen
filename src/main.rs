@@ -86,8 +86,8 @@ struct DemoUx {
 impl Extension for DemoUx {
     fn init(runtime: &mut Runtime) -> Result<()> {
         let widgets = runtime.resource::<WidgetBuffer<DemoFocus>>();
-        let system = DemoUx::new(widgets)?;
-        runtime.insert_named_resource("system", system);
+        let demo = DemoUx::new(widgets)?;
+        runtime.insert_named_resource("demo", demo);
         runtime
             .add_frame_system(Self::sys_track_visible_state.after(GpuStep::PresentTargetSurface));
         runtime.run_string(

@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     dump_schedule::dump_schedule,
-    herder::{ExitRequest, ScriptCompletions, ScriptHerder, ScriptRunKind},
+    herder::{ExitRequest, ScriptCompletions, ScriptHerder, ScriptQueue, ScriptRunKind},
 };
 use anyhow::Result;
 use bevy_ecs::{
@@ -22,8 +22,11 @@ use bevy_ecs::{
     world::EntityMut,
 };
 use bevy_tasks::TaskPool;
-use nitrous::{Heap, HeapMut, LocalNamespace, NamedEntityMut, NitrousScript, ScriptResource};
-use std::path::PathBuf;
+use nitrous::{
+    inject_nitrous_resource, method, Heap, HeapMut, LocalNamespace, NamedEntityMut,
+    NitrousResource, NitrousScript, ScriptResource,
+};
+use std::{fs, path::PathBuf};
 
 /// Interface for extending the Runtime.
 pub trait Extension {
@@ -59,6 +62,20 @@ pub enum SimStage {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, StageLabel)]
 pub enum FrameStage {
     Main,
+}
+
+#[derive(Debug, Default, NitrousResource)]
+pub struct RuntimeResource;
+
+#[inject_nitrous_resource]
+impl RuntimeResource {
+    #[method]
+    fn exec(&self, filename: &str, mut heap: HeapMut) -> Result<()> {
+        let script_text = fs::read_to_string(&PathBuf::from(filename))?;
+        heap.resource_mut::<ScriptQueue>()
+            .run_interactive(&script_text);
+        Ok(())
+    }
 }
 
 pub struct Runtime {
@@ -105,7 +122,9 @@ impl Default for Runtime {
             .insert_resource(ExitRequest::Continue)
             .insert_resource(ScriptHerder::default())
             .insert_resource(ScriptCompletions::new())
-            .insert_resource(TaskPool::default());
+            .insert_resource(ScriptQueue::default())
+            .insert_resource(TaskPool::default())
+            .insert_named_resource("runtime", RuntimeResource::default());
 
         runtime
     }

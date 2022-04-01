@@ -212,12 +212,12 @@ where
         let fira_sans = TtfFont::from_bytes(FIRA_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
         let dejavu_mono = TtfFont::from_bytes(DEJAVU_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
         let dejavu_sans = TtfFont::from_bytes(DEJAVU_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
-        paint_context.add_font("dejavu-sans", dejavu_sans.clone());
+        paint_context.add_font("sans", dejavu_sans.clone());
+        paint_context.add_font("mono", fira_mono.clone());
+        paint_context.add_font("dejavu-sans", dejavu_sans);
         paint_context.add_font("dejavu-mono", dejavu_mono);
         paint_context.add_font("fira-sans", fira_sans);
-        paint_context.add_font("fira-mono", fira_mono.clone());
-        paint_context.add_font("mono", fira_mono);
-        paint_context.add_font("sans", dejavu_sans);
+        paint_context.add_font("fira-mono", fira_mono);
 
         // Create the core widget info buffer.
         let widget_info_buffer_size =

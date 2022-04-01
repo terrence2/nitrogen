@@ -62,6 +62,20 @@ impl ExitRequest {
     }
 }
 
+/// Sometimes scripts need to run other scripts. But since we're inside Herder,
+/// it's not available to push to directly. Herder will check this resource at
+/// the start of it's run phase and start anything that's been queued.
+#[derive(Debug, Default)]
+pub struct ScriptQueue {
+    queue: Vec<String>,
+}
+
+impl ScriptQueue {
+    pub fn run_interactive<S: Into<String>>(&mut self, script_text: S) {
+        self.queue.push(script_text.into());
+    }
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum ScriptRunKind {
     Interactive,
@@ -216,6 +230,14 @@ impl ScriptHerder {
     fn run_scripts(&mut self, mut heap: HeapMut, phase: ScriptRunPhase) {
         // If there are any script completions left, dump them.
         heap.resource_mut::<ScriptCompletions>().clear();
+
+        // If there are any scripts queued to run, start them up.
+        for script in &heap.resource::<ScriptQueue>().queue {
+            if let Err(err) = self.run_interactive(script) {
+                warn!("script failed: {}", err);
+            }
+        }
+        heap.resource_mut::<ScriptQueue>().queue.clear();
 
         let mut next_gthreads = Vec::with_capacity(self.gthread.capacity());
         for mut meta in self.gthread.drain(..) {
