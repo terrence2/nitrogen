@@ -51,9 +51,11 @@ pub enum ShutdownStage {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, StageLabel)]
 pub enum SimStage {
     /// Pre-script parallel phase.
-    Main,
+    Input,
     /// Fully serial phase where scripts run.
     RunScript,
+    /// Simulate with latest input state.
+    Simulate,
 }
 
 // Copy from entities into buffers more suitable for upload to the GPU. Also, do heavier
@@ -62,6 +64,11 @@ pub enum SimStage {
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, StageLabel)]
 pub enum FrameStage {
     Main,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum RuntimeStep {
+    ClearCompletions,
 }
 
 #[derive(Debug, Default, NitrousResource)]
@@ -96,15 +103,20 @@ impl Default for Runtime {
         );
 
         let sim_schedule = Schedule::default()
-            .with_stage(SimStage::Main, SystemStage::parallel())
+            .with_stage(SimStage::Input, SystemStage::parallel())
             .with_stage(
                 SimStage::RunScript,
                 SystemStage::single_threaded()
                     .with_system(ScriptHerder::sys_run_sim_scripts.exclusive_system()),
-            );
+            )
+            .with_stage(SimStage::Simulate, SystemStage::parallel());
 
-        let frame_schedule =
-            Schedule::default().with_stage(FrameStage::Main, SystemStage::parallel());
+        let frame_schedule = Schedule::default().with_stage(
+            FrameStage::Main,
+            SystemStage::parallel().with_system(
+                ScriptHerder::sys_clear_completions.label(RuntimeStep::ClearCompletions),
+            ),
+        );
 
         let shutdown_schedule =
             Schedule::default().with_stage(ShutdownStage::Cleanup, SystemStage::single_threaded());
@@ -217,12 +229,23 @@ impl Runtime {
         self.sim_schedule.get_stage_mut(&sim_stage).unwrap()
     }
 
+    pub fn add_input_system<Params>(
+        &mut self,
+        system: impl IntoSystemDescriptor<Params>,
+    ) -> &mut Self {
+        self.sim_schedule
+            .get_stage_mut::<SystemStage>(&SimStage::Input)
+            .unwrap()
+            .add_system(system);
+        self
+    }
+
     pub fn add_sim_system<Params>(
         &mut self,
         system: impl IntoSystemDescriptor<Params>,
     ) -> &mut Self {
         self.sim_schedule
-            .get_stage_mut::<SystemStage>(&SimStage::Main)
+            .get_stage_mut::<SystemStage>(&SimStage::Simulate)
             .unwrap()
             .add_system(system);
         self

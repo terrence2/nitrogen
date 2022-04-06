@@ -212,8 +212,40 @@ macro_rules! impl_mutable_heap_methods {
         }
 
         #[inline]
+        pub fn despawn(&mut self, entity: Entity) {
+            self.resource_mut::<WorldIndex>().remove_entity(&entity);
+            self.world.despawn(entity);
+        }
+
+        #[inline]
         pub fn get_mut<T: Component + 'static>(&mut self, entity: Entity) -> Mut<T> {
             self.world.get_mut::<T>(entity).expect("entity not found")
+        }
+
+        #[inline]
+        pub fn maybe_get_mut<T: Component + 'static>(&mut self, entity: Entity) -> Option<Mut<T>> {
+            self.world.get_mut::<T>(entity)
+        }
+
+        #[inline]
+        pub fn get_named_mut<T: Component + 'static>(&mut self, name: &str) -> Mut<T> {
+            let entity = self
+                .resource::<WorldIndex>()
+                .get_entity(name)
+                .expect("named entity not found");
+            self.get_mut::<T>(entity)
+        }
+
+        #[inline]
+        pub fn maybe_get_named_mut<T: Component + 'static>(
+            &mut self,
+            name: &str,
+        ) -> Option<Mut<T>> {
+            let entity = self
+                .resource::<WorldIndex>()
+                .get_entity(name)
+                .expect("named entity not found");
+            self.maybe_get_mut::<T>(entity)
         }
 
         #[inline]

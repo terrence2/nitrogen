@@ -50,7 +50,7 @@ use log::{error, trace};
 use nitrous::{inject_nitrous_resource, method, HeapMut, NitrousResource, Value};
 use parking_lot::RwLock;
 use platform_dirs::AppDirs;
-use runtime::{Extension, Runtime, ScriptCompletions, ScriptHerder};
+use runtime::{Extension, Runtime, RuntimeStep, ScriptCompletions, ScriptHerder};
 use std::{
     borrow::Borrow, marker::PhantomData, mem, num::NonZeroU64, ops::Range, path::Path, sync::Arc,
     time::Instant,
@@ -143,17 +143,17 @@ where
         let widget = WidgetBuffer::<T>::new(&mut runtime.resource_mut::<Gpu>(), &state_dir)?;
         runtime.insert_named_resource("widget", widget);
 
-        runtime.add_sim_system(
+        runtime.add_input_system(
             Self::sys_handle_terminal_events
                 .exclusive_system()
                 .label(WidgetSimStep::HandleTerminal),
         );
-        runtime.add_sim_system(
+        runtime.add_input_system(
             Self::sys_handle_input_events
                 .label(WidgetSimStep::HandleEvents)
                 .after(EventMapperStep::HandleEvents),
         );
-        runtime.add_sim_system(
+        runtime.add_input_system(
             Self::sys_handle_toggle_terminal
                 .label(WidgetSimStep::ToggleTerminal)
                 .after(WidgetSimStep::HandleEvents),
@@ -163,7 +163,9 @@ where
             Self::sys_report_script_completions.label(WidgetSimStep::ReportScriptCompletions),
         );
         runtime.add_frame_system(
-            Self::sys_report_script_completions.label(WidgetSimStep::ReportScriptCompletions),
+            Self::sys_report_script_completions
+                .label(WidgetSimStep::ReportScriptCompletions)
+                .before(RuntimeStep::ClearCompletions),
         );
 
         runtime.add_frame_system(

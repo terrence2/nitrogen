@@ -166,10 +166,18 @@ pub type RustCallbackFunc = dyn Fn(&[Value], HeapMut) -> Result<Value> + Send + 
 
 #[derive(Default)]
 struct EntityMetadata {
+    name: String,
     components: HashMap<String, ComponentLookup>,
 }
 
 impl EntityMetadata {
+    fn new(name: String) -> Self {
+        Self {
+            name,
+            components: Default::default(),
+        }
+    }
+
     fn component_names(&self) -> impl Iterator<Item = &str> {
         self.components.keys().map(|s| s.as_str())
     }
@@ -213,10 +221,16 @@ impl WorldIndex {
             !self.named_entities.contains_key(&entity_name),
             "duplicate entity name"
         );
-        self.named_entities.insert(entity_name, entity);
+        self.named_entities.insert(entity_name.clone(), entity);
         self.entity_metadata
-            .insert(entity, EntityMetadata::default());
+            .insert(entity, EntityMetadata::new(entity_name));
         Ok(())
+    }
+
+    pub fn remove_entity(&mut self, entity: &Entity) {
+        if let Some(meta) = self.entity_metadata.remove(entity) {
+            self.named_entities.remove(&meta.name);
+        }
     }
 
     pub fn insert_named_component(

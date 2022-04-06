@@ -46,7 +46,7 @@ impl Extension for ArcBallSystem {
                 bindings.bind("+Down", "@player.arcball.target_down(pressed)");
             "#,
         )?;
-        runtime.add_sim_system(
+        runtime.add_input_system(
             ArcBallController::sys_apply_input
                 .label(ArcBallStep::ApplyInput)
                 .after(EventMapperStep::HandleEvents),

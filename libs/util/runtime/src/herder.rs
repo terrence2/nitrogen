@@ -43,7 +43,7 @@ followed by another dot, followed by the name of a property or method on that
 component. As with resources, methods are called by appending parentheses.
 
 Examples:
-    @player.camera.exposure()
+    @player.throttle.set_detent(4)
 "#;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -218,6 +218,10 @@ impl ScriptHerder {
         world.resource_scope(|world, mut herder: Mut<ScriptHerder>| {
             herder.run_scripts(HeapMut::wrap(world), ScriptRunPhase::Startup);
         });
+        world
+            .get_resource_mut::<ScriptCompletions>()
+            .unwrap()
+            .clear();
     }
 
     #[inline]
@@ -227,10 +231,12 @@ impl ScriptHerder {
         });
     }
 
-    fn run_scripts(&mut self, mut heap: HeapMut, phase: ScriptRunPhase) {
-        // If there are any script completions left, dump them.
-        heap.resource_mut::<ScriptCompletions>().clear();
+    pub(crate) fn sys_clear_completions(mut completions: ResMut<ScriptCompletions>) {
+        // This runs at frame schedule, whereas scripts may run each sim step.
+        completions.clear();
+    }
 
+    fn run_scripts(&mut self, mut heap: HeapMut, phase: ScriptRunPhase) {
         // If there are any scripts queued to run, start them up.
         for script in &heap.resource::<ScriptQueue>().queue {
             if let Err(err) = self.run_interactive(script) {

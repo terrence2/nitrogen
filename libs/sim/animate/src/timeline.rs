@@ -178,7 +178,7 @@ pub struct Timeline {
 impl Extension for Timeline {
     fn init(runtime: &mut Runtime) -> Result<()> {
         runtime.insert_named_resource("timeline", Timeline::default());
-        runtime.add_sim_system(
+        runtime.add_input_system(
             Self::sys_animate
                 .exclusive_system()
                 .label(TimelineStep::Animate),

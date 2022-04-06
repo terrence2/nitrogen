@@ -22,6 +22,6 @@ pub use crate::{
         ExecutionMetadata, ExitRequest, ScriptCompletion, ScriptCompletions, ScriptHerder,
         ScriptQueue, ScriptResult, ScriptRunKind, ScriptRunPhase,
     },
-    runtime::{Extension, FrameStage, Runtime, ShutdownStage, SimStage, StartupStage},
+    runtime::{Extension, FrameStage, Runtime, RuntimeStep, ShutdownStage, SimStage, StartupStage},
     startup::StartupOpts,
 };

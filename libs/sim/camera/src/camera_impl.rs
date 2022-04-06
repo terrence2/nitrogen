@@ -56,7 +56,7 @@ impl Extension for CameraSystem {
                 bindings.bind("Shift+RBracket", "camera.increase_exposure()");
             "#,
         )?;
-        runtime.add_sim_system(
+        runtime.add_input_system(
             ScreenCamera::sys_apply_input
                 .label(CameraStep::ApplyInput)
                 .after(EventMapperStep::HandleEvents)
@@ -267,6 +267,7 @@ impl ScreenCamera {
         let view = Isometry3::look_at_rh(
             &Point3::from(eye),
             &Point3::from(eye + self.forward),
+            // FIXME: is this upside down?
             &self.up,
         );
 
