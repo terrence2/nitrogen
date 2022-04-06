@@ -55,9 +55,9 @@ where
             Self::sys_composite_scene
                 .label(CompositeRenderStep::Render)
                 .after(GlobalsStep::EnsureUpdated)
-                .after(WorldStep::Render)
-                .after(UiStep::Render)
                 .after(GpuStep::CreateCommandEncoder)
+                .after(WorldStep::Render)
+                .before(UiStep::Render)
                 .before(GpuStep::SubmitCommands),
         );
         Ok(())

@@ -219,7 +219,8 @@ impl WorldIndex {
         let entity_name = entity_name.into();
         ensure!(
             !self.named_entities.contains_key(&entity_name),
-            "duplicate entity name"
+            "duplicate entity name: {}",
+            entity_name
         );
         self.named_entities.insert(entity_name.clone(), entity);
         self.entity_metadata
