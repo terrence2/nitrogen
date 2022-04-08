@@ -114,28 +114,70 @@ where
 
 fn lower_arg(i: usize, arg: &ArgDef) -> Expr {
     match arg.ty {
-        Scalar::Boolean => {
-            parse2(quote! { args.get(#i).expect("not enough args").to_bool()? }).unwrap()
-        }
-        Scalar::Integer => {
-            parse2(quote! { args.get(#i).expect("not enough args").to_int()? }).unwrap()
-        }
-        Scalar::Float => {
-            parse2(quote! { args.get(#i).expect("not enough args").to_float()? }).unwrap()
-        }
-        Scalar::StrRef => {
-            parse2(quote! { args.get(#i).expect("not enough args").to_str()? }).unwrap()
-        }
-        Scalar::String => {
-            parse2(quote! { args.get(#i).expect("not enough args").to_str()?.to_owned() }).unwrap()
-        }
-        Scalar::GraticuleSurface => {
-            parse2(quote! { args.get(#i).expect("not enough args").to_grat_surface()? }).unwrap()
-        }
-        Scalar::GraticuleTarget => {
-            parse2(quote! { args.get(#i).expect("not enough args").to_grat_target()? }).unwrap()
-        }
-        Scalar::Value => parse2(quote! { args.get(#i).expect("not enough args").clone() }).unwrap(),
+        Scalar::Boolean => parse2(quote! {
+            if let Some(arg) = args.get(#i) {
+                arg.to_bool()?
+            } else {
+                ::nitrous::anyhow::bail!("not enough args")
+            }
+        })
+        .unwrap(),
+        Scalar::Integer => parse2(quote! {
+            if let Some(arg) = args.get(#i) {
+                arg.to_int()?
+            } else {
+                ::nitrous::anyhow::bail!("not enough args")
+            }
+        })
+        .unwrap(),
+        Scalar::Float => parse2(quote! {
+            if let Some(arg) = args.get(#i) {
+                arg.to_float()?
+            } else {
+                ::nitrous::anyhow::bail!("not enough args")
+            }
+        })
+        .unwrap(),
+        Scalar::StrRef => parse2(quote! {
+            if let Some(arg) = args.get(#i) {
+                arg.to_str()?
+            } else {
+                ::nitrous::anyhow::bail!("not enough args")
+            }
+        })
+        .unwrap(),
+        Scalar::String => parse2(quote! {
+            if let Some(arg) = args.get(#i) {
+                arg.to_str()?.to_owned()
+            } else {
+                ::nitrous::anyhow::bail!("not enough args")
+            }
+        })
+        .unwrap(),
+        Scalar::GraticuleSurface => parse2(quote! {
+            if let Some(arg) = args.get(#i) {
+                arg.to_grat_surface()?
+            } else {
+                ::nitrous::anyhow::bail!("not enough args")
+            }
+        })
+        .unwrap(),
+        Scalar::GraticuleTarget => parse2(quote! {
+            if let Some(arg) = args.get(#i) {
+                arg.to_grat_target()?
+            } else {
+                ::nitrous::anyhow::bail!("not enough args")
+            }
+        })
+        .unwrap(),
+        Scalar::Value => parse2(quote! {
+            if let Some(arg) = args.get(#i) {
+                arg.clone()
+            } else {
+                ::nitrous::anyhow::bail!("not enough args")
+            }
+        })
+        .unwrap(),
         Scalar::Unit => parse2(quote! { ::nitrous::Value::True() }).unwrap(),
         Scalar::HeapMut => parse2(quote! { heap }).unwrap(),
         Scalar::HeapRef => parse2(quote! { heap.as_ref() }).unwrap(),
