@@ -531,7 +531,7 @@ fn add_dependency_labels(
                 SystemDirection::After => graph.add_edge(&other, me, &[("constraint", "false")]),
             }
         }
-        assert!(found);
+        assert!(found, "missing other edge: {:?}", requirement);
     }
 }
 
