@@ -56,11 +56,12 @@ impl Extension for CameraSystem {
                 bindings.bind("Shift+RBracket", "camera.increase_exposure()");
             "#,
         )?;
-        runtime.add_input_system(
-            ScreenCamera::sys_apply_input
-                .label(CameraStep::ApplyInput)
-                .after(EventMapperStep::HandleEvents),
-        );
+        // Input happens in EventMapper in Input stage. This queues up scripts to run
+        // as part of the Script stage. This stage mutates InputState here and elsewhere.
+        // We then process this input in the Simulation stage so that input gets shown
+        // in the first frame after it happens. Anything that touches the WorldSpaceFrame
+        // of the screen camera entity should be installed before CameraStep::ApplyInput.
+        runtime.add_sim_system(ScreenCamera::sys_apply_input.label(CameraStep::ApplyInput));
         runtime.add_frame_system(
             ScreenCamera::sys_apply_display_changes
                 .label(CameraStep::HandleDisplayChange)

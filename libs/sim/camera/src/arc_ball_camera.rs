@@ -35,10 +35,9 @@ pub enum ArcBallStep {
 pub struct ArcBallSystem;
 impl Extension for ArcBallSystem {
     fn init(runtime: &mut Runtime) -> Result<()> {
-        runtime.add_input_system(
+        runtime.add_sim_system(
             ArcBallController::sys_apply_input
                 .label(ArcBallStep::ApplyInput)
-                .after(EventMapperStep::HandleEvents)
                 .before(CameraStep::ApplyInput),
         );
         Ok(())
