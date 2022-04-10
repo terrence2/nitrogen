@@ -35,18 +35,6 @@ pub enum ArcBallStep {
 pub struct ArcBallSystem;
 impl Extension for ArcBallSystem {
     fn init(runtime: &mut Runtime) -> Result<()> {
-        runtime.run_string(
-            r#"
-                bindings.bind("+mouse1", "@player.arcball.pan_view(pressed)");
-                bindings.bind("+mouse3", "@player.arcball.move_view(pressed)");
-                bindings.bind("mouseMotion", "@player.arcball.handle_mousemotion(dx, dy)");
-                bindings.bind("mouseWheel", "@player.arcball.handle_mousewheel(vertical_delta)");
-                bindings.bind("+Shift+Up", "@player.arcball.target_up_fast(pressed)");
-                bindings.bind("+Shift+Down", "@player.arcball.target_down_fast(pressed)");
-                bindings.bind("+Up", "@player.arcball.target_up(pressed)");
-                bindings.bind("+Down", "@player.arcball.target_down(pressed)");
-            "#,
-        )?;
         runtime.add_input_system(
             ArcBallController::sys_apply_input
                 .label(ArcBallStep::ApplyInput)

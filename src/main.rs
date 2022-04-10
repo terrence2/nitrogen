@@ -274,7 +274,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     // We need at least one entity with a camera controller for the screen camera
     // before the sim is fully ready to run.
     let _player_ent = runtime
-        .spawn_named("player")?
+        .spawn_named("camera")?
         .insert(WorldSpaceFrame::default())
         .insert_named(ArcBallController::default())?
         .insert(ScreenCameraController::default())
