@@ -94,6 +94,10 @@ impl WorldSpaceFrame {
         &self.position
     }
 
+    pub fn position_graticule(&self) -> Graticule<GeoSurface> {
+        Graticule::<GeoSurface>::from(Graticule::<GeoCenter>::from(self.position))
+    }
+
     pub fn position_mut(&mut self) -> &mut Cartesian<GeoCenter, Meters> {
         &mut self.position
     }
