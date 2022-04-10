@@ -26,6 +26,7 @@ mod widgets;
 pub use crate::{
     box_packing::{PositionH, PositionV},
     color::Color,
+    font_context::FontId,
     paint_context::PaintContext,
     region::{Border, Extent, Position, Region},
     widget::{Labeled, Widget, WidgetFocus},
