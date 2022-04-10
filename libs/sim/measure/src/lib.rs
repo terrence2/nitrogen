@@ -12,10 +12,10 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use absolute_unit::{LengthUnit, Meters};
+use absolute_unit::{meters, Length, LengthUnit, Meters};
 use bevy_ecs::prelude::*;
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
-use nalgebra::{convert, Unit as NUnit, UnitQuaternion, Vector3};
+use nalgebra::{convert, Point3, Unit as NUnit, UnitQuaternion, Vector3};
 use nitrous::{inject_nitrous_component, method, NitrousComponent};
 use std::f64::consts::PI;
 
@@ -98,6 +98,10 @@ impl WorldSpaceFrame {
         &mut self.position
     }
 
+    pub fn set_position(&mut self, point: Point3<f64>) {
+        self.position = Cartesian::<GeoCenter, Meters>::from(point);
+    }
+
     pub fn basis(&self) -> BasisVectors<f64> {
         BasisVectors {
             forward: (self.facing * Vector3::z_axis()).into_inner(),
@@ -120,6 +124,62 @@ impl WorldSpaceFrame {
 
     pub fn facing32(&self) -> UnitQuaternion<f32> {
         convert(self.facing)
+    }
+}
+
+// Positive z is forward, positive x is right, positive y is up
+#[derive(Component, NitrousComponent, Copy, Clone, Debug, Default)]
+pub struct LocalMotion {
+    acceleration_m_s2: Vector3<f64>,
+    velocity_m_s: Vector3<f64>,
+}
+
+#[inject_nitrous_component]
+impl LocalMotion {
+    pub fn new_forward<Unit: LengthUnit>(per_second: Length<Unit>) -> Self {
+        Self {
+            acceleration_m_s2: Vector3::new(0., 0., 0.),
+            velocity_m_s: Vector3::new(0., 0., meters!(per_second).f64()),
+        }
+    }
+
+    pub fn acceleration_m_s2(&self) -> &Vector3<f64> {
+        &self.acceleration_m_s2
+    }
+
+    pub fn acceleration_m_s2_mut(&mut self) -> &mut Vector3<f64> {
+        &mut self.acceleration_m_s2
+    }
+
+    pub fn velocity_m_s(&self) -> &Vector3<f64> {
+        &self.velocity_m_s
+    }
+
+    pub fn velocity_m_s_mut(&mut self) -> &mut Vector3<f64> {
+        &mut self.velocity_m_s
+    }
+
+    pub fn meters_per_second(&self) -> Vector3<f64> {
+        self.velocity_m_s
+    }
+
+    #[method]
+    pub fn forward_velocity(&self) -> f64 {
+        self.velocity_m_s.z
+    }
+
+    pub fn forward_velocity_mut(&mut self) -> &mut f64 {
+        &mut self.velocity_m_s.z
+    }
+
+    #[method]
+    pub fn sideways_velocity(&self) -> f64 {
+        self.velocity_m_s.x
+    }
+
+    #[method]
+    pub fn vertical_velocity(&self) -> f64 {
+        self.velocity_m_s.y
     }
 }
 
