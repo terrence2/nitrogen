@@ -253,6 +253,12 @@ impl WorldIndex {
         Ok(())
     }
 
+    pub fn remove_named_component(&mut self, entity: Entity, component_name: &str) {
+        if let Some(meta) = self.entity_metadata.get_mut(&entity) {
+            meta.components.remove(component_name);
+        }
+    }
+
     pub fn entity_names(&self) -> impl Iterator<Item = &str> {
         self.named_entities.keys().map(|s| s.as_str())
     }
