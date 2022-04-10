@@ -12,6 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use crate::camera_impl::CameraStep;
 use absolute_unit::{degrees, meters, radians, Degrees, Length, LengthUnit, Meters, Radians};
 use anyhow::{bail, ensure, Result};
 use bevy_ecs::prelude::*;
@@ -49,7 +50,8 @@ impl Extension for ArcBallSystem {
         runtime.add_input_system(
             ArcBallController::sys_apply_input
                 .label(ArcBallStep::ApplyInput)
-                .after(EventMapperStep::HandleEvents),
+                .after(EventMapperStep::HandleEvents)
+                .before(CameraStep::ApplyInput),
         );
         Ok(())
     }

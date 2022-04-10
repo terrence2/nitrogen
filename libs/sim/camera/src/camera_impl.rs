@@ -59,8 +59,7 @@ impl Extension for CameraSystem {
         runtime.add_input_system(
             ScreenCamera::sys_apply_input
                 .label(CameraStep::ApplyInput)
-                .after(EventMapperStep::HandleEvents)
-                .after(ArcBallStep::ApplyInput),
+                .after(EventMapperStep::HandleEvents),
         );
         runtime.add_frame_system(
             ScreenCamera::sys_apply_display_changes
