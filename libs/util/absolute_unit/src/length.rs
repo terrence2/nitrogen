@@ -12,15 +12,16 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::impl_unit_for_numerics;
+use crate::{impl_unit_for_floats, impl_unit_for_integers, Scalar};
 use approx::AbsDiffEq;
 use std::{
     fmt,
+    fmt::Debug,
     marker::PhantomData,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
 };
 
-pub trait LengthUnit: Copy {
+pub trait LengthUnit: Copy + Debug + Eq + PartialEq + 'static {
     fn unit_name() -> &'static str;
     fn suffix() -> &'static str;
     fn nanometers_in_unit() -> i64;
@@ -133,6 +134,52 @@ where
     }
 }
 
+impl<Unit> Mul<Scalar> for Length<Unit>
+where
+    Unit: LengthUnit,
+{
+    type Output = Length<Unit>;
+
+    fn mul(self, other: Scalar) -> Self {
+        Self {
+            nm: (self.nm as f64 * other.f64()) as i64,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<Unit> MulAssign<Scalar> for Length<Unit>
+where
+    Unit: LengthUnit,
+{
+    fn mul_assign(&mut self, other: Scalar) {
+        self.nm = (self.nm as f64 * other.f64()) as i64;
+    }
+}
+
+impl<Unit> Div<Scalar> for Length<Unit>
+where
+    Unit: LengthUnit,
+{
+    type Output = Length<Unit>;
+
+    fn div(self, other: Scalar) -> Self {
+        Self {
+            nm: (self.nm as f64 / other.f64()) as i64,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<Unit> DivAssign<Scalar> for Length<Unit>
+where
+    Unit: LengthUnit,
+{
+    fn div_assign(&mut self, other: Scalar) {
+        self.nm = (self.nm as f64 / other.f64()) as i64;
+    }
+}
+
 macro_rules! impl_length_unit_for_numeric_type {
     ($Num:ty) => {
         impl<Unit> From<$Num> for Length<Unit>
@@ -167,64 +214,28 @@ macro_rules! impl_length_unit_for_numeric_type {
                 (v.nm as f64 / Unit::nanometers_in_unit() as f64) as $Num
             }
         }
-
-        impl<Unit> Mul<$Num> for Length<Unit>
-        where
-            Unit: LengthUnit,
-        {
-            type Output = Length<Unit>;
-
-            fn mul(self, other: $Num) -> Self {
-                Self {
-                    nm: (self.nm as f64 * other as f64) as i64,
-                    phantom: PhantomData,
-                }
-            }
-        }
-
-        impl<Unit> MulAssign<$Num> for Length<Unit>
-        where
-            Unit: LengthUnit,
-        {
-            fn mul_assign(&mut self, other: $Num) {
-                self.nm = (self.nm as f64 * other as f64) as i64;
-            }
-        }
-
-        impl<Unit> Div<$Num> for Length<Unit>
-        where
-            Unit: LengthUnit,
-        {
-            type Output = Length<Unit>;
-
-            fn div(self, other: $Num) -> Self {
-                Self {
-                    nm: (self.nm as f64 / other as f64) as i64,
-                    phantom: PhantomData,
-                }
-            }
-        }
-
-        impl<Unit> DivAssign<$Num> for Length<Unit>
-        where
-            Unit: LengthUnit,
-        {
-            fn div_assign(&mut self, other: $Num) {
-                self.nm = (self.nm as f64 / other as f64) as i64;
-            }
-        }
     };
 }
-impl_unit_for_numerics!(impl_length_unit_for_numeric_type);
+impl_unit_for_floats!(impl_length_unit_for_numeric_type);
+impl_unit_for_integers!(impl_length_unit_for_numeric_type);
 
 #[cfg(test)]
 mod test {
     use crate::{feet, meters};
+    use nalgebra::{Point3, Vector3};
 
     #[test]
     fn test_meters_to_feet() {
         let m = meters!(1);
         println!("m : {}", m);
         println!("ft: {}", feet!(m));
+    }
+
+    #[test]
+    fn test_nalgebra_integration() {
+        let pt = Point3::new(feet!(10), feet!(13), feet!(17));
+        let v = Vector3::new(feet!(10), feet!(13), feet!(17));
+        let rv = pt + v;
+        assert_eq!(rv, Point3::new(feet!(20), feet!(26), feet!(34)));
     }
 }

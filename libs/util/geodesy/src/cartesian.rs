@@ -103,6 +103,20 @@ where
     }
 }
 
+impl<Origin, Unit> From<Point3<Length<Unit>>> for Cartesian<Origin, Unit>
+where
+    Origin: CartesianOrigin,
+    Unit: LengthUnit,
+{
+    #[inline]
+    fn from(v: Point3<Length<Unit>>) -> Self {
+        Self {
+            coords: [v.coords[0], v.coords[1], v.coords[2]],
+            phantom: PhantomData,
+        }
+    }
+}
+
 impl<Origin, Unit> From<Point3<f64>> for Cartesian<Origin, Unit>
 where
     Origin: CartesianOrigin,
@@ -127,8 +141,8 @@ where
 {
     #[inline]
     fn from(graticule: Graticule<GeoCenter>) -> Self {
-        let lat = graticule.lat::<Radians>().f64();
-        let lon = graticule.lon::<Radians>().f64();
+        let lat = graticule.lat::<Radians>();
+        let lon = graticule.lon::<Radians>();
         let base = graticule.distance;
         Self {
             coords: [
@@ -147,8 +161,8 @@ where
 {
     #[inline]
     fn from(graticule: Graticule<Target>) -> Self {
-        let lat = f64::from(graticule.latitude);
-        let lon = f64::from(graticule.longitude);
+        let lat = graticule.latitude;
+        let lon = graticule.longitude;
         Self {
             coords: [
                 (&(graticule.distance * -lon.sin() * lat.cos())).into(),

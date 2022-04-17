@@ -13,7 +13,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::camera_impl::CameraStep;
-use absolute_unit::{degrees, meters, radians, Degrees, Length, LengthUnit, Meters, Radians};
+use absolute_unit::{
+    degrees, meters, radians, scalar, Degrees, Length, LengthUnit, Meters, Radians,
+};
 use anyhow::{bail, ensure, Result};
 use bevy_ecs::prelude::*;
 use event_mapper::EventMapperStep;
@@ -325,14 +327,18 @@ impl ArcBallController {
             let sensitivity: f64 = f64::from(self.distance()) / 60_000_000.0;
 
             let dir = self.eye.longitude;
-            let lat = f64::from(degrees!(self.target.latitude)) + dir.cos() * y * sensitivity;
-            let lon = f64::from(degrees!(self.target.longitude)) + -dir.sin() * y * sensitivity;
+            let lat = f64::from(degrees!(self.target.latitude))
+                + (dir.cos() * scalar!(y * sensitivity)).into_inner();
+            let lon = f64::from(degrees!(self.target.longitude))
+                + (-dir.sin() * scalar!(y * sensitivity)).into_inner();
             self.target.latitude = radians!(degrees!(lat));
             self.target.longitude = radians!(degrees!(lon));
 
             let dir = self.eye.longitude + degrees!(PI / 2.0);
-            let lat = f64::from(degrees!(self.target.latitude)) + -dir.sin() * x * sensitivity;
-            let lon = f64::from(degrees!(self.target.longitude)) + -dir.cos() * x * sensitivity;
+            let lat = f64::from(degrees!(self.target.latitude))
+                + (-dir.sin() * scalar!(x * sensitivity)).into_inner();
+            let lon = f64::from(degrees!(self.target.longitude))
+                + (-dir.cos() * scalar!(x * sensitivity)).into_inner();
             self.target.latitude = radians!(degrees!(lat));
             self.target.longitude = radians!(degrees!(lon));
         }
@@ -344,7 +350,7 @@ impl ArcBallController {
         //   Up is negative
         //   Down is positive
         //   Works in steps of 15 for my mouse.
-        self.eye.distance *= if vertical > 0f64 { 1.1f64 } else { 0.9f64 };
+        self.eye.distance *= scalar!(if vertical > 0f64 { 1.1f64 } else { 0.9f64 });
         self.eye.distance = self.eye.distance.max(meters!(0.01));
     }
 

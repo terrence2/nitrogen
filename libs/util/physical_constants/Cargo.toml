@@ -5,3 +5,4 @@ authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 edition = "2021"
 
 [dependencies]
+absolute_unit = { path = "../../util/absolute_unit" }

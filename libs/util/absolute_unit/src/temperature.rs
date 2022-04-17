@@ -12,22 +12,22 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use crate::{impl_unit_for_floats, impl_unit_for_integers};
+use approx::AbsDiffEq;
+use std::{
+    fmt,
+    marker::PhantomData,
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
+};
 
-#[macro_export]
-macro_rules! impl_unit_for_floats {
-    ($it:tt) => {
-        $it!(f64);
-        $it!(f32);
-    };
+pub trait TemperatureUnit: Copy {
+    fn unit_name() -> &'static str;
+    fn suffix() -> &'static str;
+    fn nanokelvin_in_unit() -> i64;
 }
 
-#[macro_export]
-macro_rules! impl_unit_for_integers {
-    ($it:tt) => {
-        $it!(isize);
-        $it!(i64);
-        $it!(i32);
-        $it!(i16);
-        $it!(i8);
-    };
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
+pub struct Temperature<Unit: TemperatureUnit> {
+    nm: i64, // in nanometers
+    phantom: PhantomData<Unit>,
 }

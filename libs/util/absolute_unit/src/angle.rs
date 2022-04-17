@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{impl_unit_for_numerics, radians};
+use crate::{impl_unit_for_floats, impl_unit_for_integers, radians, scalar, Scalar};
 use std::{
     fmt,
     marker::PhantomData,
@@ -70,16 +70,16 @@ impl<Unit: AngleUnit> Angle<Unit> {
         self.femto_rad.signum() as i8
     }
 
-    pub fn cos(self) -> f64 {
-        f64::from(radians!(self)).cos()
+    pub fn cos(self) -> Scalar {
+        scalar!(f64::from(radians!(self)).cos())
     }
 
-    pub fn sin(self) -> f64 {
-        f64::from(radians!(self)).sin()
+    pub fn sin(self) -> Scalar {
+        scalar!(f64::from(radians!(self)).sin())
     }
 
-    pub fn tan(self) -> f64 {
-        f64::from(radians!(self)).tan()
+    pub fn tan(self) -> Scalar {
+        scalar!(f64::from(radians!(self)).tan())
     }
 
     pub fn f32(self) -> f32 {
@@ -211,6 +211,43 @@ where
     }
 }
 
+impl<Unit> Mul<Scalar> for Angle<Unit>
+where
+    Unit: AngleUnit,
+{
+    type Output = Angle<Unit>;
+
+    fn mul(self, other: Scalar) -> Self {
+        Self {
+            femto_rad: (self.femto_rad as f64 * other.f64()) as i64,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<Unit> Div<Scalar> for Angle<Unit>
+where
+    Unit: AngleUnit,
+{
+    type Output = Self;
+
+    fn div(self, rhs: Scalar) -> Self {
+        Self {
+            femto_rad: (self.femto_rad as f64 / rhs.f64()).round() as i64,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<Unit> DivAssign<Scalar> for Angle<Unit>
+where
+    Unit: AngleUnit,
+{
+    fn div_assign(&mut self, rhs: Scalar) {
+        self.femto_rad = (self.femto_rad as f64 / rhs.f64()).round() as i64;
+    }
+}
+
 macro_rules! impl_angle_unit_for_numeric_type {
     ($Num:ty) => {
         impl<Unit> From<$Num> for Angle<Unit>
@@ -245,46 +282,10 @@ macro_rules! impl_angle_unit_for_numeric_type {
                 (v.femto_rad as f64 / Unit::femto_radians_in_unit() as f64) as $Num
             }
         }
-
-        impl<Unit> Mul<$Num> for Angle<Unit>
-        where
-            Unit: AngleUnit,
-        {
-            type Output = Self;
-
-            fn mul(self, rhs: $Num) -> Self {
-                Self {
-                    femto_rad: (self.femto_rad as f64 * rhs as f64).round() as i64,
-                    phantom: PhantomData,
-                }
-            }
-        }
-
-        impl<Unit> Div<$Num> for Angle<Unit>
-        where
-            Unit: AngleUnit,
-        {
-            type Output = Self;
-
-            fn div(self, rhs: $Num) -> Self {
-                Self {
-                    femto_rad: (self.femto_rad as f64 / rhs as f64).round() as i64,
-                    phantom: PhantomData,
-                }
-            }
-        }
-
-        impl<Unit> DivAssign<$Num> for Angle<Unit>
-        where
-            Unit: AngleUnit,
-        {
-            fn div_assign(&mut self, rhs: $Num) {
-                self.femto_rad = (self.femto_rad as f64 / rhs as f64).round() as i64;
-            }
-        }
     };
 }
-impl_unit_for_numerics!(impl_angle_unit_for_numeric_type);
+impl_unit_for_floats!(impl_angle_unit_for_numeric_type);
+impl_unit_for_integers!(impl_angle_unit_for_numeric_type);
 
 #[cfg(test)]
 mod test {

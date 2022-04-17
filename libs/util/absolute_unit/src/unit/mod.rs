@@ -13,6 +13,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 
+// Unitless
+pub(crate) mod scalar;
+
 // Angular
 pub(crate) mod arcminutes;
 pub(crate) mod arcseconds;

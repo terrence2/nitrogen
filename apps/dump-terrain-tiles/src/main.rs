@@ -21,7 +21,7 @@ use crate::{
     mip::{DataSource, MipIndex, MipIndexDataSet, MipTile, NeighborIndex},
     srtm::SrtmIndex,
 };
-use absolute_unit::{arcseconds, degrees, meters, radians, Angle, Radians};
+use absolute_unit::{arcseconds, degrees, meters, radians, scalar, Angle, Radians};
 use anyhow::Result;
 use bzip2::{read::BzEncoder, Compression};
 use geodesy::{GeoSurface, Graticule};
@@ -293,7 +293,7 @@ pub fn generate_mip_tile_from_source(
         // 'actual' unfolds infinitely
         // 'srtm' is clamped or wrapped as appropriate to srtm extents
 
-        let lat_actual = degrees!(base.latitude + (scale * lat_i));
+        let lat_actual = degrees!(base.latitude + (scale * scalar!(lat_i)));
         let lat_srtm = radians!(if lat_actual > degrees!(90) {
             degrees!(90)
         } else if lat_actual < degrees!(-90) {
@@ -303,7 +303,7 @@ pub fn generate_mip_tile_from_source(
         });
 
         for lon_i in -1..TILE_SAMPLES + 1 {
-            let lon_actual = degrees!(base.longitude + (scale * lon_i));
+            let lon_actual = degrees!(base.longitude + (scale * scalar!(lon_i)));
             let mut lon_srtm = lon_actual;
             while lon_srtm < degrees!(-180) {
                 lon_srtm += degrees!(360);

@@ -13,6 +13,8 @@ name = "absolute_unit"
 version = "0.0.0"
 dependencies = [
  "approx",
+ "nalgebra",
+ "ordered-float",
 ]
 
 [[package]]
@@ -2357,6 +2359,9 @@ dependencies = [
 [[package]]
 name = "physical_constants"
 version = "0.0.0"
+dependencies = [
+ "absolute_unit",
+]
 
 [[package]]
 name = "pico-args"

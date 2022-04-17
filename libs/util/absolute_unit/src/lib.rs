@@ -16,6 +16,7 @@
 pub(crate) mod angle;
 pub(crate) mod generic;
 pub(crate) mod length;
+pub(crate) mod temperature;
 pub(crate) mod unit;
 
 pub use crate::{
@@ -23,6 +24,8 @@ pub use crate::{
     length::{Length, LengthUnit},
     unit::{
         arcminutes::ArcMinutes, arcseconds::ArcSeconds, degrees::Degrees, feet::Feet,
-        kilometers::Kilometers, meters::Meters, radians::Radians,
+        kilometers::Kilometers, meters::Meters, radians::Radians, scalar::Scalar,
     },
 };
+
+pub use ordered_float;
