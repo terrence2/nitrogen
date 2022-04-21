@@ -447,6 +447,8 @@ impl InputSystem {
         }
     }
 
+    // Uh, clippy? It's mutable: we need the vec-ness?
+    #[allow(clippy::ptr_arg)]
     fn wrap_window_event(
         event: &WindowEvent,
         input_state: &mut InputState,
