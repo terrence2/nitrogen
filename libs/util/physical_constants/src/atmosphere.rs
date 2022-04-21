@@ -12,12 +12,14 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use absolute_unit::{feet, Length, LengthUnit};
+use absolute_unit::{feet, rankine, scalar, Length, LengthUnit, Rankine, Temperature};
 
 pub struct UsStandardAtmosphere;
 
 impl UsStandardAtmosphere {
-    pub fn at_altitude<Unit: LengthUnit>(altitude: Length<Unit>) -> (f64, f64, f64) {
+    pub fn at_altitude<Unit: LengthUnit>(
+        altitude: Length<Unit>,
+    ) -> (Temperature<Rankine>, f64, f64) {
         let altitude_ft = feet!(altitude).f64();
         let (theta, sigma, delta) = if altitude_ft < 36_089. {
             (
@@ -59,18 +61,18 @@ impl UsStandardAtmosphere {
             (0.745, 0.000_052, 0.000_039)
         };
 
-        let sea_level_temperature_rankine = 518.67;
-        let sea_level_densite_slug_ft3 = 0.002_376_89;
+        let sea_level_temperature_rankine = rankine!(518.67);
+        let sea_level_density_slug_ft3 = 0.002_376_89;
         let sea_level_pressure_lbf_ft2 = 2_116.22;
 
-        let temperature_rankine = theta * sea_level_temperature_rankine;
-        let density = sigma * sea_level_densite_slug_ft3;
+        let temperature_rankine = sea_level_temperature_rankine * scalar!(theta);
+        let density = sigma * sea_level_density_slug_ft3;
         let pressure = delta * sea_level_pressure_lbf_ft2;
 
-        let viscosity = 0.022_696_8 * temperature_rankine.powf(1.5)
-            / (temperature_rankine + 198.72)
+        let _viscosity = 0.022_696_8 * temperature_rankine.f64().powf(1.5)
+            / (temperature_rankine.f64() + 198.72)
             / 1_000_000.0;
-        let speed_of_sound = (1.4 * 1716.56 * temperature_rankine).sqrt();
+        let _speed_of_sound = (1.4 * 1716.56 * temperature_rankine.f64()).sqrt();
 
         (temperature_rankine, density, pressure)
     }

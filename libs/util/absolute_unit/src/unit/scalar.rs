@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use ordered_float::OrderedFloat;
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, Neg, Sub, SubAssign};
+use std::ops::{Mul, Neg};
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Scalar(pub(crate) OrderedFloat<f64>);
@@ -31,7 +31,7 @@ impl Scalar {
 impl Neg for Scalar {
     type Output = Self;
 
-    fn neg(mut self) -> Self::Output {
+    fn neg(self) -> Self::Output {
         Self(OrderedFloat(-self.into_inner()))
     }
 }

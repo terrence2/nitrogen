@@ -16,7 +16,7 @@ use crate::{Cartesian, GeoCenter, GeoSurface};
 use absolute_unit::{
     degrees, kilometers, meters, radians, Angle, AngleUnit, Length, LengthUnit, Meters, Radians,
 };
-use nalgebra::{Point3, Vector3};
+use nalgebra::Point3;
 use num_traits::Float;
 use physical_constants::EARTH_RADIUS_KM;
 use std::{convert::From, fmt, marker::PhantomData};

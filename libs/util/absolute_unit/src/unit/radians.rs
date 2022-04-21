@@ -23,8 +23,8 @@ impl AngleUnit for Radians {
     fn suffix() -> &'static str {
         " ㎭"
     }
-    fn femto_radians_in_unit() -> i64 {
-        1_000_000_000_000_000 // peta = 10**15
+    fn femto_radians_in_unit() -> f64 {
+        1_000_000_000_000_000. // peta = 10**15
     }
 }
 

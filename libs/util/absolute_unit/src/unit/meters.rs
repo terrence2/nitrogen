@@ -20,11 +20,14 @@ impl LengthUnit for Meters {
     fn unit_name() -> &'static str {
         "meters"
     }
+    fn unit_short_name() -> &'static str {
+        "m"
+    }
     fn suffix() -> &'static str {
         "m"
     }
-    fn nanometers_in_unit() -> i64 {
-        1_000_000_000
+    fn nanometers_in_unit() -> f64 {
+        1_000_000_000.
     }
 }
 
@@ -32,5 +35,12 @@ impl LengthUnit for Meters {
 macro_rules! meters {
     ($num:expr) => {
         $crate::Length::<$crate::Meters>::from(&$num)
+    };
+}
+
+#[macro_export]
+macro_rules! meters2 {
+    ($num:expr) => {
+        $crate::Area::<$crate::Meters>::from(&$num)
     };
 }

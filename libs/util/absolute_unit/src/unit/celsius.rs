@@ -12,26 +12,28 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::angle::AngleUnit;
-use std::f64::consts::PI;
+use crate::temperature::TemperatureUnit;
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
-pub struct ArcMinutes;
-impl AngleUnit for ArcMinutes {
+pub struct Celsius;
+impl TemperatureUnit for Celsius {
     fn unit_name() -> &'static str {
-        "arcmin"
+        "celsius"
     }
     fn suffix() -> &'static str {
-        "'"
+        "°C"
     }
-    fn femto_radians_in_unit() -> f64 {
-        1_000_000_000_000_000f64 * PI / 180f64 / 60f64
+    fn convert_to_kelvin(degrees_in: f64) -> f64 {
+        degrees_in + 273.15
+    }
+    fn convert_from_kelvin(degrees_k: f64) -> f64 {
+        degrees_k - 273.15
     }
 }
 
 #[macro_export]
-macro_rules! arcminutes {
+macro_rules! celsius {
     ($num:expr) => {
-        $crate::Angle::<$crate::ArcMinutes>::from(&$num)
+        $crate::Temperature::<$crate::Celsius>::from(&$num)
     };
 }

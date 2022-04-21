@@ -12,26 +12,25 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::angle::AngleUnit;
-use std::f64::consts::PI;
+use crate::force::ForceUnit;
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
-pub struct ArcMinutes;
-impl AngleUnit for ArcMinutes {
+pub struct Newtons;
+impl ForceUnit for Newtons {
     fn unit_name() -> &'static str {
-        "arcmin"
+        "newtons"
     }
-    fn suffix() -> &'static str {
-        "'"
+    fn unit_short_name() -> &'static str {
+        "N"
     }
-    fn femto_radians_in_unit() -> f64 {
-        1_000_000_000_000_000f64 * PI / 180f64 / 60f64
+    fn newtons_in_unit() -> f64 {
+        1.
     }
 }
 
 #[macro_export]
-macro_rules! arcminutes {
+macro_rules! newtons {
     ($num:expr) => {
-        $crate::Angle::<$crate::ArcMinutes>::from(&$num)
+        $crate::Force::<$crate::Newtons>::from(&$num)
     };
 }

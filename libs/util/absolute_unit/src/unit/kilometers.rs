@@ -20,11 +20,14 @@ impl LengthUnit for Kilometers {
     fn unit_name() -> &'static str {
         "kilometers"
     }
+    fn unit_short_name() -> &'static str {
+        "km"
+    }
     fn suffix() -> &'static str {
         "km"
     }
-    fn nanometers_in_unit() -> i64 {
-        Meters::nanometers_in_unit() * 1_000
+    fn nanometers_in_unit() -> f64 {
+        Meters::nanometers_in_unit() * 1_000.
     }
 }
 

@@ -26,3 +26,21 @@ pub(crate) mod radians;
 pub(crate) mod feet;
 pub(crate) mod kilometers;
 pub(crate) mod meters;
+
+// Temperature
+pub(crate) mod celsius;
+pub(crate) mod fahrenheit;
+pub(crate) mod kelvin;
+pub(crate) mod rankine;
+
+// Mass
+pub(crate) mod kilograms;
+pub(crate) mod pounds;
+
+// Time
+pub(crate) mod hours;
+pub(crate) mod seconds;
+
+// Force
+pub(crate) mod newtons;
+pub(crate) mod pounds_force;

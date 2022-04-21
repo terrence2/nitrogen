@@ -12,26 +12,25 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::angle::AngleUnit;
-use std::f64::consts::PI;
+use crate::time::TimeUnit;
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
-pub struct ArcMinutes;
-impl AngleUnit for ArcMinutes {
+pub struct Hours;
+impl TimeUnit for Hours {
     fn unit_name() -> &'static str {
-        "arcmin"
+        "hours"
     }
-    fn suffix() -> &'static str {
-        "'"
+    fn unit_short_name() -> &'static str {
+        "h"
     }
-    fn femto_radians_in_unit() -> f64 {
-        1_000_000_000_000_000f64 * PI / 180f64 / 60f64
+    fn seconds_in_unit() -> f64 {
+        3_600.
     }
 }
 
 #[macro_export]
-macro_rules! arcminutes {
+macro_rules! hours {
     ($num:expr) => {
-        $crate::Angle::<$crate::ArcMinutes>::from(&$num)
+        $crate::Time::<$crate::Hours>::from(&$num)
     };
 }

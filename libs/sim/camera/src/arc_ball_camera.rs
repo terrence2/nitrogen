@@ -18,7 +18,6 @@ use absolute_unit::{
 };
 use anyhow::{bail, ensure, Result};
 use bevy_ecs::prelude::*;
-use event_mapper::EventMapperStep;
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
 use measure::WorldSpaceFrame;
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};

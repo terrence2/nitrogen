@@ -20,11 +20,14 @@ impl LengthUnit for Feet {
     fn unit_name() -> &'static str {
         "feet"
     }
+    fn unit_short_name() -> &'static str {
+        "feet"
+    }
     fn suffix() -> &'static str {
         "'"
     }
-    fn nanometers_in_unit() -> i64 {
-        304_800_000
+    fn nanometers_in_unit() -> f64 {
+        304_800_000.
     }
 }
 
@@ -32,5 +35,12 @@ impl LengthUnit for Feet {
 macro_rules! feet {
     ($num:expr) => {
         $crate::Length::<$crate::Feet>::from(&$num)
+    };
+}
+
+#[macro_export]
+macro_rules! feet2 {
+    ($num:expr) => {
+        $crate::Area::<$crate::Feet>::from(&$num)
     };
 }

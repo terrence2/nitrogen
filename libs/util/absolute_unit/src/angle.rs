@@ -13,6 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{impl_unit_for_floats, impl_unit_for_integers, radians, scalar, Scalar};
+use ordered_float::OrderedFloat;
 use std::{
     fmt,
     marker::PhantomData,
@@ -22,12 +23,12 @@ use std::{
 pub trait AngleUnit: Copy {
     fn unit_name() -> &'static str;
     fn suffix() -> &'static str;
-    fn femto_radians_in_unit() -> i64;
+    fn femto_radians_in_unit() -> f64;
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Angle<Unit: AngleUnit> {
-    femto_rad: i64, // femto = 10**-15
+    v: OrderedFloat<f64>,
     phantom: PhantomData<Unit>,
 }
 
@@ -45,29 +46,31 @@ impl<Unit: AngleUnit> Angle<Unit> {
     }
 
     pub fn clamp(self, min: Self, max: Self) -> Self {
-        if self.femto_rad < min.femto_rad {
+        if self.v < min.v {
             min
-        } else if self.femto_rad > max.femto_rad {
+        } else if self.v > max.v {
             max
         } else {
             self
         }
     }
 
+    // In integer units min<x<=max
     pub fn wrap(self, min: Self, max: Self) -> Self {
-        // This clever approach is from: https://stackoverflow.com/a/707426/11820706
-        debug_assert!(max.femto_rad > min.femto_rad);
-        let range_size = max.femto_rad - min.femto_rad;
+        debug_assert!(max.v > min.v);
+        let range_size = max.v - min.v;
         let mut out = self;
-        if out.femto_rad < min.femto_rad {
-            out.femto_rad += range_size * ((min.femto_rad - out.femto_rad) / range_size + 1);
+        while out.v <= min.v {
+            out.v += range_size;
         }
-        out.femto_rad = min.femto_rad + (out.femto_rad - min.femto_rad) % range_size;
+        while out.v > max.v {
+            out.v -= range_size;
+        }
         out
     }
 
     pub fn sign(&self) -> i8 {
-        self.femto_rad.signum() as i8
+        self.v.0.signum() as i8
     }
 
     pub fn cos(self) -> Scalar {
@@ -131,8 +134,7 @@ where
     Unit: AngleUnit,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let v = self.femto_rad as f64 / Unit::femto_radians_in_unit() as f64;
-        write!(f, "{:0.4}{}", v, Unit::suffix())
+        write!(f, "{:0.4}{}", self.v, Unit::suffix())
     }
 }
 
@@ -143,7 +145,7 @@ where
 {
     fn from(v: &'a Angle<UnitA>) -> Self {
         Self {
-            femto_rad: v.femto_rad,
+            v: v.v * UnitA::femto_radians_in_unit() / UnitB::femto_radians_in_unit(),
             phantom: PhantomData,
         }
     }
@@ -158,7 +160,7 @@ where
 
     fn add(self, other: Angle<UnitA>) -> Self {
         Self {
-            femto_rad: self.femto_rad + other.femto_rad,
+            v: self.v + Angle::<UnitB>::from(&other).v,
             phantom: PhantomData,
         }
     }
@@ -170,7 +172,7 @@ where
     UnitB: AngleUnit,
 {
     fn add_assign(&mut self, other: Angle<UnitA>) {
-        self.femto_rad += other.femto_rad;
+        self.v += Angle::<UnitB>::from(&other).v;
     }
 }
 
@@ -183,7 +185,7 @@ where
 
     fn sub(self, other: Angle<UnitA>) -> Self {
         Self {
-            femto_rad: self.femto_rad - other.femto_rad,
+            v: self.v - Angle::<UnitB>::from(&other).v,
             phantom: PhantomData,
         }
     }
@@ -195,7 +197,7 @@ where
     UnitB: AngleUnit,
 {
     fn sub_assign(&mut self, other: Angle<UnitA>) {
-        self.femto_rad -= other.femto_rad;
+        self.v -= Angle::<UnitB>::from(&other).v;
     }
 }
 
@@ -206,7 +208,7 @@ where
     type Output = Self;
 
     fn neg(mut self) -> Self::Output {
-        self.femto_rad = -self.femto_rad;
+        self.v = -self.v;
         self
     }
 }
@@ -219,7 +221,7 @@ where
 
     fn mul(self, other: Scalar) -> Self {
         Self {
-            femto_rad: (self.femto_rad as f64 * other.f64()) as i64,
+            v: self.v * other.f64(),
             phantom: PhantomData,
         }
     }
@@ -233,7 +235,7 @@ where
 
     fn div(self, rhs: Scalar) -> Self {
         Self {
-            femto_rad: (self.femto_rad as f64 / rhs.f64()).round() as i64,
+            v: self.v / rhs.f64(),
             phantom: PhantomData,
         }
     }
@@ -244,7 +246,7 @@ where
     Unit: AngleUnit,
 {
     fn div_assign(&mut self, rhs: Scalar) {
-        self.femto_rad = (self.femto_rad as f64 / rhs.f64()).round() as i64;
+        self.v /= rhs.f64();
     }
 }
 
@@ -256,7 +258,7 @@ macro_rules! impl_angle_unit_for_numeric_type {
         {
             fn from(v: $Num) -> Self {
                 Self {
-                    femto_rad: (v as f64 * Unit::femto_radians_in_unit() as f64) as i64,
+                    v: OrderedFloat(v as f64),
                     phantom: PhantomData,
                 }
             }
@@ -268,7 +270,7 @@ macro_rules! impl_angle_unit_for_numeric_type {
         {
             fn from(v: &$Num) -> Self {
                 Self {
-                    femto_rad: (*v as f64 * Unit::femto_radians_in_unit() as f64) as i64,
+                    v: OrderedFloat(*v as f64),
                     phantom: PhantomData,
                 }
             }
@@ -279,7 +281,7 @@ macro_rules! impl_angle_unit_for_numeric_type {
             Unit: AngleUnit,
         {
             fn from(v: Angle<Unit>) -> $Num {
-                (v.femto_rad as f64 / Unit::femto_radians_in_unit() as f64) as $Num
+                v.v.0 as $Num
             }
         }
     };

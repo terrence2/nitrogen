@@ -14,17 +14,29 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 
 pub(crate) mod angle;
+pub(crate) mod area;
+pub(crate) mod force;
 pub(crate) mod generic;
 pub(crate) mod length;
+pub(crate) mod mass;
 pub(crate) mod temperature;
+pub(crate) mod time;
 pub(crate) mod unit;
 
 pub use crate::{
     angle::{Angle, AngleUnit},
+    area::Area,
+    force::{Force, ForceUnit},
     length::{Length, LengthUnit},
+    mass::{Mass, MassUnit},
+    temperature::{Temperature, TemperatureUnit},
+    time::{Time, TimeUnit},
     unit::{
-        arcminutes::ArcMinutes, arcseconds::ArcSeconds, degrees::Degrees, feet::Feet,
-        kilometers::Kilometers, meters::Meters, radians::Radians, scalar::Scalar,
+        arcminutes::ArcMinutes, arcseconds::ArcSeconds, celsius::Celsius, degrees::Degrees,
+        fahrenheit::Fahrenheit, feet::Feet, hours::Hours, kelvin::Kelvin, kilograms::Kilograms,
+        kilometers::Kilometers, meters::Meters, newtons::Newtons, pounds::Pounds,
+        pounds_force::PoundsForce, radians::Radians, rankine::Rankine, scalar::Scalar,
+        seconds::Seconds,
     },
 };
 

@@ -24,8 +24,8 @@ impl AngleUnit for Degrees {
     fn suffix() -> &'static str {
         "°"
     }
-    fn femto_radians_in_unit() -> i64 {
-        ((1_000_000_000_000_000f64 * PI) / 180f64) as i64
+    fn femto_radians_in_unit() -> f64 {
+        1_000_000_000_000_000f64 * PI / 180f64
     }
 }
 
