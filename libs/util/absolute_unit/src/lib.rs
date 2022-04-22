@@ -22,6 +22,7 @@ pub(crate) mod mass;
 pub(crate) mod temperature;
 pub(crate) mod time;
 pub(crate) mod unit;
+pub(crate) mod velocity;
 
 pub use crate::{
     angle::{Angle, AngleUnit},
@@ -34,10 +35,13 @@ pub use crate::{
     unit::{
         arcminutes::ArcMinutes, arcseconds::ArcSeconds, celsius::Celsius, degrees::Degrees,
         fahrenheit::Fahrenheit, feet::Feet, hours::Hours, kelvin::Kelvin, kilograms::Kilograms,
-        kilometers::Kilometers, meters::Meters, newtons::Newtons, pounds::Pounds,
+        kilometers::Kilometers, meters::Meters, miles::Miles, newtons::Newtons, pounds::Pounds,
         pounds_force::PoundsForce, radians::Radians, rankine::Rankine, scalar::Scalar,
         seconds::Seconds,
     },
+    velocity::Velocity,
 };
 
+// For use from macros
+pub use approx;
 pub use ordered_float;

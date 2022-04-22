@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::length::LengthUnit;
+use crate::{length::LengthUnit, velocity::Velocity};
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Meters;
@@ -26,8 +26,8 @@ impl LengthUnit for Meters {
     fn suffix() -> &'static str {
         "m"
     }
-    fn nanometers_in_unit() -> f64 {
-        1_000_000_000.
+    fn meters_in_unit() -> f64 {
+        1.
     }
 }
 
@@ -42,5 +42,12 @@ macro_rules! meters {
 macro_rules! meters2 {
     ($num:expr) => {
         $crate::Area::<$crate::Meters>::from(&$num)
+    };
+}
+
+#[macro_export]
+macro_rules! meters_per_second {
+    ($num:expr) => {
+        $crate::Velocity::<$crate::Meters, $crate::Seconds>::from(&$num)
     };
 }

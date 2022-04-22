@@ -12,35 +12,35 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::length::LengthUnit;
+use crate::{length::LengthUnit, velocity::Velocity};
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
-pub struct Feet;
-impl LengthUnit for Feet {
+pub struct Miles;
+impl LengthUnit for Miles {
     fn unit_name() -> &'static str {
-        "feet"
+        "miles"
     }
     fn unit_short_name() -> &'static str {
-        "feet"
+        "miles"
     }
     fn suffix() -> &'static str {
-        "'"
+        "miles"
     }
     fn meters_in_unit() -> f64 {
-        0.304_800_000
+        1609.34
     }
 }
 
 #[macro_export]
-macro_rules! feet {
+macro_rules! miles {
     ($num:expr) => {
-        $crate::Length::<$crate::Feet>::from(&$num)
+        $crate::Length::<$crate::Miles>::from(&$num)
     };
 }
 
 #[macro_export]
-macro_rules! feet2 {
+macro_rules! miles_per_hour {
     ($num:expr) => {
-        $crate::Area::<$crate::Feet>::from(&$num)
+        $crate::Velocity::<$crate::Miles, $crate::Hours>::from(&$num)
     };
 }

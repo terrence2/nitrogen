@@ -12,8 +12,10 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{impl_unit_for_floats, impl_unit_for_integers, Scalar};
-use approx::AbsDiffEq;
+use crate::{
+    impl_absdiffeq_for_type, impl_scalar_math_for_type, impl_unit_for_value_types,
+    impl_value_type_conversions, Scalar,
+};
 use ordered_float::OrderedFloat;
 use std::{
     fmt,
@@ -31,17 +33,7 @@ pub trait MassUnit: Copy + Debug + Eq + PartialEq + 'static {
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Mass<Unit: MassUnit> {
     v: OrderedFloat<f64>, // in Unit
-    phantom: PhantomData<Unit>,
-}
-
-impl<Unit: MassUnit> Mass<Unit> {
-    pub fn f64(self) -> f64 {
-        f64::from(self)
-    }
-
-    pub fn f32(self) -> f32 {
-        f32::from(self)
-    }
+    phantom_1: PhantomData<Unit>,
 }
 
 impl<Unit> fmt::Display for Mass<Unit>
@@ -61,7 +53,7 @@ where
     fn from(v: &'a Mass<UnitA>) -> Self {
         Self {
             v: v.v * UnitA::grams_in_unit() / UnitB::grams_in_unit(),
-            phantom: PhantomData,
+            phantom_1: PhantomData,
         }
     }
 }
@@ -76,7 +68,7 @@ where
     fn add(self, other: Mass<UnitA>) -> Self {
         Self {
             v: self.v + Mass::<UnitB>::from(&other).v,
-            phantom: PhantomData,
+            phantom_1: PhantomData,
         }
     }
 }
@@ -101,7 +93,7 @@ where
     fn sub(self, other: Mass<UnitA>) -> Self {
         Self {
             v: self.v - Mass::<UnitB>::from(&other).v,
-            phantom: PhantomData,
+            phantom_1: PhantomData,
         }
     }
 }
@@ -116,106 +108,15 @@ where
     }
 }
 
-impl<Unit> Mul<Scalar> for Mass<Unit>
-where
-    Unit: MassUnit,
-{
-    type Output = Mass<Unit>;
+impl_scalar_math_for_type!(Mass<A>, MassUnit);
 
-    fn mul(self, s: Scalar) -> Self {
-        Self {
-            v: self.v * s.f64(),
-            phantom: PhantomData,
-        }
-    }
-}
+impl_absdiffeq_for_type!(Mass<A>, MassUnit);
 
-impl<Unit> MulAssign<Scalar> for Mass<Unit>
-where
-    Unit: MassUnit,
-{
-    fn mul_assign(&mut self, s: Scalar) {
-        self.v *= s.f64();
-    }
-}
-
-impl<Unit> Div<Scalar> for Mass<Unit>
-where
-    Unit: MassUnit,
-{
-    type Output = Mass<Unit>;
-
-    fn div(self, s: Scalar) -> Self {
-        Self {
-            v: self.v / s.f64(),
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl<Unit> DivAssign<Scalar> for Mass<Unit>
-where
-    Unit: MassUnit,
-{
-    fn div_assign(&mut self, s: Scalar) {
-        self.v /= s.f64();
-    }
-}
-
-impl<Unit: MassUnit> AbsDiffEq for Mass<Unit> {
-    type Epsilon = f64;
-
-    fn default_epsilon() -> Self::Epsilon {
-        f64::default_epsilon()
-    }
-
-    fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
-        self.v.0.abs_diff_eq(&other.v.0, epsilon)
-    }
-}
-
-macro_rules! impl_length_unit_for_numeric_type {
-    ($Num:ty) => {
-        impl<Unit> From<$Num> for Mass<Unit>
-        where
-            Unit: MassUnit,
-        {
-            fn from(v: $Num) -> Self {
-                Self {
-                    v: OrderedFloat(v as f64),
-                    phantom: PhantomData,
-                }
-            }
-        }
-
-        impl<Unit> From<&$Num> for Mass<Unit>
-        where
-            Unit: MassUnit,
-        {
-            fn from(v: &$Num) -> Self {
-                Self {
-                    v: OrderedFloat(*v as f64),
-                    phantom: PhantomData,
-                }
-            }
-        }
-
-        impl<Unit> From<Mass<Unit>> for $Num
-        where
-            Unit: MassUnit,
-        {
-            fn from(v: Mass<Unit>) -> $Num {
-                v.v.0 as $Num
-            }
-        }
-    };
-}
-impl_unit_for_floats!(impl_length_unit_for_numeric_type);
-impl_unit_for_integers!(impl_length_unit_for_numeric_type);
+impl_unit_for_value_types!(Mass<A>, MassUnit, impl_value_type_conversions);
 
 #[cfg(test)]
 mod test {
-    use crate::{kilograms, pounds};
+    use crate::{kilograms, pounds, scalar};
     use approx::assert_abs_diff_eq;
 
     #[test]
@@ -224,5 +125,10 @@ mod test {
         println!("lb: {}", lb);
         println!("kg: {}", kilograms!(lb));
         assert_abs_diff_eq!(kilograms!(lb), kilograms!(0.907_184_74));
+    }
+
+    #[test]
+    fn test_mass_scalar() {
+        assert_abs_diff_eq!(pounds!(2) * scalar!(2), pounds!(4));
     }
 }

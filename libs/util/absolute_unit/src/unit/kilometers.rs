@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{length::LengthUnit, unit::meters::Meters};
+use crate::length::LengthUnit;
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Kilometers;
@@ -26,8 +26,8 @@ impl LengthUnit for Kilometers {
     fn suffix() -> &'static str {
         "km"
     }
-    fn nanometers_in_unit() -> f64 {
-        Meters::nanometers_in_unit() * 1_000.
+    fn meters_in_unit() -> f64 {
+        1_000.
     }
 }
 

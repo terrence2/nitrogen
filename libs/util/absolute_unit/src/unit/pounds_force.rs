@@ -34,3 +34,10 @@ macro_rules! pounds_of_force {
         $crate::Force::<$crate::PoundsForce>::from(&$num)
     };
 }
+
+#[macro_export]
+macro_rules! lbf {
+    ($num:expr) => {
+        $crate::Force::<$crate::PoundsForce>::from(&$num)
+    };
+}

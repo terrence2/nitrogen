@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{impl_unit_for_floats, impl_unit_for_integers, Scalar};
+use crate::{impl_unit_for_value_types, Scalar};
 use ordered_float::OrderedFloat;
 use std::{
     fmt,
@@ -119,7 +119,8 @@ where
     }
 }
 
-macro_rules! impl_length_unit_for_numeric_type {
+// Note: we need to convert to kelvin, so cannot use the default value conversions.
+macro_rules! impl_temperature_unit_for_numeric_type {
     ($Num:ty) => {
         impl<Unit> From<$Num> for Temperature<Unit>
         where
@@ -155,8 +156,7 @@ macro_rules! impl_length_unit_for_numeric_type {
         }
     };
 }
-impl_unit_for_floats!(impl_length_unit_for_numeric_type);
-impl_unit_for_integers!(impl_length_unit_for_numeric_type);
+impl_unit_for_value_types!(impl_temperature_unit_for_numeric_type);
 
 #[cfg(test)]
 mod test {

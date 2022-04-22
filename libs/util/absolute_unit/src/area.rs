@@ -12,8 +12,10 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{impl_unit_for_floats, impl_unit_for_integers, Length, LengthUnit, Scalar};
-use approx::AbsDiffEq;
+use crate::{
+    impl_absdiffeq_for_type, impl_scalar_math_for_type, impl_unit_for_value_types,
+    impl_value_type_conversions, Length, LengthUnit,
+};
 use ordered_float::OrderedFloat;
 use std::{
     fmt,
@@ -25,17 +27,7 @@ use std::{
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Area<Unit: LengthUnit> {
     v: OrderedFloat<f64>, // in Unit^2
-    phantom: PhantomData<Unit>,
-}
-
-impl<Unit: LengthUnit> Area<Unit> {
-    pub fn f64(self) -> f64 {
-        f64::from(self)
-    }
-
-    pub fn f32(self) -> f32 {
-        f32::from(self)
-    }
+    phantom_1: PhantomData<Unit>,
 }
 
 impl<Unit> fmt::Display for Area<Unit>
@@ -53,10 +45,10 @@ where
     UnitB: LengthUnit,
 {
     fn from(v: &'a Area<UnitA>) -> Self {
-        let ratio = UnitA::nanometers_in_unit() / UnitB::nanometers_in_unit();
+        let ratio = UnitA::meters_in_unit() / UnitB::meters_in_unit();
         Self {
             v: v.v * ratio * ratio,
-            phantom: PhantomData,
+            phantom_1: PhantomData,
         }
     }
 }
@@ -71,7 +63,7 @@ where
     fn add(self, other: Area<UnitA>) -> Self {
         Self {
             v: self.v + Area::<UnitB>::from(&other).v,
-            phantom: PhantomData,
+            phantom_1: PhantomData,
         }
     }
 }
@@ -96,7 +88,7 @@ where
     fn sub(self, other: Area<UnitA>) -> Self {
         Self {
             v: self.v - Area::<UnitB>::from(&other).v,
-            phantom: PhantomData,
+            phantom_1: PhantomData,
         }
     }
 }
@@ -123,106 +115,15 @@ where
     }
 }
 
-impl<Unit> Mul<Scalar> for Area<Unit>
-where
-    Unit: LengthUnit,
-{
-    type Output = Area<Unit>;
+impl_scalar_math_for_type!(Area<A>, LengthUnit);
 
-    fn mul(self, s: Scalar) -> Self {
-        Self {
-            v: self.v * s.f64(),
-            phantom: PhantomData,
-        }
-    }
-}
+impl_absdiffeq_for_type!(Area<A>, LengthUnit);
 
-impl<Unit> MulAssign<Scalar> for Area<Unit>
-where
-    Unit: LengthUnit,
-{
-    fn mul_assign(&mut self, s: Scalar) {
-        self.v *= s.f64();
-    }
-}
-
-impl<Unit> Div<Scalar> for Area<Unit>
-where
-    Unit: LengthUnit,
-{
-    type Output = Area<Unit>;
-
-    fn div(self, s: Scalar) -> Self {
-        Self {
-            v: self.v / s.f64(),
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl<Unit> DivAssign<Scalar> for Area<Unit>
-where
-    Unit: LengthUnit,
-{
-    fn div_assign(&mut self, s: Scalar) {
-        self.v /= s.f64();
-    }
-}
-
-impl<Unit: LengthUnit> AbsDiffEq for Area<Unit> {
-    type Epsilon = f64;
-
-    fn default_epsilon() -> Self::Epsilon {
-        f64::default_epsilon()
-    }
-
-    fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
-        self.v.0.abs_diff_eq(&other.v.0, epsilon)
-    }
-}
-
-macro_rules! impl_length_unit_for_numeric_type {
-    ($Num:ty) => {
-        impl<Unit> From<$Num> for Area<Unit>
-        where
-            Unit: LengthUnit,
-        {
-            fn from(v: $Num) -> Self {
-                Self {
-                    v: OrderedFloat(v as f64),
-                    phantom: PhantomData,
-                }
-            }
-        }
-
-        impl<Unit> From<&$Num> for Area<Unit>
-        where
-            Unit: LengthUnit,
-        {
-            fn from(v: &$Num) -> Self {
-                Self {
-                    v: OrderedFloat(*v as f64),
-                    phantom: PhantomData,
-                }
-            }
-        }
-
-        impl<Unit> From<Area<Unit>> for $Num
-        where
-            Unit: LengthUnit,
-        {
-            fn from(v: Area<Unit>) -> $Num {
-                v.v.0 as $Num
-            }
-        }
-    };
-}
-impl_unit_for_floats!(impl_length_unit_for_numeric_type);
-impl_unit_for_integers!(impl_length_unit_for_numeric_type);
+impl_unit_for_value_types!(Area<A>, LengthUnit, impl_value_type_conversions);
 
 #[cfg(test)]
 mod test {
-    use crate::{feet, feet2, meters, meters2};
+    use crate::{feet, feet2, meters, meters2, scalar};
     use approx::assert_abs_diff_eq;
 
     #[test]
@@ -230,20 +131,25 @@ mod test {
         let ft = feet2!(1);
         println!("ft^2: {}", ft);
         println!("m^2 : {}", meters2!(ft));
-        assert_abs_diff_eq!(meters2!(ft), meters2!(0.092_903_04));
+        assert_abs_diff_eq!(meters2!(ft), meters2!(0.092_903), epsilon = 0.000_001);
+    }
+
+    #[test]
+    fn test_scalar_area() {
+        assert_abs_diff_eq!(meters2!(2) * scalar!(2), meters2!(4));
     }
 
     #[test]
     fn test_derived_area() {
         let ft2 = feet!(2) * meters!(1);
         println!("ft2: {}", ft2);
-        assert_abs_diff_eq!(ft2, feet2!(6.561_679_790_026_247));
+        assert_abs_diff_eq!(ft2, feet2!(6.561_679), epsilon = 0.000_001);
     }
 
     #[test]
     fn test_derived_length() {
         let m = meters2!(4) / feet!(10);
         println!("m: {}", m);
-        assert_abs_diff_eq!(m, meters!(1.312_335_958_005_249_4));
+        assert_abs_diff_eq!(m, meters!(1.312_335), epsilon = 0.000_001);
     }
 }

@@ -26,6 +26,7 @@ pub(crate) mod radians;
 pub(crate) mod feet;
 pub(crate) mod kilometers;
 pub(crate) mod meters;
+pub(crate) mod miles;
 
 // Temperature
 pub(crate) mod celsius;

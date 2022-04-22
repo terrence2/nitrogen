@@ -12,7 +12,10 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{impl_unit_for_floats, impl_unit_for_integers, Scalar};
+use crate::{
+    impl_absdiffeq_for_type, impl_scalar_math_for_type, impl_unit_for_value_types,
+    impl_value_type_conversions, Scalar,
+};
 use approx::AbsDiffEq;
 use ordered_float::OrderedFloat;
 use std::{
@@ -31,17 +34,7 @@ pub trait TimeUnit: Copy + Debug + Eq + PartialEq + 'static {
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Time<Unit: TimeUnit> {
     v: OrderedFloat<f64>, // in Unit
-    phantom: PhantomData<Unit>,
-}
-
-impl<Unit: TimeUnit> Time<Unit> {
-    pub fn f64(self) -> f64 {
-        f64::from(self)
-    }
-
-    pub fn f32(self) -> f32 {
-        f32::from(self)
-    }
+    phantom_1: PhantomData<Unit>,
 }
 
 impl<Unit> fmt::Display for Time<Unit>
@@ -61,7 +54,7 @@ where
     fn from(v: &'a Time<UnitA>) -> Self {
         Self {
             v: v.v * UnitA::seconds_in_unit() / UnitB::seconds_in_unit(),
-            phantom: PhantomData,
+            phantom_1: PhantomData,
         }
     }
 }
@@ -76,7 +69,7 @@ where
     fn add(self, other: Time<UnitA>) -> Self {
         Self {
             v: self.v + Time::<UnitB>::from(&other).v,
-            phantom: PhantomData,
+            phantom_1: PhantomData,
         }
     }
 }
@@ -101,7 +94,7 @@ where
     fn sub(self, other: Time<UnitA>) -> Self {
         Self {
             v: self.v - Time::<UnitB>::from(&other).v,
-            phantom: PhantomData,
+            phantom_1: PhantomData,
         }
     }
 }
@@ -116,106 +109,15 @@ where
     }
 }
 
-impl<Unit> Mul<Scalar> for Time<Unit>
-where
-    Unit: TimeUnit,
-{
-    type Output = Time<Unit>;
+impl_scalar_math_for_type!(Time<A>, TimeUnit);
 
-    fn mul(self, s: Scalar) -> Self {
-        Self {
-            v: self.v * s.f64(),
-            phantom: PhantomData,
-        }
-    }
-}
+impl_absdiffeq_for_type!(Time<A>, TimeUnit);
 
-impl<Unit> MulAssign<Scalar> for Time<Unit>
-where
-    Unit: TimeUnit,
-{
-    fn mul_assign(&mut self, s: Scalar) {
-        self.v *= s.f64();
-    }
-}
-
-impl<Unit> Div<Scalar> for Time<Unit>
-where
-    Unit: TimeUnit,
-{
-    type Output = Time<Unit>;
-
-    fn div(self, s: Scalar) -> Self {
-        Self {
-            v: self.v / s.f64(),
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl<Unit> DivAssign<Scalar> for Time<Unit>
-where
-    Unit: TimeUnit,
-{
-    fn div_assign(&mut self, s: Scalar) {
-        self.v /= s.f64();
-    }
-}
-
-impl<Unit: TimeUnit> AbsDiffEq for Time<Unit> {
-    type Epsilon = f64;
-
-    fn default_epsilon() -> Self::Epsilon {
-        f64::default_epsilon()
-    }
-
-    fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
-        self.v.0.abs_diff_eq(&other.v.0, epsilon)
-    }
-}
-
-macro_rules! impl_length_unit_for_numeric_type {
-    ($Num:ty) => {
-        impl<Unit> From<$Num> for Time<Unit>
-        where
-            Unit: TimeUnit,
-        {
-            fn from(v: $Num) -> Self {
-                Self {
-                    v: OrderedFloat(v as f64),
-                    phantom: PhantomData,
-                }
-            }
-        }
-
-        impl<Unit> From<&$Num> for Time<Unit>
-        where
-            Unit: TimeUnit,
-        {
-            fn from(v: &$Num) -> Self {
-                Self {
-                    v: OrderedFloat(*v as f64),
-                    phantom: PhantomData,
-                }
-            }
-        }
-
-        impl<Unit> From<Time<Unit>> for $Num
-        where
-            Unit: TimeUnit,
-        {
-            fn from(v: Time<Unit>) -> $Num {
-                v.v.0 as $Num
-            }
-        }
-    };
-}
-impl_unit_for_floats!(impl_length_unit_for_numeric_type);
-impl_unit_for_integers!(impl_length_unit_for_numeric_type);
+impl_unit_for_value_types!(Time<A>, TimeUnit, impl_value_type_conversions);
 
 #[cfg(test)]
 mod test {
-    use crate::{hours, seconds};
+    use crate::{hours, scalar, seconds};
     use approx::assert_abs_diff_eq;
 
     #[test]
@@ -224,5 +126,10 @@ mod test {
         println!("h: {}", h);
         println!("s: {}", seconds!(h));
         assert_abs_diff_eq!(seconds!(h), seconds!(3_600));
+    }
+
+    #[test]
+    fn test_time_scalar() {
+        assert_abs_diff_eq!(seconds!(2) * scalar!(2), seconds!(4));
     }
 }

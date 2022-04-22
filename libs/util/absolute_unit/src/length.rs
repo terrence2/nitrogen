@@ -12,8 +12,10 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{impl_unit_for_floats, impl_unit_for_integers, Area, Scalar};
-use approx::AbsDiffEq;
+use crate::{
+    impl_absdiffeq_for_type, impl_scalar_math_for_type, impl_unit_for_value_types,
+    impl_value_type_conversions, Area, Scalar,
+};
 use ordered_float::OrderedFloat;
 use std::{
     fmt,
@@ -26,23 +28,13 @@ pub trait LengthUnit: Copy + Debug + Eq + PartialEq + 'static {
     fn unit_name() -> &'static str;
     fn unit_short_name() -> &'static str;
     fn suffix() -> &'static str;
-    fn nanometers_in_unit() -> f64;
+    fn meters_in_unit() -> f64;
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Length<Unit: LengthUnit> {
     v: OrderedFloat<f64>, // in Unit
-    phantom: PhantomData<Unit>,
-}
-
-impl<Unit: LengthUnit> Length<Unit> {
-    pub fn f64(self) -> f64 {
-        f64::from(self)
-    }
-
-    pub fn f32(self) -> f32 {
-        f32::from(self)
-    }
+    phantom_1: PhantomData<Unit>,
 }
 
 impl<Unit> fmt::Display for Length<Unit>
@@ -61,8 +53,8 @@ where
 {
     fn from(v: &'a Length<UnitA>) -> Self {
         Self {
-            v: v.v * UnitA::nanometers_in_unit() / UnitB::nanometers_in_unit(),
-            phantom: PhantomData,
+            v: v.v * UnitA::meters_in_unit() / UnitB::meters_in_unit(),
+            phantom_1: PhantomData,
         }
     }
 }
@@ -77,7 +69,7 @@ where
     fn add(self, other: Length<UnitA>) -> Self {
         Self {
             v: self.v + Length::<UnitB>::from(&other).v,
-            phantom: PhantomData,
+            phantom_1: PhantomData,
         }
     }
 }
@@ -102,7 +94,7 @@ where
     fn sub(self, other: Length<UnitA>) -> Self {
         Self {
             v: self.v - Length::<UnitB>::from(&other).v,
-            phantom: PhantomData,
+            phantom_1: PhantomData,
         }
     }
 }
@@ -129,106 +121,16 @@ where
     }
 }
 
-impl<Unit> Mul<Scalar> for Length<Unit>
-where
-    Unit: LengthUnit,
-{
-    type Output = Length<Unit>;
+impl_scalar_math_for_type!(Length<A>, LengthUnit);
 
-    fn mul(self, s: Scalar) -> Self {
-        Self {
-            v: self.v * s.f64(),
-            phantom: PhantomData,
-        }
-    }
-}
+impl_absdiffeq_for_type!(Length<A>, LengthUnit);
 
-impl<Unit> MulAssign<Scalar> for Length<Unit>
-where
-    Unit: LengthUnit,
-{
-    fn mul_assign(&mut self, s: Scalar) {
-        self.v *= s.f64();
-    }
-}
-
-impl<Unit> Div<Scalar> for Length<Unit>
-where
-    Unit: LengthUnit,
-{
-    type Output = Length<Unit>;
-
-    fn div(self, s: Scalar) -> Self {
-        Self {
-            v: self.v / s.f64(),
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl<Unit> DivAssign<Scalar> for Length<Unit>
-where
-    Unit: LengthUnit,
-{
-    fn div_assign(&mut self, s: Scalar) {
-        self.v /= s.f64();
-    }
-}
-
-impl<Unit: LengthUnit> AbsDiffEq for Length<Unit> {
-    type Epsilon = f64;
-
-    fn default_epsilon() -> Self::Epsilon {
-        f64::default_epsilon()
-    }
-
-    fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
-        self.v.0.abs_diff_eq(&other.v.0, epsilon)
-    }
-}
-
-macro_rules! impl_length_unit_for_numeric_type {
-    ($Num:ty) => {
-        impl<Unit> From<$Num> for Length<Unit>
-        where
-            Unit: LengthUnit,
-        {
-            fn from(v: $Num) -> Self {
-                Self {
-                    v: OrderedFloat(v as f64),
-                    phantom: PhantomData,
-                }
-            }
-        }
-
-        impl<Unit> From<&$Num> for Length<Unit>
-        where
-            Unit: LengthUnit,
-        {
-            fn from(v: &$Num) -> Self {
-                Self {
-                    v: OrderedFloat(*v as f64),
-                    phantom: PhantomData,
-                }
-            }
-        }
-
-        impl<Unit> From<Length<Unit>> for $Num
-        where
-            Unit: LengthUnit,
-        {
-            fn from(v: Length<Unit>) -> $Num {
-                v.v.0 as $Num
-            }
-        }
-    };
-}
-impl_unit_for_floats!(impl_length_unit_for_numeric_type);
-impl_unit_for_integers!(impl_length_unit_for_numeric_type);
+impl_unit_for_value_types!(Length<A>, LengthUnit, impl_value_type_conversions);
 
 #[cfg(test)]
 mod test {
-    use crate::{feet, meters};
+    use crate::{feet, kilometers, meters, scalar};
+    use approx::assert_abs_diff_eq;
     use nalgebra::{Point3, Vector3};
 
     #[test]
@@ -236,6 +138,12 @@ mod test {
         let m = meters!(1);
         println!("m : {}", m);
         println!("ft: {}", feet!(m));
+        assert_abs_diff_eq!(kilometers!(m), kilometers!(0.001));
+    }
+
+    #[test]
+    fn test_scalar_length() {
+        assert_abs_diff_eq!(meters!(2) * scalar!(2), meters!(4));
     }
 
     #[test]
