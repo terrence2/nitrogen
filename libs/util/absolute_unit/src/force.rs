@@ -12,17 +12,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    impl_absdiffeq_for_type, impl_scalar_math_for_type, impl_unit_for_value_types,
-    impl_value_type_conversions, Scalar,
+    impl_value_type_conversions, supports_absdiffeq, supports_scalar_ops, supports_shift_ops,
+    supports_value_type_conversion,
 };
-use approx::AbsDiffEq;
 use ordered_float::OrderedFloat;
-use std::{
-    fmt,
-    fmt::Debug,
-    marker::PhantomData,
-    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
-};
+use std::{fmt, fmt::Debug, marker::PhantomData};
 
 pub trait ForceUnit: Copy + Debug + Eq + PartialEq + 'static {
     fn unit_name() -> &'static str;
@@ -36,6 +30,10 @@ pub struct Force<Unit: ForceUnit> {
     v: OrderedFloat<f64>, // in Unit
     phantom_1: PhantomData<Unit>,
 }
+supports_shift_ops!(Force<A1>, Force<A2>, ForceUnit);
+supports_scalar_ops!(Force<A>, ForceUnit);
+supports_absdiffeq!(Force<A>, ForceUnit);
+supports_value_type_conversion!(Force<A>, ForceUnit, impl_value_type_conversions);
 
 impl<Unit> fmt::Display for Force<Unit>
 where
@@ -58,62 +56,6 @@ where
         }
     }
 }
-
-impl<UnitA, UnitB> Add<Force<UnitA>> for Force<UnitB>
-where
-    UnitA: ForceUnit,
-    UnitB: ForceUnit,
-{
-    type Output = Force<UnitB>;
-
-    fn add(self, other: Force<UnitA>) -> Self {
-        Self {
-            v: self.v + Force::<UnitB>::from(&other).v,
-            phantom_1: PhantomData,
-        }
-    }
-}
-
-impl<UnitA, UnitB> AddAssign<Force<UnitA>> for Force<UnitB>
-where
-    UnitA: ForceUnit,
-    UnitB: ForceUnit,
-{
-    fn add_assign(&mut self, other: Force<UnitA>) {
-        self.v += Force::<UnitB>::from(&other).v;
-    }
-}
-
-impl<UnitA, UnitB> Sub<Force<UnitA>> for Force<UnitB>
-where
-    UnitA: ForceUnit,
-    UnitB: ForceUnit,
-{
-    type Output = Force<UnitB>;
-
-    fn sub(self, other: Force<UnitA>) -> Self {
-        Self {
-            v: self.v - Force::<UnitB>::from(&other).v,
-            phantom_1: PhantomData,
-        }
-    }
-}
-
-impl<UnitA, UnitB> SubAssign<Force<UnitA>> for Force<UnitB>
-where
-    UnitA: ForceUnit,
-    UnitB: ForceUnit,
-{
-    fn sub_assign(&mut self, other: Force<UnitA>) {
-        self.v -= Force::<UnitB>::from(&other).v;
-    }
-}
-
-impl_scalar_math_for_type!(Force<A>, ForceUnit);
-
-impl_absdiffeq_for_type!(Force<A>, ForceUnit);
-
-impl_unit_for_value_types!(Force<A>, ForceUnit, impl_value_type_conversions);
 
 #[cfg(test)]
 mod test {

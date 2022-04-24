@@ -17,15 +17,9 @@ use crate::time::TimeUnit;
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Hours;
 impl TimeUnit for Hours {
-    fn unit_name() -> &'static str {
-        "hours"
-    }
-    fn unit_short_name() -> &'static str {
-        "h"
-    }
-    fn seconds_in_unit() -> f64 {
-        3_600.
-    }
+    const UNIT_NAME: &'static str = "hours";
+    const UNIT_SHORT_NAME: &'static str = "h";
+    const SECONDS_IN_UNIT: f64 = 3_600.;
 }
 
 #[macro_export]

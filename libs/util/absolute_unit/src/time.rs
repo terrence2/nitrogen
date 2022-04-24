@@ -13,22 +13,16 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    impl_absdiffeq_for_type, impl_scalar_math_for_type, impl_unit_for_value_types,
-    impl_value_type_conversions, Scalar,
+    impl_value_type_conversions, supports_absdiffeq, supports_scalar_ops, supports_shift_ops,
+    supports_value_type_conversion,
 };
-use approx::AbsDiffEq;
 use ordered_float::OrderedFloat;
-use std::{
-    fmt,
-    fmt::Debug,
-    marker::PhantomData,
-    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
-};
+use std::{fmt, fmt::Debug, marker::PhantomData};
 
 pub trait TimeUnit: Copy + Debug + Eq + PartialEq + 'static {
-    fn unit_name() -> &'static str;
-    fn unit_short_name() -> &'static str;
-    fn seconds_in_unit() -> f64;
+    const UNIT_NAME: &'static str;
+    const UNIT_SHORT_NAME: &'static str;
+    const SECONDS_IN_UNIT: f64;
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
@@ -36,13 +30,17 @@ pub struct Time<Unit: TimeUnit> {
     v: OrderedFloat<f64>, // in Unit
     phantom_1: PhantomData<Unit>,
 }
+supports_shift_ops!(Time<A1>, Time<A2>, TimeUnit);
+supports_scalar_ops!(Time<A>, TimeUnit);
+supports_absdiffeq!(Time<A>, TimeUnit);
+supports_value_type_conversion!(Time<A>, TimeUnit, impl_value_type_conversions);
 
 impl<Unit> fmt::Display for Time<Unit>
 where
     Unit: TimeUnit,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:0.4}{}", self.v, Unit::unit_short_name())
+        write!(f, "{:0.4}{}", self.v, Unit::UNIT_SHORT_NAME)
     }
 }
 
@@ -53,67 +51,11 @@ where
 {
     fn from(v: &'a Time<UnitA>) -> Self {
         Self {
-            v: v.v * UnitA::seconds_in_unit() / UnitB::seconds_in_unit(),
+            v: v.v * UnitA::SECONDS_IN_UNIT / UnitB::SECONDS_IN_UNIT,
             phantom_1: PhantomData,
         }
     }
 }
-
-impl<UnitA, UnitB> Add<Time<UnitA>> for Time<UnitB>
-where
-    UnitA: TimeUnit,
-    UnitB: TimeUnit,
-{
-    type Output = Time<UnitB>;
-
-    fn add(self, other: Time<UnitA>) -> Self {
-        Self {
-            v: self.v + Time::<UnitB>::from(&other).v,
-            phantom_1: PhantomData,
-        }
-    }
-}
-
-impl<UnitA, UnitB> AddAssign<Time<UnitA>> for Time<UnitB>
-where
-    UnitA: TimeUnit,
-    UnitB: TimeUnit,
-{
-    fn add_assign(&mut self, other: Time<UnitA>) {
-        self.v += Time::<UnitB>::from(&other).v;
-    }
-}
-
-impl<UnitA, UnitB> Sub<Time<UnitA>> for Time<UnitB>
-where
-    UnitA: TimeUnit,
-    UnitB: TimeUnit,
-{
-    type Output = Time<UnitB>;
-
-    fn sub(self, other: Time<UnitA>) -> Self {
-        Self {
-            v: self.v - Time::<UnitB>::from(&other).v,
-            phantom_1: PhantomData,
-        }
-    }
-}
-
-impl<UnitA, UnitB> SubAssign<Time<UnitA>> for Time<UnitB>
-where
-    UnitA: TimeUnit,
-    UnitB: TimeUnit,
-{
-    fn sub_assign(&mut self, other: Time<UnitA>) {
-        self.v -= Time::<UnitB>::from(&other).v;
-    }
-}
-
-impl_scalar_math_for_type!(Time<A>, TimeUnit);
-
-impl_absdiffeq_for_type!(Time<A>, TimeUnit);
-
-impl_unit_for_value_types!(Time<A>, TimeUnit, impl_value_type_conversions);
 
 #[cfg(test)]
 mod test {

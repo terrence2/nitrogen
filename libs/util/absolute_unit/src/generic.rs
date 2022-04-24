@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 
 #[macro_export]
-macro_rules! impl_unit_for_value_types {
+macro_rules! supports_value_type_conversion {
     ($TypeName:ty, $UnitA:path, $UnitB:path, $it:tt) => {
         $it!(f64, $TypeName, $UnitA, $UnitB);
         $it!(f32, $TypeName, $UnitA, $UnitB);
@@ -152,7 +152,7 @@ macro_rules! impl_value_type_conversions {
 }
 
 #[macro_export]
-macro_rules! impl_absdiffeq_for_type {
+macro_rules! supports_absdiffeq {
     ($TypeName:ty, $UnitA:path, $UnitB:path) => {
         impl<A, B> $crate::approx::AbsDiffEq for $TypeName
         where
@@ -190,7 +190,7 @@ macro_rules! impl_absdiffeq_for_type {
 }
 
 #[macro_export]
-macro_rules! impl_scalar_math_for_type {
+macro_rules! supports_scalar_ops {
     ($TypeName:ty, $UnitA:path, $UnitB:path) => {
         impl<A, B> std::ops::Mul<$crate::Scalar> for $TypeName
         where
@@ -289,6 +289,123 @@ macro_rules! impl_scalar_math_for_type {
         {
             fn div_assign(&mut self, s: $crate::Scalar) {
                 self.v /= s.f64();
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! supports_shift_ops {
+    ($TypeNameSelf:ty, $TypeNameOther:ty, $UnitA:path, $UnitB:path) => {
+        impl<A1, B1, A2, B2> std::ops::Add<$TypeNameOther> for $TypeNameSelf
+        where
+            A1: $UnitA,
+            B1: $UnitB,
+            A2: $UnitA,
+            B2: $UnitB,
+        {
+            type Output = $TypeNameSelf;
+
+            fn add(self, other: $TypeNameOther) -> Self {
+                Self {
+                    v: self.v + <$TypeNameSelf>::from(&other).v,
+                    phantom_1: PhantomData,
+                    phantom_2: PhantomData,
+                }
+            }
+        }
+
+        impl<A1, B1, A2, B2> std::ops::AddAssign<$TypeNameOther> for $TypeNameSelf
+        where
+            A1: $UnitA,
+            B1: $UnitB,
+            A2: $UnitA,
+            B2: $UnitB,
+        {
+            fn add_assign(&mut self, other: $TypeNameOther) {
+                self.v += <$TypeNameSelf>::from(&other).v;
+            }
+        }
+
+        impl<A1, B1, A2, B2> std::ops::Sub<$TypeNameOther> for $TypeNameSelf
+        where
+            A1: $UnitA,
+            B1: $UnitB,
+            A2: $UnitA,
+            B2: $UnitB,
+        {
+            type Output = $TypeNameSelf;
+
+            fn sub(self, other: $TypeNameOther) -> Self {
+                Self {
+                    v: self.v - <$TypeNameSelf>::from(&other).v,
+                    phantom_1: PhantomData,
+                    phantom_2: PhantomData,
+                }
+            }
+        }
+
+        impl<A1, B1, A2, B2> std::ops::SubAssign<$TypeNameOther> for $TypeNameSelf
+        where
+            A1: $UnitA,
+            B1: $UnitB,
+            A2: $UnitA,
+            B2: $UnitB,
+        {
+            fn sub_assign(&mut self, other: $TypeNameOther) {
+                self.v -= <$TypeNameSelf>::from(&other).v;
+            }
+        }
+    };
+
+    ($TypeNameSelf:ty, $TypeNameOther:ty, $UnitA:path) => {
+        impl<A1, A2> std::ops::Add<$TypeNameOther> for $TypeNameSelf
+        where
+            A1: $UnitA,
+            A2: $UnitA,
+        {
+            type Output = $TypeNameSelf;
+
+            fn add(self, other: $TypeNameOther) -> Self {
+                Self {
+                    v: self.v + <$TypeNameSelf>::from(&other).v,
+                    phantom_1: PhantomData,
+                }
+            }
+        }
+
+        impl<A1, A2> std::ops::AddAssign<$TypeNameOther> for $TypeNameSelf
+        where
+            A1: $UnitA,
+            A2: $UnitA,
+        {
+            fn add_assign(&mut self, other: $TypeNameOther) {
+                self.v += <$TypeNameSelf>::from(&other).v;
+            }
+        }
+
+        impl<A1, A2> std::ops::Sub<$TypeNameOther> for $TypeNameSelf
+        where
+            A1: $UnitA,
+            A2: $UnitA,
+        {
+            type Output = $TypeNameSelf;
+
+            fn sub(self, other: $TypeNameOther) -> Self {
+                Self {
+                    v: self.v - <$TypeNameSelf>::from(&other).v,
+                    phantom_1: PhantomData,
+                }
+            }
+        }
+
+        impl<A1, A2> std::ops::SubAssign<$TypeNameOther> for $TypeNameSelf
+        where
+            A1: $UnitA,
+            A2: $UnitA,
+        {
+            fn sub_assign(&mut self, other: $TypeNameOther) {
+                self.v -= <$TypeNameSelf>::from(&other).v;
             }
         }
     };

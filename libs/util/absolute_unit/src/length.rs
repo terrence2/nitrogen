@@ -13,16 +13,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    impl_absdiffeq_for_type, impl_scalar_math_for_type, impl_unit_for_value_types,
-    impl_value_type_conversions, Area, Scalar,
+    impl_value_type_conversions, supports_absdiffeq, supports_scalar_ops, supports_shift_ops,
+    supports_value_type_conversion, Area,
 };
 use ordered_float::OrderedFloat;
-use std::{
-    fmt,
-    fmt::Debug,
-    marker::PhantomData,
-    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
-};
+use std::{fmt, fmt::Debug, marker::PhantomData, ops::Mul};
 
 pub trait LengthUnit: Copy + Debug + Eq + PartialEq + 'static {
     fn unit_name() -> &'static str;
@@ -36,6 +31,10 @@ pub struct Length<Unit: LengthUnit> {
     v: OrderedFloat<f64>, // in Unit
     phantom_1: PhantomData<Unit>,
 }
+supports_shift_ops!(Length<A1>, Length<A2>, LengthUnit);
+supports_scalar_ops!(Length<A>, LengthUnit);
+supports_absdiffeq!(Length<A>, LengthUnit);
+supports_value_type_conversion!(Length<A>, LengthUnit, impl_value_type_conversions);
 
 impl<Unit> fmt::Display for Length<Unit>
 where
@@ -59,56 +58,6 @@ where
     }
 }
 
-impl<UnitA, UnitB> Add<Length<UnitA>> for Length<UnitB>
-where
-    UnitA: LengthUnit,
-    UnitB: LengthUnit,
-{
-    type Output = Length<UnitB>;
-
-    fn add(self, other: Length<UnitA>) -> Self {
-        Self {
-            v: self.v + Length::<UnitB>::from(&other).v,
-            phantom_1: PhantomData,
-        }
-    }
-}
-
-impl<UnitA, UnitB> AddAssign<Length<UnitA>> for Length<UnitB>
-where
-    UnitA: LengthUnit,
-    UnitB: LengthUnit,
-{
-    fn add_assign(&mut self, other: Length<UnitA>) {
-        self.v += Length::<UnitB>::from(&other).v;
-    }
-}
-
-impl<UnitA, UnitB> Sub<Length<UnitA>> for Length<UnitB>
-where
-    UnitA: LengthUnit,
-    UnitB: LengthUnit,
-{
-    type Output = Length<UnitB>;
-
-    fn sub(self, other: Length<UnitA>) -> Self {
-        Self {
-            v: self.v - Length::<UnitB>::from(&other).v,
-            phantom_1: PhantomData,
-        }
-    }
-}
-
-impl<UnitA, UnitB> SubAssign<Length<UnitA>> for Length<UnitB>
-where
-    UnitA: LengthUnit,
-    UnitB: LengthUnit,
-{
-    fn sub_assign(&mut self, other: Length<UnitA>) {
-        self.v -= Length::<UnitB>::from(&other).v;
-    }
-}
-
 impl<UnitA, UnitB> Mul<Length<UnitA>> for Length<UnitB>
 where
     UnitA: LengthUnit,
@@ -120,12 +69,6 @@ where
         Area::<UnitB>::from(self.v.0 * Length::<UnitB>::from(&other).f64())
     }
 }
-
-impl_scalar_math_for_type!(Length<A>, LengthUnit);
-
-impl_absdiffeq_for_type!(Length<A>, LengthUnit);
-
-impl_unit_for_value_types!(Length<A>, LengthUnit, impl_value_type_conversions);
 
 #[cfg(test)]
 mod test {

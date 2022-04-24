@@ -17,15 +17,9 @@ use crate::time::TimeUnit;
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Seconds;
 impl TimeUnit for Seconds {
-    fn unit_name() -> &'static str {
-        "seconds"
-    }
-    fn unit_short_name() -> &'static str {
-        "s"
-    }
-    fn seconds_in_unit() -> f64 {
-        1.
-    }
+    const UNIT_NAME: &'static str = "seconds";
+    const UNIT_SHORT_NAME: &'static str = "s";
+    const SECONDS_IN_UNIT: f64 = 1.;
 }
 
 #[macro_export]

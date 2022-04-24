@@ -13,16 +13,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    impl_absdiffeq_for_type, impl_scalar_math_for_type, impl_unit_for_value_types,
-    impl_value_type_conversions, radians, scalar, Scalar,
+    impl_value_type_conversions, radians, scalar, supports_absdiffeq, supports_scalar_ops,
+    supports_shift_ops, supports_value_type_conversion, Scalar,
 };
 use ordered_float::OrderedFloat;
-use std::{
-    fmt,
-    fmt::Debug,
-    marker::PhantomData,
-    ops::{Add, AddAssign, Div, DivAssign, Mul, Neg, Sub, SubAssign},
-};
+use std::{fmt, fmt::Debug, marker::PhantomData, ops::Neg};
 
 pub trait AngleUnit: Copy + Debug + Eq + PartialEq + 'static {
     fn unit_name() -> &'static str;
@@ -35,6 +30,10 @@ pub struct Angle<Unit: AngleUnit> {
     v: OrderedFloat<f64>,
     phantom_1: PhantomData<Unit>,
 }
+supports_shift_ops!(Angle<A1>, Angle<A2>, AngleUnit);
+supports_scalar_ops!(Angle<A>, AngleUnit);
+supports_absdiffeq!(Angle<A>, AngleUnit);
+supports_value_type_conversion!(Angle<A>, AngleUnit, impl_value_type_conversions);
 
 impl<Unit: AngleUnit> Angle<Unit> {
     pub fn floor(self) -> f64 {
@@ -147,56 +146,6 @@ where
     }
 }
 
-impl<UnitA, UnitB> Add<Angle<UnitA>> for Angle<UnitB>
-where
-    UnitA: AngleUnit,
-    UnitB: AngleUnit,
-{
-    type Output = Angle<UnitB>;
-
-    fn add(self, other: Angle<UnitA>) -> Self {
-        Self {
-            v: self.v + Angle::<UnitB>::from(&other).v,
-            phantom_1: PhantomData,
-        }
-    }
-}
-
-impl<UnitA, UnitB> AddAssign<Angle<UnitA>> for Angle<UnitB>
-where
-    UnitA: AngleUnit,
-    UnitB: AngleUnit,
-{
-    fn add_assign(&mut self, other: Angle<UnitA>) {
-        self.v += Angle::<UnitB>::from(&other).v;
-    }
-}
-
-impl<UnitA, UnitB> Sub<Angle<UnitA>> for Angle<UnitB>
-where
-    UnitA: AngleUnit,
-    UnitB: AngleUnit,
-{
-    type Output = Angle<UnitB>;
-
-    fn sub(self, other: Angle<UnitA>) -> Self {
-        Self {
-            v: self.v - Angle::<UnitB>::from(&other).v,
-            phantom_1: PhantomData,
-        }
-    }
-}
-
-impl<UnitA, UnitB> SubAssign<Angle<UnitA>> for Angle<UnitB>
-where
-    UnitA: AngleUnit,
-    UnitB: AngleUnit,
-{
-    fn sub_assign(&mut self, other: Angle<UnitA>) {
-        self.v -= Angle::<UnitB>::from(&other).v;
-    }
-}
-
 impl<Unit> Neg for Angle<Unit>
 where
     Unit: AngleUnit,
@@ -208,12 +157,6 @@ where
         self
     }
 }
-
-impl_scalar_math_for_type!(Angle<A>, AngleUnit);
-
-impl_absdiffeq_for_type!(Angle<A>, AngleUnit);
-
-impl_unit_for_value_types!(Angle<A>, AngleUnit, impl_value_type_conversions);
 
 #[cfg(test)]
 mod test {
@@ -235,6 +178,11 @@ mod test {
 
         println!("d    : {}", degrees!(r));
         println!("d    : {}", f64::from(degrees!(r)));
+    }
+
+    #[test]
+    fn test_basic_angle_math() {
+        assert_abs_diff_eq!(degrees!(2) + degrees!(2), degrees!(4));
     }
 
     #[test]

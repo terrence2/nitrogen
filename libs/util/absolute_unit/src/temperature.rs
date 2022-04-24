@@ -12,7 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{impl_unit_for_value_types, Scalar};
+use crate::{supports_value_type_conversion, Scalar};
 use ordered_float::OrderedFloat;
 use std::{
     fmt,
@@ -156,7 +156,7 @@ macro_rules! impl_temperature_unit_for_numeric_type {
         }
     };
 }
-impl_unit_for_value_types!(impl_temperature_unit_for_numeric_type);
+supports_value_type_conversion!(impl_temperature_unit_for_numeric_type);
 
 #[cfg(test)]
 mod test {

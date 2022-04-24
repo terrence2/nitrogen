@@ -13,22 +13,21 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    impl_absdiffeq_for_type, impl_scalar_math_for_type, impl_unit_for_value_types,
-    impl_value_type_conversions, Length, LengthUnit,
+    impl_value_type_conversions, supports_absdiffeq, supports_scalar_ops, supports_shift_ops,
+    supports_value_type_conversion, Length, LengthUnit,
 };
 use ordered_float::OrderedFloat;
-use std::{
-    fmt,
-    fmt::Debug,
-    marker::PhantomData,
-    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
-};
+use std::{fmt, fmt::Debug, marker::PhantomData, ops::Div};
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Area<Unit: LengthUnit> {
     v: OrderedFloat<f64>, // in Unit^2
     phantom_1: PhantomData<Unit>,
 }
+supports_shift_ops!(Area<A1>, Area<A2>, LengthUnit);
+supports_scalar_ops!(Area<A>, LengthUnit);
+supports_absdiffeq!(Area<A>, LengthUnit);
+supports_value_type_conversion!(Area<A>, LengthUnit, impl_value_type_conversions);
 
 impl<Unit> fmt::Display for Area<Unit>
 where
@@ -53,56 +52,6 @@ where
     }
 }
 
-impl<UnitA, UnitB> Add<Area<UnitA>> for Area<UnitB>
-where
-    UnitA: LengthUnit,
-    UnitB: LengthUnit,
-{
-    type Output = Area<UnitB>;
-
-    fn add(self, other: Area<UnitA>) -> Self {
-        Self {
-            v: self.v + Area::<UnitB>::from(&other).v,
-            phantom_1: PhantomData,
-        }
-    }
-}
-
-impl<UnitA, UnitB> AddAssign<Area<UnitA>> for Area<UnitB>
-where
-    UnitA: LengthUnit,
-    UnitB: LengthUnit,
-{
-    fn add_assign(&mut self, other: Area<UnitA>) {
-        self.v += Area::<UnitB>::from(&other).v;
-    }
-}
-
-impl<UnitA, UnitB> Sub<Area<UnitA>> for Area<UnitB>
-where
-    UnitA: LengthUnit,
-    UnitB: LengthUnit,
-{
-    type Output = Area<UnitB>;
-
-    fn sub(self, other: Area<UnitA>) -> Self {
-        Self {
-            v: self.v - Area::<UnitB>::from(&other).v,
-            phantom_1: PhantomData,
-        }
-    }
-}
-
-impl<UnitA, UnitB> SubAssign<Area<UnitA>> for Area<UnitB>
-where
-    UnitA: LengthUnit,
-    UnitB: LengthUnit,
-{
-    fn sub_assign(&mut self, other: Area<UnitA>) {
-        self.v -= Area::<UnitB>::from(&other).v;
-    }
-}
-
 impl<UnitA, UnitB> Div<Length<UnitA>> for Area<UnitB>
 where
     UnitA: LengthUnit,
@@ -114,12 +63,6 @@ where
         Length::<UnitB>::from(self.v.0 / Length::<UnitB>::from(&other).f64())
     }
 }
-
-impl_scalar_math_for_type!(Area<A>, LengthUnit);
-
-impl_absdiffeq_for_type!(Area<A>, LengthUnit);
-
-impl_unit_for_value_types!(Area<A>, LengthUnit, impl_value_type_conversions);
 
 #[cfg(test)]
 mod test {

@@ -13,16 +13,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    impl_absdiffeq_for_type, impl_scalar_math_for_type, impl_unit_for_value_types,
-    impl_value_type_conversions, Scalar,
+    impl_value_type_conversions, supports_absdiffeq, supports_scalar_ops, supports_shift_ops,
+    supports_value_type_conversion,
 };
 use ordered_float::OrderedFloat;
-use std::{
-    fmt,
-    fmt::Debug,
-    marker::PhantomData,
-    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
-};
+use std::{fmt, fmt::Debug, marker::PhantomData};
 
 pub trait MassUnit: Copy + Debug + Eq + PartialEq + 'static {
     fn unit_name() -> &'static str;
@@ -35,6 +30,10 @@ pub struct Mass<Unit: MassUnit> {
     v: OrderedFloat<f64>, // in Unit
     phantom_1: PhantomData<Unit>,
 }
+supports_shift_ops!(Mass<A1>, Mass<A2>, MassUnit);
+supports_scalar_ops!(Mass<A>, MassUnit);
+supports_absdiffeq!(Mass<A>, MassUnit);
+supports_value_type_conversion!(Mass<A>, MassUnit, impl_value_type_conversions);
 
 impl<Unit> fmt::Display for Mass<Unit>
 where
@@ -57,62 +56,6 @@ where
         }
     }
 }
-
-impl<UnitA, UnitB> Add<Mass<UnitA>> for Mass<UnitB>
-where
-    UnitA: MassUnit,
-    UnitB: MassUnit,
-{
-    type Output = Mass<UnitB>;
-
-    fn add(self, other: Mass<UnitA>) -> Self {
-        Self {
-            v: self.v + Mass::<UnitB>::from(&other).v,
-            phantom_1: PhantomData,
-        }
-    }
-}
-
-impl<UnitA, UnitB> AddAssign<Mass<UnitA>> for Mass<UnitB>
-where
-    UnitA: MassUnit,
-    UnitB: MassUnit,
-{
-    fn add_assign(&mut self, other: Mass<UnitA>) {
-        self.v += Mass::<UnitB>::from(&other).v;
-    }
-}
-
-impl<UnitA, UnitB> Sub<Mass<UnitA>> for Mass<UnitB>
-where
-    UnitA: MassUnit,
-    UnitB: MassUnit,
-{
-    type Output = Mass<UnitB>;
-
-    fn sub(self, other: Mass<UnitA>) -> Self {
-        Self {
-            v: self.v - Mass::<UnitB>::from(&other).v,
-            phantom_1: PhantomData,
-        }
-    }
-}
-
-impl<UnitA, UnitB> SubAssign<Mass<UnitA>> for Mass<UnitB>
-where
-    UnitA: MassUnit,
-    UnitB: MassUnit,
-{
-    fn sub_assign(&mut self, other: Mass<UnitA>) {
-        self.v -= Mass::<UnitB>::from(&other).v;
-    }
-}
-
-impl_scalar_math_for_type!(Mass<A>, MassUnit);
-
-impl_absdiffeq_for_type!(Mass<A>, MassUnit);
-
-impl_unit_for_value_types!(Mass<A>, MassUnit, impl_value_type_conversions);
 
 #[cfg(test)]
 mod test {

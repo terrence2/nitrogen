@@ -13,16 +13,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    impl_absdiffeq_for_type, impl_scalar_math_for_type, impl_unit_for_value_types,
-    impl_value_type_conversions, LengthUnit, TimeUnit,
+    impl_value_type_conversions, supports_absdiffeq, supports_scalar_ops, supports_shift_ops,
+    supports_value_type_conversion, LengthUnit, TimeUnit,
 };
 use ordered_float::OrderedFloat;
-use std::{
-    fmt,
-    fmt::Debug,
-    marker::PhantomData,
-    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
-};
+use std::{fmt, fmt::Debug, marker::PhantomData};
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Velocity<UnitLength: LengthUnit, UnitTime: TimeUnit> {
@@ -30,6 +25,10 @@ pub struct Velocity<UnitLength: LengthUnit, UnitTime: TimeUnit> {
     phantom_1: PhantomData<UnitLength>,
     phantom_2: PhantomData<UnitTime>,
 }
+supports_shift_ops!(Velocity<A1, B1>, Velocity<A2, B2>, LengthUnit, TimeUnit);
+supports_scalar_ops!(Velocity<A, B>, LengthUnit, TimeUnit);
+supports_absdiffeq!(Velocity<A, B>, LengthUnit, TimeUnit);
+supports_value_type_conversion!(Velocity<A, B>, LengthUnit, TimeUnit, impl_value_type_conversions);
 
 impl<L, T> fmt::Display for Velocity<L, T>
 where
@@ -42,7 +41,7 @@ where
             "{:0.4}{}/{}",
             self.v,
             L::unit_short_name(),
-            T::unit_short_name()
+            T::UNIT_SHORT_NAME
         )
     }
 }
@@ -56,72 +55,12 @@ where
 {
     fn from(v: &'a Velocity<LA, TA>) -> Self {
         let length_ratio = LA::meters_in_unit() / LB::meters_in_unit();
-        let time_ratio = TB::seconds_in_unit() / TA::seconds_in_unit();
+        let time_ratio = TB::SECONDS_IN_UNIT / TA::SECONDS_IN_UNIT;
         Self {
-            v: v.v * length_ratio * length_ratio * time_ratio * time_ratio,
+            v: v.v * length_ratio * time_ratio,
             phantom_1: PhantomData,
             phantom_2: PhantomData,
         }
-    }
-}
-
-impl<LA, TA, LB, TB> Add<Velocity<LA, TA>> for Velocity<LB, TB>
-where
-    LA: LengthUnit,
-    TA: TimeUnit,
-    LB: LengthUnit,
-    TB: TimeUnit,
-{
-    type Output = Velocity<LB, TB>;
-
-    fn add(self, other: Velocity<LA, TA>) -> Self {
-        Self {
-            v: self.v + Velocity::<LB, TB>::from(&other).v,
-            phantom_1: PhantomData,
-            phantom_2: PhantomData,
-        }
-    }
-}
-
-impl<LA, TA, LB, TB> AddAssign<Velocity<LA, TA>> for Velocity<LB, TB>
-where
-    LA: LengthUnit,
-    TA: TimeUnit,
-    LB: LengthUnit,
-    TB: TimeUnit,
-{
-    fn add_assign(&mut self, other: Velocity<LA, TA>) {
-        self.v += Velocity::<LB, TB>::from(&other).v;
-    }
-}
-
-impl<LA, TA, LB, TB> Sub<Velocity<LA, TA>> for Velocity<LB, TB>
-where
-    LA: LengthUnit,
-    TA: TimeUnit,
-    LB: LengthUnit,
-    TB: TimeUnit,
-{
-    type Output = Velocity<LB, TB>;
-
-    fn sub(self, other: Velocity<LA, TA>) -> Self {
-        Self {
-            v: self.v - Velocity::<LB, TB>::from(&other).v,
-            phantom_1: PhantomData,
-            phantom_2: PhantomData,
-        }
-    }
-}
-
-impl<LA, TA, LB, TB> SubAssign<Velocity<LA, TA>> for Velocity<LB, TB>
-where
-    LA: LengthUnit,
-    TA: TimeUnit,
-    LB: LengthUnit,
-    TB: TimeUnit,
-{
-    fn sub_assign(&mut self, other: Velocity<LA, TA>) {
-        self.v -= Velocity::<LB, TB>::from(&other).v;
     }
 }
 
@@ -132,18 +71,12 @@ where
 //     LB: LengthUnit,
 //     TB: TimeUnit,
 // {
-//     type Output = Length<LB, TB>;
+//     type Output = Length<A1, B1>;
 //
 //     fn div(self, other: Length<LA, TA>) -> Self::Output {
-//         Length::<LB, TB>::from(self.v.0 / Length::<LB, TB>::from(&other).f64())
+//         Length::<A1, B1>::from(self.v.0 / Length::<A1, B1>::from(&other).f64())
 //     }
 // }
-
-impl_scalar_math_for_type!(Velocity<A, B>, LengthUnit, TimeUnit);
-
-impl_absdiffeq_for_type!(Velocity<A, B>, LengthUnit, TimeUnit);
-
-impl_unit_for_value_types!(Velocity<A, B>, LengthUnit, TimeUnit, impl_value_type_conversions);
 
 #[cfg(test)]
 mod test {
@@ -159,16 +92,22 @@ mod test {
         assert_abs_diff_eq!(m_p_s, meters_per_second!(mph));
     }
 
+    #[test]
+    fn test_velocity_shift() {
+        let m_p_s = meters_per_second!(100) + miles_per_hour!(100);
+        assert_abs_diff_eq!(m_p_s, meters_per_second!(144.704), epsilon = 0.001);
+    }
+
     /*
     #[test]
-    fn test_derived_area() {
+    fn test_derived_length() {
         let ft2 = feet!(2) * meters!(1);
         println!("ft2: {}", ft2);
         assert_abs_diff_eq!(ft2, feet2!(6.561_679_790_026_247));
     }
 
     #[test]
-    fn test_derived_length() {
+    fn test_derived_time() {
         let m = meters2!(4) / feet!(10);
         println!("m: {}", m);
         assert_abs_diff_eq!(m, meters!(1.312_335_958_005_249_4));
