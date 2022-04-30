@@ -12,20 +12,21 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::force::ForceUnit;
+use crate::{ForceUnit, Kilograms, Meters, Seconds, Unit};
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Newtons;
+impl Unit for Newtons {
+    const UNIT_NAME: &'static str = "newtons";
+    const UNIT_SHORT_NAME: &'static str = "N";
+    const UNIT_SUFFIX: &'static str = "N";
+}
 impl ForceUnit for Newtons {
-    fn unit_name() -> &'static str {
-        "newtons"
-    }
-    fn unit_short_name() -> &'static str {
-        "N"
-    }
-    fn newtons_in_unit() -> f64 {
-        1.
-    }
+    const NEWTONS_IN_UNIT: f64 = 1.0;
+
+    type UnitMass = Kilograms;
+    type UnitLength = Meters;
+    type UnitTime = Seconds;
 }
 
 #[macro_export]

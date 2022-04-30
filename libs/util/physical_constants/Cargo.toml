@@ -5,4 +5,5 @@ authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 edition = "2021"
 
 [dependencies]
+once_cell = "^ 1.5"
 absolute_unit = { path = "../../util/absolute_unit" }

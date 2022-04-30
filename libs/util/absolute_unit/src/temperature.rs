@@ -12,17 +12,16 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{supports_value_type_conversion, Scalar};
+use crate::{supports_value_type_conversion, Scalar, Unit};
 use ordered_float::OrderedFloat;
 use std::{
     fmt,
+    fmt::Debug,
     marker::PhantomData,
     ops::{Div, DivAssign, Mul, MulAssign},
 };
 
-pub trait TemperatureUnit: Copy {
-    fn unit_name() -> &'static str;
-    fn suffix() -> &'static str;
+pub trait TemperatureUnit: Unit + Copy + Debug + Eq + PartialEq + 'static {
     fn convert_to_kelvin(degrees_in: f64) -> f64;
     fn convert_from_kelvin(degrees_k: f64) -> f64;
 }
@@ -52,7 +51,7 @@ where
             f,
             "{:0.4}{}",
             Unit::convert_from_kelvin(self.kelvin.0),
-            Unit::suffix()
+            Unit::UNIT_SUFFIX
         )
     }
 }
@@ -82,6 +81,20 @@ where
     fn mul(self, other: Scalar) -> Self {
         Self {
             kelvin: self.kelvin * other.f64(),
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<Unit> Mul<Temperature<Unit>> for Scalar
+where
+    Unit: TemperatureUnit,
+{
+    type Output = Temperature<Unit>;
+
+    fn mul(self, other: Temperature<Unit>) -> Self::Output {
+        Self::Output {
+            kelvin: other.kelvin * self.f64(),
             phantom: PhantomData,
         }
     }

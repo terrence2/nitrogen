@@ -12,22 +12,29 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{AngleUnit, Unit};
+use crate::{PressureUnit, Unit};
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
-pub struct Radians;
-impl Unit for Radians {
-    const UNIT_NAME: &'static str = "radians";
-    const UNIT_SHORT_NAME: &'static str = "rad";
-    const UNIT_SUFFIX: &'static str = "㎭";
+pub struct PoundsSquareFoot;
+impl Unit for PoundsSquareFoot {
+    const UNIT_NAME: &'static str = "pounds per square foot";
+    const UNIT_SHORT_NAME: &'static str = "lb/ft^2";
+    const UNIT_SUFFIX: &'static str = "lb/ft^2";
 }
-impl AngleUnit for Radians {
-    const RADIANS_IN_UNIT: f64 = 1.0;
+impl PressureUnit for PoundsSquareFoot {
+    const PASCALS_IN_UNIT: f64 = 47.880;
 }
 
 #[macro_export]
-macro_rules! radians {
+macro_rules! pounds_square_foot {
     ($num:expr) => {
-        $crate::Angle::<$crate::Radians>::from(&$num)
+        $crate::Pressure::<$crate::PoundsSquareFoot>::from(&$num)
+    };
+}
+
+#[macro_export]
+macro_rules! psf {
+    ($num:expr) => {
+        $crate::Pressure::<$crate::PoundsSquareFoot>::from(&$num)
     };
 }

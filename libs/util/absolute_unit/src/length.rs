@@ -13,17 +13,14 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    impl_value_type_conversions, supports_absdiffeq, supports_scalar_ops, supports_shift_ops,
-    supports_value_type_conversion, Area,
+    impl_value_type_conversions, supports_absdiffeq, supports_quantity_ops, supports_scalar_ops,
+    supports_shift_ops, supports_value_type_conversion, Area, Unit,
 };
 use ordered_float::OrderedFloat;
 use std::{fmt, fmt::Debug, marker::PhantomData, ops::Mul};
 
-pub trait LengthUnit: Copy + Debug + Eq + PartialEq + 'static {
-    fn unit_name() -> &'static str;
-    fn unit_short_name() -> &'static str;
-    fn suffix() -> &'static str;
-    fn meters_in_unit() -> f64;
+pub trait LengthUnit: Unit + Copy + Debug + Eq + PartialEq + 'static {
+    const METERS_IN_UNIT: f64;
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
@@ -31,6 +28,7 @@ pub struct Length<Unit: LengthUnit> {
     v: OrderedFloat<f64>, // in Unit
     phantom_1: PhantomData<Unit>,
 }
+supports_quantity_ops!(Length<A>, LengthUnit);
 supports_shift_ops!(Length<A1>, Length<A2>, LengthUnit);
 supports_scalar_ops!(Length<A>, LengthUnit);
 supports_absdiffeq!(Length<A>, LengthUnit);
@@ -41,7 +39,7 @@ where
     Unit: LengthUnit,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:0.4}{}", self.v, Unit::suffix())
+        write!(f, "{:0.4}{}", self.v, Unit::UNIT_SUFFIX)
     }
 }
 
@@ -52,7 +50,7 @@ where
 {
     fn from(v: &'a Length<UnitA>) -> Self {
         Self {
-            v: v.v * UnitA::meters_in_unit() / UnitB::meters_in_unit(),
+            v: v.v * UnitA::METERS_IN_UNIT / UnitB::METERS_IN_UNIT,
             phantom_1: PhantomData,
         }
     }

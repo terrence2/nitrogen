@@ -12,14 +12,22 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use absolute_unit::{feet, rankine, scalar, Length, LengthUnit, Rankine, Temperature};
+use absolute_unit::{
+    feet, psf, rankine, scalar, slugs_per_foot3, Density, Feet, Length, LengthUnit,
+    PoundsSquareFoot, Pressure, Rankine, Slugs, Temperature,
+};
 
 pub struct UsStandardAtmosphere;
 
 impl UsStandardAtmosphere {
     pub fn at_altitude<Unit: LengthUnit>(
         altitude: Length<Unit>,
-    ) -> (Temperature<Rankine>, f64, f64) {
+    ) -> (
+        Temperature<Rankine>,
+        Density<Slugs, Feet>,
+        Pressure<PoundsSquareFoot>,
+    ) {
+        // Temperature, density, and pressure per foot, respectively.
         let altitude_ft = feet!(altitude).f64();
         let (theta, sigma, delta) = if altitude_ft < 36_089. {
             (
@@ -62,12 +70,12 @@ impl UsStandardAtmosphere {
         };
 
         let sea_level_temperature_rankine = rankine!(518.67);
-        let sea_level_density_slug_ft3 = 0.002_376_89;
-        let sea_level_pressure_lbf_ft2 = 2_116.22;
+        let sea_level_density_slug_ft3 = slugs_per_foot3!(0.002_376_89);
+        let sea_level_pressure_lbf_ft2 = psf!(2_116.22);
 
-        let temperature_rankine = sea_level_temperature_rankine * scalar!(theta);
-        let density = sigma * sea_level_density_slug_ft3;
-        let pressure = delta * sea_level_pressure_lbf_ft2;
+        let temperature_rankine = scalar!(theta) * sea_level_temperature_rankine;
+        let density = scalar!(sigma) * sea_level_density_slug_ft3;
+        let pressure = scalar!(delta) * sea_level_pressure_lbf_ft2;
 
         let _viscosity = 0.022_696_8 * temperature_rankine.f64().powf(1.5)
             / (temperature_rankine.f64() + 198.72)

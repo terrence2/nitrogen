@@ -13,6 +13,7 @@ name = "absolute_unit"
 version = "0.0.0"
 dependencies = [
  "approx",
+ "hashbag",
  "nalgebra",
  "ordered-float",
 ]
@@ -1478,6 +1479,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "hashbag"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "021a178f0e7e9ff6f9312759b849f0fbadf22ee8666ac163d502a8496691c01a"
+
+[[package]]
 name = "hashbrown"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2361,6 +2368,7 @@ name = "physical_constants"
 version = "0.0.0"
 dependencies = [
  "absolute_unit",
+ "once_cell",
 ]
 
 [[package]]

@@ -12,31 +12,32 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::force::ForceUnit;
+use crate::{Feet, ForceUnit, PoundsMass, Seconds, Unit};
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct PoundsForce;
+impl Unit for PoundsForce {
+    const UNIT_NAME: &'static str = "poundals";
+    const UNIT_SHORT_NAME: &'static str = "pdl";
+    const UNIT_SUFFIX: &'static str = "pdl";
+}
 impl ForceUnit for PoundsForce {
-    fn unit_name() -> &'static str {
-        "pounds (force)"
-    }
-    fn unit_short_name() -> &'static str {
-        "lbf"
-    }
-    fn newtons_in_unit() -> f64 {
-        4.448_221_6
-    }
+    const NEWTONS_IN_UNIT: f64 = 0.224_809;
+
+    type UnitMass = PoundsMass;
+    type UnitLength = Feet;
+    type UnitTime = Seconds;
 }
 
 #[macro_export]
-macro_rules! pounds_of_force {
+macro_rules! pounds_force {
     ($num:expr) => {
         $crate::Force::<$crate::PoundsForce>::from(&$num)
     };
 }
 
 #[macro_export]
-macro_rules! lbf {
+macro_rules! pdl {
     ($num:expr) => {
         $crate::Force::<$crate::PoundsForce>::from(&$num)
     };

@@ -23,6 +23,9 @@ macro_rules! supports_value_type_conversion {
         $it!(i32, $TypeName, $UnitA, $UnitB);
         $it!(i16, $TypeName, $UnitA, $UnitB);
         $it!(i8, $TypeName, $UnitA, $UnitB);
+        $it!(u32, $TypeName, $UnitA, $UnitB);
+        $it!(u16, $TypeName, $UnitA, $UnitB);
+        $it!(u8, $TypeName, $UnitA, $UnitB);
 
         impl<A, B> $TypeName
         where
@@ -47,6 +50,9 @@ macro_rules! supports_value_type_conversion {
         $it!(i32, $TypeName, $Unit);
         $it!(i16, $TypeName, $Unit);
         $it!(i8, $TypeName, $Unit);
+        $it!(u32, $TypeName, $Unit);
+        $it!(u16, $TypeName, $Unit);
+        $it!(u8, $TypeName, $Unit);
 
         impl<A> $TypeName
         where
@@ -70,46 +76,14 @@ macro_rules! supports_value_type_conversion {
         $it!(i32);
         $it!(i16);
         $it!(i8);
+        $it!(u32);
+        $it!(u16);
+        $it!(u8);
     };
 }
 
 #[macro_export]
 macro_rules! impl_value_type_conversions {
-    ($Num:ty, $TypeName:ty, $UnitA:path) => {
-        impl<A> From<$Num> for $TypeName
-        where
-            A: $UnitA,
-        {
-            fn from(v: $Num) -> Self {
-                Self {
-                    v: OrderedFloat(v as f64),
-                    phantom_1: PhantomData,
-                }
-            }
-        }
-
-        impl<A> From<&$Num> for $TypeName
-        where
-            A: $UnitA,
-        {
-            fn from(v: &$Num) -> Self {
-                Self {
-                    v: OrderedFloat(*v as f64),
-                    phantom_1: PhantomData,
-                }
-            }
-        }
-
-        impl<A> From<$TypeName> for $Num
-        where
-            A: $UnitA,
-        {
-            fn from(v: $TypeName) -> $Num {
-                v.v.0 as $Num
-            }
-        }
-    };
-
     ($Num:ty, $TypeName:ty, $UnitA:path, $UnitB:path) => {
         impl<A, B> From<$Num> for $TypeName
         where
@@ -143,6 +117,41 @@ macro_rules! impl_value_type_conversions {
         where
             A: $UnitA,
             B: $UnitB,
+        {
+            fn from(v: $TypeName) -> $Num {
+                v.v.0 as $Num
+            }
+        }
+    };
+
+    ($Num:ty, $TypeName:ty, $UnitA:path) => {
+        impl<A> From<$Num> for $TypeName
+        where
+            A: $UnitA,
+        {
+            fn from(v: $Num) -> Self {
+                Self {
+                    v: OrderedFloat(v as f64),
+                    phantom_1: PhantomData,
+                }
+            }
+        }
+
+        impl<A> From<&$Num> for $TypeName
+        where
+            A: $UnitA,
+        {
+            fn from(v: &$Num) -> Self {
+                Self {
+                    v: OrderedFloat(*v as f64),
+                    phantom_1: PhantomData,
+                }
+            }
+        }
+
+        impl<A> From<$TypeName> for $Num
+        where
+            A: $UnitA,
         {
             fn from(v: $TypeName) -> $Num {
                 v.v.0 as $Num
@@ -199,12 +208,24 @@ macro_rules! supports_scalar_ops {
         {
             type Output = $TypeName;
 
-            fn mul(self, s: $crate::Scalar) -> Self {
+            fn mul(self, s: $crate::Scalar) -> Self::Output {
                 Self {
                     v: self.v * s.f64(),
                     phantom_1: PhantomData,
                     phantom_2: PhantomData,
                 }
+            }
+        }
+
+        impl<A, B> std::ops::Mul<$TypeName> for $crate::Scalar
+        where
+            A: $UnitA,
+            B: $UnitB,
+        {
+            type Output = $TypeName;
+
+            fn mul(self, other: $TypeName) -> Self::Output {
+                <$TypeName>::from(self.0.into_inner() * other.f64())
             }
         }
 
@@ -257,6 +278,17 @@ macro_rules! supports_scalar_ops {
                     v: self.v * s.f64(),
                     phantom_1: PhantomData,
                 }
+            }
+        }
+
+        impl<A> std::ops::Mul<$TypeName> for $crate::Scalar
+        where
+            A: $UnitA,
+        {
+            type Output = $TypeName;
+
+            fn mul(self, other: $TypeName) -> Self::Output {
+                <$TypeName>::from(self.0.into_inner() * other.f64())
             }
         }
 
@@ -408,5 +440,21 @@ macro_rules! supports_shift_ops {
                 self.v -= <$TypeNameSelf>::from(&other).v;
             }
         }
+    };
+}
+
+#[macro_export]
+macro_rules! supports_quantity_ops {
+    ($TypeName:ty, $UnitA:path, $UnitB:path) => {
+        impl<A, B> $crate::Quantity for $TypeName
+        where
+            A: $UnitA,
+            B: $UnitB,
+        {
+        }
+    };
+
+    ($TypeName:ty, $UnitA:path) => {
+        impl<A> $crate::Quantity for $TypeName where A: $UnitA {}
     };
 }

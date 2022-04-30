@@ -16,6 +16,12 @@ mod atmosphere;
 
 pub use atmosphere::UsStandardAtmosphere;
 
+use absolute_unit::{meters_per_second2, Acceleration, Meters, Seconds};
+use once_cell::sync::Lazy;
+
+pub static STANDARD_GRAVITY: Lazy<Acceleration<Meters, Seconds>> =
+    Lazy::new(|| meters_per_second2!(9.80665));
+
 pub const FEET_TO_M: f32 = 0.304_8;
 pub const FEET_TO_DAM: f32 = 0.030_48;
 pub const FEET_TO_M_32: f32 = 0.304_800;

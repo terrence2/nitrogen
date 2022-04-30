@@ -12,16 +12,19 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    impl_value_type_conversions, supports_absdiffeq, supports_scalar_ops, supports_shift_ops,
-    supports_value_type_conversion,
+    impl_value_type_conversions, supports_absdiffeq, supports_quantity_ops, supports_scalar_ops,
+    supports_shift_ops, supports_value_type_conversion, Acceleration, DynamicUnits, LengthUnit,
+    Mass, MassUnit, TimeUnit, Unit,
 };
 use ordered_float::OrderedFloat;
-use std::{fmt, fmt::Debug, marker::PhantomData};
+use std::{fmt, fmt::Debug, marker::PhantomData, ops::Div};
 
-pub trait ForceUnit: Copy + Debug + Eq + PartialEq + 'static {
-    fn unit_name() -> &'static str;
-    fn unit_short_name() -> &'static str;
-    fn newtons_in_unit() -> f64;
+pub trait ForceUnit: Unit + Copy + Debug + Eq + PartialEq + 'static {
+    const NEWTONS_IN_UNIT: f64;
+
+    type UnitMass: MassUnit;
+    type UnitLength: LengthUnit;
+    type UnitTime: TimeUnit;
 }
 
 /// mass * length / time / time
@@ -30,6 +33,7 @@ pub struct Force<Unit: ForceUnit> {
     v: OrderedFloat<f64>, // in Unit
     phantom_1: PhantomData<Unit>,
 }
+supports_quantity_ops!(Force<A>, ForceUnit);
 supports_shift_ops!(Force<A1>, Force<A2>, ForceUnit);
 supports_scalar_ops!(Force<A>, ForceUnit);
 supports_absdiffeq!(Force<A>, ForceUnit);
@@ -40,7 +44,7 @@ where
     Unit: ForceUnit,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:0.4}{}", self.v, Unit::unit_short_name())
+        write!(f, "{:0.4}{}", self.v, Unit::UNIT_SHORT_NAME)
     }
 }
 
@@ -51,23 +55,55 @@ where
 {
     fn from(v: &'a Force<UnitA>) -> Self {
         Self {
-            v: v.v * UnitA::newtons_in_unit() / UnitB::newtons_in_unit(),
+            v: v.v * UnitA::NEWTONS_IN_UNIT / UnitB::NEWTONS_IN_UNIT,
             phantom_1: PhantomData,
         }
     }
 }
 
+impl<FA> From<DynamicUnits> for Force<FA>
+where
+    FA: ForceUnit,
+{
+    fn from(v: DynamicUnits) -> Self {
+        let f = v.ordered_float();
+        v.assert_units_equal(&DynamicUnits::new2o2::<
+            FA::UnitMass,
+            FA::UnitLength,
+            FA::UnitTime,
+            FA::UnitTime,
+        >(0f64.into()));
+        Self {
+            v: f,
+            phantom_1: PhantomData,
+        }
+    }
+}
+
+impl<F, M> Div<Mass<M>> for Force<F>
+where
+    F: ForceUnit, // kg*m/s^2
+    M: MassUnit,
+{
+    type Output = Acceleration<F::UnitLength, F::UnitTime>;
+
+    fn div(self, rhs: Mass<M>) -> Self::Output {
+        let mass = Mass::<F::UnitMass>::from(&rhs);
+        Self::Output::from(self.v.0 / mass.f64())
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use crate::{newtons, pounds_of_force, scalar};
+    use crate::{newtons, pounds_force, scalar};
     use approx::assert_abs_diff_eq;
 
     #[test]
     fn test_force() {
-        let lbf = pounds_of_force!(2);
-        println!("lbf: {}", lbf);
+        let lbf = pounds_force!(2);
+        println!("pdl: {}", lbf);
         println!("N  : {}", newtons!(lbf));
-        assert_abs_diff_eq!(newtons!(lbf), newtons!(8.896_443_2));
+        assert_abs_diff_eq!(newtons!(lbf), newtons!(0.224_809 * 2.));
     }
 
     #[test]

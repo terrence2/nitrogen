@@ -12,22 +12,22 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{AngleUnit, Unit};
+use crate::{Unit, WeightUnit};
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
-pub struct Radians;
-impl Unit for Radians {
-    const UNIT_NAME: &'static str = "radians";
-    const UNIT_SHORT_NAME: &'static str = "rad";
-    const UNIT_SUFFIX: &'static str = "㎭";
+pub struct PoundsWeight;
+impl Unit for PoundsWeight {
+    const UNIT_NAME: &'static str = "pounds";
+    const UNIT_SHORT_NAME: &'static str = "lb";
+    const UNIT_SUFFIX: &'static str = "lb";
 }
-impl AngleUnit for Radians {
-    const RADIANS_IN_UNIT: f64 = 1.0;
+impl WeightUnit for PoundsWeight {
+    const POUNDS_IN_UNIT: f64 = 1.;
 }
 
 #[macro_export]
-macro_rules! radians {
+macro_rules! pounds_weight {
     ($num:expr) => {
-        $crate::Angle::<$crate::Radians>::from(&$num)
+        $crate::Weight::<$crate::PoundsWeight>::from(&$num)
     };
 }

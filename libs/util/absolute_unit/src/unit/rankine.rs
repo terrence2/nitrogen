@@ -12,17 +12,16 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::temperature::TemperatureUnit;
+use crate::{TemperatureUnit, Unit};
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Rankine;
+impl Unit for Rankine {
+    const UNIT_NAME: &'static str = "rankine";
+    const UNIT_SHORT_NAME: &'static str = "°R";
+    const UNIT_SUFFIX: &'static str = "°R";
+}
 impl TemperatureUnit for Rankine {
-    fn unit_name() -> &'static str {
-        "rankine"
-    }
-    fn suffix() -> &'static str {
-        "°R"
-    }
     fn convert_to_kelvin(degrees_in: f64) -> f64 {
         degrees_in * 5. / 9.
     }

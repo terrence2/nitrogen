@@ -12,22 +12,29 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{AngleUnit, Unit};
+use crate::{MassUnit, Unit};
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
-pub struct Radians;
-impl Unit for Radians {
-    const UNIT_NAME: &'static str = "radians";
-    const UNIT_SHORT_NAME: &'static str = "rad";
-    const UNIT_SUFFIX: &'static str = "㎭";
+pub struct Slugs;
+impl Unit for Slugs {
+    const UNIT_NAME: &'static str = "slugs";
+    const UNIT_SHORT_NAME: &'static str = "slug";
+    const UNIT_SUFFIX: &'static str = "slug";
 }
-impl AngleUnit for Radians {
-    const RADIANS_IN_UNIT: f64 = 1.0;
+impl MassUnit for Slugs {
+    const GRAMS_IN_UNIT: f64 = 14_593.90;
 }
 
 #[macro_export]
-macro_rules! radians {
+macro_rules! slugs {
     ($num:expr) => {
-        $crate::Angle::<$crate::Radians>::from(&$num)
+        $crate::Mass::<$crate::Slugs>::from(&$num)
+    };
+}
+
+#[macro_export]
+macro_rules! slugs_per_foot3 {
+    ($num:expr) => {
+        $crate::Density::<$crate::Slugs, $crate::Feet>::from(&$num)
     };
 }

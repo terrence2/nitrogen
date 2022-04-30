@@ -12,13 +12,16 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::time::TimeUnit;
+use crate::{TimeUnit, Unit};
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Hours;
-impl TimeUnit for Hours {
+impl Unit for Hours {
     const UNIT_NAME: &'static str = "hours";
     const UNIT_SHORT_NAME: &'static str = "h";
+    const UNIT_SUFFIX: &'static str = "h";
+}
+impl TimeUnit for Hours {
     const SECONDS_IN_UNIT: f64 = 3_600.;
 }
 

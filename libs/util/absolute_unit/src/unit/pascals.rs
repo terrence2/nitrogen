@@ -12,25 +12,22 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::mass::MassUnit;
+use crate::{PressureUnit, Unit};
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
-pub struct Pounds;
-impl MassUnit for Pounds {
-    fn unit_name() -> &'static str {
-        "pounds"
-    }
-    fn unit_short_name() -> &'static str {
-        "lb"
-    }
-    fn grams_in_unit() -> f64 {
-        453.592_37
-    }
+pub struct Pascals;
+impl Unit for Pascals {
+    const UNIT_NAME: &'static str = "pascals";
+    const UNIT_SHORT_NAME: &'static str = "Pa";
+    const UNIT_SUFFIX: &'static str = "Pa";
+}
+impl PressureUnit for Pascals {
+    const PASCALS_IN_UNIT: f64 = 1.0;
 }
 
 #[macro_export]
-macro_rules! pounds {
+macro_rules! pascals {
     ($num:expr) => {
-        $crate::Mass::<$crate::Pounds>::from(&$num)
+        $crate::Pressure::<$crate::Pascals>::from(&$num)
     };
 }

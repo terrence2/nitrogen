@@ -13,15 +13,13 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    impl_value_type_conversions, supports_absdiffeq, supports_scalar_ops, supports_shift_ops,
-    supports_value_type_conversion,
+    impl_value_type_conversions, supports_absdiffeq, supports_quantity_ops, supports_scalar_ops,
+    supports_shift_ops, supports_value_type_conversion, Unit,
 };
 use ordered_float::OrderedFloat;
 use std::{fmt, fmt::Debug, marker::PhantomData};
 
-pub trait TimeUnit: Copy + Debug + Eq + PartialEq + 'static {
-    const UNIT_NAME: &'static str;
-    const UNIT_SHORT_NAME: &'static str;
+pub trait TimeUnit: Unit + Copy + Debug + Eq + PartialEq + 'static {
     const SECONDS_IN_UNIT: f64;
 }
 
@@ -30,6 +28,7 @@ pub struct Time<Unit: TimeUnit> {
     v: OrderedFloat<f64>, // in Unit
     phantom_1: PhantomData<Unit>,
 }
+supports_quantity_ops!(Time<A>, TimeUnit);
 supports_shift_ops!(Time<A1>, Time<A2>, TimeUnit);
 supports_scalar_ops!(Time<A>, TimeUnit);
 supports_absdiffeq!(Time<A>, TimeUnit);

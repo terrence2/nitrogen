@@ -493,7 +493,11 @@ mod tests {
             ))?;
             let e = c.cartesian_eye_position::<Kilometers>();
             assert_abs_diff_eq!(e.coords[0], kilometers!(0));
-            assert_abs_diff_eq!(e.coords[1], kilometers!(-0.000_707_106_781));
+            assert_abs_diff_eq!(
+                e.coords[1],
+                kilometers!(-0.000_707_106_781),
+                epsilon = 0.000_000_000_001
+            );
             assert_abs_diff_eq!(
                 e.coords[2],
                 kilometers!(EARTH_RADIUS_KM + 0.000_707_106_781)
@@ -505,11 +509,16 @@ mod tests {
                 meters!(1),
             ))?;
             let e = c.cartesian_eye_position::<Kilometers>();
-            assert_abs_diff_eq!(e.coords[0], kilometers!(-0.000_707_106_781));
+            assert_abs_diff_eq!(
+                e.coords[0],
+                kilometers!(-0.000_707_106_781),
+                epsilon = 0.000_000_000_001
+            );
             assert_abs_diff_eq!(e.coords[1], kilometers!(0));
             assert_abs_diff_eq!(
                 e.coords[2],
-                kilometers!(EARTH_RADIUS_KM + 0.000_707_106_781)
+                kilometers!(EARTH_RADIUS_KM + 0.000_707_106_781),
+                epsilon = 0.000_000_000_001
             );
         }
 
@@ -543,7 +552,7 @@ mod tests {
             let e = c.cartesian_eye_position::<Kilometers>();
             assert_abs_diff_eq!(e.coords[0], kilometers!(-EARTH_RADIUS_KM));
             assert_abs_diff_eq!(e.coords[1], kilometers!(-1));
-            assert_abs_diff_eq!(e.coords[2], kilometers!(0));
+            assert_abs_diff_eq!(e.coords[2], kilometers!(0), epsilon = 0.000_000_000_001);
 
             c.set_eye(Graticule::<Target>::new(
                 degrees!(0),
@@ -551,9 +560,13 @@ mod tests {
                 kilometers!(1),
             ))?;
             let e = c.cartesian_eye_position::<Kilometers>();
-            assert_abs_diff_eq!(e.coords[0], kilometers!(-EARTH_RADIUS_KM));
-            assert_abs_diff_eq!(e.coords[1], kilometers!(0));
-            assert_abs_diff_eq!(e.coords[2], kilometers!(-1));
+            assert_abs_diff_eq!(
+                e.coords[0],
+                kilometers!(-EARTH_RADIUS_KM),
+                epsilon = 0.000_000_000_001
+            );
+            assert_abs_diff_eq!(e.coords[1], kilometers!(0), epsilon = 0.000_000_000_001);
+            assert_abs_diff_eq!(e.coords[2], kilometers!(-1), epsilon = 0.000_000_000_001);
         }
 
         Ok(())

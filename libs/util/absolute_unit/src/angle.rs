@@ -13,16 +13,15 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    impl_value_type_conversions, radians, scalar, supports_absdiffeq, supports_scalar_ops,
-    supports_shift_ops, supports_value_type_conversion, Scalar,
+    impl_value_type_conversions, radians, scalar, supports_absdiffeq, supports_quantity_ops,
+    supports_scalar_ops, supports_shift_ops, supports_value_type_conversion, ArcSeconds, Degrees,
+    Scalar, Unit,
 };
 use ordered_float::OrderedFloat;
 use std::{fmt, fmt::Debug, marker::PhantomData, ops::Neg};
 
-pub trait AngleUnit: Copy + Debug + Eq + PartialEq + 'static {
-    fn unit_name() -> &'static str;
-    fn suffix() -> &'static str;
-    fn femto_radians_in_unit() -> f64;
+pub trait AngleUnit: Unit + Copy + Debug + Eq + PartialEq + 'static {
+    const RADIANS_IN_UNIT: f64;
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
@@ -30,6 +29,7 @@ pub struct Angle<Unit: AngleUnit> {
     v: OrderedFloat<f64>,
     phantom_1: PhantomData<Unit>,
 }
+supports_quantity_ops!(Angle<A>, AngleUnit);
 supports_shift_ops!(Angle<A1>, Angle<A2>, AngleUnit);
 supports_scalar_ops!(Angle<A>, AngleUnit);
 supports_absdiffeq!(Angle<A>, AngleUnit);
@@ -89,8 +89,6 @@ impl<Unit: AngleUnit> Angle<Unit> {
     }
 
     pub fn split_degrees_minutes_seconds(&self) -> (i32, i32, i32) {
-        use crate::unit::{arcseconds::ArcSeconds, degrees::Degrees};
-
         let mut arcsecs = Angle::<ArcSeconds>::from(self).f64() as i64;
         let degrees = Angle::<Degrees>::from(self).f64() as i64;
         arcsecs -= degrees * 3_600;
@@ -129,7 +127,7 @@ where
     Unit: AngleUnit,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:0.4}{}", self.v, Unit::suffix())
+        write!(f, "{:0.4}{}", self.v, Unit::UNIT_SUFFIX)
     }
 }
 
@@ -140,7 +138,7 @@ where
 {
     fn from(v: &'a Angle<UnitA>) -> Self {
         Self {
-            v: v.v * UnitA::femto_radians_in_unit() / UnitB::femto_radians_in_unit(),
+            v: v.v * UnitA::RADIANS_IN_UNIT / UnitB::RADIANS_IN_UNIT,
             phantom_1: PhantomData,
         }
     }

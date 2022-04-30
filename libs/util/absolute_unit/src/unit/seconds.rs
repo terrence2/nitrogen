@@ -12,13 +12,16 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::time::TimeUnit;
+use crate::{TimeUnit, Unit};
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Seconds;
-impl TimeUnit for Seconds {
+impl Unit for Seconds {
     const UNIT_NAME: &'static str = "seconds";
     const UNIT_SHORT_NAME: &'static str = "s";
+    const UNIT_SUFFIX: &'static str = "s";
+}
+impl TimeUnit for Seconds {
     const SECONDS_IN_UNIT: f64 = 1.;
 }
 

@@ -13,6 +13,13 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 
+/// Must be implemented by all unit types.
+pub trait Unit {
+    const UNIT_NAME: &'static str;
+    const UNIT_SHORT_NAME: &'static str;
+    const UNIT_SUFFIX: &'static str;
+}
+
 // Unitless
 pub(crate) mod scalar;
 
@@ -36,7 +43,11 @@ pub(crate) mod rankine;
 
 // Mass
 pub(crate) mod kilograms;
-pub(crate) mod pounds;
+pub(crate) mod pounds_mass;
+pub(crate) mod slugs;
+
+// Weight
+pub(crate) mod pounds_weight;
 
 // Time
 pub(crate) mod hours;
@@ -45,3 +56,7 @@ pub(crate) mod seconds;
 // Force
 pub(crate) mod newtons;
 pub(crate) mod pounds_force;
+
+// Pressure
+pub(crate) mod pascals;
+pub(crate) mod pounds_square_foot;

@@ -12,6 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use crate::DynamicUnits;
 use ordered_float::OrderedFloat;
 use std::ops::{Mul, Neg};
 
@@ -25,6 +26,10 @@ impl Scalar {
 
     pub fn into_inner(self) -> f64 {
         self.0.into_inner()
+    }
+
+    pub fn as_dyn(&self) -> DynamicUnits {
+        DynamicUnits::new0o0(self.0)
     }
 }
 

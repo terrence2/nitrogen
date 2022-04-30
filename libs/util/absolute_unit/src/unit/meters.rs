@@ -12,23 +12,17 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{length::LengthUnit, velocity::Velocity};
+use crate::{LengthUnit, Unit};
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Meters;
+impl Unit for Meters {
+    const UNIT_NAME: &'static str = "meters";
+    const UNIT_SHORT_NAME: &'static str = "m";
+    const UNIT_SUFFIX: &'static str = "m";
+}
 impl LengthUnit for Meters {
-    fn unit_name() -> &'static str {
-        "meters"
-    }
-    fn unit_short_name() -> &'static str {
-        "m"
-    }
-    fn suffix() -> &'static str {
-        "m"
-    }
-    fn meters_in_unit() -> f64 {
-        1.
-    }
+    const METERS_IN_UNIT: f64 = 1.0;
 }
 
 #[macro_export]
@@ -49,5 +43,12 @@ macro_rules! meters2 {
 macro_rules! meters_per_second {
     ($num:expr) => {
         $crate::Velocity::<$crate::Meters, $crate::Seconds>::from(&$num)
+    };
+}
+
+#[macro_export]
+macro_rules! meters_per_second2 {
+    ($num:expr) => {
+        $crate::Acceleration::<$crate::Meters, $crate::Seconds>::from(&$num)
     };
 }

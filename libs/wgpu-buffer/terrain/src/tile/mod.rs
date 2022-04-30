@@ -172,7 +172,7 @@ lazy_static! {
         let mut scale = arcseconds!(1);
         for level in (0..=ARCSEC_LEVEL).rev() {
             out[level] = scale;
-            scale = scale * scalar!(2.0);
+            scale *= scalar!(2.0);
         }
         out
     };

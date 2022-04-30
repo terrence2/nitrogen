@@ -12,17 +12,16 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::temperature::TemperatureUnit;
+use crate::{TemperatureUnit, Unit};
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Kelvin;
+impl Unit for Kelvin {
+    const UNIT_NAME: &'static str = "kelvin";
+    const UNIT_SHORT_NAME: &'static str = "°K";
+    const UNIT_SUFFIX: &'static str = "°K";
+}
 impl TemperatureUnit for Kelvin {
-    fn unit_name() -> &'static str {
-        "kelvin"
-    }
-    fn suffix() -> &'static str {
-        "°K"
-    }
     fn convert_to_kelvin(degrees_in: f64) -> f64 {
         degrees_in
     }

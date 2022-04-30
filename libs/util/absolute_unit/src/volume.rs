@@ -14,28 +14,23 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     impl_value_type_conversions, supports_absdiffeq, supports_quantity_ops, supports_scalar_ops,
-    supports_shift_ops, supports_value_type_conversion, DynamicUnits, Length, LengthUnit, Volume,
+    supports_shift_ops, supports_value_type_conversion, Area, Length, LengthUnit,
 };
 use ordered_float::OrderedFloat;
-use std::{
-    fmt,
-    fmt::Debug,
-    marker::PhantomData,
-    ops::{Div, Mul},
-};
+use std::{fmt, fmt::Debug, marker::PhantomData, ops::Div};
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
-pub struct Area<Unit: LengthUnit> {
+pub struct Volume<Unit: LengthUnit> {
     v: OrderedFloat<f64>, // in Unit^2
     phantom_1: PhantomData<Unit>,
 }
-supports_quantity_ops!(Area<A>, LengthUnit);
-supports_shift_ops!(Area<A1>, Area<A2>, LengthUnit);
-supports_scalar_ops!(Area<A>, LengthUnit);
-supports_absdiffeq!(Area<A>, LengthUnit);
-supports_value_type_conversion!(Area<A>, LengthUnit, impl_value_type_conversions);
+supports_quantity_ops!(Volume<A>, LengthUnit);
+supports_shift_ops!(Volume<A1>, Volume<A2>, LengthUnit);
+supports_scalar_ops!(Volume<A>, LengthUnit);
+supports_absdiffeq!(Volume<A>, LengthUnit);
+supports_value_type_conversion!(Volume<A>, LengthUnit, impl_value_type_conversions);
 
-impl<Unit> fmt::Display for Area<Unit>
+impl<Unit> fmt::Display for Volume<Unit>
 where
     Unit: LengthUnit,
 {
@@ -44,12 +39,12 @@ where
     }
 }
 
-impl<'a, UnitA, UnitB> From<&'a Area<UnitA>> for Area<UnitB>
+impl<'a, UnitA, UnitB> From<&'a Volume<UnitA>> for Volume<UnitB>
 where
     UnitA: LengthUnit,
     UnitB: LengthUnit,
 {
-    fn from(v: &'a Area<UnitA>) -> Self {
+    fn from(v: &'a Volume<UnitA>) -> Self {
         let ratio = UnitA::METERS_IN_UNIT / UnitB::METERS_IN_UNIT;
         Self {
             v: v.v * ratio * ratio,
@@ -58,36 +53,15 @@ where
     }
 }
 
-impl<LA> Area<LA>
-where
-    LA: LengthUnit,
-{
-    pub fn as_dyn(&self) -> DynamicUnits {
-        DynamicUnits::new2o0::<LA, LA>(self.v)
-    }
-}
-
-impl<UnitA, UnitB> Div<Length<UnitA>> for Area<UnitB>
+impl<UnitA, UnitB> Div<Length<UnitA>> for Volume<UnitB>
 where
     UnitA: LengthUnit,
     UnitB: LengthUnit,
 {
-    type Output = Length<UnitB>;
+    type Output = Area<UnitB>;
 
     fn div(self, other: Length<UnitA>) -> Self::Output {
-        Length::<UnitB>::from(self.v.0 / Length::<UnitB>::from(&other).f64())
-    }
-}
-
-impl<UnitA, UnitB> Mul<Length<UnitA>> for Area<UnitB>
-where
-    UnitA: LengthUnit,
-    UnitB: LengthUnit,
-{
-    type Output = Volume<UnitB>;
-
-    fn mul(self, other: Length<UnitA>) -> Self::Output {
-        Volume::<UnitB>::from(self.v.0 * Length::<UnitB>::from(&other).f64())
+        Area::<UnitB>::from(self.v.0 / Length::<UnitB>::from(&other).f64())
     }
 }
 
