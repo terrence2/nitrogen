@@ -71,6 +71,26 @@ impl<'w> NamedEntityMut<'w> {
             .insert_named_component(entity, component_name, ComponentLookup::new::<T>())?;
         Ok(self)
     }
+
+    pub fn remove<T>(&mut self)
+    where
+        T: Component + 'static,
+    {
+        self.entity.remove::<T>();
+    }
+
+    pub fn remove_named<T>(&mut self, component_name: &str) -> Result<()>
+    where
+        T: Component + ScriptComponent + 'static,
+    {
+        let id = self.id();
+        unsafe { self.entity.world_mut() }
+            .get_resource_mut::<WorldIndex>()
+            .unwrap()
+            .remove_named_component(id, component_name);
+        self.entity.remove::<T>();
+        Ok(())
+    }
 }
 
 macro_rules! impl_immutable_heap_methods {
@@ -80,6 +100,7 @@ macro_rules! impl_immutable_heap_methods {
             &self.world
         }
 
+        // Component Access
         #[inline]
         pub fn get<T: Component + 'static>(&self, entity: Entity) -> &T {
             self.world.get::<T>(entity).expect("entity not found")
@@ -114,6 +135,16 @@ macro_rules! impl_immutable_heap_methods {
                 .lookup_component(&entity, name)
         }
 
+        // Entity Access
+        //   name to id
+        #[inline]
+        pub fn entity_by_name(&self, name: &str) -> Entity {
+            if let Some(Value::Entity(entity)) = self.resource::<WorldIndex>().lookup_entity(name) {
+                entity
+            } else {
+                panic!("no entity named {}", name)
+            }
+        }
         #[inline]
         pub fn maybe_entity_by_name(&self, name: &str) -> Option<Entity> {
             if let Some(Value::Entity(entity)) = self.resource::<WorldIndex>().lookup_entity(name) {
@@ -123,6 +154,7 @@ macro_rules! impl_immutable_heap_methods {
             }
         }
 
+        //    entity to wrappers
         #[inline]
         pub fn entity(&self, entity: Entity) -> EntityRef {
             self.world.entity(entity)
@@ -184,6 +216,7 @@ macro_rules! impl_mutable_heap_methods {
             &mut self.world
         }
 
+        // Manage entities
         #[inline]
         pub fn spawn(&mut self) -> EntityMut {
             self.world.spawn()
@@ -212,8 +245,19 @@ macro_rules! impl_mutable_heap_methods {
         }
 
         #[inline]
-        pub fn get_mut<T: Component + 'static>(&mut self, entity: Entity) -> Mut<T> {
-            self.world.get_mut::<T>(entity).expect("entity not found")
+        pub fn despawn(&mut self, entity: Entity) {
+            self.resource_mut::<WorldIndex>().remove_entity(&entity);
+            self.world.despawn(entity);
+        }
+
+        #[inline]
+        pub fn despawn_named<S>(&mut self, name: S)
+        where
+            S: AsRef<str>,
+        {
+            if let Some(entity) = self.maybe_entity_by_name(name.as_ref()) {
+                self.despawn(entity);
+            }
         }
 
         #[inline]
@@ -228,6 +272,39 @@ macro_rules! impl_mutable_heap_methods {
             }
         }
 
+        // Manage components
+        #[inline]
+        pub fn get_mut<T: Component + 'static>(&mut self, entity: Entity) -> Mut<T> {
+            self.world.get_mut::<T>(entity).expect("entity not found")
+        }
+
+        #[inline]
+        pub fn maybe_get_mut<T: Component + 'static>(&mut self, entity: Entity) -> Option<Mut<T>> {
+            self.world.get_mut::<T>(entity)
+        }
+
+        #[inline]
+        pub fn get_named_mut<T: Component + 'static>(&mut self, name: &str) -> Mut<T> {
+            let entity = self
+                .resource::<WorldIndex>()
+                .get_entity(name)
+                .expect("named entity not found");
+            self.get_mut::<T>(entity)
+        }
+
+        #[inline]
+        pub fn maybe_get_named_mut<T: Component + 'static>(
+            &mut self,
+            name: &str,
+        ) -> Option<Mut<T>> {
+            let entity = self
+                .resource::<WorldIndex>()
+                .get_entity(name)
+                .expect("named entity not found");
+            self.maybe_get_mut::<T>(entity)
+        }
+
+        // Resource Management
         #[inline]
         pub fn insert_named_resource<S, T>(&mut self, name: S, value: T) -> &mut Self
         where

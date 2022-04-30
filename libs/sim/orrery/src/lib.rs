@@ -314,7 +314,7 @@ impl Extension for Orrery {
     fn init(runtime: &mut Runtime) -> Result<()> {
         let orrery = Orrery::new_current_time()?;
         runtime.insert_named_resource("orrery", orrery);
-        runtime.add_sim_system(
+        runtime.add_input_system(
             Self::sys_step_time
                 .label(OrreryStep::StepTime)
                 .after(TimeStepStep::Tick),

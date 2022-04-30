@@ -12,21 +12,18 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::angle::AngleUnit;
+use crate::{AngleUnit, Unit};
 use std::f64::consts::PI;
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Degrees;
+impl Unit for Degrees {
+    const UNIT_NAME: &'static str = "degrees";
+    const UNIT_SHORT_NAME: &'static str = "deg";
+    const UNIT_SUFFIX: &'static str = "°";
+}
 impl AngleUnit for Degrees {
-    fn unit_name() -> &'static str {
-        "degrees"
-    }
-    fn suffix() -> &'static str {
-        "°"
-    }
-    fn femto_radians_in_unit() -> i64 {
-        ((1_000_000_000_000_000f64 * PI) / 180f64) as i64
-    }
+    const RADIANS_IN_UNIT: f64 = PI / 180f64;
 }
 
 #[macro_export]

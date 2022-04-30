@@ -12,10 +12,12 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use absolute_unit::{degrees, meters, radians, Degrees, Length, LengthUnit, Meters, Radians};
+use crate::camera_impl::CameraStep;
+use absolute_unit::{
+    degrees, meters, radians, scalar, Degrees, Length, LengthUnit, Meters, Radians,
+};
 use anyhow::{bail, ensure, Result};
 use bevy_ecs::prelude::*;
-use event_mapper::EventMapperStep;
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
 use measure::WorldSpaceFrame;
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
@@ -34,22 +36,10 @@ pub enum ArcBallStep {
 pub struct ArcBallSystem;
 impl Extension for ArcBallSystem {
     fn init(runtime: &mut Runtime) -> Result<()> {
-        runtime.run_string(
-            r#"
-                bindings.bind("+mouse1", "@player.arcball.pan_view(pressed)");
-                bindings.bind("+mouse3", "@player.arcball.move_view(pressed)");
-                bindings.bind("mouseMotion", "@player.arcball.handle_mousemotion(dx, dy)");
-                bindings.bind("mouseWheel", "@player.arcball.handle_mousewheel(vertical_delta)");
-                bindings.bind("+Shift+Up", "@player.arcball.target_up_fast(pressed)");
-                bindings.bind("+Shift+Down", "@player.arcball.target_down_fast(pressed)");
-                bindings.bind("+Up", "@player.arcball.target_up(pressed)");
-                bindings.bind("+Down", "@player.arcball.target_down(pressed)");
-            "#,
-        )?;
         runtime.add_sim_system(
             ArcBallController::sys_apply_input
                 .label(ArcBallStep::ApplyInput)
-                .after(EventMapperStep::HandleEvents),
+                .before(CameraStep::ApplyInput),
         );
         Ok(())
     }
@@ -336,14 +326,18 @@ impl ArcBallController {
             let sensitivity: f64 = f64::from(self.distance()) / 60_000_000.0;
 
             let dir = self.eye.longitude;
-            let lat = f64::from(degrees!(self.target.latitude)) + dir.cos() * y * sensitivity;
-            let lon = f64::from(degrees!(self.target.longitude)) + -dir.sin() * y * sensitivity;
+            let lat = f64::from(degrees!(self.target.latitude))
+                + (dir.cos() * scalar!(y * sensitivity)).into_inner();
+            let lon = f64::from(degrees!(self.target.longitude))
+                + (-dir.sin() * scalar!(y * sensitivity)).into_inner();
             self.target.latitude = radians!(degrees!(lat));
             self.target.longitude = radians!(degrees!(lon));
 
             let dir = self.eye.longitude + degrees!(PI / 2.0);
-            let lat = f64::from(degrees!(self.target.latitude)) + -dir.sin() * x * sensitivity;
-            let lon = f64::from(degrees!(self.target.longitude)) + -dir.cos() * x * sensitivity;
+            let lat = f64::from(degrees!(self.target.latitude))
+                + (-dir.sin() * scalar!(x * sensitivity)).into_inner();
+            let lon = f64::from(degrees!(self.target.longitude))
+                + (-dir.cos() * scalar!(x * sensitivity)).into_inner();
             self.target.latitude = radians!(degrees!(lat));
             self.target.longitude = radians!(degrees!(lon));
         }
@@ -355,7 +349,7 @@ impl ArcBallController {
         //   Up is negative
         //   Down is positive
         //   Works in steps of 15 for my mouse.
-        self.eye.distance *= if vertical > 0f64 { 1.1f64 } else { 0.9f64 };
+        self.eye.distance *= scalar!(if vertical > 0f64 { 1.1f64 } else { 0.9f64 });
         self.eye.distance = self.eye.distance.max(meters!(0.01));
     }
 
@@ -499,7 +493,11 @@ mod tests {
             ))?;
             let e = c.cartesian_eye_position::<Kilometers>();
             assert_abs_diff_eq!(e.coords[0], kilometers!(0));
-            assert_abs_diff_eq!(e.coords[1], kilometers!(-0.000_707_106_781));
+            assert_abs_diff_eq!(
+                e.coords[1],
+                kilometers!(-0.000_707_106_781),
+                epsilon = 0.000_000_000_001
+            );
             assert_abs_diff_eq!(
                 e.coords[2],
                 kilometers!(EARTH_RADIUS_KM + 0.000_707_106_781)
@@ -511,11 +509,16 @@ mod tests {
                 meters!(1),
             ))?;
             let e = c.cartesian_eye_position::<Kilometers>();
-            assert_abs_diff_eq!(e.coords[0], kilometers!(-0.000_707_106_781));
+            assert_abs_diff_eq!(
+                e.coords[0],
+                kilometers!(-0.000_707_106_781),
+                epsilon = 0.000_000_000_001
+            );
             assert_abs_diff_eq!(e.coords[1], kilometers!(0));
             assert_abs_diff_eq!(
                 e.coords[2],
-                kilometers!(EARTH_RADIUS_KM + 0.000_707_106_781)
+                kilometers!(EARTH_RADIUS_KM + 0.000_707_106_781),
+                epsilon = 0.000_000_000_001
             );
         }
 
@@ -549,7 +552,7 @@ mod tests {
             let e = c.cartesian_eye_position::<Kilometers>();
             assert_abs_diff_eq!(e.coords[0], kilometers!(-EARTH_RADIUS_KM));
             assert_abs_diff_eq!(e.coords[1], kilometers!(-1));
-            assert_abs_diff_eq!(e.coords[2], kilometers!(0));
+            assert_abs_diff_eq!(e.coords[2], kilometers!(0), epsilon = 0.000_000_000_001);
 
             c.set_eye(Graticule::<Target>::new(
                 degrees!(0),
@@ -557,9 +560,13 @@ mod tests {
                 kilometers!(1),
             ))?;
             let e = c.cartesian_eye_position::<Kilometers>();
-            assert_abs_diff_eq!(e.coords[0], kilometers!(-EARTH_RADIUS_KM));
-            assert_abs_diff_eq!(e.coords[1], kilometers!(0));
-            assert_abs_diff_eq!(e.coords[2], kilometers!(-1));
+            assert_abs_diff_eq!(
+                e.coords[0],
+                kilometers!(-EARTH_RADIUS_KM),
+                epsilon = 0.000_000_000_001
+            );
+            assert_abs_diff_eq!(e.coords[1], kilometers!(0), epsilon = 0.000_000_000_001);
+            assert_abs_diff_eq!(e.coords[2], kilometers!(-1), epsilon = 0.000_000_000_001);
         }
 
         Ok(())

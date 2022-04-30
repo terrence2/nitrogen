@@ -12,10 +12,14 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use absolute_unit::{LengthUnit, Meters};
+use absolute_unit::{
+    meters_per_second, meters_per_second2, Acceleration, Length, LengthUnit, Meters, Seconds,
+    TimeUnit, Velocity,
+};
 use bevy_ecs::prelude::*;
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
-use nalgebra::{convert, Unit as NUnit, UnitQuaternion, Vector3};
+use nalgebra::{convert, Point3, Unit as NUnit, UnitQuaternion, Vector3};
+use nitrous::{inject_nitrous_component, method, NitrousComponent};
 use std::f64::consts::PI;
 
 pub struct BasisVectors<T> {
@@ -24,13 +28,30 @@ pub struct BasisVectors<T> {
     pub up: Vector3<T>,
 }
 
-#[derive(Component, Debug, Default)]
+#[derive(Component, NitrousComponent, Debug, Default, Clone)]
+#[Name = "frame"]
 pub struct WorldSpaceFrame {
     position: Cartesian<GeoCenter, Meters>,
     facing: UnitQuaternion<f64>,
 }
 
+#[inject_nitrous_component]
 impl WorldSpaceFrame {
+    #[method]
+    fn x(&self) -> f64 {
+        self.position.coords[0].f64()
+    }
+
+    #[method]
+    fn y(&self) -> f64 {
+        self.position.coords[1].f64()
+    }
+
+    #[method]
+    fn z(&self) -> f64 {
+        self.position.coords[2].f64()
+    }
+
     fn cartesian_position<Unit: LengthUnit>(
         position: Graticule<GeoSurface>,
     ) -> Cartesian<GeoCenter, Unit> {
@@ -59,6 +80,13 @@ impl WorldSpaceFrame {
         Self::new(cart_position, cart_forward.vec64())
     }
 
+    pub fn from_quaternion(
+        position: Cartesian<GeoCenter, Meters>,
+        facing: UnitQuaternion<f64>,
+    ) -> Self {
+        Self { position, facing }
+    }
+
     pub fn new(position: Cartesian<GeoCenter, Meters>, forward: Vector3<f64>) -> Self {
         let up_like = position.vec64().normalize();
         let facing = UnitQuaternion::face_towards(&forward, &up_like);
@@ -69,6 +97,26 @@ impl WorldSpaceFrame {
         &self.position
     }
 
+    pub fn position_pt3(&self) -> Point3<Length<Meters>> {
+        Point3::new(
+            self.position.coords[0],
+            self.position.coords[1],
+            self.position.coords[2],
+        )
+    }
+
+    pub fn position_graticule(&self) -> Graticule<GeoSurface> {
+        Graticule::<GeoSurface>::from(Graticule::<GeoCenter>::from(self.position))
+    }
+
+    pub fn position_mut(&mut self) -> &mut Cartesian<GeoCenter, Meters> {
+        &mut self.position
+    }
+
+    pub fn set_position(&mut self, point: Point3<Length<Meters>>) {
+        self.position = Cartesian::<GeoCenter, Meters>::from(point);
+    }
+
     pub fn basis(&self) -> BasisVectors<f64> {
         BasisVectors {
             forward: (self.facing * Vector3::z_axis()).into_inner(),
@@ -77,12 +125,83 @@ impl WorldSpaceFrame {
         }
     }
 
+    pub fn forward(&self) -> Vector3<f64> {
+        (self.facing * Vector3::z_axis()).into_inner()
+    }
+
     pub fn facing(&self) -> &UnitQuaternion<f64> {
         &self.facing
     }
 
+    pub fn facing_mut(&mut self) -> &mut UnitQuaternion<f64> {
+        &mut self.facing
+    }
+
     pub fn facing32(&self) -> UnitQuaternion<f32> {
         convert(self.facing)
+    }
+}
+
+// Positive z is forward, positive x is right, positive y is up
+#[derive(Component, NitrousComponent, Copy, Clone, Debug, Default)]
+pub struct LocalMotion {
+    acceleration_m_s2: Vector3<Acceleration<Meters, Seconds>>,
+    velocity_m_s: Vector3<Velocity<Meters, Seconds>>,
+}
+
+#[inject_nitrous_component]
+impl LocalMotion {
+    pub fn new_forward<UnitLength: LengthUnit, UnitTime: TimeUnit>(
+        forward_velocity: Velocity<UnitLength, UnitTime>,
+    ) -> Self {
+        Self {
+            acceleration_m_s2: Vector3::new(
+                meters_per_second2!(0f64),
+                meters_per_second2!(0f64),
+                meters_per_second2!(0f64),
+            ),
+            velocity_m_s: Vector3::new(
+                meters_per_second!(0f64),
+                meters_per_second!(0f64),
+                meters_per_second!(forward_velocity),
+            ),
+        }
+    }
+
+    pub fn acceleration_m_s2(&self) -> &Vector3<Acceleration<Meters, Seconds>> {
+        &self.acceleration_m_s2
+    }
+
+    pub fn acceleration_m_s2_mut(&mut self) -> &mut Vector3<Acceleration<Meters, Seconds>> {
+        &mut self.acceleration_m_s2
+    }
+
+    pub fn velocity_m_s(&self) -> &Vector3<Velocity<Meters, Seconds>> {
+        &self.velocity_m_s
+    }
+
+    pub fn velocity_m_s_mut(&mut self) -> &mut Vector3<Velocity<Meters, Seconds>> {
+        &mut self.velocity_m_s
+    }
+
+    pub fn meters_per_second(&self) -> Vector3<Velocity<Meters, Seconds>> {
+        self.velocity_m_s
+    }
+
+    pub fn forward_velocity(&self) -> Velocity<Meters, Seconds> {
+        self.velocity_m_s.z
+    }
+
+    pub fn forward_velocity_mut(&mut self) -> &mut Velocity<Meters, Seconds> {
+        &mut self.velocity_m_s.z
+    }
+
+    pub fn sideways_velocity(&self) -> Velocity<Meters, Seconds> {
+        self.velocity_m_s.x
+    }
+
+    pub fn vertical_velocity(&self) -> Velocity<Meters, Seconds> {
+        self.velocity_m_s.y
     }
 }
 

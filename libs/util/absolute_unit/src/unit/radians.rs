@@ -12,20 +12,17 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::angle::AngleUnit;
+use crate::{AngleUnit, Unit};
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Radians;
+impl Unit for Radians {
+    const UNIT_NAME: &'static str = "radians";
+    const UNIT_SHORT_NAME: &'static str = "rad";
+    const UNIT_SUFFIX: &'static str = "㎭";
+}
 impl AngleUnit for Radians {
-    fn unit_name() -> &'static str {
-        "radians"
-    }
-    fn suffix() -> &'static str {
-        " ㎭"
-    }
-    fn femto_radians_in_unit() -> i64 {
-        1_000_000_000_000_000 // peta = 10**15
-    }
+    const RADIANS_IN_UNIT: f64 = 1.0;
 }
 
 #[macro_export]

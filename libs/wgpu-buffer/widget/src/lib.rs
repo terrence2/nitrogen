@@ -26,6 +26,7 @@ mod widgets;
 pub use crate::{
     box_packing::{PositionH, PositionV},
     color::Color,
+    font_context::FontId,
     paint_context::PaintContext,
     region::{Border, Extent, Position, Region},
     widget::{Labeled, Widget, WidgetFocus},
@@ -50,7 +51,7 @@ use log::{error, trace};
 use nitrous::{inject_nitrous_resource, method, HeapMut, NitrousResource, Value};
 use parking_lot::RwLock;
 use platform_dirs::AppDirs;
-use runtime::{Extension, Runtime, ScriptCompletions, ScriptHerder};
+use runtime::{Extension, Runtime, RuntimeStep, ScriptCompletions, ScriptHerder};
 use std::{
     borrow::Borrow, marker::PhantomData, mem, num::NonZeroU64, ops::Range, path::Path, sync::Arc,
     time::Instant,
@@ -143,17 +144,17 @@ where
         let widget = WidgetBuffer::<T>::new(&mut runtime.resource_mut::<Gpu>(), &state_dir)?;
         runtime.insert_named_resource("widget", widget);
 
-        runtime.add_sim_system(
+        runtime.add_input_system(
             Self::sys_handle_terminal_events
                 .exclusive_system()
                 .label(WidgetSimStep::HandleTerminal),
         );
-        runtime.add_sim_system(
+        runtime.add_input_system(
             Self::sys_handle_input_events
                 .label(WidgetSimStep::HandleEvents)
                 .after(EventMapperStep::HandleEvents),
         );
-        runtime.add_sim_system(
+        runtime.add_input_system(
             Self::sys_handle_toggle_terminal
                 .label(WidgetSimStep::ToggleTerminal)
                 .after(WidgetSimStep::HandleEvents),
@@ -163,7 +164,9 @@ where
             Self::sys_report_script_completions.label(WidgetSimStep::ReportScriptCompletions),
         );
         runtime.add_frame_system(
-            Self::sys_report_script_completions.label(WidgetSimStep::ReportScriptCompletions),
+            Self::sys_report_script_completions
+                .label(WidgetSimStep::ReportScriptCompletions)
+                .before(RuntimeStep::ClearCompletions),
         );
 
         runtime.add_frame_system(
@@ -212,12 +215,12 @@ where
         let fira_sans = TtfFont::from_bytes(FIRA_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
         let dejavu_mono = TtfFont::from_bytes(DEJAVU_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
         let dejavu_sans = TtfFont::from_bytes(DEJAVU_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
-        paint_context.add_font("dejavu-sans", dejavu_sans.clone());
+        paint_context.add_font("sans", dejavu_sans.clone());
+        paint_context.add_font("mono", fira_mono.clone());
+        paint_context.add_font("dejavu-sans", dejavu_sans);
         paint_context.add_font("dejavu-mono", dejavu_mono);
         paint_context.add_font("fira-sans", fira_sans);
-        paint_context.add_font("fira-mono", fira_mono.clone());
-        paint_context.add_font("mono", fira_mono);
-        paint_context.add_font("sans", dejavu_sans);
+        paint_context.add_font("fira-mono", fira_mono);
 
         // Create the core widget info buffer.
         let widget_info_buffer_size =

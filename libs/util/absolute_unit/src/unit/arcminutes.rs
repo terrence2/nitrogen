@@ -12,21 +12,18 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::angle::AngleUnit;
+use crate::{AngleUnit, Unit};
 use std::f64::consts::PI;
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ArcMinutes;
+impl Unit for ArcMinutes {
+    const UNIT_NAME: &'static str = "arcminutes";
+    const UNIT_SHORT_NAME: &'static str = "arcmin";
+    const UNIT_SUFFIX: &'static str = "'";
+}
 impl AngleUnit for ArcMinutes {
-    fn unit_name() -> &'static str {
-        "arcmin"
-    }
-    fn suffix() -> &'static str {
-        "'"
-    }
-    fn femto_radians_in_unit() -> i64 {
-        ((1_000_000_000_000_000f64 * PI) / 180f64 / 60f64) as i64
-    }
+    const RADIANS_IN_UNIT: f64 = PI / 180f64 / 60f64;
 }
 
 #[macro_export]

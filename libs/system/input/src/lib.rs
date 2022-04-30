@@ -34,6 +34,7 @@ use std::{
     },
     time::Instant,
 };
+// use stick::{Controller, Event as StickEvent};
 use winit::{
     event::{
         DeviceEvent, DeviceId, Event, KeyboardInput, MouseScrollDelta, StartCause, WindowEvent,
@@ -156,7 +157,7 @@ impl InputController {
         runtime.insert_resource(InputEventVec::new());
         runtime.insert_resource(SystemEventVec::new());
 
-        runtime.add_sim_system(Self::sys_read_input_events.label(InputStep::ReadInput));
+        runtime.add_input_system(Self::sys_read_input_events.label(InputStep::ReadInput));
         runtime.add_frame_system(Self::sys_read_system_events.label(InputStep::ReadSystem));
 
         input_controller
@@ -446,6 +447,8 @@ impl InputSystem {
         }
     }
 
+    // Uh, clippy? It's mutable: we need the vec-ness?
+    #[allow(clippy::ptr_arg)]
     fn wrap_window_event(
         event: &WindowEvent,
         input_state: &mut InputState,

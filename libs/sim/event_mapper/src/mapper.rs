@@ -59,7 +59,7 @@ where
 {
     fn init(runtime: &mut Runtime) -> Result<()> {
         runtime.insert_named_resource("bindings", EventMapper::<T>::new());
-        runtime.add_sim_system(
+        runtime.add_input_system(
             Self::sys_handle_input_events
                 .label(EventMapperStep::HandleEvents)
                 .after(InputStep::ReadInput),

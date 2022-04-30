@@ -24,7 +24,7 @@ pub(crate) use layer_pack::LayerPack;
 pub use layer_pack::{LayerPackBuilder, LayerPackHeader, LayerPackIndexItem};
 pub use tile_builder::{ColorsTileSet, HeightsTileSet, NormalsTileSet, TileSet};
 
-use absolute_unit::{arcseconds, meters, Angle, ArcSeconds};
+use absolute_unit::{arcseconds, meters, scalar, Angle, ArcSeconds};
 use anyhow::{bail, Result};
 use geodesy::{GeoCenter, Graticule};
 use lazy_static::lazy_static;
@@ -172,7 +172,7 @@ lazy_static! {
         let mut scale = arcseconds!(1);
         for level in (0..=ARCSEC_LEVEL).rev() {
             out[level] = scale;
-            scale = scale * 2.0;
+            scale *= scalar!(2.0);
         }
         out
     };
@@ -190,7 +190,7 @@ impl TerrainLevel {
     }
 
     pub fn base_angular_extent() -> Angle<ArcSeconds> {
-        Self::base_scale() * TILE_EXTENT
+        Self::base_scale() * scalar!(TILE_EXTENT)
     }
 
     pub fn base() -> Graticule<GeoCenter> {
@@ -234,7 +234,7 @@ impl TerrainLevel {
     }
 
     pub fn angular_extent(&self) -> Angle<ArcSeconds> {
-        self.as_scale() * TILE_EXTENT
+        self.as_scale() * scalar!(TILE_EXTENT)
     }
 
     pub fn new(level: usize) -> Self {

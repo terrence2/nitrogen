@@ -16,6 +16,7 @@ use crate::{Cartesian, GeoCenter, GeoSurface};
 use absolute_unit::{
     degrees, kilometers, meters, radians, Angle, AngleUnit, Length, LengthUnit, Meters, Radians,
 };
+use nalgebra::Point3;
 use num_traits::Float;
 use physical_constants::EARTH_RADIUS_KM;
 use std::{convert::From, fmt, marker::PhantomData};
@@ -67,8 +68,39 @@ where
         Angle::<UnitAng>::from(&self.longitude)
     }
 
+    pub fn distance<UnitLen: LengthUnit>(&self) -> Length<UnitLen> {
+        Length::<UnitLen>::from(&self.distance)
+    }
+
     pub fn with_origin<O: GraticuleOrigin>(&self) -> Graticule<O> {
         Graticule::<O>::new(self.latitude, self.longitude, self.distance)
+    }
+}
+
+impl Graticule<GeoCenter> {
+    pub fn cartesian(&self) -> Point3<Length<Meters>> {
+        let lat = self.latitude;
+        let lon = self.longitude;
+        let d = self.distance;
+        Point3::new(
+            (&(d * -lon.sin() * lat.cos())).into(),
+            (&(d * lat.sin())).into(),
+            (&(d * lon.cos() * lat.cos())).into(),
+        )
+    }
+}
+
+impl Graticule<GeoSurface> {
+    pub fn cartesian<Unit: LengthUnit>(&self) -> Point3<Length<Unit>> {
+        let geocenter = Graticule::<GeoCenter>::from(*self);
+        let lat = geocenter.latitude;
+        let lon = geocenter.longitude;
+        let d = geocenter.distance;
+        Point3::new(
+            Length::<Unit>::from(&(d * -lon.sin() * lat.cos())),
+            Length::<Unit>::from(&(d * lat.sin())),
+            Length::<Unit>::from(&(d * lon.cos() * lat.cos())),
+        )
     }
 }
 
@@ -119,6 +151,18 @@ impl From<Graticule<GeoCenter>> for Graticule<GeoSurface> {
 
 impl<Unit: LengthUnit> From<Cartesian<GeoCenter, Unit>> for Graticule<GeoCenter> {
     fn from(xyz: Cartesian<GeoCenter, Unit>) -> Self {
+        let x = f64::from(xyz.coords[0]);
+        let y = f64::from(xyz.coords[1]);
+        let z = f64::from(xyz.coords[2]);
+        let distance = (x * x + y * y + z * z).sqrt();
+        let lon = -x.atan2(z);
+        let lat = (y / distance).asin();
+        Self::new(radians!(lat), radians!(lon), meters!(distance))
+    }
+}
+
+impl<Unit: LengthUnit> From<&Cartesian<GeoCenter, Unit>> for Graticule<GeoCenter> {
+    fn from(xyz: &Cartesian<GeoCenter, Unit>) -> Self {
         let x = f64::from(xyz.coords[0]);
         let y = f64::from(xyz.coords[1]);
         let z = f64::from(xyz.coords[2]);

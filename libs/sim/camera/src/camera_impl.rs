@@ -12,14 +12,12 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::arc_ball_camera::ArcBallStep;
 use absolute_unit::{
     degrees, meters, radians, Angle, AngleUnit, Degrees, Kilometers, Length, LengthUnit, Meters,
     Radians,
 };
 use anyhow::Result;
 use bevy_ecs::prelude::*;
-use event_mapper::EventMapperStep;
 use geodesy::{Cartesian, GeoCenter};
 use geometry::Plane;
 use measure::WorldSpaceFrame;
@@ -56,12 +54,12 @@ impl Extension for CameraSystem {
                 bindings.bind("Shift+RBracket", "camera.increase_exposure()");
             "#,
         )?;
-        runtime.add_sim_system(
-            ScreenCamera::sys_apply_input
-                .label(CameraStep::ApplyInput)
-                .after(EventMapperStep::HandleEvents)
-                .after(ArcBallStep::ApplyInput),
-        );
+        // Input happens in EventMapper in Input stage. This queues up scripts to run
+        // as part of the Script stage. This stage mutates InputState here and elsewhere.
+        // We then process this input in the Simulation stage so that input gets shown
+        // in the first frame after it happens. Anything that touches the WorldSpaceFrame
+        // of the screen camera entity should be installed before CameraStep::ApplyInput.
+        runtime.add_sim_system(ScreenCamera::sys_apply_input.label(CameraStep::ApplyInput));
         runtime.add_frame_system(
             ScreenCamera::sys_apply_display_changes
                 .label(CameraStep::HandleDisplayChange)
@@ -267,6 +265,7 @@ impl ScreenCamera {
         let view = Isometry3::look_at_rh(
             &Point3::from(eye),
             &Point3::from(eye + self.forward),
+            // FIXME: is this upside down?
             &self.up,
         );
 

@@ -12,24 +12,28 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{impl_unit_for_numerics, radians};
-use std::{
-    fmt,
-    marker::PhantomData,
-    ops::{Add, AddAssign, Div, DivAssign, Mul, Neg, Sub, SubAssign},
+use crate::{
+    impl_value_type_conversions, radians, scalar, supports_absdiffeq, supports_quantity_ops,
+    supports_scalar_ops, supports_shift_ops, supports_value_type_conversion, ArcSeconds, Degrees,
+    Scalar, Unit,
 };
+use ordered_float::OrderedFloat;
+use std::{fmt, fmt::Debug, marker::PhantomData, ops::Neg};
 
-pub trait AngleUnit: Copy {
-    fn unit_name() -> &'static str;
-    fn suffix() -> &'static str;
-    fn femto_radians_in_unit() -> i64;
+pub trait AngleUnit: Unit + Copy + Debug + Eq + PartialEq + 'static {
+    const RADIANS_IN_UNIT: f64;
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Angle<Unit: AngleUnit> {
-    femto_rad: i64, // femto = 10**-15
-    phantom: PhantomData<Unit>,
+    v: OrderedFloat<f64>,
+    phantom_1: PhantomData<Unit>,
 }
+supports_quantity_ops!(Angle<A>, AngleUnit);
+supports_shift_ops!(Angle<A1>, Angle<A2>, AngleUnit);
+supports_scalar_ops!(Angle<A>, AngleUnit);
+supports_absdiffeq!(Angle<A>, AngleUnit);
+supports_value_type_conversion!(Angle<A>, AngleUnit, impl_value_type_conversions);
 
 impl<Unit: AngleUnit> Angle<Unit> {
     pub fn floor(self) -> f64 {
@@ -45,54 +49,46 @@ impl<Unit: AngleUnit> Angle<Unit> {
     }
 
     pub fn clamp(self, min: Self, max: Self) -> Self {
-        if self.femto_rad < min.femto_rad {
+        if self.v < min.v {
             min
-        } else if self.femto_rad > max.femto_rad {
+        } else if self.v > max.v {
             max
         } else {
             self
         }
     }
 
+    // In integer units min<x<=max
     pub fn wrap(self, min: Self, max: Self) -> Self {
-        // This clever approach is from: https://stackoverflow.com/a/707426/11820706
-        debug_assert!(max.femto_rad > min.femto_rad);
-        let range_size = max.femto_rad - min.femto_rad;
+        debug_assert!(max.v > min.v);
+        let range_size = max.v - min.v;
         let mut out = self;
-        if out.femto_rad < min.femto_rad {
-            out.femto_rad += range_size * ((min.femto_rad - out.femto_rad) / range_size + 1);
+        while out.v <= min.v {
+            out.v += range_size;
         }
-        out.femto_rad = min.femto_rad + (out.femto_rad - min.femto_rad) % range_size;
+        while out.v > max.v {
+            out.v -= range_size;
+        }
         out
     }
 
     pub fn sign(&self) -> i8 {
-        self.femto_rad.signum() as i8
+        self.v.0.signum() as i8
     }
 
-    pub fn cos(self) -> f64 {
-        f64::from(radians!(self)).cos()
+    pub fn cos(self) -> Scalar {
+        scalar!(f64::from(radians!(self)).cos())
     }
 
-    pub fn sin(self) -> f64 {
-        f64::from(radians!(self)).sin()
+    pub fn sin(self) -> Scalar {
+        scalar!(f64::from(radians!(self)).sin())
     }
 
-    pub fn tan(self) -> f64 {
-        f64::from(radians!(self)).tan()
-    }
-
-    pub fn f32(self) -> f32 {
-        f32::from(self)
-    }
-
-    pub fn f64(self) -> f64 {
-        f64::from(self)
+    pub fn tan(self) -> Scalar {
+        scalar!(f64::from(radians!(self)).tan())
     }
 
     pub fn split_degrees_minutes_seconds(&self) -> (i32, i32, i32) {
-        use crate::unit::{arcseconds::ArcSeconds, degrees::Degrees};
-
         let mut arcsecs = Angle::<ArcSeconds>::from(self).f64() as i64;
         let degrees = Angle::<Degrees>::from(self).f64() as i64;
         arcsecs -= degrees * 3_600;
@@ -131,8 +127,7 @@ where
     Unit: AngleUnit,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let v = self.femto_rad as f64 / Unit::femto_radians_in_unit() as f64;
-        write!(f, "{:0.4}{}", v, Unit::suffix())
+        write!(f, "{:0.4}{}", self.v, Unit::UNIT_SUFFIX)
     }
 }
 
@@ -143,59 +138,9 @@ where
 {
     fn from(v: &'a Angle<UnitA>) -> Self {
         Self {
-            femto_rad: v.femto_rad,
-            phantom: PhantomData,
+            v: v.v * UnitA::RADIANS_IN_UNIT / UnitB::RADIANS_IN_UNIT,
+            phantom_1: PhantomData,
         }
-    }
-}
-
-impl<UnitA, UnitB> Add<Angle<UnitA>> for Angle<UnitB>
-where
-    UnitA: AngleUnit,
-    UnitB: AngleUnit,
-{
-    type Output = Angle<UnitB>;
-
-    fn add(self, other: Angle<UnitA>) -> Self {
-        Self {
-            femto_rad: self.femto_rad + other.femto_rad,
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl<UnitA, UnitB> AddAssign<Angle<UnitA>> for Angle<UnitB>
-where
-    UnitA: AngleUnit,
-    UnitB: AngleUnit,
-{
-    fn add_assign(&mut self, other: Angle<UnitA>) {
-        self.femto_rad += other.femto_rad;
-    }
-}
-
-impl<UnitA, UnitB> Sub<Angle<UnitA>> for Angle<UnitB>
-where
-    UnitA: AngleUnit,
-    UnitB: AngleUnit,
-{
-    type Output = Angle<UnitB>;
-
-    fn sub(self, other: Angle<UnitA>) -> Self {
-        Self {
-            femto_rad: self.femto_rad - other.femto_rad,
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl<UnitA, UnitB> SubAssign<Angle<UnitA>> for Angle<UnitB>
-where
-    UnitA: AngleUnit,
-    UnitB: AngleUnit,
-{
-    fn sub_assign(&mut self, other: Angle<UnitA>) {
-        self.femto_rad -= other.femto_rad;
     }
 }
 
@@ -206,90 +151,15 @@ where
     type Output = Self;
 
     fn neg(mut self) -> Self::Output {
-        self.femto_rad = -self.femto_rad;
+        self.v = -self.v;
         self
     }
 }
 
-macro_rules! impl_angle_unit_for_numeric_type {
-    ($Num:ty) => {
-        impl<Unit> From<$Num> for Angle<Unit>
-        where
-            Unit: AngleUnit,
-        {
-            fn from(v: $Num) -> Self {
-                Self {
-                    femto_rad: (v as f64 * Unit::femto_radians_in_unit() as f64) as i64,
-                    phantom: PhantomData,
-                }
-            }
-        }
-
-        impl<Unit> From<&$Num> for Angle<Unit>
-        where
-            Unit: AngleUnit,
-        {
-            fn from(v: &$Num) -> Self {
-                Self {
-                    femto_rad: (*v as f64 * Unit::femto_radians_in_unit() as f64) as i64,
-                    phantom: PhantomData,
-                }
-            }
-        }
-
-        impl<Unit> From<Angle<Unit>> for $Num
-        where
-            Unit: AngleUnit,
-        {
-            fn from(v: Angle<Unit>) -> $Num {
-                (v.femto_rad as f64 / Unit::femto_radians_in_unit() as f64) as $Num
-            }
-        }
-
-        impl<Unit> Mul<$Num> for Angle<Unit>
-        where
-            Unit: AngleUnit,
-        {
-            type Output = Self;
-
-            fn mul(self, rhs: $Num) -> Self {
-                Self {
-                    femto_rad: (self.femto_rad as f64 * rhs as f64).round() as i64,
-                    phantom: PhantomData,
-                }
-            }
-        }
-
-        impl<Unit> Div<$Num> for Angle<Unit>
-        where
-            Unit: AngleUnit,
-        {
-            type Output = Self;
-
-            fn div(self, rhs: $Num) -> Self {
-                Self {
-                    femto_rad: (self.femto_rad as f64 / rhs as f64).round() as i64,
-                    phantom: PhantomData,
-                }
-            }
-        }
-
-        impl<Unit> DivAssign<$Num> for Angle<Unit>
-        where
-            Unit: AngleUnit,
-        {
-            fn div_assign(&mut self, rhs: $Num) {
-                self.femto_rad = (self.femto_rad as f64 / rhs as f64).round() as i64;
-            }
-        }
-    };
-}
-impl_unit_for_numerics!(impl_angle_unit_for_numeric_type);
-
 #[cfg(test)]
 mod test {
     use crate::{arcminutes, arcseconds, degrees, radians};
-    use approx::assert_relative_eq;
+    use approx::assert_abs_diff_eq;
     use std::f64::consts::PI;
 
     #[test]
@@ -309,10 +179,15 @@ mod test {
     }
 
     #[test]
+    fn test_basic_angle_math() {
+        assert_abs_diff_eq!(degrees!(2) + degrees!(2), degrees!(4));
+    }
+
+    #[test]
     fn test_arcminute_arcsecond() {
         let a = degrees!(1);
-        assert_relative_eq!(arcminutes!(a).f32(), 60f32);
-        assert_relative_eq!(arcseconds!(a).f32(), 60f32 * 60f32);
+        assert_abs_diff_eq!(arcminutes!(a).f32(), 60f32);
+        assert_abs_diff_eq!(arcseconds!(a).f32(), 60f32 * 60f32);
     }
 
     #[test]
@@ -325,18 +200,14 @@ mod test {
             degrees!(-179),
             degrees!(181).wrap(degrees!(-180), degrees!(180))
         );
-        assert_relative_eq!(
-            degrees!(-179).f64(),
-            degrees!(180 + 3_600 + 1)
-                .wrap(degrees!(-180), degrees!(180))
-                .f64(),
+        assert_abs_diff_eq!(
+            degrees!(-179),
+            degrees!(180 + 3_600 + 1).wrap(degrees!(-180), degrees!(180)),
             epsilon = 0.000_000_000_001
         );
-        assert_relative_eq!(
-            degrees!(179).f64(),
-            degrees!(-180 - 3_600 - 1)
-                .wrap(degrees!(-180), degrees!(180))
-                .f64(),
+        assert_abs_diff_eq!(
+            degrees!(179),
+            degrees!(-180 - 3_600 - 1).wrap(degrees!(-180), degrees!(180)),
             epsilon = 0.000_000_000_001
         );
     }
