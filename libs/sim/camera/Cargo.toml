@@ -12,7 +12,6 @@ nalgebra = "^ 0.31"
 num = "^ 0.4"
 ordered-float = "^ 3"
 absolute_unit = { path = "../../util/absolute_unit" }
-event_mapper = { path = "../../sim/event_mapper" }
 geodesy = { path = "../../util/geodesy" }
 geometry = { path = "../../util/geometry" }
 measure = { path = "../../sim/measure" }

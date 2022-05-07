@@ -17,7 +17,6 @@ log = "^ 0.4"
 futures = "^ 0.3"
 ordered-float = "^ 3"
 parking_lot = "^ 0.12"
-rayon = "^ 1.5"
 regex = "1"
 geodesy = { path = "../../util/geodesy" }
 nitrous_injector = { path = "../../util/nitrous_injector" }

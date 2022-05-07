@@ -12,7 +12,6 @@ futures = "^ 0.3"
 log = "^ 0.4"
 lyon_geom = "^ 0.17"
 parking_lot = "^ 0.12"
-rayon = "^ 1.5"
 triggered = "^ 0.1"
 absolute_unit = { path = "../../util/absolute_unit" }
 geodesy = { path = "../../util/geodesy" }

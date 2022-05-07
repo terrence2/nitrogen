@@ -73,7 +73,6 @@ dependencies = [
  "lyon_geom",
  "nitrous",
  "parking_lot 0.12.0",
- "rayon",
  "runtime",
  "triggered",
 ]
@@ -469,7 +468,6 @@ dependencies = [
  "anyhow",
  "approx",
  "bevy_ecs",
- "event_mapper",
  "geodesy",
  "geometry",
  "log",
@@ -1153,7 +1151,6 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "image",
- "wgpu",
  "window",
 ]
 
@@ -1166,7 +1163,6 @@ dependencies = [
  "image",
  "parking_lot 0.12.0",
  "rusttype",
- "wgpu",
  "window",
 ]
 
@@ -1390,7 +1386,6 @@ dependencies = [
  "bevy_ecs",
  "build_shaders",
  "camera",
- "event_mapper",
  "geodesy",
  "gpu",
  "log",
@@ -2059,7 +2054,6 @@ dependencies = [
  "nitrous_injector",
  "ordered-float",
  "parking_lot 0.12.0",
- "rayon",
  "regex",
 ]
 
@@ -2067,10 +2061,6 @@ dependencies = [
 name = "nitrous_injector"
 version = "0.0.0"
 dependencies = [
- "anyhow",
- "log",
- "ordered-float",
- "parking_lot 0.12.0",
  "proc-macro2",
  "quote",
  "syn",
