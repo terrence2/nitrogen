@@ -10,7 +10,7 @@ bitflags = ">= 1.0"
 anyhow = { version = "^ 1", features = ["backtrace"] }
 lazy_static = "^ 1"
 log = "^ 0.4"
-nalgebra = "^ 0.29"
+nalgebra = "^ 0.31"
 static_assertions = "^ 1"
 wgpu = { version = "^ 0.12", features = ["spirv"] }
 zerocopy = "^ 0.5"

@@ -274,7 +274,7 @@ dependencies = [
  "async-channel",
  "bevy_ecs_macros",
  "bevy_reflect",
- "bevy_tasks 0.7.0",
+ "bevy_tasks",
  "bevy_utils",
  "downcast-rs",
  "fixedbitset 0.4.1",
@@ -332,20 +332,6 @@ dependencies = [
  "quote",
  "syn",
  "uuid",
-]
-
-[[package]]
-name = "bevy_tasks"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9dc4bce7f4cddbb489636092f52478b103dc26ee8526c585289bbdd9c0d0a99f"
-dependencies = [
- "async-channel",
- "async-executor",
- "event-listener",
- "futures-lite",
- "num_cpus",
- "wasm-bindgen-futures",
 ]
 
 [[package]]
@@ -1916,9 +1902,9 @@ dependencies = [
 
 [[package]]
 name = "nalgebra"
-version = "0.29.0"
+version = "0.31.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d506eb7e08d6329505faa8a3a00a5dcc6de9f76e0c77e4b75763ae3c770831ff"
+checksum = "18a89248335f688e4bd994e6d030fd7e185eb41769b8c435395075425e100ac6"
 dependencies = [
  "approx",
  "matrixmultiply",
@@ -2673,7 +2659,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "bevy_ecs",
- "bevy_tasks 0.6.0",
+ "bevy_tasks",
  "itertools",
  "log",
  "nitrous",
@@ -2791,9 +2777,9 @@ dependencies = [
 
 [[package]]
 name = "simba"
-version = "0.6.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0b7840f121a46d63066ee7a99fc81dcabbc6105e437cae43528cea199b5a05f"
+checksum = "13a2609e876d4f77f6ab7ff5254fc39b4f1927ba8e6db3d18be7c32534d3725e"
 dependencies = [
  "approx",
  "num-complex 0.4.0",

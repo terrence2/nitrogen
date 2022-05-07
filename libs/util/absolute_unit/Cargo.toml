@@ -11,4 +11,4 @@ hashbag = "^ 0.1"
 ordered-float = "^ 2"
 
 [dev-dependencies]
-nalgebra = "^ 0.29"
+nalgebra = "^ 0.31"

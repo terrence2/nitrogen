@@ -11,7 +11,7 @@ anyhow = { version = "^ 1", features = ["backtrace"] }
 image = "^ 0.23"
 json = "^ 0.12"
 memmap = "^ 0.7"
-nalgebra = "^ 0.29"
+nalgebra = "^ 0.31"
 parking_lot = "^ 0.11"
 rayon = "= 1.4.0"
 structopt = "^ 0.3"

@@ -8,7 +8,7 @@ edition = "2021"
 anyhow = { version = "^ 1", features = ["backtrace"] }
 bevy_ecs = { version = "^ 0.7", features = ["trace"] }
 log = "^ 0.4"
-nalgebra = "^ 0.29"
+nalgebra = "^ 0.31"
 ordered-float = "^ 2"
 wgpu = { version = "^ 0.12", features = ["spirv"] }
 zerocopy = "^ 0.5"

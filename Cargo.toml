@@ -66,7 +66,7 @@ anyhow = { version = "^ 1", features = ["backtrace"] }
 bevy_ecs = { version = "^ 0.7", features = ["trace"] }
 image = "^ 0.23"
 log = "^ 0.4"
-nalgebra = "^ 0.29"
+nalgebra = "^ 0.31"
 parking_lot = "^ 0.11"
 paste = "^ 1"
 platform-dirs = "^ 0.3"

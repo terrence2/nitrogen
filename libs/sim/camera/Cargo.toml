@@ -8,7 +8,7 @@ edition = "2021"
 anyhow = { version = "^ 1", features = ["backtrace"] }
 bevy_ecs = { version = "^ 0.7", features = ["trace"] }
 log = ">= 0.4"
-nalgebra = "^ 0.29"
+nalgebra = "^ 0.31"
 num = "^ 0.3"
 ordered-float = "^ 2"
 absolute_unit = { path = "../../util/absolute_unit" }

@@ -15,7 +15,7 @@
 use approx::relative_eq;
 use nalgebra::{convert, Point3, RealField, Vector3};
 use num_traits::cast::FromPrimitive;
-use simba::scalar::SupersetOf;
+use simba::scalar::{SubsetOf, SupersetOf};
 use std::fmt::{Debug, Display};
 
 #[derive(Clone, Copy, Debug)]
@@ -92,7 +92,11 @@ where
         -self.distance
     }
 
-    pub fn vec4<To: SupersetOf<T>>(&self) -> [To; 4] {
+    pub fn vec4<To>(&self) -> [To; 4]
+    where
+        To: SupersetOf<T>,
+        T: SubsetOf<To>,
+    {
         [
             convert::<T, To>(self.normal.x),
             convert::<T, To>(self.normal.y),
