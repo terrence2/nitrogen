@@ -6,6 +6,6 @@ edition = "2021"
 
 [dependencies]
 anyhow = { version = "^ 1", features = ["backtrace"] }
-image = "^ 0.23"
+image = "^ 0.24"
 wgpu = { version = "^ 0.12", features = ["spirv"] }
 window = { path = "../../system/window" }

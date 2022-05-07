@@ -8,7 +8,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = { version = "^ 1", features = ["backtrace"] }
-image = "^ 0.23"
+image = "^ 0.24"
 rusttype = "^ 0.9"
 parking_lot = "^ 0.11"
 wgpu = { version = "^ 0.12", features = ["spirv"] }
