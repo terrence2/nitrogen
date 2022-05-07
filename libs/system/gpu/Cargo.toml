@@ -9,7 +9,7 @@ anyhow = { version = "^ 1", features = ["backtrace"] }
 bevy_ecs = { version = "^ 0.7", features = ["trace"] }
 futures-lite = "^ 1"
 log = "^ 0.4"
-ordered-float = "^ 2"
+ordered-float = "^ 3"
 parking_lot = "^ 0.12"
 raw-window-handle = "^ 0.4"
 structopt = "^ 0.3"

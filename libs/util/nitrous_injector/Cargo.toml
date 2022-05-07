@@ -15,5 +15,5 @@ quote = "^ 1"
 [dev-dependencies]
 anyhow = { version = "^ 1", features = ["backtrace"] }
 log = "^ 0.4"
-ordered-float = "^ 2"
+ordered-float = "^ 3"
 parking_lot = "^ 0.12"

@@ -12,10 +12,10 @@ anyhow = { version = "^ 1", features = ["backtrace"] }
 bevy_ecs = { version = "^ 0.7", features = ["trace"] }
 ellipse = "^ 0.2"
 itertools = "^ 0.10"
-lalrpop-util = { version = "0.19.4", features = ["lexer"] }
+lalrpop-util = { version = "^ 0.19", features = ["lexer"] }
 log = "^ 0.4"
 futures = "^ 0.3"
-ordered-float = "^ 2"
+ordered-float = "^ 3"
 parking_lot = "^ 0.12"
 rayon = "^ 1.5"
 regex = "1"

@@ -9,7 +9,7 @@ anyhow = { version = "^ 1", features = ["backtrace"] }
 bevy_ecs = { version = "^ 0.7", features = ["trace"] }
 log = "^ 0.4"
 nalgebra = "^ 0.31"
-ordered-float = "^ 2"
+ordered-float = "^ 3"
 wgpu = { version = "^ 0.12", features = ["spirv"] }
 zerocopy = "^ 0.6"
 absolute_unit = { path = "../../util/absolute_unit" }

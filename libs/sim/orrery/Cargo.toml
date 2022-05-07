@@ -11,7 +11,7 @@ bevy_ecs = { version = "^ 0.7", features = ["trace"] }
 lazy_static = "^ 1"
 log = "^ 0.4"
 nalgebra = "^ 0.31"
-ordered-float = "^ 2"
+ordered-float = "^ 3"
 animate = { path = "../../sim/animate" }
 nitrous = { path = "../../util/nitrous" }
 runtime = { path = "../../util/runtime" }

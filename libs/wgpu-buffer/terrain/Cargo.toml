@@ -11,7 +11,7 @@ approx = "^ 0.5"
 bevy_ecs = { version = "^ 0.7", features = ["trace"] }
 bzip2 = "^ 0.4"
 crossbeam = "^ 0.8"
-float-ord = "^ 0.2"
+float-ord = "^ 0.3"
 fxhash = "^ 0.2"
 image = "^ 0.24"
 json = "^ 0.12"
