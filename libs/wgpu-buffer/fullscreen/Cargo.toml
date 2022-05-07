@@ -14,7 +14,7 @@ gpu = { path = "../../system/gpu" }
 runtime = { path = "../../util/runtime" }
 
 [dev-dependencies]
-bevy_ecs = { version = "^ 0.6", features = ["trace"] }
+bevy_ecs = { version = "^ 0.7", features = ["trace"] }
 chrono = "^ 0.4"
 absolute_unit = { path = "../../util/absolute_unit" }
 animate = { path = "../../sim/animate" }

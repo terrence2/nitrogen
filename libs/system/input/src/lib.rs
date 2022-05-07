@@ -221,7 +221,7 @@ impl InputController {
             &mut runtime,
         );
         let event_loop = Arc::new(Mutex::new(event_loop));
-        runtime.insert_non_send(event_loop);
+        runtime.insert_non_send_resource(event_loop);
         os_window.focus_window();
         runtime.insert_resource(os_window);
         Ok(runtime)

@@ -62,7 +62,7 @@ impl Extension for TraceLog {
                         }
                     }))
                     .build();
-                runtime.insert_non_send(guard);
+                runtime.insert_non_send_resource(guard);
                 chrome_layer
             };
 

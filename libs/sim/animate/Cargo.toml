@@ -7,7 +7,7 @@ edition = "2021"
 [dependencies]
 anyhow = { version = "^ 1", features = ["backtrace"] }
 approx = "^ 0.5"
-bevy_ecs = { version = "^ 0.6", features = ["trace"] }
+bevy_ecs = { version = "^ 0.7", features = ["trace"] }
 futures = "^ 0.3"
 log = "^ 0.4"
 lyon_geom = "^ 0.17"
