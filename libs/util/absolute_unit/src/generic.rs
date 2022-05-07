@@ -264,6 +264,19 @@ macro_rules! supports_scalar_ops {
                 self.v /= s.f64();
             }
         }
+
+        impl<A, B> std::ops::Neg for $TypeName
+        where
+            A: $UnitA,
+            B: $UnitB,
+        {
+            type Output = $TypeName;
+
+            fn neg(mut self) -> Self::Output {
+                self.v = -self.v;
+                self
+            }
+        }
     };
 
     ($TypeName:ty, $UnitA:path) => {
@@ -321,6 +334,18 @@ macro_rules! supports_scalar_ops {
         {
             fn div_assign(&mut self, s: $crate::Scalar) {
                 self.v /= s.f64();
+            }
+        }
+
+        impl<A> std::ops::Neg for $TypeName
+        where
+            A: $UnitA,
+        {
+            type Output = $TypeName;
+
+            fn neg(mut self) -> Self::Output {
+                self.v = -self.v;
+                self
             }
         }
     };

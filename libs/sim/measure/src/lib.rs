@@ -184,10 +184,7 @@ impl LocalMotion {
         &mut self.velocity_m_s
     }
 
-    pub fn meters_per_second(&self) -> Vector3<Velocity<Meters, Seconds>> {
-        self.velocity_m_s
-    }
-
+    // TODO: remove
     pub fn forward_velocity(&self) -> Velocity<Meters, Seconds> {
         self.velocity_m_s.z
     }

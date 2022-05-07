@@ -38,13 +38,8 @@ where
     L: LengthUnit,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{:0.4}{}/{}^3",
-            self.v,
-            L::UNIT_SHORT_NAME,
-            M::UNIT_SHORT_NAME
-        )
+        fmt::Display::fmt(&self.v.0, f)?;
+        write!(f, "{}/{}^3", L::UNIT_SHORT_NAME, M::UNIT_SHORT_NAME)
     }
 }
 
