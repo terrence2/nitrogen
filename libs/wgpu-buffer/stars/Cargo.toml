@@ -13,7 +13,7 @@ log = "^ 0.4"
 nalgebra = "^ 0.31"
 static_assertions = "^ 1"
 wgpu = { version = "^ 0.12", features = ["spirv"] }
-zerocopy = "^ 0.5"
+zerocopy = "^ 0.6"
 star_catalog = { path = "../../util/star_catalog" }
 gpu = { path = "../../system/gpu" }
 runtime = { path = "../../util/runtime" }
@@ -21,7 +21,7 @@ runtime = { path = "../../util/runtime" }
 [dev-dependencies]
 bevy_ecs = { version = "^ 0.7", features = ["trace"] }
 chrono = "^ 0.4"
-parking_lot = "^ 0.11"
+parking_lot = "^ 0.12"
 absolute_unit = { path = "../../util/absolute_unit" }
 animate = { path = "../../sim/animate" }
 camera = { path = "../../sim/camera" }

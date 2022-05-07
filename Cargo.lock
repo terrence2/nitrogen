@@ -72,7 +72,7 @@ dependencies = [
  "log",
  "lyon_geom",
  "nitrous",
- "parking_lot",
+ "parking_lot 0.12.0",
  "rayon",
  "runtime",
  "triggered",
@@ -214,7 +214,7 @@ dependencies = [
  "nalgebra",
  "nitrous",
  "num-traits",
- "parking_lot",
+ "parking_lot 0.12.0",
  "runtime",
  "spirv-reflect",
  "static_assertions",
@@ -316,7 +316,7 @@ dependencies = [
  "bevy_utils",
  "downcast-rs",
  "erased-serde",
- "parking_lot",
+ "parking_lot 0.11.2",
  "serde",
  "thiserror",
 ]
@@ -993,7 +993,7 @@ dependencies = [
  "json",
  "memmap",
  "nalgebra",
- "parking_lot",
+ "parking_lot 0.12.0",
  "rayon",
  "structopt",
  "terrain",
@@ -1170,7 +1170,7 @@ dependencies = [
  "anyhow",
  "font_common",
  "image",
- "parking_lot",
+ "parking_lot 0.12.0",
  "rusttype",
  "wgpu",
  "window",
@@ -1211,7 +1211,7 @@ dependencies = [
  "measure",
  "nitrous",
  "orrery",
- "parking_lot",
+ "parking_lot 0.12.0",
  "runtime",
  "wgpu",
  "window",
@@ -1433,7 +1433,7 @@ dependencies = [
  "log",
  "nitrous",
  "ordered-float",
- "parking_lot",
+ "parking_lot 0.12.0",
  "paste",
  "raw-window-handle",
  "runtime",
@@ -1600,7 +1600,7 @@ dependencies = [
  "bevy_ecs",
  "futures",
  "log",
- "parking_lot",
+ "parking_lot 0.12.0",
  "runtime",
  "smallvec",
  "wasm-bindgen",
@@ -1830,9 +1830,9 @@ dependencies = [
 
 [[package]]
 name = "memoffset"
-version = "0.6.4"
+version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59accc507f1338036a0477ef61afdae33cde60840f4dfe481319ce3ad116ddf9"
+checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
 dependencies = [
  "autocfg",
 ]
@@ -2032,7 +2032,7 @@ dependencies = [
  "nalgebra",
  "nitrous",
  "orrery",
- "parking_lot",
+ "parking_lot 0.12.0",
  "paste",
  "platform-dirs",
  "rayon",
@@ -2064,7 +2064,7 @@ dependencies = [
  "log",
  "nitrous_injector",
  "ordered-float",
- "parking_lot",
+ "parking_lot 0.12.0",
  "rayon",
  "regex",
 ]
@@ -2076,7 +2076,7 @@ dependencies = [
  "anyhow",
  "log",
  "ordered-float",
- "parking_lot",
+ "parking_lot 0.12.0",
  "proc-macro2",
  "quote",
  "syn",
@@ -2334,7 +2334,17 @@ checksum = "7d17b78036a60663b797adeaee46f5c9dfebb86948d1255007a1d6be0271ff99"
 dependencies = [
  "instant",
  "lock_api",
- "parking_lot_core",
+ "parking_lot_core 0.8.5",
+]
+
+[[package]]
+name = "parking_lot"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "87f5ec2493a61ac0506c0f4199f99070cbe83857b0337006a30f3e6719b8ef58"
+dependencies = [
+ "lock_api",
+ "parking_lot_core 0.9.3",
 ]
 
 [[package]]
@@ -2349,6 +2359,19 @@ dependencies = [
  "redox_syscall",
  "smallvec",
  "winapi",
+]
+
+[[package]]
+name = "parking_lot_core"
+version = "0.9.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09a279cbf25cb0757810394fbc1e359949b59e348145c643a939a525692e6929"
+dependencies = [
+ "cfg-if 1.0.0",
+ "libc",
+ "redox_syscall",
+ "smallvec",
+ "windows-sys",
 ]
 
 [[package]]
@@ -2553,14 +2576,13 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.8.4"
+version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e7573632e6454cf6b99d7aac4ccca54be06da05aca2ef7423d22d27d4d4bcd8"
+checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
 dependencies = [
  "libc",
  "rand_chacha",
  "rand_core",
- "rand_hc",
 ]
 
 [[package]]
@@ -2580,15 +2602,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d34f1408f55294453790c48b2f1ebbb1c5b4b7563eb1f418bcfcfdbb06ebb4e7"
 dependencies = [
  "getrandom",
-]
-
-[[package]]
-name = "rand_hc"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d51e9f596de227fda2ea6c84607f5558e196eeaf43c986b724ba4fb8fdf497e7"
-dependencies = [
- "rand_core",
 ]
 
 [[package]]
@@ -2945,7 +2958,7 @@ dependencies = [
  "nalgebra",
  "nitrous",
  "orrery",
- "parking_lot",
+ "parking_lot 0.12.0",
  "runtime",
  "star_catalog",
  "static_assertions",
@@ -2968,7 +2981,7 @@ checksum = "923f0f39b6267d37d23ce71ae7235602134b250ace715dd2c90421998ddac0c6"
 dependencies = [
  "lazy_static",
  "new_debug_unreachable",
- "parking_lot",
+ "parking_lot 0.11.2",
  "phf_shared",
  "precomputed-hash",
 ]
@@ -3090,7 +3103,7 @@ dependencies = [
  "nitrous",
  "num-traits",
  "packed_struct",
- "parking_lot",
+ "parking_lot 0.12.0",
  "physical_constants",
  "rayon",
  "runtime",
@@ -3258,9 +3271,9 @@ dependencies = [
 
 [[package]]
 name = "tracing-log"
-version = "0.1.2"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6923477a48e41c1951f1999ef8bb5a3023eb723ceadafe78ffb65dc366761e3"
+checksum = "78ddad33d2d10b1ed7eb9d1f518a5674713876e97e5bb9b7345a7984fbb4f922"
 dependencies = [
  "lazy_static",
  "log",
@@ -3577,7 +3590,7 @@ dependencies = [
  "js-sys",
  "log",
  "naga",
- "parking_lot",
+ "parking_lot 0.11.2",
  "raw-window-handle",
  "smallvec",
  "wasm-bindgen",
@@ -3602,7 +3615,7 @@ dependencies = [
  "fxhash",
  "log",
  "naga",
- "parking_lot",
+ "parking_lot 0.11.2",
  "profiling",
  "raw-window-handle",
  "smallvec",
@@ -3637,7 +3650,7 @@ dependencies = [
  "metal",
  "naga",
  "objc",
- "parking_lot",
+ "parking_lot 0.11.2",
  "profiling",
  "range-alloc",
  "raw-window-handle",
@@ -3686,7 +3699,7 @@ dependencies = [
  "memoffset",
  "nitrous",
  "ordered-float",
- "parking_lot",
+ "parking_lot 0.12.0",
  "platform-dirs",
  "rayon",
  "runtime",
@@ -3737,11 +3750,54 @@ dependencies = [
  "log",
  "nitrous",
  "ordered-float",
- "parking_lot",
+ "parking_lot 0.12.0",
  "runtime",
  "structopt",
  "winit",
 ]
+
+[[package]]
+name = "windows-sys"
+version = "0.36.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea04155a16a59f9eab786fe12a4a450e75cdb175f9e0d80da1e17db09f55b8d2"
+dependencies = [
+ "windows_aarch64_msvc",
+ "windows_i686_gnu",
+ "windows_i686_msvc",
+ "windows_x86_64_gnu",
+ "windows_x86_64_msvc",
+]
+
+[[package]]
+name = "windows_aarch64_msvc"
+version = "0.36.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9bb8c3fd39ade2d67e9874ac4f3db21f0d710bee00fe7cab16949ec184eeaa47"
+
+[[package]]
+name = "windows_i686_gnu"
+version = "0.36.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "180e6ccf01daf4c426b846dfc66db1fc518f074baa793aa7d9b9aaeffad6a3b6"
+
+[[package]]
+name = "windows_i686_msvc"
+version = "0.36.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e2e7917148b2812d1eeafaeb22a97e4813dfa60a3f8f78ebe204bcc88f12f024"
+
+[[package]]
+name = "windows_x86_64_gnu"
+version = "0.36.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4dcd171b8776c41b97521e5da127a2d86ad280114807d0b2ab1e462bc764d9e1"
+
+[[package]]
+name = "windows_x86_64_msvc"
+version = "0.36.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c811ca4a8c853ef420abd8592ba53ddbbac90410fab6903b3e79972a631f7680"
 
 [[package]]
 name = "winit"
@@ -3764,7 +3820,7 @@ dependencies = [
  "ndk-glue",
  "ndk-sys",
  "objc",
- "parking_lot",
+ "parking_lot 0.11.2",
  "percent-encoding",
  "raw-window-handle",
  "smithay-client-toolkit",
@@ -3789,7 +3845,7 @@ dependencies = [
  "gpu",
  "log",
  "nitrous",
- "parking_lot",
+ "parking_lot 0.12.0",
  "runtime",
  "shader_shared",
  "stars",
@@ -3826,9 +3882,9 @@ checksum = "d2d7d3948613f75c98fd9328cfdcc45acc4d360655289d0a7d4ec931392200a3"
 
 [[package]]
 name = "zerocopy"
-version = "0.5.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e59ec1d2457bd6c0dd89b50e7d9d6b0b647809bf3f0a59ac85557046950b7b2"
+checksum = "332f188cc1bcf1fe1064b8c58d150f497e697f49774aa846f2dc949d9a25f236"
 dependencies = [
  "byteorder",
  "zerocopy-derive",
@@ -3836,9 +3892,9 @@ dependencies = [
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0af017aca1fa6181f5dd7a802456fe6f7666ecdcc18d0910431f0fc89d474e51"
+checksum = "a0fbc82b82efe24da867ee52e015e58178684bd9dd64c34e66bdf21da2582a9f"
 dependencies = [
  "proc-macro2",
  "syn",

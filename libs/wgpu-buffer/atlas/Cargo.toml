@@ -11,7 +11,7 @@ log = "^ 0.4"
 wgpu = { version = "^ 0.12", features = ["spirv"] }
 geometry = { path = "../../util/geometry" }
 gpu = { path = "../../system/gpu" }
-zerocopy = "^ 0.5"
+zerocopy = "^ 0.6"
 
 [dev-dependencies]
 rand = "^ 0.8"
