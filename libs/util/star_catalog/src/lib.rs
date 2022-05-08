@@ -41,15 +41,16 @@ use std::mem;
             If negative, coordinates are J2000 instead of B1950
     Integer*4 NBENT	Number of bytes per star entry
 */
-packed_struct!(Header {
-    _0 => star0: u32,
-    _1 => star1: u32,
-    _2 => star_n: i32,
-    _3 => st_num: u32,
-    _4 => m_prop: u32,
-    _5 => n_mag: u32,
-    _6 => nb_ent: u32
-});
+#[packed_struct]
+struct Header {
+    star0: u32,
+    star1: u32,
+    star_n: i32,
+    st_num: u32,
+    m_prop: u32,
+    n_mag: u32,
+    nb_ent: u32,
+}
 
 /*
     Each entry in the catalog contains the following information:
@@ -68,17 +69,19 @@ packed_struct!(Header {
     increasing integers. Proper motions may be omitted if they are not known.
     There may be up to 10 magnitudes.
 */
-packed_struct!(SAOEntry {
-    _0 => xno: f32,
-    _1 => sra0: f64,
-    _2 => sdec0: f64,
-    _3 => isp: [u8; 2],
-    _4 => mag: u16,
-    _5 => xrpm: f32,
-    _6 => xdpm: f32
-    //_7 => svel: f64
-    //_8 => name: &[u8]
-});
+#[packed_struct]
+pub struct SAOEntry {
+    xno: f32,
+    sra0: f64,
+    sdec0: f64,
+    isp: [u8; 2],
+    mag: u16,
+    xrpm: f32,
+    xdpm: f32,
+    // Extra members that may be in other catalog types
+    //svel: f64
+    //name: &[u8]
+}
 
 impl SAOEntry {
     pub fn magnitude(&self) -> f32 {
@@ -155,9 +158,7 @@ impl Stars {
     pub fn new() -> Result<Self> {
         const HDR_SIZE: usize = mem::size_of::<Header>();
 
-        #[allow(clippy::transmute_ptr_to_ptr)]
-        let header_a: &[Header] = unsafe { mem::transmute(&BSC_DATA[0..HDR_SIZE]) };
-        let header = &header_a[0];
+        let header = Header::overlay_prefix(BSC_DATA)?;
         assert_eq!(header.star0(), 0);
         assert_eq!(header.star1(), 1);
         assert!(header.star_n() < 0);
@@ -166,8 +167,7 @@ impl Stars {
         assert_eq!(header.n_mag(), 1);
         assert_eq!(header.nb_ent(), 32);
 
-        #[allow(clippy::transmute_ptr_to_ptr)]
-        let entries: &[SAOEntry] = unsafe { mem::transmute(&BSC_DATA[HDR_SIZE..]) };
+        let entries = SAOEntry::overlay_slice(&BSC_DATA[HDR_SIZE..])?;
         Ok(Self {
             n_stars: -header.star_n() as usize,
             entries,

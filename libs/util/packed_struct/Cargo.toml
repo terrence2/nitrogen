@@ -7,3 +7,4 @@ authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 [dependencies]
 anyhow = { version = "^ 1", features = ["backtrace"] }
 zerocopy = "^ 0.6"
+packed_injector = { path = "../../util/packed_injector" }
