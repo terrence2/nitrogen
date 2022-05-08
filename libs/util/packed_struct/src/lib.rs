@@ -36,7 +36,7 @@ macro_rules! packed_struct {
         $( $field:ident => $field_name:ident : $field_ty:ty $(as $field_name_ty:ty),* ),+
     }) => {
         #[repr(C, packed)]
-        #[derive($crate::AsBytes, $crate::FromBytes)]
+        #[derive($crate::AsBytes, $crate::FromBytes, Copy, Clone)]
         pub struct $name {
             $(
                 $field: $field_ty
