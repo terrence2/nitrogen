@@ -12,13 +12,14 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{supports_value_type_conversion, Scalar, Unit};
+use crate::{kelvin, supports_value_type_conversion, Scalar, Unit};
+use approx::AbsDiffEq;
 use ordered_float::OrderedFloat;
 use std::{
     fmt,
     fmt::Debug,
     marker::PhantomData,
-    ops::{Div, DivAssign, Mul, MulAssign},
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign},
 };
 
 pub trait TemperatureUnit: Unit + Copy + Debug + Eq + PartialEq + 'static {
@@ -47,12 +48,8 @@ where
     Unit: TemperatureUnit,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{:0.4}{}",
-            Unit::convert_from_kelvin(self.kelvin.0),
-            Unit::UNIT_SUFFIX
-        )
+        fmt::Display::fmt(&Unit::convert_from_kelvin(self.kelvin.0), f)?;
+        write!(f, "{}", Unit::UNIT_SUFFIX)
     }
 }
 
@@ -66,6 +63,68 @@ where
             kelvin: v.kelvin,
             phantom: PhantomData,
         }
+    }
+}
+
+impl<Unit> AbsDiffEq for Temperature<Unit>
+where
+    Unit: TemperatureUnit,
+{
+    type Epsilon = f64;
+
+    fn default_epsilon() -> Self::Epsilon {
+        f64::default_epsilon()
+    }
+
+    fn abs_diff_eq(&self, other: &Self, epsilon: Self::Epsilon) -> bool {
+        let a = Unit::convert_from_kelvin(self.kelvin.0);
+        let b = Unit::convert_from_kelvin(other.kelvin.0);
+        a.abs_diff_eq(&b, epsilon)
+    }
+}
+
+/// Linear ops are defined on all temperature types.
+impl<UnitA, UnitB> Add<Temperature<UnitB>> for Temperature<UnitA>
+where
+    UnitA: TemperatureUnit,
+    UnitB: TemperatureUnit,
+{
+    type Output = Temperature<UnitA>;
+
+    fn add(self, rhs: Temperature<UnitB>) -> Self::Output {
+        Temperature::<UnitA>::from(&kelvin!(self.kelvin.0 + rhs.kelvin.0))
+    }
+}
+
+impl<UnitA, UnitB> AddAssign<Temperature<UnitB>> for Temperature<UnitA>
+where
+    UnitA: TemperatureUnit,
+    UnitB: TemperatureUnit,
+{
+    fn add_assign(&mut self, rhs: Temperature<UnitB>) {
+        self.kelvin += rhs.kelvin;
+    }
+}
+
+impl<UnitA, UnitB> Sub<Temperature<UnitB>> for Temperature<UnitA>
+where
+    UnitA: TemperatureUnit,
+    UnitB: TemperatureUnit,
+{
+    type Output = Temperature<UnitA>;
+
+    fn sub(self, rhs: Temperature<UnitB>) -> Self::Output {
+        Temperature::<UnitA>::from(&kelvin!(self.kelvin.0 - rhs.kelvin.0))
+    }
+}
+
+impl<UnitA, UnitB> SubAssign<Temperature<UnitB>> for Temperature<UnitA>
+where
+    UnitA: TemperatureUnit,
+    UnitB: TemperatureUnit,
+{
+    fn sub_assign(&mut self, rhs: Temperature<UnitB>) {
+        self.kelvin -= rhs.kelvin;
     }
 }
 

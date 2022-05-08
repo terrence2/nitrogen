@@ -5,8 +5,8 @@ version = "0.0.0"
 edition = "2021"
 
 [dependencies]
-bevy_ecs = { version = "^ 0.6", features = ["trace"] }
-nalgebra = "^ 0.29"
+bevy_ecs = { version = "^ 0.7", features = ["trace"] }
+nalgebra = "^ 0.31"
 absolute_unit = { path = "../../util/absolute_unit" }
 geodesy = { path = "../../util/geodesy" }
 nitrous = { path = "../../util/nitrous" }

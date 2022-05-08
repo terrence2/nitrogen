@@ -324,8 +324,8 @@ macro_rules! impl_mutable_heap_methods {
         }
 
         #[inline]
-        pub fn insert_non_send<T: 'static>(&mut self, value: T) -> &mut Self {
-            self.world.insert_non_send(value);
+        pub fn insert_non_send_resource<T: 'static>(&mut self, value: T) -> &mut Self {
+            self.world.insert_non_send_resource(value);
             self
         }
 

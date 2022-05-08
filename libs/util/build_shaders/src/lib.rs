@@ -205,7 +205,7 @@ pub fn build_shader_from_path(
     options.set_optimization_level(opt_level);
     options.set_include_callback(find_included_file);
 
-    let mut compiler = Compiler::new().expect("a compiler");
+    let compiler = Compiler::new().expect("a compiler");
     let result = compiler.compile_into_spirv(
         &shader_content,
         shader_type,

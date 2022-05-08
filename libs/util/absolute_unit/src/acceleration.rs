@@ -37,13 +37,8 @@ where
     T: TimeUnit,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{:0.4}{}/{}^2",
-            self.v,
-            L::UNIT_SHORT_NAME,
-            T::UNIT_SHORT_NAME
-        )
+        fmt::Display::fmt(&self.v.0, f)?;
+        write!(f, "{}/{}^2", L::UNIT_SHORT_NAME, T::UNIT_SHORT_NAME)
     }
 }
 

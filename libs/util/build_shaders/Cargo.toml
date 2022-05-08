@@ -8,4 +8,4 @@ edition = "2021"
 log = "^ 0.4"
 anyhow = { version = "^ 1", features = ["backtrace"] }
 naga = { version = "^ 0.8", features = ["spv-in", "spv-out", "dot-out", "glsl-in", "glsl-out", "glsl-validate"] }
-shaderc = "^ 0.7"
+shaderc = "^ 0.8"

@@ -8,24 +8,24 @@ edition = "2021"
 [dependencies]
 anyhow = { version = "^ 1", features = ["backtrace"] }
 approx = "^ 0.5"
-bevy_ecs = { version = "^ 0.6", features = ["trace"] }
+bevy_ecs = { version = "^ 0.7", features = ["trace"] }
 bzip2 = "^ 0.4"
 crossbeam = "^ 0.8"
-float-ord = "^ 0.2"
+float-ord = "^ 0.3"
 fxhash = "^ 0.2"
-image = "^ 0.23"
+image = "^ 0.24"
 json = "^ 0.12"
 lazy_static = "^ 1"
 log = "^ 0.4"
 memoffset = "^ 0.6"
-nalgebra = "^ 0.29"
+nalgebra = "^ 0.31"
 num-traits = "^ 0.2"
-parking_lot = "^ 0.11"
-rayon = "= 1.4.0"
-smallvec = "^ 1.4"
+parking_lot = "^ 0.12"
+rayon = "^ 1.5"
+smallvec = "^ 1"
 static_assertions = "^ 1"
 wgpu = { version = "^ 0.12", features = ["spirv"] }
-zerocopy = "^ 0.5"
+zerocopy = "^ 0.6"
 absolute_unit = { path = "../../util/absolute_unit" }
 camera = { path = "../../sim/camera" }
 catalog = { path = "../../system/catalog" }

@@ -6,9 +6,9 @@ edition = "2021"
 
 [dependencies]
 approx = "^ 0.5"
-nalgebra = "^ 0.29"
+nalgebra = "^ 0.31"
 num-traits = "^ 0.2"
 
 [dependencies.simba]
-version = "0.6"
+version = "^ 0.7"
 default-features = false

@@ -9,15 +9,15 @@ approx = "^ 0.5"
 bitflags = ">= 1.0"
 anyhow = { version = "^ 1", features = ["backtrace"] }
 futures = "^ 0.3"
-image = "^ 0.23"
+image = "^ 0.24"
 lazy_static = "^ 1"
 log = "^ 0.4"
-nalgebra = "^ 0.29"
+nalgebra = "^ 0.31"
 num-traits = "^ 0.2"
-parking_lot = "^ 0.11"
+parking_lot = "^ 0.12"
 static_assertions = "^ 1"
 wgpu = { version = "^ 0.12", features = ["spirv"] }
-zerocopy = "^ 0.5"
+zerocopy = "^ 0.6"
 gpu = { path = "../../system/gpu" }
 runtime = { path = "../../util/runtime" }
 

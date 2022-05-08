@@ -35,7 +35,8 @@ where
     Unit: LengthUnit,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:0.4}{}^2", self.v, Unit::UNIT_SHORT_NAME)
+        fmt::Display::fmt(&self.v.0, f)?;
+        write!(f, "{}^3", Unit::UNIT_SHORT_NAME)
     }
 }
 

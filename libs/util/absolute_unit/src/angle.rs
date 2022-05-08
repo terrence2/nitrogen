@@ -18,7 +18,7 @@ use crate::{
     Scalar, Unit,
 };
 use ordered_float::OrderedFloat;
-use std::{fmt, fmt::Debug, marker::PhantomData, ops::Neg};
+use std::{fmt, fmt::Debug, marker::PhantomData};
 
 pub trait AngleUnit: Unit + Copy + Debug + Eq + PartialEq + 'static {
     const RADIANS_IN_UNIT: f64;
@@ -127,7 +127,8 @@ where
     Unit: AngleUnit,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:0.4}{}", self.v, Unit::UNIT_SUFFIX)
+        fmt::Display::fmt(&self.v.0, f)?;
+        write!(f, "{}", Unit::UNIT_SUFFIX)
     }
 }
 
@@ -141,18 +142,6 @@ where
             v: v.v * UnitA::RADIANS_IN_UNIT / UnitB::RADIANS_IN_UNIT,
             phantom_1: PhantomData,
         }
-    }
-}
-
-impl<Unit> Neg for Angle<Unit>
-where
-    Unit: AngleUnit,
-{
-    type Output = Self;
-
-    fn neg(mut self) -> Self::Output {
-        self.v = -self.v;
-        self
     }
 }
 

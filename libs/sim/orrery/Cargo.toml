@@ -7,11 +7,11 @@ edition = "2021"
 [dependencies]
 chrono = "^ 0.4"
 anyhow = { version = "^ 1", features = ["backtrace"] }
-bevy_ecs = { version = "^ 0.6", features = ["trace"] }
+bevy_ecs = { version = "^ 0.7", features = ["trace"] }
 lazy_static = "^ 1"
 log = "^ 0.4"
-nalgebra = "^ 0.29"
-ordered-float = "^ 2"
+nalgebra = "^ 0.31"
+ordered-float = "^ 3"
 animate = { path = "../../sim/animate" }
 nitrous = { path = "../../util/nitrous" }
 runtime = { path = "../../util/runtime" }

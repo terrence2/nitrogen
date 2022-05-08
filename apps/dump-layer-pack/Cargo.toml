@@ -8,5 +8,5 @@ edition = "2021"
 anyhow = { version = "^ 1", features = ["backtrace"] }
 memmap = "^ 0.7"
 structopt = "^ 0.3"
-zerocopy = "^ 0.5"
+zerocopy = "^ 0.6"
 terrain = { path = "../../libs/wgpu-buffer/terrain" }

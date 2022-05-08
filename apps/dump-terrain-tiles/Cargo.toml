@@ -8,14 +8,14 @@ edition = "2021"
 approx = "^ 0.5"
 bzip2 = "^ 0.4"
 anyhow = { version = "^ 1", features = ["backtrace"] }
-image = "^ 0.23"
+image = "^ 0.24"
 json = "^ 0.12"
 memmap = "^ 0.7"
-nalgebra = "^ 0.29"
-parking_lot = "^ 0.11"
-rayon = "= 1.4.0"
+nalgebra = "^ 0.31"
+parking_lot = "^ 0.12"
+rayon = "^ 1.5"
 structopt = "^ 0.3"
-zerocopy = "^ 0.5"
+zerocopy = "^ 0.6"
 absolute_unit = { path = "../../libs/util/absolute_unit" }
 geodesy = { path = "../../libs/util/geodesy" }
 terrain = { path = "../../libs/wgpu-buffer/terrain" }

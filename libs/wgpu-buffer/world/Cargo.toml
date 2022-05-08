@@ -7,9 +7,9 @@ edition = "2021"
 
 [dependencies]
 anyhow = { version = "^ 1", features = ["backtrace"] }
-bevy_ecs = { version = "^ 0.6", features = ["trace"] }
+bevy_ecs = { version = "^ 0.7", features = ["trace"] }
 log = "^ 0.4"
-parking_lot = "^ 0.11"
+parking_lot = "^ 0.12"
 wgpu = { version = "^ 0.12", features = ["spirv"] }
 atmosphere = { path = "../../wgpu-buffer/atmosphere" }
 fullscreen = { path = "../../wgpu-buffer/fullscreen" }

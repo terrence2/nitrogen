@@ -5,16 +5,16 @@ edition = "2021"
 
 [dependencies]
 anyhow = { version = "^ 1", features = ["backtrace"] }
-bevy_ecs = { version = "^ 0.6", features = ["trace"] }
+bevy_ecs = { version = "^ 0.7", features = ["trace"] }
 log = "^ 0.4"
-once_cell = "^ 1.5"
-ordered-float = "^ 2"
-smallvec = "^ 1.4"
-strsim = "^ 0.8"
+once_cell = "^ 1"
+ordered-float = "^ 3"
+smallvec = "^ 1"
+strsim = "^ 0.10"
 unicase = "^ 2.6"
 input = { path = "../../system/input" }
 nitrous = { path = "../../util/nitrous" }
 runtime = { path = "../../util/runtime" }
 
 [dev-dependencies]
-env_logger = "^ 0.8"
+env_logger = "^ 0.9"
