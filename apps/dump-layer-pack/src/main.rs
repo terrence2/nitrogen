@@ -57,8 +57,9 @@ fn main() -> Result<()> {
         "index: {} bytes",
         header.tile_start() - header.index_start()
     );
-    let items =
-        LayerPackIndexItem::overlay_slice(&mmap[header.index_start()..header.tile_start()])?;
+    let items = LayerPackIndexItem::overlay_slice(
+        &mmap[header.index_start() as usize..header.tile_start() as usize],
+    )?;
     for item in items {
         if let Some(latitude) = opt.latitude {
             if item.base_lat_as() != latitude {

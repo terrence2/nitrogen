@@ -32,28 +32,30 @@ use zerocopy::AsBytes;
 // pack them up by layers, leaving our catalog fast and allowing us to reference
 // tiles by coordinate and level, rather than by hashing a string.
 
-packed_struct!(LayerPackHeader {
-    _0 => magic: [u8; 3],
-    _1 => version: u8,
-    _2 => angular_extent_as: i32,
-    _3 => tile_count: u32,
-    _4 => tile_level: u16,
-    _5 => tile_compression: u16,
-    _6 => index_start: u32 as usize,
-    _7 => tile_start: u32 as usize
+#[packed_struct]
+pub struct LayerPackHeader {
+    magic: [u8; 3],
+    version: u8,
+    angular_extent_as: i32,
+    tile_count: u32,
+    tile_level: u16,
+    tile_compression: u16,
+    index_start: u32,
+    tile_start: u32,
     // Followed immediately by index data at file[index_start..tile_start]
     // Followed by tile data at files[tile_start..] with offsets determined by
-});
+}
 
-packed_struct!(LayerPackIndexItem {
-    _0 => base_lat_as: i32,
-    _1 => base_lon_as: i32,
-    _3 => index_in_parent: u32,
+#[packed_struct]
+pub struct LayerPackIndexItem {
+    base_lat_as: i32,
+    base_lon_as: i32,
+    index_in_parent: u32,
 
     // Relative to file start, no offset needed.
-    _4 => tile_start: u64,
-    _5 => tile_end: u64
-});
+    tile_start: u64,
+    tile_end: u64,
+}
 
 const HEADER_MAGIC: [u8; 3] = [b'L', b'P', b'K'];
 const HEADER_VERSION: u8 = 1;
@@ -77,15 +79,16 @@ impl LayerPack {
         ensure!(header.magic() == HEADER_MAGIC);
         ensure!(header.version() == HEADER_VERSION);
         ensure!(
-            (header.tile_start() - header.index_start()) % mem::size_of::<LayerPackIndexItem>()
+            (header.tile_start() - header.index_start()) as usize
+                % mem::size_of::<LayerPackIndexItem>()
                 == 0
         );
         Ok(Self {
             layer_pack_fid,
             angular_extent_as: header.angular_extent_as(),
             terrain_level: TerrainLevel::new(header.tile_level() as usize),
-            index_extent: header.index_start()..header.tile_start(),
-            tile_count: (header.tile_start() - header.index_start())
+            index_extent: header.index_start() as usize..header.tile_start() as usize,
+            tile_count: (header.tile_start() - header.index_start()) as usize
                 / mem::size_of::<LayerPackIndexItem>(),
             tile_compression: TileCompression::from_u16(header.tile_compression()),
         })
@@ -140,16 +143,16 @@ impl LayerPackBuilder {
         // Emit the header
         let index_start = mem::size_of::<LayerPackHeader>();
         let tile_start = index_start + mem::size_of::<LayerPackIndexItem>() * tile_count;
-        let header = LayerPackHeader::build(
-            HEADER_MAGIC,
-            HEADER_VERSION,
+        let header = LayerPackHeader {
+            magic: HEADER_MAGIC,
+            version: HEADER_VERSION,
             angular_extent_as,
-            tile_count as u32,
-            tile_level as u16,
-            tile_compression as u16,
-            index_start as u32,
-            tile_start as u32,
-        )?;
+            tile_count: tile_count as u32,
+            tile_level: tile_level as u16,
+            tile_compression: tile_compression as u16,
+            index_start: index_start as u32,
+            tile_start: tile_start as u32,
+        };
         stream.write_all(header.as_bytes())?;
 
         Ok(Self {
@@ -167,13 +170,13 @@ impl LayerPackBuilder {
         }
 
         self.stream.seek(SeekFrom::Start(self.index_cursor))?;
-        let index_item = LayerPackIndexItem::build(
-            base.0,
-            base.1,
+        let index_item = LayerPackIndexItem {
+            base_lat_as: base.0,
+            base_lon_as: base.1,
             index_in_parent,
-            self.tile_cursor,
-            self.tile_cursor + data.len() as u64,
-        )?;
+            tile_start: self.tile_cursor,
+            tile_end: self.tile_cursor + data.len() as u64,
+        };
         self.stream.write_all(index_item.as_bytes())?;
         self.index_cursor += mem::size_of::<LayerPackIndexItem>() as u64;
 
