@@ -23,20 +23,21 @@ use crate::{
     WidgetInfo,
 };
 use anyhow::Result;
+use bevy_ecs::prelude::*;
 use gpu::Gpu;
 use input::InputEvent;
 use parking_lot::RwLock;
 use runtime::ScriptHerder;
 use std::{sync::Arc, time::Instant};
 use window::{
-    size::{AbsSize, Size},
+    size::{AbsSize, RelSize, Size},
     Window,
 };
 
 #[derive(Debug)]
 pub struct Expander {
-    header: Arc<RwLock<Label>>,
-    child: Arc<RwLock<dyn Widget>>,
+    header: Label,
+    child: Entity,
     expanded: bool,
 
     border: Border<Size>,
@@ -50,12 +51,9 @@ pub struct Expander {
 }
 
 impl Expander {
-    pub fn new_with_child<S: AsRef<str> + Into<String>>(
-        s: S,
-        child: Arc<RwLock<dyn Widget>>,
-    ) -> Self {
+    pub fn new_with_child<S: AsRef<str> + Into<String>>(s: S, child: Entity) -> Self {
         Expander {
-            header: Label::new(s).wrapped(),
+            header: Label::new(s),
             child,
             expanded: false,
 
@@ -98,78 +96,79 @@ impl Expander {
 
 impl Labeled for Expander {
     fn set_text<S: AsRef<str> + Into<String>>(&mut self, content: S) {
-        self.header.write().set_text(content);
+        self.header.set_text(content);
     }
 
     fn set_size(&mut self, size: Size) {
-        self.header.write().set_size(size);
+        self.header.set_size(size);
     }
 
     fn set_color(&mut self, color: Color) {
-        self.header.write().set_color(color);
+        self.header.set_color(color);
     }
 
     fn set_font(&mut self, font_id: FontId) {
-        self.header.write().set_font(font_id);
+        self.header.set_font(font_id);
     }
 }
 
 impl Widget for Expander {
-    fn measure(&mut self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>> {
+    fn measure(&self, win: &Window, font_context: &FontContext) -> Result<Extent<Size>> {
         // Measure label and add border and padding from the box.
-        let mut extent = self.header.write().measure(win, font_context)?.as_abs(win);
+        let mut extent = self.header.measure(win, font_context)?.as_abs(win);
         extent.expand_with_border(&self.border.as_abs(win), win);
         extent.expand_with_border(&self.padding.as_abs(win), win);
 
         // Copy the full area to what we use for hit testing.
-        self.header_region.set_extent(extent);
+        // FIXME
+        // self.header_region.set_extent(extent);
 
         // If we are expanded, add the full size of the child.
         if self.expanded {
             // TODO: what about internal border / line between?
-            let child = self.child.write().measure(win, font_context)?.as_abs(win);
-            *extent.width_mut() = extent.width().max(&child.width());
-            *extent.height_mut() = extent.height() + child.height();
+            // let child = self.child.write().measure(win, font_context)?.as_abs(win);
+            // *extent.width_mut() = extent.width().max(&child.width());
+            // *extent.height_mut() = extent.height() + child.height();
         }
         Ok(extent.into())
     }
 
-    fn layout(
-        &mut self,
-        now: Instant,
-        region: Region<Size>,
-        win: &Window,
-        font_context: &mut FontContext,
-    ) -> Result<()> {
-        let region = region.as_abs(win);
-
-        // Put the expanded content at the bottom of the box.
-        let mut extent = *region.extent();
-        *extent.height_mut() = extent.height() - self.header_region.extent().height();
-        if self.expanded {
-            self.child
-                .write()
-                .layout(now, region.with_extent(extent).into(), win, font_context)?;
-        }
-
-        // Recompute position from top using the header.
-        let mut pos = *region.position();
-        *pos.bottom_mut() = pos.bottom() + region.extent().height();
-        *pos.bottom_mut() = pos.bottom() - self.header_region.extent().height();
-        self.header_region.set_position(pos);
-        pos.offset_by_border(&self.border.as_abs(win), win);
-        pos.offset_by_border(&self.padding.as_abs(win), win);
-        self.header.write().layout(
-            now,
-            Region::new(pos.into(), (*self.header_region.extent()).into()),
-            win,
-            font_context,
-        )?;
-
-        self.allocated_region = region;
-
-        Ok(())
-    }
+    // fn layout(
+    //     &mut self,
+    //     now: Instant,
+    //     region: Region<RelSize>,
+    //     win: &Window,
+    //     font_context: &mut FontContext,
+    // ) -> Result<()> {
+    //     let region = region.as_abs(win);
+    //
+    //     // Put the expanded content at the bottom of the box.
+    //     let mut extent = *region.extent();
+    //     *extent.height_mut() = extent.height() - self.header_region.extent().height();
+    //     if self.expanded {
+    //         self.child
+    //             .write()
+    //             .layout(now, region.with_extent(extent).into(), win, font_context)?;
+    //     }
+    //
+    //     // Recompute position from top using the header.
+    //     let mut pos = *region.position();
+    //     *pos.bottom_mut() = pos.bottom() + region.extent().height();
+    //     *pos.bottom_mut() = pos.bottom() - self.header_region.extent().height();
+    //     self.header_region.set_position(pos);
+    //     pos.offset_by_border(&self.border.as_abs(win), win);
+    //     pos.offset_by_border(&self.padding.as_abs(win), win);
+    //     self.header.write().layout(
+    //         now,
+    //         Region::new(pos.into(), (*self.header_region.extent()).into()),
+    //         win,
+    //         font_context,
+    //     )?;
+    //
+    //     self.allocated_region = region;
+    //
+    //     Ok(())
+    // }
 
     fn upload(
         &self,
@@ -180,10 +179,10 @@ impl Widget for Expander {
     ) -> Result<()> {
         let widget_info_index = context.push_widget(&self.info);
 
-        self.header.read().upload(now, win, gpu, context)?;
-        if self.expanded {
-            self.child.read().upload(now, win, gpu, context)?;
-        }
+        self.header.upload(now, win, gpu, context)?;
+        // if self.expanded {
+        //     self.child.read().upload(now, win, gpu, context)?;
+        // }
 
         if let Some(border_color) = self.border_color {
             WidgetVertex::push_quad_ext(

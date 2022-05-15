@@ -12,9 +12,9 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-mod box_packing;
 mod color;
 mod font_context;
+mod layout;
 mod paint_context;
 mod region;
 mod text_run;
@@ -24,17 +24,16 @@ mod widget_vertex;
 mod widgets;
 
 pub use crate::{
-    box_packing::{PositionH, PositionV},
     color::Color,
     font_context::FontId,
+    layout::{LayoutNode, PositionH, PositionV},
     paint_context::PaintContext,
     region::{Border, Extent, Position, Region},
-    widget::{Labeled, Widget, WidgetFocus},
+    widget::{Labeled, Widget, WidgetComponent, WidgetFocus},
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,
     widgets::{
-        button::Button, expander::Expander, float_box::FloatBox, label::Label, line_edit::LineEdit,
-        terminal::Terminal, text_edit::TextEdit, vertical_box::VerticalBox,
+        button::Button, expander::Expander, label::Label, line_edit::LineEdit, text_edit::TextEdit,
     },
 };
 
@@ -43,7 +42,7 @@ use animate::TimeStep;
 use anyhow::{ensure, Result};
 use bevy_ecs::prelude::*;
 use event_mapper::EventMapperStep;
-use font_common::{FontAdvance, FontInterface};
+use font_common::{Font, FontAdvance};
 use font_ttf::TtfFont;
 use gpu::{Gpu, GpuStep};
 use input::{ElementState, InputEvent, InputEventVec, InputFocus, ModifiersState, VirtualKeyCode};
@@ -113,12 +112,12 @@ where
     T: InputFocus,
 {
     // Widget state.
-    root: Arc<RwLock<FloatBox>>,
-    paint_context: PaintContext,
+    root: LayoutNode,
+    // paint_context: PaintContext,
     cursor_position: Position<AbsSize>,
 
     // Auto-inserted widgets.
-    terminal: Arc<RwLock<Terminal>>,
+    // terminal: Arc<RwLock<Terminal>>,
     request_toggle_terminal: bool,
     show_terminal: bool,
 
@@ -140,8 +139,26 @@ where
     T: InputFocus,
 {
     fn init(runtime: &mut Runtime) -> Result<()> {
+        let mut paint_context = PaintContext::new(runtime.resource::<Gpu>());
+        let fira_mono = TtfFont::from_bytes(FIRA_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
+        let fira_sans = TtfFont::from_bytes(FIRA_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
+        let dejavu_mono = TtfFont::from_bytes(DEJAVU_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
+        let dejavu_sans = TtfFont::from_bytes(DEJAVU_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
+        paint_context.add_font("sans", dejavu_sans.clone());
+        paint_context.add_font("mono", fira_mono.clone());
+        paint_context.add_font("dejavu-sans", dejavu_sans);
+        paint_context.add_font("dejavu-mono", dejavu_mono);
+        paint_context.add_font("fira-sans", fira_sans);
+        paint_context.add_font("fira-mono", fira_mono);
+        runtime.insert_named_resource("paint", paint_context);
+
         let state_dir = runtime.resource::<AppDirs>().state_dir.clone();
-        let widget = WidgetBuffer::<T>::new(&mut runtime.resource_mut::<Gpu>(), &state_dir)?;
+        let widget = WidgetBuffer::<T>::new(
+            LayoutNode::new_float("root", runtime.heap_mut())?,
+            &runtime.resource::<Gpu>(),
+            &state_dir,
+            &runtime.resource::<PaintContext>(),
+        )?;
         runtime.insert_named_resource("widget", widget);
 
         runtime.add_input_system(
@@ -207,20 +224,13 @@ where
     const MAX_BACKGROUND_VERTICES: usize = Self::MAX_WIDGETS * 128 * 6; // note: rounded corners
     const MAX_IMAGE_VERTICES: usize = Self::MAX_WIDGETS * 4 * 6;
 
-    pub fn new(gpu: &mut Gpu, state_dir: &Path) -> Result<Self> {
+    pub fn new(
+        root: LayoutNode,
+        gpu: &Gpu,
+        state_dir: &Path,
+        paint_context: &PaintContext,
+    ) -> Result<Self> {
         trace!("WidgetBuffer::new");
-
-        let mut paint_context = PaintContext::new(gpu);
-        let fira_mono = TtfFont::from_bytes(FIRA_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
-        let fira_sans = TtfFont::from_bytes(FIRA_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
-        let dejavu_mono = TtfFont::from_bytes(DEJAVU_MONO_REGULAR_TTF_DATA, FontAdvance::Mono)?;
-        let dejavu_sans = TtfFont::from_bytes(DEJAVU_SANS_REGULAR_TTF_DATA, FontAdvance::Sans)?;
-        paint_context.add_font("sans", dejavu_sans.clone());
-        paint_context.add_font("mono", fira_mono.clone());
-        paint_context.add_font("dejavu-sans", dejavu_sans);
-        paint_context.add_font("dejavu-mono", dejavu_mono);
-        paint_context.add_font("fira-sans", fira_sans);
-        paint_context.add_font("fira-mono", fira_mono);
 
         // Create the core widget info buffer.
         let widget_info_buffer_size =
@@ -290,18 +300,18 @@ where
                     ],
                 });
 
-        let root = FloatBox::new();
-        let terminal = Terminal::new(&mut paint_context.font_context, state_dir, gpu)?
-            .with_visible(false)
-            .wrapped();
-        root.write().add_child("terminal", terminal.clone());
+        // let root = FloatBox::new();
+        // let terminal = Terminal::new(&mut paint_context.font_context, state_dir, gpu)?
+        //     .with_visible(false)
+        //     .wrapped();
+        // root.write().add_child("terminal", terminal.clone());
 
         Ok(Self {
             root,
-            paint_context,
+            // paint_context,
             cursor_position: Position::origin(),
 
-            terminal,
+            // terminal,
             request_toggle_terminal: false,
             show_terminal: false,
 
@@ -317,8 +327,18 @@ where
         })
     }
 
-    pub fn root_container(&self) -> Arc<RwLock<FloatBox>> {
-        self.root.clone()
+    pub fn background_vertex_buffer(&self, paint: &PaintContext) -> wgpu::BufferSlice {
+        self.background_vertex_buffer
+            .slice(0u64..(mem::size_of::<WidgetVertex>() * paint.background_vertex_count()) as u64)
+    }
+
+    pub fn text_vertex_buffer(&self, paint: &PaintContext) -> wgpu::BufferSlice {
+        self.text_vertex_buffer
+            .slice(0u64..(mem::size_of::<WidgetVertex>() * paint.text_vertex_count()) as u64)
+    }
+
+    pub fn root_mut(&mut self) -> &mut LayoutNode {
+        &mut self.root
     }
 
     // #[method]
@@ -326,37 +346,33 @@ where
     //     Value::Module(self.root.clone())
     // }
 
-    pub fn add_font<S: Borrow<str> + Into<String>>(
-        &mut self,
-        font_name: S,
-        font: Arc<RwLock<dyn FontInterface>>,
-    ) {
-        self.paint_context.add_font(font_name, font);
-    }
+    // pub fn add_font<S: Borrow<str> + Into<String>>(&mut self, font_name: S, font: Font) {
+    //     self.paint_context.add_font(font_name, font);
+    // }
 
-    pub fn font_context(&self) -> &FontContext {
-        &self.paint_context.font_context
-    }
+    // pub fn font_context(&self) -> &FontContext {
+    //     &self.paint_context.font_context
+    // }
 
-    #[method]
-    pub fn font_id_for_name(&self, font_name: &str) -> Value {
-        self.paint_context
-            .font_context
-            .font_id_for_name(font_name)
-            .as_value()
-    }
+    // #[method]
+    // pub fn font_id_for_name(&self, font_name: &str) -> Value {
+    //     self.paint_context
+    //         .font_context
+    //         .font_id_for_name(font_name)
+    //         .as_value()
+    // }
 
-    #[method]
-    pub fn dump_glyphs(&mut self) -> Result<()> {
-        self.paint_context.dump_glyphs()
-    }
+    // #[method]
+    // pub fn dump_glyphs(&mut self) -> Result<()> {
+    //     self.paint_context.dump_glyphs()
+    // }
 
-    #[method]
-    pub fn set_terminal_font_size(&mut self, size: i64) {
-        self.terminal
-            .write()
-            .set_font_size(AbsSize::Pts(size as f32))
-    }
+    // #[method]
+    // pub fn set_terminal_font_size(&mut self, size: i64) {
+    //     self.terminal
+    //         .write()
+    //         .set_font_size(AbsSize::Pts(size as f32))
+    // }
 
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.bind_group_layout
@@ -365,27 +381,6 @@ where
     /// Must only be called after first upload
     pub fn bind_group(&self) -> &wgpu::BindGroup {
         self.bind_group.as_ref().unwrap()
-    }
-
-    pub fn background_vertex_buffer(&self) -> wgpu::BufferSlice {
-        self.background_vertex_buffer.slice(
-            0u64..(mem::size_of::<WidgetVertex>() * self.paint_context.background_pool.len())
-                as u64,
-        )
-    }
-
-    pub fn background_vertex_range(&self) -> Range<u32> {
-        0u32..self.paint_context.background_pool.len() as u32
-    }
-
-    pub fn text_vertex_buffer(&self) -> wgpu::BufferSlice {
-        self.text_vertex_buffer.slice(
-            0u64..(mem::size_of::<WidgetVertex>() * self.paint_context.text_pool.len()) as u64,
-        )
-    }
-
-    pub fn text_vertex_range(&self) -> Range<u32> {
-        0u32..self.paint_context.text_pool.len() as u32
     }
 
     #[method]
@@ -419,19 +414,19 @@ where
         mut input_focus: ResMut<T>,
         mut widgets: ResMut<WidgetBuffer<T>>,
     ) {
-        if events
-            .iter()
-            .any(|event| widgets.is_toggle_terminal_event(event))
-        {
-            widgets.request_toggle_terminal = true;
-        }
-
-        if widgets.request_toggle_terminal {
-            widgets.request_toggle_terminal = false;
-            input_focus.toggle_terminal();
-            widgets.show_terminal = !widgets.show_terminal;
-            widgets.terminal.write().set_visible(widgets.show_terminal);
-        }
+        // if events
+        //     .iter()
+        //     .any(|event| widgets.is_toggle_terminal_event(event))
+        // {
+        //     widgets.request_toggle_terminal = true;
+        // }
+        //
+        // if widgets.request_toggle_terminal {
+        //     widgets.request_toggle_terminal = false;
+        //     input_focus.toggle_terminal();
+        //     widgets.show_terminal = !widgets.show_terminal;
+        //     widgets.terminal.write().set_visible(widgets.show_terminal);
+        // }
     }
 
     pub fn sys_handle_input_events(
@@ -465,16 +460,16 @@ where
                     AbsSize::from_px(win.height() as f32 - y as f32),
                 );
             }
-            self.root_container().write().handle_event(
-                event,
-                if focus.is_terminal_focused() {
-                    WidgetFocus::Terminal
-                } else {
-                    WidgetFocus::Game
-                },
-                self.cursor_position,
-                herder,
-            )?;
+            // self.root_container().write().handle_event(
+            //     event,
+            //     if focus.is_terminal_focused() {
+            //         WidgetFocus::Terminal
+            //     } else {
+            //         WidgetFocus::Game
+            //     },
+            //     self.cursor_position,
+            //     herder,
+            // )?;
         }
         Ok(())
     }
@@ -484,11 +479,11 @@ where
             let events = world.get_resource::<InputEventVec>().unwrap().to_owned();
             world.resource_scope(|world, widgets: Mut<WidgetBuffer<T>>| {
                 for event in events {
-                    widgets
-                        .terminal
-                        .write()
-                        .handle_terminal_events(&event, HeapMut::wrap(world))
-                        .ok();
+                    // widgets
+                    //     .terminal
+                    //     .write()
+                    //     .handle_terminal_events(&event, HeapMut::wrap(world))
+                    //     .ok();
                 }
             })
         }
@@ -498,10 +493,10 @@ where
         widgets: Res<WidgetBuffer<T>>,
         completions: Res<ScriptCompletions>,
     ) {
-        widgets
-            .terminal
-            .write()
-            .report_script_completions(&completions);
+        // widgets
+        //     .terminal
+        //     .write()
+        //     .report_script_completions(&completions);
     }
 
     fn sys_layout_widgets(
@@ -514,15 +509,15 @@ where
 
     fn layout_widgets(&mut self, now: Instant, win: &Window) -> Result<()> {
         // Perform recursive layout algorithm against retained state.
-        self.root.write().layout(
-            now,
-            Region::new(
-                Position::origin(),
-                Extent::new(Size::from_percent(100.), Size::from_percent(100.)),
-            ),
-            win,
-            &mut self.paint_context.font_context,
-        )?;
+        // self.root.write().layout(
+        //     now,
+        //     Region::new(
+        //         Position::origin(),
+        //         Extent::new(Size::from_percent(100.), Size::from_percent(100.)),
+        //     ),
+        //     win,
+        //     &mut self.paint_context.font_context,
+        // )?;
 
         Ok(())
     }
@@ -549,11 +544,12 @@ where
         encoder: &mut wgpu::CommandEncoder,
     ) -> Result<()> {
         // Draw into the paint context.
-        self.paint_context.reset_for_frame();
-        self.root
-            .read()
-            .upload(now, win, gpu, &mut self.paint_context)?;
+        // self.paint_context.reset_for_frame();
+        // self.root
+        //     .read()
+        //     .upload(now, win, gpu, &mut self.paint_context)?;
 
+        /*
         if !self.paint_context.widget_info_pool.is_empty() {
             ensure!(self.paint_context.widget_info_pool.len() <= Self::MAX_WIDGETS);
             gpu.upload_slice_to(
@@ -621,19 +617,20 @@ where
                 ],
             }),
         );
+         */
 
         Ok(())
     }
 
     fn sys_handle_dump_texture(mut widgets: ResMut<WidgetBuffer<T>>, mut gpu: ResMut<Gpu>) {
-        widgets
-            .paint_context
-            .handle_dump_texture(&mut gpu)
-            .map_err(|e| {
-                error!("Widgets::handle_dump_texture: {}", e);
-                e
-            })
-            .ok();
+        // widgets
+        //     .paint_context
+        //     .handle_dump_texture(&mut gpu)
+        //     .map_err(|e| {
+        //         error!("Widgets::handle_dump_texture: {}", e);
+        //         e
+        //     })
+        //     .ok();
     }
 
     fn sys_maintain_font_atlas(
@@ -641,9 +638,9 @@ where
         gpu: Res<Gpu>,
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
-        if let Some(encoder) = maybe_encoder.into_inner() {
-            widgets.paint_context.maintain_font_atlas(&gpu, encoder);
-        }
+        // if let Some(encoder) = maybe_encoder.into_inner() {
+        //     widgets.paint_context.maintain_font_atlas(&gpu, encoder);
+        // }
     }
 }
 
@@ -660,22 +657,22 @@ mod test {
             .insert_resource(TimeStep::new_60fps())
             .load_extension::<WidgetBuffer<DemoFocus>>()?;
 
-        let label = Label::new(
-            "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\
-            สิบสองกษัตริย์ก่อนหน้าแลถัดไป       สององค์ไซร้โง่เขลาเบาปัญญา\
-            Зарегистрируйтесь сейчас на Десятую Международную Конференцию по\
-            გთხოვთ ახლავე გაიაროთ რეგისტრაცია Unicode-ის მეათე საერთაშორისო\
-            ∮ E⋅da = Q,  n → ∞, ∑ f(i) = ∏ g(i), ∀x∈ℝ: ⌈x⌉ = −⌊−x⌋, α ∧ ¬β = ¬(¬α ∨ β)\
-            Οὐχὶ ταὐτὰ παρίσταταί μοι γιγνώσκειν, ὦ ἄνδρες ᾿Αθηναῖοι,\
-            ði ıntəˈnæʃənəl fəˈnɛtık əsoʊsiˈeıʃn\
-            Y [ˈʏpsilɔn], Yen [jɛn], Yoga [ˈjoːgɑ]",
-        )
-        .wrapped();
-        runtime
-            .resource_mut::<WidgetBuffer<DemoFocus>>()
-            .root_container()
-            .write()
-            .add_child("label", label);
+        // let label = Label::new(
+        //     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\
+        //     สิบสองกษัตริย์ก่อนหน้าแลถัดไป       สององค์ไซร้โง่เขลาเบาปัญญา\
+        //     Зарегистрируйтесь сейчас на Десятую Международную Конференцию по\
+        //     გთხოვთ ახლავე გაიაროთ რეგისტრაცია Unicode-ის მეათე საერთაშორისო\
+        //     ∮ E⋅da = Q,  n → ∞, ∑ f(i) = ∏ g(i), ∀x∈ℝ: ⌈x⌉ = −⌊−x⌋, α ∧ ¬β = ¬(¬α ∨ β)\
+        //     Οὐχὶ ταὐτὰ παρίσταταί μοι γιγνώσκειν, ὦ ἄνδρες ᾿Αθηναῖοι,\
+        //     ði ıntəˈnæʃənəl fəˈnɛtık əsoʊsiˈeıʃn\
+        //     Y [ˈʏpsilɔn], Yen [jɛn], Yoga [ˈjoːgɑ]",
+        // )
+        // .wrapped();
+        // runtime
+        //     .resource_mut::<WidgetBuffer<DemoFocus>>()
+        //     .root_container()
+        //     .write()
+        //     .add_child("label", label);
 
         runtime.run_frame_once();
 

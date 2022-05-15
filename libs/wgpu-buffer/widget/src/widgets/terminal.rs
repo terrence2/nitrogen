@@ -38,7 +38,7 @@ use std::{
     time::Instant,
 };
 use window::{
-    size::{AbsSize, Size},
+    size::{AbsSize, RelSize, Size},
     Window,
 };
 
@@ -480,18 +480,18 @@ impl Terminal {
 }
 
 impl Widget for Terminal {
-    fn measure(&mut self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>> {
+    fn measure(&self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>> {
         if !self.visible {
             return Ok(Extent::zero());
         }
 
-        self.container.write().measure(win, font_context)
+        self.container.read().measure(win, font_context)
     }
 
     fn layout(
         &mut self,
         now: Instant,
-        region: Region<Size>,
+        region: Region<RelSize>,
         win: &Window,
         font_context: &mut FontContext,
     ) -> Result<()> {

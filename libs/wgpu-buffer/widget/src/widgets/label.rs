@@ -18,17 +18,21 @@ use crate::{
     paint_context::PaintContext,
     region::{Extent, Position, Region},
     text_run::TextRun,
-    widget::{Labeled, Widget},
+    widget::{Labeled, Widget, WidgetComponent},
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
+use bevy_ecs::prelude::*;
 use gpu::Gpu;
-use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
+use nitrous::{inject_nitrous_resource, method, HeapMut, NitrousResource, Value};
 use parking_lot::RwLock;
 use std::{sync::Arc, time::Instant};
-use window::{size::Size, Window};
+use window::{
+    size::{RelSize, Size},
+    Window,
+};
 
-#[derive(Debug, NitrousResource)]
+#[derive(Debug)]
 pub struct Label {
     line: TextRun,
 
@@ -37,7 +41,6 @@ pub struct Label {
     allocated_extent: Extent<Size>,
 }
 
-#[inject_nitrous_resource]
 impl Label {
     pub fn new<S: AsRef<str> + Into<String>>(content: S) -> Self {
         Self {
@@ -54,22 +57,22 @@ impl Label {
         self
     }
 
-    pub fn wrapped(self) -> Arc<RwLock<Self>> {
-        Arc::new(RwLock::new(self))
+    pub fn wrapped(self, name: &str, mut heap: HeapMut) -> Result<Entity> {
+        Ok(heap
+            .spawn_named(name)?
+            .insert_named(WidgetComponent::new(self))?
+            .id())
     }
 
-    #[method]
     fn show(&mut self, content: &str) {
         self.set_text(content);
     }
 
-    #[method]
     fn set_font_by_id(&mut self, font_id: Value) -> Result<()> {
         self.set_font(FontId::from_value(font_id)?);
         Ok(())
     }
 
-    #[method]
     fn set_font_size(&mut self, size: Value) -> Result<()> {
         self.set_size(Size::from_pts(size.to_float()? as f32));
         Ok(())
@@ -107,27 +110,28 @@ impl Labeled for Label {
 }
 
 impl Widget for Label {
-    fn measure(&mut self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>> {
-        self.metrics = self.line.measure(win, font_context)?.to_owned();
+    fn measure(&self, win: &Window, font_context: &FontContext) -> Result<Extent<Size>> {
+        // FIXME: why were we caching metrics?
+        let metrics = self.line.measure(win, font_context)?.to_owned();
         Ok(Extent::<Size>::new(
-            self.metrics.width.into(),
-            (self.metrics.height - self.metrics.descent).into(),
+            metrics.width.into(),
+            (metrics.height - metrics.descent).into(),
         ))
     }
 
-    fn layout(
-        &mut self,
-        _now: Instant,
-        region: Region<Size>,
-        win: &Window,
-        _font_context: &mut FontContext,
-    ) -> Result<()> {
-        let mut position = region.position().as_abs(win);
-        *position.bottom_mut() = position.bottom() - self.metrics.descent;
-        self.allocated_position = position.into();
-        self.allocated_extent = *region.extent();
-        Ok(())
-    }
+    // fn layout(
+    //     &mut self,
+    //     _now: Instant,
+    //     region: Region<RelSize>,
+    //     win: &Window,
+    //     _font_context: &mut FontContext,
+    // ) -> Result<()> {
+    //     let mut position = region.position().as_abs(win);
+    //     *position.bottom_mut() = position.bottom() - self.metrics.descent;
+    //     self.allocated_position = position.into();
+    //     self.allocated_extent = *region.extent();
+    //     Ok(())
+    // }
 
     fn upload(
         &self,

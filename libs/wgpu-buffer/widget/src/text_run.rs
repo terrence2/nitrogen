@@ -22,12 +22,39 @@ use crate::{
 use anyhow::Result;
 use gpu::Gpu;
 use input::ModifiersState;
+use parking_lot::{Mutex, MutexGuard};
 use smallvec::{smallvec, SmallVec};
-use std::{cmp::Ordering, ops::Range};
+use std::{cell::RefCell, cmp::Ordering, ops::Range};
 use window::{
     size::{AbsSize, LeftBound, Size},
     Window,
 };
+
+#[derive(Debug, Default)]
+pub struct SpanCache {
+    cached_metrics: Option<TextSpanMetrics>,
+    cached_layout: Vec<WidgetVertex>,
+}
+
+impl SpanCache {
+    fn mark_dirty(&mut self) {
+        self.cached_metrics = None;
+        self.cached_layout.clear();
+    }
+
+    fn metrics(&self) -> Option<TextSpanMetrics> {
+        self.cached_metrics.clone()
+    }
+
+    pub fn set_metrics(&mut self, metrics: &TextSpanMetrics) {
+        debug_assert!(self.cached_metrics.is_none());
+        self.cached_metrics = Some(metrics.to_owned());
+    }
+
+    pub fn vertex(&self, offset: usize) -> WidgetVertex {
+        self.cached_layout[offset]
+    }
+}
 
 #[derive(Debug)]
 pub struct TextSpan {
@@ -35,8 +62,7 @@ pub struct TextSpan {
     color: Color,
     size: Size,
     font_id: FontId,
-    cached_metrics: Option<TextSpanMetrics>,
-    cached_layout: Vec<WidgetVertex>,
+    cache: Mutex<SpanCache>,
 }
 
 impl TextSpan {
@@ -46,33 +72,33 @@ impl TextSpan {
             color,
             size,
             font_id,
-            cached_metrics: None,
-            cached_layout: Vec::new(),
+            cache: Mutex::new(SpanCache::default()),
         }
     }
 
     pub fn insert_at(&mut self, s: &str, position: usize) {
         self.text.insert_str(position, s);
-        self.cached_metrics = None;
-        self.cached_layout.clear();
+        self.cache.lock().mark_dirty();
     }
 
     pub fn delete_range(&mut self, range: Range<usize>) {
         self.text.replace_range(range, "");
-        self.cached_metrics = None;
-        self.cached_layout.clear();
+        self.cache.lock().mark_dirty();
     }
 
     pub fn set_font(&mut self, font_id: FontId) {
         self.font_id = font_id;
+        self.cache.lock().mark_dirty();
     }
 
     pub fn set_size(&mut self, size: Size) {
         self.size = size;
+        self.cache.lock().mark_dirty();
     }
 
     pub fn set_color(&mut self, color: Color) {
         self.color = color;
+        self.cache.lock().mark_dirty();
     }
 
     pub fn content(&self) -> &str {
@@ -91,21 +117,20 @@ impl TextSpan {
         &self.color
     }
 
-    pub fn metrics(&self) -> Option<&TextSpanMetrics> {
-        self.cached_metrics.as_ref()
+    pub fn metrics(&self) -> Option<TextSpanMetrics> {
+        self.cache.lock().metrics()
     }
 
-    pub fn set_metrics(&mut self, metrics: &TextSpanMetrics) {
-        debug_assert!(self.cached_metrics.is_none());
-        self.cached_metrics = Some(metrics.to_owned());
+    pub fn set_metrics(&self, metrics: &TextSpanMetrics) {
+        self.cache.lock().set_metrics(metrics);
     }
 
-    pub fn layout_cache(&self) -> &Vec<WidgetVertex> {
-        &self.cached_layout
+    pub fn layout_cache_len(&self) -> usize {
+        self.cache.lock().cached_layout.len()
     }
 
-    pub fn layout_cache_mut(&mut self) -> &mut Vec<WidgetVertex> {
-        &mut self.cached_layout
+    pub fn span_cache(&self) -> MutexGuard<SpanCache> {
+        self.cache.lock()
     }
 }
 
@@ -215,7 +240,7 @@ pub struct TextRun {
     default_size: Size,
     default_color: Color,
 
-    measured_metrics: Option<TextSpanMetrics>,
+    measured_metrics: Mutex<Option<TextSpanMetrics>>,
 }
 
 impl TextRun {
@@ -236,7 +261,7 @@ impl TextRun {
             default_font_id: SANS_FONT_ID,
             default_size: Size::from_pts(12.0),
             default_color: Color::Magenta,
-            measured_metrics: None,
+            measured_metrics: Mutex::new(None),
         }
     }
 
@@ -525,17 +550,13 @@ impl TextRun {
         out
     }
 
-    pub fn measure(
-        &mut self,
-        win: &Window,
-        font_context: &mut FontContext,
-    ) -> Result<&TextSpanMetrics> {
+    pub fn measure(&self, win: &Window, font_context: &FontContext) -> Result<TextSpanMetrics> {
         let mut total_width = AbsSize::zero();
         let mut max_height = AbsSize::zero();
         let mut max_ascent = AbsSize::zero();
         let mut min_descent = AbsSize::zero();
         let mut max_line_gap = AbsSize::zero();
-        for span in self.spans.iter_mut() {
+        for span in &self.spans {
             let span_metrics = font_context.measure_text(span, win)?;
             total_width += span_metrics.width;
             max_height = max_height.max(&span_metrics.height);
@@ -543,18 +564,19 @@ impl TextRun {
             max_ascent = max_ascent.max(&span_metrics.ascent);
             min_descent = min_descent.min(&span_metrics.descent);
         }
-        self.measured_metrics = Some(TextSpanMetrics {
+        let metrics = TextSpanMetrics {
             width: total_width,
             ascent: max_ascent,
             descent: min_descent,
             height: max_height,
             line_gap: max_line_gap,
-        });
-        Ok(self.measured_metrics.as_ref().expect("measured"))
+        };
+        *self.measured_metrics.lock() = Some(metrics.clone());
+        Ok(metrics)
     }
 
-    pub fn measure_cached(&self) -> &TextSpanMetrics {
-        self.measured_metrics.as_ref().expect("measured")
+    pub fn measure_cached(&self) -> TextSpanMetrics {
+        self.measured_metrics.lock().clone().expect("measured")
     }
 
     pub fn upload(

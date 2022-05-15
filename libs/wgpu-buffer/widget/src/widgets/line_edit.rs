@@ -28,7 +28,7 @@ use parking_lot::RwLock;
 use runtime::ScriptHerder;
 use std::{ops::Range, sync::Arc, time::Instant};
 use window::{
-    size::{AbsSize, AspectMath, ScreenDir, Size},
+    size::{AbsSize, AspectMath, RelSize, ScreenDir, Size},
     Window,
 };
 
@@ -112,30 +112,30 @@ impl LineEdit {
 }
 
 impl Widget for LineEdit {
-    fn measure(&mut self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>> {
-        self.metrics = self.line.measure(win, font_context)?.to_owned();
+    fn measure(&self, win: &Window, font_context: &FontContext) -> Result<Extent<Size>> {
+        let metrics = self.line.measure(win, font_context)?.to_owned();
         Ok(Extent::<Size>::new(
-            self.metrics.width.into(),
-            (self.metrics.height - self.metrics.descent).into(),
+            metrics.width.into(),
+            (metrics.height - metrics.descent).into(),
         ))
     }
 
-    fn layout(
-        &mut self,
-        _now: Instant,
-        region: Region<Size>,
-        win: &Window,
-        _font_context: &mut FontContext,
-    ) -> Result<()> {
-        let mut position = *region.position();
-        *position.bottom_mut() =
-            position
-                .bottom()
-                .sub(&self.metrics.descent.into(), win, ScreenDir::Vertical);
-        self.position = position;
-        self.extent = *region.extent();
-        Ok(())
-    }
+    // fn layout(
+    //     &mut self,
+    //     _now: Instant,
+    //     region: Region<RelSize>,
+    //     win: &Window,
+    //     _font_context: &mut FontContext,
+    // ) -> Result<()> {
+    //     let mut position = *region.position();
+    //     *position.bottom_mut() =
+    //         position
+    //             .bottom()
+    //             .sub(&self.metrics.descent.into(), win, ScreenDir::Vertical);
+    //     self.position = position;
+    //     self.extent = *region.extent();
+    //     Ok(())
+    // }
 
     fn upload(
         &self,

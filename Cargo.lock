@@ -1150,7 +1150,10 @@ name = "font_common"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "atlas",
  "image",
+ "ordered-float",
+ "parking_lot 0.12.0",
  "window",
 ]
 
@@ -1161,7 +1164,6 @@ dependencies = [
  "anyhow",
  "font_common",
  "image",
- "parking_lot 0.12.0",
  "rusttype",
  "window",
 ]

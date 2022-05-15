@@ -21,7 +21,7 @@ use log::trace;
 use runtime::{Extension, Runtime};
 use shader_shared::Group;
 use std::marker::PhantomData;
-use widget::{WidgetBuffer, WidgetRenderStep, WidgetVertex};
+use widget::{PaintContext, WidgetBuffer, WidgetRenderStep, WidgetVertex};
 use window::WindowStep;
 use world::{WorldRenderPass, WorldStep};
 
@@ -438,6 +438,7 @@ where
         ui: Res<UiRenderPass<T>>,
         globals: Res<GlobalParametersBuffer>,
         widgets: Res<WidgetBuffer<T>>,
+        paint: Res<PaintContext>,
         world: Res<WorldRenderPass>,
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
@@ -449,7 +450,7 @@ where
                 depth_stencil_attachment,
             };
             let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
-            let _rpass = ui.render_ui(rpass, &globals, &widgets, &world);
+            let _rpass = ui.render_ui(rpass, &globals, &widgets, &paint, &world);
         }
     }
 
@@ -458,6 +459,7 @@ where
         mut rpass: wgpu::RenderPass<'a>,
         global_data: &'a GlobalParametersBuffer,
         widget_buffer: &'a WidgetBuffer<T>,
+        paint: &'a PaintContext,
         world: &'a WorldRenderPass,
     ) -> wgpu::RenderPass<'a> {
         // Background
@@ -465,15 +467,15 @@ where
         rpass.set_bind_group(Group::Globals.index(), global_data.bind_group(), &[]);
         rpass.set_bind_group(Group::Ui.index(), widget_buffer.bind_group(), &[]);
         rpass.set_bind_group(Group::OffScreenWorld.index(), world.bind_group(), &[]);
-        rpass.set_vertex_buffer(0, widget_buffer.background_vertex_buffer());
-        rpass.draw(widget_buffer.background_vertex_range(), 0..1);
+        rpass.set_vertex_buffer(0, widget_buffer.background_vertex_buffer(paint));
+        rpass.draw(paint.background_vertex_range(), 0..1);
         // Image
         // Text
         rpass.set_pipeline(&self.text_pipeline);
         rpass.set_bind_group(Group::Globals.index(), global_data.bind_group(), &[]);
         rpass.set_bind_group(Group::Ui.index(), widget_buffer.bind_group(), &[]);
-        rpass.set_vertex_buffer(0, widget_buffer.text_vertex_buffer());
-        rpass.draw(widget_buffer.text_vertex_range(), 0..1);
+        rpass.set_vertex_buffer(0, widget_buffer.text_vertex_buffer(paint));
+        rpass.draw(paint.text_vertex_range(), 0..1);
 
         rpass
     }

@@ -28,7 +28,7 @@ use global_data::GlobalParametersBuffer;
 use gpu::{DetailLevelOpts, Gpu, GpuStep};
 use input::{DemoFocus, InputSystem};
 use measure::WorldSpaceFrame;
-use nitrous::{inject_nitrous_resource, NitrousResource};
+use nitrous::{inject_nitrous_resource, HeapMut, NitrousResource};
 use orrery::Orrery;
 use parking_lot::RwLock;
 use platform_dirs::AppDirs;
@@ -41,7 +41,8 @@ use terrain::TerrainBuffer;
 use tracelog::{TraceLog, TraceLogOpts};
 use ui::UiRenderPass;
 use widget::{
-    Border, Color, Expander, Label, Labeled, PositionH, PositionV, VerticalBox, WidgetBuffer,
+    Border, Color, Expander, Label, Labeled, LayoutNode, PaintContext, PositionH, PositionV,
+    WidgetBuffer, WidgetComponent,
 };
 use window::{
     size::{LeftBound, Size},
@@ -71,11 +72,11 @@ struct Opt {
 
 #[derive(Debug)]
 struct VisibleWidgets {
-    sim_time: Arc<RwLock<Label>>,
-    camera_direction: Arc<RwLock<Label>>,
-    camera_position: Arc<RwLock<Label>>,
-    camera_fov: Arc<RwLock<Label>>,
-    fps_label: Arc<RwLock<Label>>,
+    sim_time: Entity,
+    camera_direction: Entity,
+    camera_position: Entity,
+    camera_fov: Entity,
+    fps_label: Entity,
 }
 
 #[derive(Debug, NitrousResource)]
@@ -86,7 +87,7 @@ struct DemoUx {
 impl Extension for DemoUx {
     fn init(runtime: &mut Runtime) -> Result<()> {
         let widgets = runtime.resource::<WidgetBuffer<DemoFocus>>();
-        let demo = DemoUx::new(widgets)?;
+        let demo = DemoUx::new(widgets, runtime.heap_mut())?;
         runtime.insert_named_resource("demo", demo);
         runtime
             .add_frame_system(Self::sys_track_visible_state.after(GpuStep::PresentTargetSurface));
@@ -102,68 +103,86 @@ impl Extension for DemoUx {
 
 #[inject_nitrous_resource]
 impl DemoUx {
-    pub fn new(widgets: &WidgetBuffer<DemoFocus>) -> Result<Self> {
-        let visible_widgets = Self::build_gui(widgets)?;
+    pub fn new(widgets: &WidgetBuffer<DemoFocus>, heap: HeapMut) -> Result<Self> {
+        let visible_widgets = Self::build_gui(widgets, heap)?;
         Ok(Self { visible_widgets })
     }
 
-    pub fn build_gui(widgets: &WidgetBuffer<DemoFocus>) -> Result<VisibleWidgets> {
-        let sim_time = Label::new("").with_color(Color::White).wrapped();
-        let camera_direction = Label::new("").with_color(Color::White).wrapped();
-        let camera_position = Label::new("").with_color(Color::White).wrapped();
-        let camera_fov = Label::new("").with_color(Color::White).wrapped();
-        let controls_box = VerticalBox::new_with_children(&[
-            sim_time.clone(),
-            camera_direction.clone(),
-            camera_position.clone(),
-            camera_fov.clone(),
-        ])
-        .with_background_color(Color::Gray.darken(3.).opacity(0.8))
-        .with_glass_background()
-        .with_padding(Border::new(
-            Size::zero(),
-            Size::from_px(8.),
-            Size::from_px(24.),
-            Size::from_px(8.),
-        ))
-        .wrapped();
-        let expander = Expander::new_with_child("☰ Nitrogen v0.1", controls_box)
+    pub fn build_gui(
+        widgets: &WidgetBuffer<DemoFocus>,
+        mut heap: HeapMut,
+    ) -> Result<VisibleWidgets> {
+        let sim_time = Label::new("")
             .with_color(Color::White)
-            .with_background_color(Color::Gray.darken(3.).opacity(0.8))
-            .with_glass_background()
-            .with_border(
-                Color::Black,
-                Border::new(
-                    Size::zero(),
-                    Size::from_px(2.),
-                    Size::from_px(2.),
-                    Size::zero(),
-                ),
-            )
-            .with_padding(Border::new(
-                Size::from_px(2.),
-                Size::from_px(3.),
-                Size::from_px(3.),
-                Size::from_px(2.),
-            ))
-            .wrapped();
-        widgets
-            .root_container()
-            .write()
-            .add_child("controls", expander)
-            .set_float(PositionH::End, PositionV::Top);
+            .wrapped("sim_time", heap.as_mut())?;
+        let camera_direction = Label::new("")
+            .with_color(Color::White)
+            .wrapped("camera_direction", heap.as_mut())?;
+        let camera_position = Label::new("")
+            .with_color(Color::White)
+            .wrapped("camera_position", heap.as_mut())?;
+        let camera_fov = Label::new("")
+            .with_color(Color::White)
+            .wrapped("camera_fov", heap.as_mut())?;
+        let mut controls_box = LayoutNode::new_vbox("controls_box", heap)?;
+        controls_box.push_widget(sim_time, heap.as_mut())?;
+        controls_box.push_widget(camera_direction, heap.as_mut())?;
+        controls_box.push_widget(camera_position, heap.as_mut())?;
+        controls_box.push_widget(camera_fov, heap.as_mut())?;
+        // VerticalBox::new_with_children(&[
+        //     sim_time.clone(),
+        //     camera_direction.clone(),
+        //     camera_position.clone(),
+        //     camera_fov.clone(),
+        // ])
+        // .with_background_color(Color::Gray.darken(3.).opacity(0.8))
+        // .with_glass_background()
+        // .with_padding(Border::new(
+        //     Size::zero(),
+        //     Size::from_px(8.),
+        //     Size::from_px(24.),
+        //     Size::from_px(8.),
+        // ))
+        // .wrapped();
+
+        // let expander = Expander::new_with_child("☰ Nitrogen v0.1", controls_box)
+        //     .with_color(Color::White)
+        //     .with_background_color(Color::Gray.darken(3.).opacity(0.8))
+        //     .with_glass_background()
+        //     .with_border(
+        //         Color::Black,
+        //         Border::new(
+        //             Size::zero(),
+        //             Size::from_px(2.),
+        //             Size::from_px(2.),
+        //             Size::zero(),
+        //         ),
+        //     )
+        //     .with_padding(Border::new(
+        //         Size::from_px(2.),
+        //         Size::from_px(3.),
+        //         Size::from_px(3.),
+        //         Size::from_px(2.),
+        //     ))
+        //     .wrapped();
+        // widgets
+        //     .root_container()
+        //     .write()
+        //     .add_child("controls", expander)
+        //     .set_float(PositionH::End, PositionV::Top);
 
         let fps_label = Label::new("")
-            .with_font(widgets.font_context().font_id_for_name("sans"))
+            .with_font(
+                heap.resource::<PaintContext>()
+                    .font_context
+                    .font_id_for_name("sans"),
+            )
             .with_color(Color::Red)
             .with_size(Size::from_pts(13.0))
             .with_pre_blended_text()
-            .wrapped();
-        widgets
-            .root_container()
-            .write()
-            .add_child("fps", fps_label.clone())
-            .set_float(PositionH::Start, PositionV::Bottom);
+            .wrapped("fps_label", heap.as_mut())?;
+        widgets.root_mut().push_widget(fps_label, heap.as_mut())?;
+        // .set_float(PositionH::Start, PositionV::Bottom);
         Ok(VisibleWidgets {
             sim_time,
             camera_direction,
@@ -175,6 +194,7 @@ impl DemoUx {
 
     fn sys_track_visible_state(
         query: Query<(&ArcBallController, &ScreenCameraController)>,
+        widgets: Query<&WidgetComponent>,
         camera: Res<ScreenCamera>,
         timestep: Res<TimeStep>,
         orrery: Res<Orrery>,
@@ -182,41 +202,44 @@ impl DemoUx {
     ) {
         for (arcball, _) in query.iter() {
             system
-                .track_visible_state(*timestep.now(), &orrery, arcball, &camera)
+                .track_visible_state(widgets, *timestep.now(), &orrery, arcball, &camera)
                 .ok();
         }
     }
 
     pub fn track_visible_state(
         &self,
+        mut widgets: Query<&WidgetComponent>,
         now: Instant,
         orrery: &Orrery,
         arcball: &ArcBallController,
         camera: &ScreenCamera,
     ) -> Result<()> {
-        self.visible_widgets
-            .sim_time
-            .write()
-            .set_text(format!("Date: {}", orrery.get_time()));
-        self.visible_widgets
-            .camera_direction
-            .write()
-            .set_text(format!("Eye: {}", arcball.eye()));
-        self.visible_widgets
-            .camera_position
-            .write()
-            .set_text(format!("Position: {}", arcball.target(),));
-        self.visible_widgets
-            .camera_fov
-            .write()
-            .set_text(format!("FoV: {}", degrees!(camera.fov_y()),));
-        let frame_time = now.elapsed();
-        let ts = format!(
-            "frame: {}.{}ms",
-            frame_time.as_secs() * 1000 + u64::from(frame_time.subsec_millis()),
-            frame_time.subsec_micros(),
-        );
-        self.visible_widgets.fps_label.write().set_text(ts);
+        let sim_time = widgets.get_mut(self.visible_widgets.sim_time)?.inner();
+        // sim_time.set_text(format!("Date: {}", orrery.get_time()));
+        // self.visible_widgets
+        //     .sim_time
+        //     .write()
+        //     .set_text(format!("Date: {}", orrery.get_time()));
+        // self.visible_widgets
+        //     .camera_direction
+        //     .write()
+        //     .set_text(format!("Eye: {}", arcball.eye()));
+        // self.visible_widgets
+        //     .camera_position
+        //     .write()
+        //     .set_text(format!("Position: {}", arcball.target(),));
+        // self.visible_widgets
+        //     .camera_fov
+        //     .write()
+        //     .set_text(format!("FoV: {}", degrees!(camera.fov_y()),));
+        // let frame_time = now.elapsed();
+        // let ts = format!(
+        //     "frame: {}.{}ms",
+        //     frame_time.as_secs() * 1000 + u64::from(frame_time.subsec_millis()),
+        //     frame_time.subsec_micros(),
+        // );
+        // self.visible_widgets.fps_label.write().set_text(ts);
         Ok(())
     }
 }

@@ -19,12 +19,14 @@ use crate::{
     region::{Extent, Position, Region},
 };
 use anyhow::Result;
+use bevy_ecs::prelude::*;
 use gpu::Gpu;
 use input::InputEvent;
+use nitrous::{inject_nitrous_component, NitrousComponent};
 use runtime::ScriptHerder;
 use std::{fmt::Debug, time::Instant};
 use window::{
-    size::{AbsSize, Size},
+    size::{AbsSize, RelSize, Size},
     Window,
 };
 
@@ -68,18 +70,37 @@ pub enum WidgetFocus {
     Game,
 }
 
+#[derive(Component, NitrousComponent)]
+#[Name = "widget"]
+pub struct WidgetComponent {
+    inner: Box<dyn Widget>,
+}
+
+#[inject_nitrous_component]
+impl WidgetComponent {
+    pub fn new<T: Widget>(inner: T) -> Self {
+        Self {
+            inner: Box::new(inner),
+        }
+    }
+
+    pub fn inner(&self) -> &dyn Widget {
+        self.inner.as_ref()
+    }
+}
+
 pub trait Widget: Debug + Send + Sync + 'static {
     /// Return the minimum required size for displaying this widget.
-    fn measure(&mut self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>>;
+    fn measure(&self, win: &Window, font_context: &FontContext) -> Result<Extent<Size>>;
 
     /// Apply the layout algorithm to size everything for the current displayed set.
-    fn layout(
-        &mut self,
-        now: Instant,
-        region: Region<Size>,
-        win: &Window,
-        font_context: &mut FontContext,
-    ) -> Result<()>;
+    // fn layout(
+    //     &mut self,
+    //     now: Instant,
+    //     region: Region<RelSize>,
+    //     win: &Window,
+    //     font_context: &mut FontContext,
+    // ) -> Result<()>;
 
     /// Mutate paint context to reflect the presence of this widget.
     fn upload(

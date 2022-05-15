@@ -52,6 +52,14 @@ impl<T: Copy + Clone + LeftBound + AspectMath> Extent<T> {
         }
     }
 
+    pub fn axis_mut(&mut self, dir: ScreenDir) -> &mut T {
+        match dir {
+            ScreenDir::Horizontal => &mut self.width,
+            ScreenDir::Vertical => &mut self.height,
+            ScreenDir::Depth => panic!("no depth on extent"),
+        }
+    }
+
     pub fn set_width(&mut self, width: T) {
         self.width = width;
     }
@@ -385,5 +393,14 @@ impl Region<Size> {
 impl From<Region<AbsSize>> for Region<Size> {
     fn from(abs: Region<AbsSize>) -> Self {
         Region::new((*abs.position()).into(), (*abs.extent()).into())
+    }
+}
+
+impl Region<RelSize> {
+    pub fn full() -> Self {
+        Region::new(
+            Position::new(RelSize::from_percent(0.), RelSize::from_percent(0.)),
+            Extent::new(RelSize::from_percent(100.), RelSize::from_percent(100.)),
+        )
     }
 }

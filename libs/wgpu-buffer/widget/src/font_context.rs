@@ -17,41 +17,24 @@ use crate::{
     region::Position,
     text_run::{SpanSelection, TextSpan},
     widget_vertex::WidgetVertex,
-    SANS_FONT_NAME,
+    Extent, Size, SANS_FONT_NAME,
 };
 use anyhow::Result;
 use atlas::{AtlasPacker, Frame};
-use font_common::{FontAdvance, FontInterface};
+use font_common::{Font, FontAdvance};
 use gpu::Gpu;
 use image::Luma;
 use nitrous::Value;
 use ordered_float::OrderedFloat;
-use parking_lot::RwLock;
-use std::hint::unreachable_unchecked;
-use std::{borrow::Borrow, collections::HashMap, env, path::PathBuf, sync::Arc};
+use parking_lot::Mutex;
+use std::{
+    borrow::Borrow, collections::HashMap, env, hint::unreachable_unchecked, path::PathBuf,
+    sync::Arc,
+};
 use window::{
     size::{AbsSize, LeftBound, RelSize, ScreenDir},
     Window,
 };
-
-#[derive(Debug)]
-pub struct GlyphTracker {
-    font: Arc<RwLock<dyn FontInterface>>,
-    glyphs: HashMap<(char, OrderedFloat<f32>), Frame>,
-}
-
-impl GlyphTracker {
-    pub fn new(font: Arc<RwLock<dyn FontInterface>>) -> Self {
-        Self {
-            font,
-            glyphs: HashMap::new(),
-        }
-    }
-
-    pub fn font(&self) -> Arc<RwLock<dyn FontInterface>> {
-        self.font.clone()
-    }
-}
 
 #[derive(Clone, Debug, Default)]
 pub struct TextSpanMetrics {
@@ -69,10 +52,16 @@ pub struct TextSpanMetrics {
     pub line_gap: AbsSize,
 }
 
+impl TextSpanMetrics {
+    pub fn extent(&self) -> Extent<Size> {
+        Extent::new(self.width.into(), self.height.into())
+    }
+}
+
 #[derive(Debug)]
 pub struct FontContext {
-    glyph_sheet: AtlasPacker<Luma<u8>>,
-    trackers: HashMap<FontId, GlyphTracker>,
+    glyph_sheet: Mutex<AtlasPacker<Luma<u8>>>,
+    trackers: HashMap<FontId, Font>,
     name_manager: FontNameManager,
     dump_texture_path: Option<PathBuf>,
 }
@@ -80,14 +69,14 @@ pub struct FontContext {
 impl FontContext {
     pub fn new(gpu: &Gpu) -> Self {
         Self {
-            glyph_sheet: AtlasPacker::new(
+            glyph_sheet: Mutex::new(AtlasPacker::new(
                 "glyph_sheet",
                 gpu,
                 256 * 4,
                 256,
                 wgpu::TextureFormat::R8Unorm,
                 wgpu::FilterMode::Linear,
-            ),
+            )),
             trackers: HashMap::new(),
             name_manager: Default::default(),
             dump_texture_path: None,
@@ -96,73 +85,65 @@ impl FontContext {
 
     pub fn handle_dump_texture(&mut self, gpu: &mut Gpu) -> Result<()> {
         if let Some(dump_path) = &self.dump_texture_path {
-            self.glyph_sheet.dump_texture(gpu, dump_path)?;
+            self.glyph_sheet.lock().dump_texture(gpu, dump_path)?;
         }
         self.dump_texture_path = None;
         Ok(())
     }
 
     pub fn maintain_font_atlas(&mut self, gpu: &Gpu, encoder: &mut wgpu::CommandEncoder) {
-        self.glyph_sheet.encode_frame_uploads(gpu, encoder);
+        self.glyph_sheet.lock().encode_frame_uploads(gpu, encoder);
     }
 
     pub fn glyph_sheet_width(&self) -> u32 {
-        self.glyph_sheet.width()
+        self.glyph_sheet.lock().width()
     }
 
     pub fn glyph_sheet_height(&self) -> u32 {
-        self.glyph_sheet.height()
+        self.glyph_sheet.lock().height()
     }
 
     pub fn glyph_sheet_texture_layout_entry(&self, binding: u32) -> wgpu::BindGroupLayoutEntry {
-        self.glyph_sheet.texture_layout_entry(binding)
+        self.glyph_sheet.lock().texture_layout_entry(binding)
     }
 
     pub fn glyph_sheet_sampler_layout_entry(&self, binding: u32) -> wgpu::BindGroupLayoutEntry {
-        self.glyph_sheet.sampler_layout_entry(binding)
+        self.glyph_sheet.lock().sampler_layout_entry(binding)
     }
 
-    pub fn glyph_sheet_texture_binding(&self, binding: u32) -> wgpu::BindGroupEntry {
-        self.glyph_sheet.texture_binding(binding)
-    }
+    // pub fn glyph_sheet_texture_binding(&self, binding: u32) -> wgpu::BindGroupEntry {
+    //     self.glyph_sheet.lock().texture_binding(binding)
+    // }
+    //
+    // pub fn glyph_sheet_sampler_binding(&self, binding: u32) -> wgpu::BindGroupEntry {
+    //     self.glyph_sheet.lock().sampler_binding(binding)
+    // }
 
-    pub fn glyph_sheet_sampler_binding(&self, binding: u32) -> wgpu::BindGroupEntry {
-        self.glyph_sheet.sampler_binding(binding)
-    }
-
-    pub fn get_font_by_name(&self, font_name: &str) -> Arc<RwLock<dyn FontInterface>> {
+    pub fn get_font_by_name(&self, font_name: &str) -> Font {
         self.get_font(self.font_id_for_name(font_name))
     }
 
-    pub fn get_font(&self, font_id: FontId) -> Arc<RwLock<dyn FontInterface>> {
-        self.trackers[&font_id].font()
+    pub fn get_font(&self, font_id: FontId) -> Font {
+        self.trackers[&font_id].clone()
     }
 
-    pub fn add_font<S: Borrow<str> + Into<String>>(
-        &mut self,
-        font_name: S,
-        font: Arc<RwLock<dyn FontInterface>>,
-    ) {
+    pub fn add_font<S: Borrow<str> + Into<String>>(&mut self, font_name: S, font: Font) {
         let fid = self.name_manager.allocate(font_name);
-        self.trackers.insert(fid, GlyphTracker::new(font));
+        self.trackers.insert(fid, font);
     }
 
-    pub fn load_glyph(&mut self, fid: FontId, c: char, scale: AbsSize, gpu: &Gpu) -> Result<Frame> {
-        if let Some(frame) = self.trackers[&fid]
-            .glyphs
-            .get(&(c, OrderedFloat(scale.as_pts())))
-        {
+    pub fn load_glyph(&self, fid: FontId, c: char, scale: AbsSize, gpu: &Gpu) -> Result<Frame> {
+        // We always have to take at least one mutex to protect the cache.
+        let f0 = &self.trackers[&fid];
+        let mut f = f0.interface();
+        if let Some(frame) = f.get_cached_frame(c, scale.as_pts()) {
             return Ok(*frame);
         }
-        // Note: cannot delegate to GlyphTracker because of the second mutable borrow.
-        let img = self.trackers[&fid].font.read().render_glyph(c, scale);
-
-        let frame = self.glyph_sheet.push_image(&img, gpu)?;
-        self.trackers
-            .get_mut(&fid)
-            .unwrap()
-            .glyphs
-            .insert((c, OrderedFloat(scale.as_pts())), frame);
+        let img = f.font().render_glyph(c, scale);
+        // On cache miss we have to take a second mutex to allow inner mutability for the glyph
+        // sheet, unless we want to move those to the font as well.
+        let frame = self.glyph_sheet.lock().push_image(&img, gpu)?;
+        f.cache_frame(c, scale.as_pts(), frame);
         Ok(frame)
     }
 
@@ -200,15 +181,12 @@ impl FontContext {
         *x_pos = AbsSize::from_px((x_pos.as_px() * phys_w).floor() / phys_w);
     }
 
-    pub fn measure_text(&mut self, span: &mut TextSpan, win: &Window) -> Result<TextSpanMetrics> {
+    pub fn measure_text(&self, span: &TextSpan, win: &Window) -> Result<TextSpanMetrics> {
         if let Some(metrics) = span.metrics() {
-            debug_assert_eq!(
-                span.layout_cache().len(),
-                span.content().chars().count() * 6
-            );
+            debug_assert_eq!(span.layout_cache_len(), span.content().chars().count() * 6);
             return Ok(metrics.to_owned());
         }
-        debug_assert_eq!(span.layout_cache().len(), 0);
+        debug_assert_eq!(span.layout_cache_len(), 0);
 
         let phys_w = win.width() as f32;
         // let scale_px = (span.size() * win.dpi_scale_factor() as f32)
@@ -218,8 +196,9 @@ impl FontContext {
 
         // Font rendering is based around the baseline. We want it based around the top-left
         // corner instead, so move down by the ascent.
-        let font_p = self.get_font(span.font());
-        let font = font_p.read();
+        let font_ref = self.get_font(span.font());
+        let font_p = font_ref.interface();
+        let font = font_p.font();
         let descent = font.descent(scale_px);
         let ascent = font.ascent(scale_px);
         let line_gap = font.line_gap(scale_px);
@@ -268,8 +247,8 @@ impl FontContext {
             descent,
             line_gap,
         };
-        span.set_metrics(&metrics);
-        span.layout_cache_mut().append(&mut cache);
+        // span.set_metrics(&metrics);
+        // span.layout_cache_mut().append(&mut cache);
         Ok(metrics)
     }
 
@@ -285,6 +264,8 @@ impl FontContext {
         text_pool: &mut Vec<WidgetVertex>,
         background_pool: &mut Vec<WidgetVertex>,
     ) -> Result<()> {
+        debug_assert_eq!(span.layout_cache_len(), span.content().chars().count() * 6);
+
         let gs_width = self.glyph_sheet_width();
         let gs_height = self.glyph_sheet_height();
 
@@ -310,6 +291,7 @@ impl FontContext {
         let y_pos = offset.bottom();
         let z_depth = offset.depth().as_depth();
         let mut cache_offset = 0;
+        let span_cache = span.span_cache();
         for (i, c) in span.content().chars().enumerate() {
             let frame = self.load_glyph(span.font(), c, scale_px, gpu)?;
 
@@ -318,7 +300,7 @@ impl FontContext {
             let s1 = frame.s1(gs_width);
             let t1 = frame.t1(gs_height);
             for j in 0..6 {
-                let mut v = span.layout_cache()[cache_offset + j];
+                let mut v = span_cache.vertex(cache_offset + j);
 
                 v.position[0] += x_base.as_px();
                 if j == 0 {

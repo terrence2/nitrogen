@@ -24,18 +24,21 @@ use anyhow::Result;
 use gpu::Gpu;
 use parking_lot::RwLock;
 use std::{sync::Arc, time::Instant};
-use window::{size::Size, Window};
+use window::{
+    size::{RelSize, Size},
+    Window,
+};
 
 #[derive(Debug)]
 pub struct Button {
-    label: Arc<RwLock<Label>>,
+    label: Label,
     action: String,
 }
 
 impl Button {
     pub fn new_with_text<S: AsRef<str> + Into<String>>(s: S) -> Self {
         Button {
-            label: Label::new(s).wrapped(),
+            label: Label::new(s),
             action: String::new(),
         }
     }
@@ -52,36 +55,36 @@ impl Button {
 
 impl Labeled for Button {
     fn set_text<S: AsRef<str> + Into<String>>(&mut self, content: S) {
-        self.label.write().set_text(content);
+        self.label.set_text(content);
     }
 
     fn set_size(&mut self, size: Size) {
-        self.label.write().set_size(size);
+        self.label.set_size(size);
     }
 
     fn set_color(&mut self, color: Color) {
-        self.label.write().set_color(color);
+        self.label.set_color(color);
     }
 
     fn set_font(&mut self, font_id: FontId) {
-        self.label.write().set_font(font_id);
+        self.label.set_font(font_id);
     }
 }
 
 impl Widget for Button {
-    fn measure(&mut self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>> {
-        self.label.write().measure(win, font_context)
+    fn measure(&self, win: &Window, font_context: &FontContext) -> Result<Extent<Size>> {
+        self.label.measure(win, font_context)
     }
 
-    fn layout(
-        &mut self,
-        now: Instant,
-        region: Region<Size>,
-        win: &Window,
-        font_context: &mut FontContext,
-    ) -> Result<()> {
-        self.label.write().layout(now, region, win, font_context)
-    }
+    // fn layout(
+    //     &mut self,
+    //     now: Instant,
+    //     region: Region<RelSize>,
+    //     win: &Window,
+    //     font_context: &mut FontContext,
+    // ) -> Result<()> {
+    //     self.label.write().layout(now, region, win, font_context)
+    // }
 
     fn upload(
         &self,
@@ -90,6 +93,6 @@ impl Widget for Button {
         gpu: &Gpu,
         context: &mut PaintContext,
     ) -> Result<()> {
-        self.label.read().upload(now, win, gpu, context)
+        self.label.upload(now, win, gpu, context)
     }
 }

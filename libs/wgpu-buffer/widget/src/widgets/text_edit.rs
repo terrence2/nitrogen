@@ -28,7 +28,7 @@ use parking_lot::RwLock;
 use runtime::ScriptHerder;
 use std::{collections::VecDeque, sync::Arc, time::Instant};
 use window::{
-    size::{AbsSize, LeftBound, Size},
+    size::{AbsSize, LeftBound, RelSize, Size},
     Window,
 };
 
@@ -143,11 +143,11 @@ impl TextEdit {
 }
 
 impl Widget for TextEdit {
-    fn measure(&mut self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>> {
+    fn measure(&self, win: &Window, font_context: &FontContext) -> Result<Extent<Size>> {
         let mut width = AbsSize::zero();
         let mut height_offset = AbsSize::zero();
         let line_count = self.lines.len();
-        for (i, line) in self.lines.iter_mut().enumerate() {
+        for (i, line) in self.lines.iter().enumerate() {
             let span_metrics = line.measure(win, font_context)?;
             if i != line_count - 1 {
                 height_offset += span_metrics.line_gap;
@@ -155,21 +155,21 @@ impl Widget for TextEdit {
             height_offset += span_metrics.height;
             width = width.max(&span_metrics.width);
         }
-        self.measured_extent = Extent::new(width, height_offset);
-        Ok(self.measured_extent.into())
+        let measured_extent = Extent::new(width, height_offset);
+        Ok(measured_extent.into())
     }
 
-    fn layout(
-        &mut self,
-        _now: Instant,
-        region: Region<Size>,
-        _win: &Window,
-        _font_context: &mut FontContext,
-    ) -> Result<()> {
-        self.layout_position = *region.position();
-        self.layout_extent = *region.extent();
-        Ok(())
-    }
+    // fn layout(
+    //     &mut self,
+    //     _now: Instant,
+    //     region: Region<RelSize>,
+    //     _win: &Window,
+    //     _font_context: &mut FontContext,
+    // ) -> Result<()> {
+    //     self.layout_position = *region.position();
+    //     self.layout_extent = *region.extent();
+    //     Ok(())
+    // }
 
     fn upload(
         &self,
