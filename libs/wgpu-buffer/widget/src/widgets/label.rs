@@ -13,39 +13,110 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    color::Color,
-    font_context::{FontContext, FontId, TextSpanMetrics},
+    font_context::FontId,
+    layout::{LayoutMeasurements, LayoutPacking},
     paint_context::PaintContext,
-    region::{Extent, Position, Region},
+    region::Extent,
     text_run::TextRun,
-    widget::{Labeled, Widget},
+    widget::Labeled,
     widget_info::WidgetInfo,
+    WidgetRenderStep,
 };
 use anyhow::Result;
+use bevy_ecs::prelude::*;
+use csscolorparser::Color;
 use gpu::Gpu;
-use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
-use parking_lot::RwLock;
-use std::{sync::Arc, time::Instant};
-use window::{size::Size, Window};
+use nitrous::{inject_nitrous_component, method, HeapMut, NitrousComponent, Value};
+use runtime::{Extension, Runtime};
+use window::{
+    size::{RelSize, ScreenDir, Size},
+    Window,
+};
 
-#[derive(Debug, NitrousResource)]
-pub struct Label {
-    line: TextRun,
-
-    metrics: TextSpanMetrics,
-    allocated_position: Position<Size>,
-    allocated_extent: Extent<Size>,
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum LabelRenderStep {
+    Measure,
+    Upload,
 }
 
-#[inject_nitrous_resource]
+#[derive(Component, NitrousComponent, Debug)]
+#[Name = "label"]
+pub struct Label {
+    line: TextRun,
+}
+
+impl Extension for Label {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        runtime.add_frame_system(
+            Label::sys_measure
+                .label(LabelRenderStep::Measure)
+                .before(WidgetRenderStep::LayoutWidgets),
+        );
+        runtime.add_frame_system(
+            Label::sys_upload
+                .label(LabelRenderStep::Upload)
+                .after(WidgetRenderStep::PrepareForFrame)
+                .after(WidgetRenderStep::LayoutWidgets)
+                .before(WidgetRenderStep::EnsureUploaded),
+        );
+        Ok(())
+    }
+}
+
+#[inject_nitrous_component]
 impl Label {
+    fn sys_measure(
+        mut labels: Query<(&Label, &LayoutPacking, &mut LayoutMeasurements)>,
+        win: Res<Window>,
+        paint_context: Res<PaintContext>,
+    ) {
+        for (label, packing, mut measure) in labels.iter_mut() {
+            // FIXME: error handling
+            let metrics = label
+                .line
+                .measure(&win, &paint_context.font_context)
+                .unwrap();
+            let extent = Extent::<RelSize>::new(
+                metrics.width.as_rel(&win, ScreenDir::Horizontal),
+                metrics.height.as_rel(&win, ScreenDir::Vertical),
+            );
+            measure.set_child_extent(extent, packing);
+            measure.set_metrics(metrics);
+        }
+    }
+
+    fn sys_upload(
+        labels: Query<(&Label, &LayoutMeasurements)>,
+        win: Res<Window>,
+        gpu: Res<Gpu>,
+        mut paint_context: ResMut<PaintContext>,
+    ) {
+        for (label, measure) in labels.iter() {
+            let widget_info_index = paint_context.push_widget(&WidgetInfo::default());
+
+            // Account for descender
+            let mut pos = *measure.child_allocation().position();
+            *pos.bottom_mut() -= measure.metrics().descent.as_rel(&win, ScreenDir::Vertical);
+
+            // FIXME: error handling
+            label
+                .line
+                .upload(
+                    pos.into(),
+                    widget_info_index,
+                    &win,
+                    &gpu,
+                    &mut paint_context,
+                )
+                .unwrap();
+        }
+    }
+
     pub fn new<S: AsRef<str> + Into<String>>(content: S) -> Self {
         Self {
-            line: TextRun::from_text(content.as_ref()).with_hidden_selection(),
-
-            metrics: TextSpanMetrics::default(),
-            allocated_position: Position::origin(),
-            allocated_extent: Extent::zero(),
+            line: TextRun::empty()
+                .with_hidden_selection()
+                .with_text(content.as_ref()),
         }
     }
 
@@ -54,8 +125,13 @@ impl Label {
         self
     }
 
-    pub fn wrapped(self) -> Arc<RwLock<Self>> {
-        Arc::new(RwLock::new(self))
+    pub fn wrapped(self, name: &str, mut heap: HeapMut) -> Result<Entity> {
+        Ok(heap
+            .spawn_named(name)?
+            .insert_named(self)?
+            .insert_named(LayoutPacking::default())?
+            .insert(LayoutMeasurements::default())
+            .id())
     }
 
     #[method]
@@ -89,7 +165,7 @@ impl Labeled for Label {
         self.line.select_none();
     }
 
-    fn set_color(&mut self, color: Color) {
+    fn set_color(&mut self, color: &Color) {
         self.line.set_default_color(color);
         // Note: this is a label; we don't allow selection, so no need to save and restore it.
         self.line.select_all();
@@ -103,49 +179,5 @@ impl Labeled for Label {
         self.line.select_all();
         self.line.change_font(font_id);
         self.line.select_none();
-    }
-}
-
-impl Widget for Label {
-    fn measure(&mut self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>> {
-        self.metrics = self.line.measure(win, font_context)?.to_owned();
-        Ok(Extent::<Size>::new(
-            self.metrics.width.into(),
-            (self.metrics.height - self.metrics.descent).into(),
-        ))
-    }
-
-    fn layout(
-        &mut self,
-        _now: Instant,
-        region: Region<Size>,
-        win: &Window,
-        _font_context: &mut FontContext,
-    ) -> Result<()> {
-        let mut position = region.position().as_abs(win);
-        *position.bottom_mut() = position.bottom() - self.metrics.descent;
-        self.allocated_position = position.into();
-        self.allocated_extent = *region.extent();
-        Ok(())
-    }
-
-    fn upload(
-        &self,
-        _now: Instant,
-        win: &Window,
-        gpu: &Gpu,
-        context: &mut PaintContext,
-    ) -> Result<()> {
-        let widget_info_index = context.push_widget(&WidgetInfo::default());
-
-        self.line.upload(
-            self.allocated_position,
-            widget_info_index,
-            win,
-            gpu,
-            context,
-        )?;
-
-        Ok(())
     }
 }

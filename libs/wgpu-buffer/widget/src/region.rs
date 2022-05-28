@@ -52,6 +52,14 @@ impl<T: Copy + Clone + LeftBound + AspectMath> Extent<T> {
         }
     }
 
+    pub fn axis_mut(&mut self, dir: ScreenDir) -> &mut T {
+        match dir {
+            ScreenDir::Horizontal => &mut self.width,
+            ScreenDir::Vertical => &mut self.height,
+            ScreenDir::Depth => panic!("no depth on extent"),
+        }
+    }
+
     pub fn set_width(&mut self, width: T) {
         self.width = width;
     }
@@ -108,6 +116,22 @@ impl From<PhysicalSize<u32>> for Extent<AbsSize> {
             AbsSize::from_px(sz.width as f32),
             AbsSize::from_px(sz.height as f32),
         )
+    }
+}
+
+impl Extent<RelSize> {
+    pub fn expand_with_border_rel(&mut self, border: &Border<RelSize>) {
+        self.width += border.left;
+        self.width += border.right;
+        self.height += border.top;
+        self.height += border.bottom;
+    }
+
+    pub fn remove_border_rel(&mut self, border: &Border<RelSize>) {
+        self.width -= border.left;
+        self.width -= border.right;
+        self.height -= border.top;
+        self.height -= border.bottom;
     }
 }
 
@@ -196,6 +220,10 @@ impl<T: Copy + Clone + LeftBound + AspectMath> Position<T> {
         self.depth
     }
 
+    pub fn set_depth(&mut self, depth: RelSize) {
+        self.depth = depth;
+    }
+
     pub fn with_depth(mut self, depth: RelSize) -> Self {
         self.depth = depth;
         self
@@ -209,6 +237,20 @@ impl<T: Copy + Clone + LeftBound + AspectMath> Position<T> {
     pub fn with_border(mut self, border: &Border<T>, win: &Window) -> Self {
         self.offset_by_border(border, win);
         self
+    }
+}
+
+impl Position<RelSize> {
+    /// Adjust the position up and to the right to account for a border at position.
+    pub fn offset_by_border_rel(&mut self, border: &Border<RelSize>) {
+        self.bottom += border.bottom;
+        self.left += border.left;
+    }
+
+    /// Bump the position down and to the left, to contain the given border.
+    pub fn including_border_rel(&mut self, border: &Border<RelSize>) {
+        self.bottom -= border.bottom;
+        self.left -= border.left;
     }
 }
 
@@ -233,6 +275,12 @@ impl Position<Size> {
 impl From<Position<AbsSize>> for Position<Size> {
     fn from(abs: Position<AbsSize>) -> Self {
         Position::<Size>::new_with_depth(abs.left().into(), abs.bottom().into(), abs.depth())
+    }
+}
+
+impl From<Position<RelSize>> for Position<Size> {
+    fn from(rel: Position<RelSize>) -> Self {
+        Position::<Size>::new_with_depth(rel.left().into(), rel.bottom().into(), rel.depth())
     }
 }
 
@@ -272,24 +320,36 @@ impl<T: Copy + Clone + LeftBound> Border<T> {
         }
     }
 
-    #[allow(unused)]
     pub fn left(&self) -> T {
         self.left
     }
 
-    #[allow(unused)]
     pub fn right(&self) -> T {
         self.right
     }
 
-    #[allow(unused)]
     pub fn top(&self) -> T {
         self.top
     }
 
-    #[allow(unused)]
     pub fn bottom(&self) -> T {
         self.bottom
+    }
+
+    pub fn set_left(&mut self, v: T) {
+        self.left = v;
+    }
+
+    pub fn set_right(&mut self, v: T) {
+        self.right = v;
+    }
+
+    pub fn set_top(&mut self, v: T) {
+        self.top = v;
+    }
+
+    pub fn set_bottom(&mut self, v: T) {
+        self.bottom = v;
     }
 }
 
@@ -385,5 +445,27 @@ impl Region<Size> {
 impl From<Region<AbsSize>> for Region<Size> {
     fn from(abs: Region<AbsSize>) -> Self {
         Region::new((*abs.position()).into(), (*abs.extent()).into())
+    }
+}
+
+impl Region<RelSize> {
+    pub fn full() -> Self {
+        Region::new(
+            Position::new(RelSize::from_percent(0.), RelSize::from_percent(0.)),
+            Extent::new(RelSize::from_percent(100.), RelSize::from_percent(100.)),
+        )
+    }
+
+    /// Adjust this region so that it contains a border, pushing the origin down and left and
+    /// extending the extent appropriately for both sides in each axis.
+    pub fn add_border_rel(&mut self, border: &Border<RelSize>) {
+        self.position.including_border_rel(border);
+        self.extent.expand_with_border_rel(border);
+    }
+
+    /// Adjust this region so that it becomes the area inside the given border.
+    pub fn remove_border_rel(&mut self, border: &Border<RelSize>) {
+        self.position.offset_by_border_rel(border);
+        self.extent.remove_border_rel(border);
     }
 }

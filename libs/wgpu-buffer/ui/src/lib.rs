@@ -16,12 +16,10 @@ use anyhow::Result;
 use bevy_ecs::prelude::*;
 use global_data::{GlobalParametersBuffer, GlobalsStep};
 use gpu::{DisplayConfig, Gpu, GpuStep};
-use input::InputFocus;
 use log::trace;
 use runtime::{Extension, Runtime};
 use shader_shared::Group;
-use std::marker::PhantomData;
-use widget::{WidgetBuffer, WidgetRenderStep, WidgetVertex};
+use widget::{PaintContext, WidgetBuffer, WidgetRenderStep, WidgetVertex};
 use window::WindowStep;
 use world::{WorldRenderPass, WorldStep};
 
@@ -32,10 +30,7 @@ pub enum UiStep {
 }
 
 #[derive(Debug)]
-pub struct UiRenderPass<T>
-where
-    T: InputFocus,
-{
+pub struct UiRenderPass {
     // Offscreen render targets
     deferred_texture: (wgpu::Texture, wgpu::TextureView),
     deferred_depth: (wgpu::Texture, wgpu::TextureView),
@@ -46,17 +41,12 @@ where
     background_pipeline: wgpu::RenderPipeline,
     // image_pipeline: wgpu::RenderPipeline,
     text_pipeline: wgpu::RenderPipeline,
-
-    widget_type_holder: PhantomData<T>,
 }
 
-impl<T> Extension for UiRenderPass<T>
-where
-    T: InputFocus,
-{
+impl Extension for UiRenderPass {
     fn init(runtime: &mut Runtime) -> Result<()> {
         let ui = UiRenderPass::new(
-            runtime.resource::<WidgetBuffer<T>>(),
+            runtime.resource::<WidgetBuffer>(),
             runtime.resource::<WorldRenderPass>(),
             runtime.resource::<GlobalParametersBuffer>(),
             runtime.resource::<Gpu>(),
@@ -81,12 +71,9 @@ where
     }
 }
 
-impl<T> UiRenderPass<T>
-where
-    T: InputFocus,
-{
+impl UiRenderPass {
     pub fn new(
-        widget_buffer: &WidgetBuffer<T>,
+        widget_buffer: &WidgetBuffer,
         world_render_pass: &WorldRenderPass,
         global_data: &GlobalParametersBuffer,
         gpu: &Gpu,
@@ -267,8 +254,8 @@ where
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: Gpu::DEPTH_FORMAT,
-                    depth_write_enabled: false,
-                    depth_compare: wgpu::CompareFunction::Always,
+                    depth_write_enabled: true,
+                    depth_compare: wgpu::CompareFunction::Greater,
                     stencil: wgpu::StencilState {
                         front: wgpu::StencilFaceState::IGNORE,
                         back: wgpu::StencilFaceState::IGNORE,
@@ -298,8 +285,6 @@ where
 
             background_pipeline,
             text_pipeline,
-
-            widget_type_holder: PhantomData::default(),
         })
     }
 
@@ -380,7 +365,7 @@ where
     pub fn sys_handle_display_config_change(
         updated_config: Res<Option<DisplayConfig>>,
         gpu: Res<Gpu>,
-        mut ui: ResMut<UiRenderPass<T>>,
+        mut ui: ResMut<UiRenderPass>,
     ) {
         if updated_config.is_some() {
             ui.handle_render_extent_changed(&gpu)
@@ -435,9 +420,10 @@ where
     }
 
     fn sys_render_ui(
-        ui: Res<UiRenderPass<T>>,
+        ui: Res<UiRenderPass>,
         globals: Res<GlobalParametersBuffer>,
-        widgets: Res<WidgetBuffer<T>>,
+        widgets: Res<WidgetBuffer>,
+        paint: Res<PaintContext>,
         world: Res<WorldRenderPass>,
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
@@ -449,7 +435,7 @@ where
                 depth_stencil_attachment,
             };
             let rpass = encoder.begin_render_pass(&render_pass_desc_ref);
-            let _rpass = ui.render_ui(rpass, &globals, &widgets, &world);
+            let _rpass = ui.render_ui(rpass, &globals, &widgets, &paint, &world);
         }
     }
 
@@ -457,7 +443,8 @@ where
         &'a self,
         mut rpass: wgpu::RenderPass<'a>,
         global_data: &'a GlobalParametersBuffer,
-        widget_buffer: &'a WidgetBuffer<T>,
+        widget_buffer: &'a WidgetBuffer,
+        paint: &'a PaintContext,
         world: &'a WorldRenderPass,
     ) -> wgpu::RenderPass<'a> {
         // Background
@@ -465,15 +452,15 @@ where
         rpass.set_bind_group(Group::Globals.index(), global_data.bind_group(), &[]);
         rpass.set_bind_group(Group::Ui.index(), widget_buffer.bind_group(), &[]);
         rpass.set_bind_group(Group::OffScreenWorld.index(), world.bind_group(), &[]);
-        rpass.set_vertex_buffer(0, widget_buffer.background_vertex_buffer());
-        rpass.draw(widget_buffer.background_vertex_range(), 0..1);
+        rpass.set_vertex_buffer(0, widget_buffer.background_vertex_buffer(paint));
+        rpass.draw(paint.background_vertex_range(), 0..1);
         // Image
         // Text
         rpass.set_pipeline(&self.text_pipeline);
         rpass.set_bind_group(Group::Globals.index(), global_data.bind_group(), &[]);
         rpass.set_bind_group(Group::Ui.index(), widget_buffer.bind_group(), &[]);
-        rpass.set_vertex_buffer(0, widget_buffer.text_vertex_buffer());
-        rpass.draw(widget_buffer.text_vertex_range(), 0..1);
+        rpass.set_vertex_buffer(0, widget_buffer.text_vertex_buffer(paint));
+        rpass.draw(paint.text_vertex_range(), 0..1);
 
         rpass
     }

@@ -144,6 +144,16 @@ impl Default for Runtime {
 
 impl Runtime {
     #[inline]
+    pub fn heap(&self) -> &Heap {
+        &self.heap
+    }
+
+    #[inline]
+    pub fn heap_mut(&mut self) -> HeapMut {
+        HeapMut::wrap(self.heap.world_mut())
+    }
+
+    #[inline]
     pub fn run_sim_once(&mut self) {
         self.sim_schedule.run_once(self.heap.world_mut());
     }

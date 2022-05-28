@@ -498,12 +498,13 @@ impl Orrery {
 mod tests {
     use super::*;
     use event_mapper::EventMapper;
-    use input::DemoFocus;
+    use input::InputTarget;
 
     #[test]
     fn it_works() -> Result<()> {
         let runtime = Runtime::default()
-            .with_extension::<EventMapper<DemoFocus>>()?
+            .with_extension::<InputTarget>()?
+            .with_extension::<EventMapper>()?
             .with_extension::<Orrery>()?;
         runtime.resource::<Orrery>().sun_direction();
         Ok(())
@@ -512,7 +513,8 @@ mod tests {
     #[test]
     fn test_leap_seconds() -> Result<()> {
         let mut runtime = Runtime::default()
-            .with_extension::<EventMapper<DemoFocus>>()?
+            .with_extension::<InputTarget>()?
+            .with_extension::<EventMapper>()?
             .with_extension::<Orrery>()?;
         runtime
             .resource_mut::<Orrery>()

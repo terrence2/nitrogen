@@ -20,8 +20,9 @@ pub use winit::event::{ButtonId, ElementState, ModifiersState, VirtualKeyCode};
 use anyhow::{bail, Result};
 use bevy_ecs::prelude::*;
 use log::warn;
+use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use parking_lot::Mutex;
-use runtime::Runtime;
+use runtime::{Extension, Runtime};
 use smallvec::SmallVec;
 use std::{
     collections::HashMap,
@@ -54,61 +55,134 @@ pub fn test_make_input_events(mut events: Vec<InputEvent>) -> InputEventVec {
     out
 }
 
-/// Enable applications to track focus for various purposes, with input focus falling into
-/// large scale classes that affect input processing in major ways.
-pub trait InputFocus:
-    Clone + Copy + Debug + Default + Eq + PartialEq + FromStr + Hash + Send + Sync + 'static
-{
-    fn name(&self) -> &'static str;
-    fn is_terminal_focused(&self) -> bool;
-    fn toggle_terminal(&mut self);
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum InputFocus {
+    Menu,
+    GameMenu,
+    Game,
+    Edit,
 }
 
-/// A simple two-state InputFocus for demo purposes.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub enum DemoFocus {
-    Demo,
-    Terminal,
-}
-
-impl Default for DemoFocus {
-    fn default() -> Self {
-        Self::Demo
+impl InputFocus {
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Menu => "menu",
+            Self::GameMenu => "game_menu",
+            Self::Game => "game",
+            Self::Edit => "edit",
+        }
     }
 }
 
-impl FromStr for DemoFocus {
+impl FromStr for InputFocus {
     type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> std::prelude::rust_2015::Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Result<Self> {
         Ok(match s {
-            "demo" => Self::Demo,
-            "terminal" => Self::Terminal,
-            _ => bail!(
-                "unknown focus to bind in {}; expected \"demo\" or \"terminal\"",
-                s
-            ),
+            "menu" => Self::Menu,
+            "game_menu" => Self::GameMenu,
+            "game" => Self::Game,
+            "edit" => Self::Edit,
+            _ => bail!("not an input focus"),
         })
     }
 }
 
-impl InputFocus for DemoFocus {
-    fn name(&self) -> &'static str {
-        match self {
-            Self::Demo => "demo",
-            Self::Terminal => "terminal",
+impl ToString for InputFocus {
+    fn to_string(&self) -> String {
+        self.name().to_owned()
+    }
+}
+
+impl Default for InputFocus {
+    fn default() -> Self {
+        Self::Game
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum InputTargetSimStep {
+    ToggleTerminal,
+}
+
+/// Controls terminal visibility and key access. Should be installed before Terminal and anything
+/// that processes input, like EventMapper and WidgetBuffer.
+#[derive(NitrousResource, Copy, Clone, Debug, Eq, PartialEq, Hash)]
+pub struct InputTarget {
+    terminal_active: bool,
+    input_focus: InputFocus,
+}
+
+impl Extension for InputTarget {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        runtime.insert_named_resource("input_target", InputTarget::default());
+        runtime.add_input_system(
+            Self::sys_handle_toggle_terminal.label(InputTargetSimStep::ToggleTerminal),
+        );
+        Ok(())
+    }
+}
+
+impl Default for InputTarget {
+    fn default() -> Self {
+        Self {
+            terminal_active: false,
+            input_focus: InputFocus::Edit,
+        }
+    }
+}
+
+#[inject_nitrous_resource]
+impl InputTarget {
+    // Handle terminal separately from bindings in case things get messed up
+    pub fn sys_handle_toggle_terminal(events: Res<InputEventVec>, mut target: ResMut<InputTarget>) {
+        if events
+            .iter()
+            .any(|event| target.is_toggle_terminal_event(event))
+        {
+            target.toggle_terminal();
         }
     }
 
-    fn is_terminal_focused(&self) -> bool {
-        *self == Self::Terminal
+    fn is_toggle_terminal_event(&self, event: &InputEvent) -> bool {
+        if let InputEvent::KeyboardKey {
+            virtual_keycode,
+            press_state,
+            modifiers_state,
+            ..
+        } = event
+        {
+            if self.terminal_active && *virtual_keycode == VirtualKeyCode::Escape
+                || *virtual_keycode == VirtualKeyCode::Grave
+                    && *modifiers_state == ModifiersState::CTRL
+                    && *press_state == ElementState::Pressed
+            {
+                return true;
+            }
+        }
+        false
     }
 
-    fn toggle_terminal(&mut self) {
-        *self = match self {
-            Self::Terminal => Self::Demo,
-            Self::Demo => Self::Terminal,
-        };
+    #[method]
+    pub fn terminal_active(&self) -> bool {
+        self.terminal_active
+    }
+
+    #[method]
+    pub fn set_terminal_active(&mut self, active: bool) {
+        self.terminal_active = active;
+    }
+
+    #[method]
+    pub fn toggle_terminal(&mut self) {
+        self.terminal_active = !self.terminal_active;
+    }
+
+    pub fn focus(&self) -> String {
+        self.input_focus.to_string()
+    }
+
+    pub fn input_focus(&self) -> InputFocus {
+        self.input_focus
     }
 }
 
@@ -118,7 +192,7 @@ pub enum MetaEvent {
 }
 
 #[derive(Debug, Default)]
-pub struct InputState {
+pub struct GlobalInputState {
     modifiers_state: ModifiersState,
     cursor_in_window: HashMap<DeviceId, bool>,
     window_focused: bool,
@@ -301,7 +375,7 @@ impl InputSystem {
 
         // Hijack the main thread.
         let mut generic_events = Vec::new();
-        let mut input_state: InputState = Default::default();
+        let mut input_state: GlobalInputState = Default::default();
         event_loop.run(move |event, _target, control_flow| {
             *control_flow = ControlFlow::Wait;
             if event == Event::UserEvent(MetaEvent::Stop) {
@@ -393,7 +467,7 @@ impl InputSystem {
         // Hijack the main thread.
         let mut input_events = Vec::new();
         let mut system_events = Vec::new();
-        let mut input_state: InputState = Default::default();
+        let mut input_state: GlobalInputState = Default::default();
         event_loop.run(move |event, _target, control_flow| {
             *control_flow = ControlFlow::Wait;
             if event == Event::UserEvent(MetaEvent::Stop) {
@@ -426,7 +500,7 @@ impl InputSystem {
 
     fn wrap_event(
         e: &Event<MetaEvent>,
-        input_state: &mut InputState,
+        input_state: &mut GlobalInputState,
         input_events: &mut Vec<InputEvent>,
         system_events: &mut Vec<SystemEvent>,
     ) {
@@ -451,7 +525,7 @@ impl InputSystem {
     #[allow(clippy::ptr_arg)]
     fn wrap_window_event(
         event: &WindowEvent,
-        input_state: &mut InputState,
+        input_state: &mut GlobalInputState,
         out: &mut Vec<InputEvent>,
         system_events: &mut Vec<SystemEvent>,
     ) {
@@ -554,7 +628,7 @@ impl InputSystem {
     fn wrap_device_event(
         device_id: &DeviceId,
         event: &DeviceEvent,
-        input_state: &mut InputState,
+        input_state: &mut GlobalInputState,
         out: &mut Vec<InputEvent>,
     ) {
         match event {
@@ -798,6 +872,88 @@ impl InputSystem {
 
         discovered
     }
+
+    pub fn code_to_char(virtual_keycode: &VirtualKeyCode) -> (Option<char>, Option<char>) {
+        match virtual_keycode {
+            VirtualKeyCode::Numpad0 => (Some('0'), None),
+            VirtualKeyCode::Numpad1 => (Some('1'), None),
+            VirtualKeyCode::Numpad2 => (Some('2'), None),
+            VirtualKeyCode::Numpad3 => (Some('3'), None),
+            VirtualKeyCode::Numpad4 => (Some('4'), None),
+            VirtualKeyCode::Numpad5 => (Some('5'), None),
+            VirtualKeyCode::Numpad6 => (Some('6'), None),
+            VirtualKeyCode::Numpad7 => (Some('7'), None),
+            VirtualKeyCode::Numpad8 => (Some('8'), None),
+            VirtualKeyCode::Numpad9 => (Some('9'), None),
+            VirtualKeyCode::Key0 => (Some('0'), Some(')')),
+            VirtualKeyCode::Key1 => (Some('1'), Some('!')),
+            VirtualKeyCode::Key2 => (Some('2'), Some('@')),
+            VirtualKeyCode::Key3 => (Some('3'), Some('#')),
+            VirtualKeyCode::Key4 => (Some('4'), Some('$')),
+            VirtualKeyCode::Key5 => (Some('5'), Some('%')),
+            VirtualKeyCode::Key6 => (Some('6'), Some('^')),
+            VirtualKeyCode::Key7 => (Some('7'), Some('&')),
+            VirtualKeyCode::Key8 => (Some('8'), Some('*')),
+            VirtualKeyCode::Key9 => (Some('9'), Some('(')),
+            VirtualKeyCode::A => (Some('a'), Some('A')),
+            VirtualKeyCode::B => (Some('b'), Some('B')),
+            VirtualKeyCode::C => (Some('c'), Some('C')),
+            VirtualKeyCode::D => (Some('d'), Some('D')),
+            VirtualKeyCode::E => (Some('e'), Some('E')),
+            VirtualKeyCode::F => (Some('f'), Some('F')),
+            VirtualKeyCode::G => (Some('g'), Some('G')),
+            VirtualKeyCode::H => (Some('h'), Some('H')),
+            VirtualKeyCode::I => (Some('i'), Some('I')),
+            VirtualKeyCode::J => (Some('j'), Some('J')),
+            VirtualKeyCode::K => (Some('k'), Some('K')),
+            VirtualKeyCode::L => (Some('l'), Some('L')),
+            VirtualKeyCode::M => (Some('m'), Some('M')),
+            VirtualKeyCode::N => (Some('n'), Some('N')),
+            VirtualKeyCode::O => (Some('o'), Some('O')),
+            VirtualKeyCode::P => (Some('p'), Some('P')),
+            VirtualKeyCode::Q => (Some('q'), Some('Q')),
+            VirtualKeyCode::R => (Some('r'), Some('R')),
+            VirtualKeyCode::S => (Some('s'), Some('S')),
+            VirtualKeyCode::T => (Some('t'), Some('T')),
+            VirtualKeyCode::U => (Some('u'), Some('U')),
+            VirtualKeyCode::V => (Some('v'), Some('V')),
+            VirtualKeyCode::W => (Some('w'), Some('W')),
+            VirtualKeyCode::X => (Some('x'), Some('X')),
+            VirtualKeyCode::Y => (Some('y'), Some('Y')),
+            VirtualKeyCode::Z => (Some('z'), Some('Z')),
+            VirtualKeyCode::Space => (Some(' '), None),
+            VirtualKeyCode::Caret => (Some('^'), None),
+            VirtualKeyCode::NumpadAdd => (Some('+'), None),
+            VirtualKeyCode::NumpadDivide => (Some('/'), None),
+            VirtualKeyCode::NumpadDecimal => (Some('.'), None),
+            VirtualKeyCode::NumpadComma => (Some(','), None),
+            VirtualKeyCode::NumpadEquals => (Some('='), None),
+            VirtualKeyCode::NumpadMultiply => (Some('*'), None),
+            VirtualKeyCode::NumpadSubtract => (Some('-'), None),
+            VirtualKeyCode::Apostrophe => (Some('\''), Some('"')),
+            VirtualKeyCode::Asterisk => (Some('*'), None),
+            VirtualKeyCode::At => (Some('@'), None),
+            VirtualKeyCode::Backslash => (Some('\\'), Some('|')),
+            VirtualKeyCode::Colon => (Some(':'), None),
+            VirtualKeyCode::Comma => (Some(','), Some('<')),
+            VirtualKeyCode::Equals => (Some('='), Some('+')),
+            VirtualKeyCode::Grave => (Some('`'), Some('~')),
+            VirtualKeyCode::LBracket => (Some('['), Some('{')),
+            VirtualKeyCode::Minus => (Some('-'), Some('_')),
+            VirtualKeyCode::Period => (Some('.'), Some('>')),
+            VirtualKeyCode::Plus => (Some('+'), None),
+            VirtualKeyCode::RBracket => (Some(']'), Some('}')),
+            VirtualKeyCode::Semicolon => (Some(';'), Some(':')),
+            VirtualKeyCode::Slash => (Some('/'), Some('?')),
+
+            // Move to top level?
+            // Tab,
+            // Copy,
+            // Paste,
+            // Cut,
+            _ => (None, None),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -836,7 +992,7 @@ mod test {
 
     #[test]
     fn test_handle_system_events() {
-        let mut input_state: InputState = Default::default();
+        let mut input_state: GlobalInputState = Default::default();
         let psz = physical_size();
 
         let mut evts = Vec::new();

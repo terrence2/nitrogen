@@ -59,14 +59,14 @@ pub(crate) fn codegen(ir: Ir) -> TokenStream {
     let (impl_generics, _ty_generics, where_clause) = item.generics.split_for_impl();
     let ts2 = quote! {
         impl #impl_generics #ty #where_clause {
-            fn __call_method_inner__(&mut self, entity: ::nitrous::reexport::Entity, name: &str, args: &[::nitrous::Value], heap: ::nitrous::HeapMut) -> ::nitrous::anyhow::Result<::nitrous::Value> {
-                match name {
+            fn __call_method_inner__(&mut self, name: &str, args: &[::nitrous::Value], heap: ::nitrous::HeapMut) -> ::nitrous::anyhow::Result<::nitrous::CallResult> {
+                Ok(match name {
                     #(#method_arms)*
                     _ => {
                         ::nitrous::log::warn!("Unknown call_method '{}' passed to {}", name, stringify!(#ty));
                         ::nitrous::anyhow::bail!("Unknown call_method '{}' passed to {}", name, stringify!(#ty))
                     }
-                }
+                })
             }
 
             fn __get_inner__(&self, entity: ::nitrous::reexport::Entity, name: &str) -> ::nitrous::anyhow::Result<::nitrous::Value> {
@@ -93,10 +93,10 @@ pub(crate) fn codegen(ir: Ir) -> TokenStream {
                 vec![#(#names),*]
             }
 
-            fn __show_list__(&self) -> ::nitrous::anyhow::Result<::nitrous::Value> {
+            fn __show_list__(&self) -> ::nitrous::CallResult {
                 let items = vec![#(#list_items),*];
                 let out = items.join("\n");
-                Ok(::nitrous::Value::String(out))
+                ::nitrous::CallResult::Val(::nitrous::Value::String(out))
             }
         }
 

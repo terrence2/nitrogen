@@ -17,10 +17,15 @@ mod herder;
 mod runtime;
 mod startup;
 
+pub mod reexport {
+    pub use log;
+    pub use std::result;
+}
+
 pub use crate::{
     herder::{
         ExecutionMetadata, ExitRequest, ScriptCompletion, ScriptCompletions, ScriptHerder,
-        ScriptQueue, ScriptResult, ScriptRunKind, ScriptRunPhase,
+        ScriptQueue, ScriptResult, ScriptRunKind, ScriptRunPhase, ERROR_REPORTS,
     },
     runtime::{Extension, FrameStage, Runtime, RuntimeStep, ShutdownStage, SimStage, StartupStage},
     startup::StartupOpts,

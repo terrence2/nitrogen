@@ -20,18 +20,17 @@ use crate::{
     widget_vertex::WidgetVertex,
 };
 use anyhow::Result;
-use font_common::FontInterface;
+use font_common::Font;
 use gpu::Gpu;
-use parking_lot::RwLock;
-use std::{borrow::Borrow, sync::Arc};
+use nitrous::{inject_nitrous_resource, NitrousResource};
+use std::{borrow::Borrow, ops::Range};
 use window::{
-    size::{AbsSize, LeftBound, RelSize},
+    size::{AbsSize, RelSize},
     Window,
 };
 
-#[derive(Debug)]
+#[derive(Debug, NitrousResource)]
 pub struct PaintContext {
-    pub current_depth: RelSize,
     pub font_context: FontContext,
     pub widget_info_pool: Vec<WidgetInfo>,
     pub background_pool: Vec<WidgetVertex>,
@@ -39,6 +38,7 @@ pub struct PaintContext {
     pub image_pool: Vec<WidgetVertex>,
 }
 
+#[inject_nitrous_resource]
 impl PaintContext {
     pub const BACKGROUND_DEPTH: RelSize = RelSize::from_percent(0.75);
     pub const BORDER_DEPTH: RelSize = RelSize::from_percent(0.5);
@@ -47,7 +47,6 @@ impl PaintContext {
 
     pub fn new(gpu: &Gpu) -> Self {
         Self {
-            current_depth: RelSize::zero(),
             font_context: FontContext::new(gpu),
             widget_info_pool: Vec::new(),
             background_pool: Vec::new(),
@@ -60,7 +59,6 @@ impl PaintContext {
     // struct, inconveniently, so that we need to thread fewer random parameters through our
     // entire upload call stack.
     pub fn reset_for_frame(&mut self) {
-        self.current_depth = RelSize::zero();
         self.widget_info_pool.truncate(0);
         self.background_pool.truncate(0);
         self.image_pool.truncate(0);
@@ -71,20 +69,12 @@ impl PaintContext {
         &mut self.widget_info_pool[offset as usize]
     }
 
-    pub fn add_font<S: Borrow<str> + Into<String>>(
-        &mut self,
-        font_name: S,
-        font: Arc<RwLock<dyn FontInterface>>,
-    ) {
+    pub fn add_font<S: Borrow<str> + Into<String>>(&mut self, font_name: S, font: Font) {
         self.font_context.add_font(font_name, font);
     }
 
     pub fn dump_glyphs(&mut self) -> Result<()> {
         self.font_context.dump_glyphs()
-    }
-
-    pub fn enter_box(&mut self) {
-        self.current_depth += Self::BOX_DEPTH_SIZE;
     }
 
     pub fn push_widget(&mut self, info: &WidgetInfo) -> u32 {
@@ -105,7 +95,7 @@ impl PaintContext {
         self.font_context.layout_text(
             span,
             widget_info_index,
-            offset.with_depth(self.current_depth + Self::TEXT_DEPTH),
+            offset.with_depth(offset.depth() + Self::TEXT_DEPTH),
             selection_area,
             win,
             gpu,
@@ -120,5 +110,21 @@ impl PaintContext {
 
     pub fn handle_dump_texture(&mut self, gpu: &mut Gpu) -> Result<()> {
         self.font_context.handle_dump_texture(gpu)
+    }
+
+    pub fn background_vertex_count(&self) -> usize {
+        self.background_pool.len()
+    }
+
+    pub fn text_vertex_count(&self) -> usize {
+        self.text_pool.len()
+    }
+
+    pub fn background_vertex_range(&self) -> Range<u32> {
+        0u32..self.background_pool.len() as u32
+    }
+
+    pub fn text_vertex_range(&self) -> Range<u32> {
+        0u32..self.text_pool.len() as u32
     }
 }

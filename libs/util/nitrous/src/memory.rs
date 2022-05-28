@@ -17,12 +17,18 @@ use anyhow::{anyhow, ensure, Result};
 use bevy_ecs::{prelude::*, system::Resource};
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
+/// Enable the call to return self for chaining.
+pub enum CallResult {
+    Val(Value),
+    Selfish,
+}
+
 /// Use #[derive(NitrousResource)] to implement this trait. The derived implementation
 /// will expect the struct to have an impl block annotated with #[inject_nitrous]. This
 /// second macro will use #[method] tags to populate lookups for the various operations.
 pub trait ScriptResource: Resource + 'static {
     fn resource_type_name(&self) -> String;
-    fn call_method(&mut self, name: &str, args: &[Value], heap: HeapMut) -> Result<Value>;
+    fn call_method(&mut self, name: &str, args: &[Value], heap: HeapMut) -> Result<CallResult>;
     fn put(&mut self, name: &str, value: Value) -> Result<()>;
     fn get(&self, name: &str) -> Result<Value>;
     fn names(&self) -> Vec<&str>;
@@ -34,7 +40,7 @@ type ResourceLookupRefFunc =
     dyn Fn(&World) -> Option<&(dyn ScriptResource + 'static)> + Send + Sync + 'static;
 type ResourceLookupMutFunc =
     dyn Fn(&mut World) -> Option<&mut (dyn ScriptResource + 'static)> + Send + Sync + 'static;
-type ResourceCallMethodFunc = dyn Fn(&str, &[Value], HeapMut) -> Result<Value> + Send + Sync;
+type ResourceCallMethodFunc = dyn Fn(&str, &[Value], HeapMut) -> Result<CallResult> + Send + Sync;
 
 #[derive(Clone)]
 pub struct ResourceLookup {
@@ -86,7 +92,12 @@ impl ResourceLookup {
         (self.mut_func)(world)
     }
 
-    pub fn call_method(&self, method_name: &str, args: &[Value], heap: HeapMut) -> Result<Value> {
+    pub fn call_method(
+        &self,
+        method_name: &str,
+        args: &[Value],
+        heap: HeapMut,
+    ) -> Result<CallResult> {
         (self.call_func)(method_name, args, heap)
     }
 }
@@ -96,7 +107,7 @@ impl ResourceLookup {
 /// second macro will use #[method] tags to populate lookups for the various operations.
 pub trait ScriptComponent: Send + Sync + 'static {
     fn component_name(&self) -> &'static str;
-    fn call_method(&mut self, entity: Entity, name: &str, args: &[Value]) -> Result<Value>;
+    fn call_method(&mut self, name: &str, args: &[Value], heap: HeapMut) -> Result<CallResult>;
     fn put(&mut self, entity: Entity, name: &str, value: Value) -> Result<()>;
     fn get(&self, entity: Entity, name: &str) -> Result<Value>;
     fn names(&self) -> Vec<&str>;
@@ -108,11 +119,14 @@ type ComponentLookupMutFunc = dyn Fn(Entity, &mut World) -> Option<&mut (dyn Scr
     + Send
     + Sync
     + 'static;
+type ComponentCallMethodFunc =
+    dyn Fn(Entity, &str, &[Value], HeapMut) -> Result<CallResult> + Send + Sync;
 
 #[derive(Clone)]
 pub struct ComponentLookup {
     ref_func: Arc<ComponentLookupRefFunc>,
     mut_func: Arc<ComponentLookupMutFunc>,
+    call_func: Arc<ComponentCallMethodFunc>,
 }
 
 impl ComponentLookup {
@@ -132,6 +146,12 @@ impl ComponentLookup {
                     let cto: &mut (dyn ScriptComponent + 'static) = ptr.into_inner();
                     cto
                 })
+            }),
+            call_func: Arc::new(|entity, method_name, args, mut heap| {
+                let mut component = heap.world_mut().entity_mut(entity).remove::<T>().unwrap();
+                let rv = component.call_method(method_name, args, heap.as_mut());
+                heap.world_mut().entity_mut(entity).insert(component);
+                rv
             }),
         }
     }
@@ -158,6 +178,16 @@ impl ComponentLookup {
         world: &'a mut World,
     ) -> Option<&'a mut dyn ScriptComponent> {
         (self.mut_func)(entity, world)
+    }
+
+    pub fn call_method(
+        &self,
+        entity: Entity,
+        method_name: &str,
+        args: &[Value],
+        heap: HeapMut,
+    ) -> Result<CallResult> {
+        (self.call_func)(entity, method_name, args, heap)
     }
 }
 

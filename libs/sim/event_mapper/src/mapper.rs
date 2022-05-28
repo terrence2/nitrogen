@@ -18,14 +18,15 @@ use crate::{
 };
 use anyhow::{bail, Result};
 use bevy_ecs::prelude::*;
-use input::{ElementState, InputEvent, InputEventVec, InputFocus, InputStep, ModifiersState};
+use input::{
+    ElementState, InputEvent, InputEventVec, InputFocus, InputStep, InputTarget, ModifiersState,
+};
 use nitrous::{inject_nitrous_resource, method, NitrousResource, Value};
 use ordered_float::OrderedFloat;
 use runtime::{Extension, Runtime, ScriptHerder};
 use std::{
     collections::{HashMap, HashSet},
     fmt::Debug,
-    marker::PhantomData,
     str::FromStr,
 };
 
@@ -42,23 +43,14 @@ pub enum EventMapperStep {
 }
 
 #[derive(Default, Debug, NitrousResource)]
-pub struct EventMapper<T>
-where
-    T: InputFocus,
-    <T as FromStr>::Err: Debug,
-{
-    bindings: HashMap<T, Bindings>,
+pub struct EventMapper {
+    bindings: HashMap<InputFocus, Bindings>,
     state: State,
-    phantom_data: PhantomData<T>,
 }
 
-impl<T> Extension for EventMapper<T>
-where
-    T: InputFocus,
-    <T as FromStr>::Err: Debug,
-{
+impl Extension for EventMapper {
     fn init(runtime: &mut Runtime) -> Result<()> {
-        runtime.insert_named_resource("bindings", EventMapper::<T>::new());
+        runtime.insert_named_resource("bindings", EventMapper::new());
         runtime.add_input_system(
             Self::sys_handle_input_events
                 .label(EventMapperStep::HandleEvents)
@@ -69,20 +61,20 @@ where
 }
 
 #[inject_nitrous_resource]
-impl<T> EventMapper<T>
-where
-    T: InputFocus,
-    <T as FromStr>::Err: Debug,
-{
+impl EventMapper {
     pub fn new() -> Self {
         Self {
             bindings: HashMap::new(),
             state: State::default(),
-            phantom_data: Default::default(),
         }
     }
 
-    pub fn bind_in_focus(&mut self, focus: T, event_name: &str, script_raw: &str) -> Result<()> {
+    pub fn bind_in_focus(
+        &mut self,
+        focus: InputFocus,
+        event_name: &str,
+        script_raw: &str,
+    ) -> Result<()> {
         let bindings = self
             .bindings
             .entry(focus)
@@ -93,7 +85,7 @@ where
 
     #[method]
     pub fn bind_in(&mut self, focus_name: &str, event_name: &str, script_raw: &str) -> Result<()> {
-        let focus = match T::from_str(focus_name) {
+        let focus = match InputFocus::from_str(focus_name) {
             Ok(focus) => focus,
             Err(e) => bail!("{:?}", e),
         };
@@ -102,28 +94,28 @@ where
 
     #[method]
     pub fn bind(&mut self, event_name: &str, script_raw: &str) -> Result<()> {
-        self.bind_in_focus(T::default(), event_name, script_raw)
+        self.bind_in_focus(InputFocus::default(), event_name, script_raw)
     }
 
     pub fn sys_handle_input_events(
         events: Res<InputEventVec>,
-        input_focus: Res<T>,
+        input_target: Res<InputTarget>,
         mut herder: ResMut<ScriptHerder>,
-        mut mapper: ResMut<EventMapper<T>>,
+        mut mapper: ResMut<EventMapper>,
     ) {
         mapper
-            .handle_events(&events, *input_focus, &mut herder)
+            .handle_events(&events, &input_target, &mut herder)
             .expect("EventMapper::handle_events");
     }
 
     pub fn handle_events(
         &mut self,
         events: &[InputEvent],
-        focus: T,
+        target: &InputTarget,
         herder: &mut ScriptHerder,
     ) -> Result<()> {
         for event in events {
-            self.handle_event(event, focus, herder)?;
+            self.handle_event(event, target, herder)?;
         }
         Ok(())
     }
@@ -131,7 +123,7 @@ where
     fn handle_event(
         &mut self,
         event: &InputEvent,
-        focus: T,
+        target: &InputTarget,
         herder: &mut ScriptHerder,
     ) -> Result<()> {
         let input = Input::from_event(event);
@@ -157,7 +149,7 @@ where
         }
 
         // Break *after* maintaining state.
-        if focus.is_terminal_focused() {
+        if target.terminal_active() {
             return Ok(());
         }
 
@@ -209,7 +201,7 @@ where
 mod test {
     use super::*;
     use input::{
-        test_make_input_events as mkinp, DemoFocus, InputEvent, ModifiersState, VirtualKeyCode,
+        test_make_input_events as mkinp, InputEvent, InputTarget, ModifiersState, VirtualKeyCode,
         VirtualKeyCode as VKC,
     };
     use nitrous::{inject_nitrous_resource, method, NitrousResource};
@@ -271,9 +263,9 @@ mod test {
     fn prepare() -> Result<Runtime> {
         let mut runtime = Runtime::default();
         runtime
-            .insert_resource(DemoFocus::default())
+            .insert_resource(InputTarget::default())
             .insert_named_resource("player", Player::default())
-            .load_extension::<EventMapper<DemoFocus>>()?;
+            .load_extension::<EventMapper>()?;
         runtime.resource_mut::<ScriptHerder>().run_string(
             r#"
                 bindings.bind("+w", "player.walk(pressed)");

@@ -10,6 +10,5 @@ edition = "2021"
 anyhow = { version = "^ 1", features = ["backtrace"] }
 image = "^ 0.24"
 rusttype = "^ 0.9"
-parking_lot = "^ 0.12"
 window = { path = "../../system/window" }
 font_common = { path = "../../wgpu-buffer/font_common" }

@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    color::Color,
     font_context::{FontContext, FontId, SANS_FONT_ID},
     paint_context::PaintContext,
     region::{Extent, Position, Region},
@@ -22,13 +21,14 @@ use crate::{
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
+use csscolorparser::Color;
 use gpu::Gpu;
 use input::InputEvent;
 use parking_lot::RwLock;
 use runtime::ScriptHerder;
 use std::{collections::VecDeque, sync::Arc, time::Instant};
 use window::{
-    size::{AbsSize, LeftBound, Size},
+    size::{AbsSize, LeftBound, RelSize, Size},
     Window,
 };
 
@@ -50,7 +50,7 @@ impl TextEdit {
         let mut obj = Self {
             lines: VecDeque::new(),
             read_only: true, // NOTE: writable text edits not supported yet.
-            default_color: Color::Black,
+            default_color: Color::from([0, 0, 0]),
             default_font: SANS_FONT_ID,
             default_size: Size::from_pts(12.),
 
@@ -62,8 +62,8 @@ impl TextEdit {
         obj
     }
 
-    pub fn with_default_color(mut self, color: Color) -> Self {
-        self.default_color = color;
+    pub fn with_default_color(mut self, color: &Color) -> Self {
+        self.default_color = color.to_owned();
         self
     }
 
@@ -77,8 +77,8 @@ impl TextEdit {
         self
     }
 
-    pub fn default_color(&self) -> Color {
-        self.default_color
+    pub fn default_color(&self) -> &Color {
+        &self.default_color
     }
 
     pub fn default_font(&self) -> FontId {
@@ -136,18 +136,18 @@ impl TextEdit {
         TextRun::empty()
             .with_hidden_selection()
             .with_default_size(self.default_size)
-            .with_default_color(self.default_color)
+            .with_default_color(&self.default_color)
             .with_default_font(self.default_font)
             .with_text(text)
     }
 }
 
 impl Widget for TextEdit {
-    fn measure(&mut self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>> {
+    fn measure(&self, win: &Window, font_context: &FontContext) -> Result<Extent<Size>> {
         let mut width = AbsSize::zero();
         let mut height_offset = AbsSize::zero();
         let line_count = self.lines.len();
-        for (i, line) in self.lines.iter_mut().enumerate() {
+        for (i, line) in self.lines.iter().enumerate() {
             let span_metrics = line.measure(win, font_context)?;
             if i != line_count - 1 {
                 height_offset += span_metrics.line_gap;
@@ -155,21 +155,21 @@ impl Widget for TextEdit {
             height_offset += span_metrics.height;
             width = width.max(&span_metrics.width);
         }
-        self.measured_extent = Extent::new(width, height_offset);
-        Ok(self.measured_extent.into())
+        let measured_extent = Extent::new(width, height_offset);
+        Ok(measured_extent.into())
     }
 
-    fn layout(
-        &mut self,
-        _now: Instant,
-        region: Region<Size>,
-        _win: &Window,
-        _font_context: &mut FontContext,
-    ) -> Result<()> {
-        self.layout_position = *region.position();
-        self.layout_extent = *region.extent();
-        Ok(())
-    }
+    // fn layout(
+    //     &mut self,
+    //     _now: Instant,
+    //     region: Region<RelSize>,
+    //     _win: &Window,
+    //     _font_context: &mut FontContext,
+    // ) -> Result<()> {
+    //     self.layout_position = *region.position();
+    //     self.layout_extent = *region.extent();
+    //     Ok(())
+    // }
 
     fn upload(
         &self,

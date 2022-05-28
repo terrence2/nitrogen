@@ -7,4 +7,7 @@ edition = "2021"
 [dependencies]
 anyhow = { version = "^ 1", features = ["backtrace"] }
 image = "^ 0.24"
+ordered-float = "^ 3"
+parking_lot = "^ 0.12"
+atlas = { path = "../../wgpu-buffer/atlas" }
 window = { path = "../../system/window" }

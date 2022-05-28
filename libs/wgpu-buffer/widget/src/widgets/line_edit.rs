@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    color::Color,
     font_context::{FontContext, FontId, TextSpanMetrics},
     paint_context::PaintContext,
     region::{Extent, Position, Region},
@@ -22,13 +21,14 @@ use crate::{
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
+use csscolorparser::Color;
 use gpu::Gpu;
 use input::{ElementState, InputEvent, ModifiersState, VirtualKeyCode};
 use parking_lot::RwLock;
 use runtime::ScriptHerder;
 use std::{ops::Range, sync::Arc, time::Instant};
 use window::{
-    size::{AbsSize, AspectMath, ScreenDir, Size},
+    size::{AbsSize, AspectMath, RelSize, ScreenDir, Size},
     Window,
 };
 
@@ -52,7 +52,7 @@ impl LineEdit {
         }
     }
 
-    pub fn with_default_color(mut self, color: Color) -> Self {
+    pub fn with_default_color(mut self, color: &Color) -> Self {
         self.line.set_default_color(color);
         self
     }
@@ -112,30 +112,30 @@ impl LineEdit {
 }
 
 impl Widget for LineEdit {
-    fn measure(&mut self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>> {
-        self.metrics = self.line.measure(win, font_context)?.to_owned();
+    fn measure(&self, win: &Window, font_context: &FontContext) -> Result<Extent<Size>> {
+        let metrics = self.line.measure(win, font_context)?.to_owned();
         Ok(Extent::<Size>::new(
-            self.metrics.width.into(),
-            (self.metrics.height - self.metrics.descent).into(),
+            metrics.width.into(),
+            (metrics.height - metrics.descent).into(),
         ))
     }
 
-    fn layout(
-        &mut self,
-        _now: Instant,
-        region: Region<Size>,
-        win: &Window,
-        _font_context: &mut FontContext,
-    ) -> Result<()> {
-        let mut position = *region.position();
-        *position.bottom_mut() =
-            position
-                .bottom()
-                .sub(&self.metrics.descent.into(), win, ScreenDir::Vertical);
-        self.position = position;
-        self.extent = *region.extent();
-        Ok(())
-    }
+    // fn layout(
+    //     &mut self,
+    //     _now: Instant,
+    //     region: Region<RelSize>,
+    //     win: &Window,
+    //     _font_context: &mut FontContext,
+    // ) -> Result<()> {
+    //     let mut position = *region.position();
+    //     *position.bottom_mut() =
+    //         position
+    //             .bottom()
+    //             .sub(&self.metrics.descent.into(), win, ScreenDir::Vertical);
+    //     self.position = position;
+    //     self.extent = *region.extent();
+    //     Ok(())
+    // }
 
     fn upload(
         &self,

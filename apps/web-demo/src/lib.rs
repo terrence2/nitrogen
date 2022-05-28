@@ -18,7 +18,7 @@ use camera::{ArcBallController, ArcBallSystem, CameraSystem, ScreenCameraControl
 use event_mapper::EventMapper;
 use global_data::GlobalParametersBuffer;
 use gpu::Gpu;
-use input::{DemoFocus, InputController, InputSystem};
+use input::{InputController, InputSystem, InputTarget};
 use measure::WorldSpaceFrame;
 use orrery::Orrery;
 use runtime::Runtime;
@@ -70,10 +70,10 @@ async fn async_main() -> Result<()> {
         // .insert_resource(opt.detail_opts.cpu_detail())
         // .insert_resource(opt.detail_opts.gpu_detail())
         // .insert_resource(app_dirs)
-        .insert_resource(DemoFocus::Demo)
         // .load_extension::<StartupOpts>()?
         // .load_extension::<Catalog>()?
-        .load_extension::<EventMapper<DemoFocus>>()?
+        .load_extension::<InputTarget>()?
+        .load_extension::<EventMapper>()?
         .load_extension::<Window>()?
         .load_extension::<Gpu>()?
         // .load_extension::<AtmosphereBuffer>()?

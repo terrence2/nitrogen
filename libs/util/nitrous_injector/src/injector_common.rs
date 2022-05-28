@@ -187,35 +187,35 @@ fn lower_arg(i: usize, arg: &ArgDef) -> Expr {
 fn lower_method_call(name: &str, item: Ident, arg_exprs: &[Expr], ret: RetType) -> Arm {
     parse2(match ret {
         RetType::Nothing => {
-            quote! { #name => { self.#item( #(#arg_exprs),* ); Ok(::nitrous::Value::True()) } }
+            quote! { #name => { self.#item( #(#arg_exprs),* ); ::nitrous::CallResult::Val(::nitrous::Value::True()) } }
         }
         RetType::Raw(llty) => match llty {
             Scalar::Boolean => {
-                quote! { #name => { Ok(::nitrous::Value::Boolean(self.#item( #(#arg_exprs),* ))) } }
+                quote! { #name => { ::nitrous::CallResult::Val(::nitrous::Value::Boolean(self.#item( #(#arg_exprs),* ))) } }
             }
             Scalar::Integer => {
-                quote! { #name => { Ok(::nitrous::Value::Integer(self.#item( #(#arg_exprs),* ))) } }
+                quote! { #name => { ::nitrous::CallResult::Val(::nitrous::Value::Integer(self.#item( #(#arg_exprs),* ))) } }
             }
             Scalar::Float => {
-                quote! { #name => { Ok(::nitrous::Value::Float(::nitrous::ordered_float::OrderedFloat(self.#item( #(#arg_exprs),* )))) } }
+                quote! { #name => { ::nitrous::CallResult::Val(::nitrous::Value::Float(::nitrous::ordered_float::OrderedFloat(self.#item( #(#arg_exprs),* )))) } }
             }
             Scalar::String => {
-                quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_exprs),* ))) } }
+                quote! { #name => { ::nitrous::CallResult::Val(::nitrous::Value::String(self.#item( #(#arg_exprs),* ))) } }
             }
             Scalar::StrRef => {
-                quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_exprs),* ).to_owned())) } }
+                quote! { #name => { ::nitrous::CallResult::Val(::nitrous::Value::String(self.#item( #(#arg_exprs),* ).to_owned())) } }
             }
             Scalar::GraticuleSurface => {
-                quote! { #name => { Ok(::nitrous::Value::Graticule(self.#item( #(#arg_exprs),* ))) } }
+                quote! { #name => { ::nitrous::CallResult::Val(::nitrous::Value::Graticule(self.#item( #(#arg_exprs),* ))) } }
             }
             Scalar::GraticuleTarget => {
-                quote! { #name => { Ok(::nitrous::Value::Graticule(self.#item( #(#arg_exprs),* ).with_origin::<::geodesy::GeoSurface>())) } }
+                quote! { #name => { ::nitrous::CallResult::Val(::nitrous::Value::Graticule(self.#item( #(#arg_exprs),* ).with_origin::<::geodesy::GeoSurface>())) } }
             }
             Scalar::Value => {
-                quote! { #name => { Ok(self.#item( #(#arg_exprs),* )) } }
+                quote! { #name => { ::nitrous::CallResult::Val(self.#item( #(#arg_exprs),* )) } }
             }
             Scalar::Unit => {
-                quote! { #name => { self.#item( #(#arg_exprs),* ); Ok(::nitrous::Value::True()) } }
+                quote! { #name => { self.#item( #(#arg_exprs),* ); ::nitrous::CallResult::Val(::nitrous::Value::True()) } }
             }
             Scalar::HeapMut | Scalar::HeapRef => {
                 panic!("invalid return of heap type from method")
@@ -223,37 +223,46 @@ fn lower_method_call(name: &str, item: Ident, arg_exprs: &[Expr], ret: RetType) 
         },
         RetType::ResultRaw(llty) => match llty {
             Scalar::Boolean => {
-                quote! { #name => { Ok(::nitrous::Value::Boolean(self.#item( #(#arg_exprs),* )?)) } }
+                quote! { #name => { ::nitrous::CallResult::Val(::nitrous::Value::Boolean(self.#item( #(#arg_exprs),* )?)) } }
             }
             Scalar::Integer => {
-                quote! { #name => { Ok(::nitrous::Value::Integer(self.#item( #(#arg_exprs),* )?)) } }
+                quote! { #name => { ::nitrous::CallResult::Val(::nitrous::Value::Integer(self.#item( #(#arg_exprs),* )?)) } }
             }
             Scalar::Float => {
-                quote! { #name => { Ok(::nitrous::Value::Float(::nitrous::ordered_float::OrderedFloat(self.#item( #(#arg_exprs),* )?))) } }
+                quote! { #name => { ::nitrous::CallResult::Val(::nitrous::Value::Float(::nitrous::ordered_float::OrderedFloat(self.#item( #(#arg_exprs),* )?))) } }
             }
             Scalar::String => {
-                quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_exprs),* )?)) } }
+                quote! { #name => { ::nitrous::CallResult::Val(::nitrous::Value::String(self.#item( #(#arg_exprs),* )?)) } }
             }
             Scalar::StrRef => {
-                quote! { #name => { Ok(::nitrous::Value::String(self.#item( #(#arg_exprs),* )?.to_owned())) } }
+                quote! { #name => { ::nitrous::CallResult::Val(::nitrous::Value::String(self.#item( #(#arg_exprs),* )?.to_owned())) } }
             }
             Scalar::GraticuleSurface => {
-                quote! { #name => { Ok(::nitrous::Value::Graticule(self.#item( #(#arg_exprs),* )?)) } }
+                quote! { #name => { ::nitrous::CallResult::Val(::nitrous::Value::Graticule(self.#item( #(#arg_exprs),* )?)) } }
             }
             Scalar::GraticuleTarget => {
-                quote! { #name => { Ok(::nitrous::Value::Graticule(self.#item( #(#arg_exprs),* )?.with_origin::<::geodesy::GeoSurface>())) } }
+                quote! { #name => { ::nitrous::CallResult::Val(::nitrous::Value::Graticule(self.#item( #(#arg_exprs),* )?.with_origin::<::geodesy::GeoSurface>())) } }
             }
             Scalar::Value => {
-                quote! { #name => { self.#item( #(#arg_exprs),* ) } }
+                quote! { #name => { ::nitrous::CallResult::Val(self.#item( #(#arg_exprs),* )?) } }
             }
             Scalar::Unit => {
-                quote! { #name => { self.#item( #(#arg_exprs),* )?; Ok(::nitrous::Value::True()) } }
+                quote! { #name => { self.#item( #(#arg_exprs),* )?; ::nitrous::CallResult::Val(::nitrous::Value::True()) } }
             }
             Scalar::HeapMut | Scalar::HeapRef => {
                 panic!("invalid return of heap type from method")
             }
         },
-    }).unwrap()
+        RetType::Selfish => {
+            quote! {
+                #name => {
+                    self.#item( #(#arg_exprs),* );
+                    ::nitrous::CallResult::Selfish
+                }
+            }
+        }
+    })
+    .unwrap()
 }
 
 #[derive(Debug)]
@@ -411,6 +420,7 @@ pub(crate) enum RetType {
     Nothing,
     Raw(Scalar),
     ResultRaw(Scalar),
+    Selfish,
 }
 
 impl RetType {
@@ -436,8 +446,21 @@ impl RetType {
                         }
                         _ => Self::Raw(Scalar::from_type(ty.borrow())),
                     }
+                } else if let Type::Reference(ref ty_ref) = ty.borrow() {
+                    if let Type::Path(p) = ty_ref.elem.borrow() {
+                        if Scalar::type_path_name(p).as_str() == "Self" {
+                            Self::Selfish
+                        } else {
+                            panic!(
+                                "nitrous methods can only return references to Self, not {:#?}",
+                                p
+                            );
+                        }
+                    } else {
+                        panic!("nitrous methods can only return references to Self");
+                    }
                 } else {
-                    panic!("nitrous RetType only supports Result, None, Value, and basic types")
+                    panic!("nitrous RetType only supports Result, None, Value, and basic types, not: {:#?}", ty)
                 }
             }
         }

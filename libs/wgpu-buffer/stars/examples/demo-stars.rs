@@ -22,7 +22,7 @@ use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use geodesy::{GeoSurface, Graticule, Target};
 use global_data::GlobalParametersBuffer;
 use gpu::{Gpu, GpuStep};
-use input::{DemoFocus, InputSystem};
+use input::{InputSystem, InputTarget};
 use measure::WorldSpaceFrame;
 use orrery::Orrery;
 use runtime::{ExitRequest, Extension, Runtime};
@@ -186,8 +186,8 @@ fn main() -> Result<()> {
 fn window_main(mut runtime: Runtime) -> Result<()> {
     runtime
         .insert_resource(DisplayOpts::default())
-        .insert_resource(DemoFocus::Demo)
-        .load_extension::<EventMapper<DemoFocus>>()?
+        .load_extension::<InputTarget>()?
+        .load_extension::<EventMapper>()?
         .load_extension::<Window>()?
         .load_extension::<Gpu>()?
         .load_extension::<FullscreenBuffer>()?
@@ -231,7 +231,7 @@ fn window_main(mut runtime: Runtime) -> Result<()> {
 
         runtime
             .get_mut::<ArcBallController>(player_ent)
-            .handle_mousemotion(-0.5f64, 0f64);
+            .handle_mousemotion(-0.05f64, 0f64);
     }
 
     Ok(())

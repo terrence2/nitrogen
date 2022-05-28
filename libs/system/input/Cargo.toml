@@ -13,6 +13,7 @@ smallvec = "^ 1"
 #pasts = "^ 0.8"
 #stick = "^ 0.12"
 winit = "^ 0.26"
+nitrous = { path = "../../util/nitrous" }
 runtime = { path = "../../util/runtime" }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

@@ -17,11 +17,9 @@ use bevy_ecs::prelude::*;
 use fullscreen::{FullscreenBuffer, FullscreenVertex};
 use global_data::{GlobalParametersBuffer, GlobalsStep};
 use gpu::{Gpu, GpuStep};
-use input::InputFocus;
 use log::trace;
 use runtime::{Extension, Runtime};
 use shader_shared::Group;
-use std::marker::PhantomData;
 use ui::{UiRenderPass, UiStep};
 use world::{WorldRenderPass, WorldStep};
 
@@ -31,21 +29,14 @@ pub enum CompositeRenderStep {
 }
 
 #[derive(Debug)]
-pub struct CompositeRenderPass<T>
-where
-    T: InputFocus,
-{
+pub struct CompositeRenderPass {
     pipeline: wgpu::RenderPipeline,
-    widget_type_holder: PhantomData<T>,
 }
 
-impl<T> Extension for CompositeRenderPass<T>
-where
-    T: InputFocus,
-{
+impl Extension for CompositeRenderPass {
     fn init(runtime: &mut Runtime) -> Result<()> {
         let composite = CompositeRenderPass::new(
-            runtime.resource::<UiRenderPass<T>>(),
+            runtime.resource::<UiRenderPass>(),
             runtime.resource::<WorldRenderPass>(),
             runtime.resource::<GlobalParametersBuffer>(),
             runtime.resource::<Gpu>(),
@@ -64,12 +55,9 @@ where
     }
 }
 
-impl<T> CompositeRenderPass<T>
-where
-    T: InputFocus,
-{
+impl CompositeRenderPass {
     pub fn new(
-        ui: &UiRenderPass<T>,
+        ui: &UiRenderPass,
         world: &WorldRenderPass,
         globals: &GlobalParametersBuffer,
         gpu: &Gpu,
@@ -147,20 +135,17 @@ where
                 multiview: None,
             });
 
-        Ok(Self {
-            pipeline,
-            widget_type_holder: PhantomData::default(),
-        })
+        Ok(Self { pipeline })
     }
 
     // composite: Accumulate offscreen buffers into a final image.
     #[allow(clippy::too_many_arguments)]
     fn sys_composite_scene(
-        composite: Res<CompositeRenderPass<T>>,
+        composite: Res<CompositeRenderPass>,
         fullscreen: Res<FullscreenBuffer>,
         globals: Res<GlobalParametersBuffer>,
         world: Res<WorldRenderPass>,
-        ui: Res<UiRenderPass<T>>,
+        ui: Res<UiRenderPass>,
         gpu: Res<Gpu>,
         maybe_surface: Res<Option<wgpu::SurfaceTexture>>,
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
@@ -187,7 +172,7 @@ where
         fullscreen: &'a FullscreenBuffer,
         globals: &'a GlobalParametersBuffer,
         world: &'a WorldRenderPass,
-        ui: &'a UiRenderPass<T>,
+        ui: &'a UiRenderPass,
     ) -> wgpu::RenderPass<'a> {
         rpass.set_pipeline(&self.pipeline);
         rpass.set_bind_group(Group::Globals.index(), globals.bind_group(), &[]);

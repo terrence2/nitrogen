@@ -15,3 +15,59 @@
 mod font_interface;
 
 pub use crate::font_interface::{FontAdvance, FontInterface};
+
+use atlas::Frame;
+use ordered_float::OrderedFloat;
+use parking_lot::{Mutex, MutexGuard};
+use std::{
+    collections::HashMap,
+    fmt,
+    fmt::{Debug, Formatter},
+    sync::Arc,
+};
+
+/// Combines a font interface with a glyph cache behind a handy interface.
+#[derive(Clone)]
+pub struct Font {
+    inner: Arc<Mutex<FontInner>>,
+}
+
+impl Debug for Font {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.inner.lock().font.fmt(f)
+    }
+}
+
+impl Font {
+    pub fn new<T: FontInterface>(font: T) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(FontInner {
+                font: Box::new(font),
+                cache: HashMap::new(),
+            })),
+        }
+    }
+
+    pub fn interface(&self) -> MutexGuard<FontInner> {
+        self.inner.lock()
+    }
+}
+
+pub struct FontInner {
+    font: Box<dyn FontInterface>,
+    cache: HashMap<(char, OrderedFloat<f32>), Frame>,
+}
+
+impl FontInner {
+    pub fn font(&self) -> &dyn FontInterface {
+        self.font.as_ref()
+    }
+
+    pub fn get_cached_frame(&self, c: char, scale_pts: f32) -> Option<&Frame> {
+        self.cache.get(&(c, OrderedFloat(scale_pts)))
+    }
+
+    pub fn cache_frame(&mut self, c: char, scale_pts: f32, frame: Frame) {
+        self.cache.insert((c, OrderedFloat(scale_pts)), frame);
+    }
+}
