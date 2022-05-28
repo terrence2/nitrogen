@@ -12,8 +12,12 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use std::fmt::Formatter;
-use std::{default::Default, fmt::Display};
+use anyhow::{Error, Result};
+use std::{
+    default::Default,
+    fmt::{Display, Formatter},
+    str::FromStr,
+};
 
 #[derive(Copy, Clone, Debug)]
 pub enum Color {
@@ -44,6 +48,31 @@ impl Display for Color {
         write!(f, "{:?}", self)
     }
 }
+
+/*
+impl FromStr for Color {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "transparent" => Self::Transparent,
+            "black" => Self::Black,
+            "gray" => Self::Gray,
+            "brown" => Self::Brown,
+            "white" => Self::White,
+            "pink" => Self::Pink,
+            "red" => Self::Red,
+            "orange" => Self::Orange,
+            "yellow" => Self::Yellow,
+            "green" => Self::Green,
+            "blue" => Self::Blue,
+            "purple" => Self::Purple,
+            "magenta" => Self::Magenta,
+            html => {}
+        }
+    }
+}
+ */
 
 impl Color {
     pub fn to_u8_array(self) -> [u8; 4] {

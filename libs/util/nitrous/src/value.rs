@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    memory::{ComponentLookup, ResourceLookup, RustCallbackFunc, WorldIndex},
+    memory::{CallResult, ComponentLookup, ResourceLookup, RustCallbackFunc, WorldIndex},
     HeapMut, HeapRef, ScriptComponent, ScriptResource,
 };
 use anyhow::{anyhow, bail, Result};
@@ -191,15 +191,20 @@ impl Value {
         }
     }
 
-    pub fn call_method(&mut self, args: &[Value], mut heap: HeapMut) -> Result<Value> {
+    pub fn call_method(&mut self, args: &[Value], heap: HeapMut) -> Result<Value> {
         match self {
             Value::ResourceMethod(lookup, method_name) => {
-                lookup.call_method(method_name, args, heap)
+                Ok(match lookup.call_method(method_name, args, heap)? {
+                    CallResult::Val(v) => v,
+                    CallResult::Selfish => Value::Resource(lookup.to_owned()),
+                })
             }
-            Value::ComponentMethod(entity, lookup, method_name) => lookup
-                .get_mut(*entity, heap.world_mut())
-                .ok_or_else(|| anyhow!("no such component for call: {}", method_name))?
-                .call_method(*entity, method_name, args),
+            Value::ComponentMethod(entity, lookup, method_name) => Ok(
+                match lookup.call_method(*entity, method_name, args, heap)? {
+                    CallResult::Val(v) => v,
+                    CallResult::Selfish => Value::Component(*entity, lookup.to_owned()),
+                },
+            ),
             Value::RustMethod(method) => method(args, heap),
             _ => {
                 error!("attempting to call non-method value: {}", self);

@@ -12,14 +12,12 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{
-    color::Color,
-    region::{Extent, Position},
-};
+use crate::region::{Extent, Position, Region};
+use csscolorparser::Color;
 use memoffset::offset_of;
 use std::mem;
 use window::{
-    size::{AbsSize, AspectMath, ScreenDir, Size},
+    size::{AbsSize, AspectMath, RelSize, ScreenDir, Size},
     Window,
 };
 use zerocopy::{AsBytes, FromBytes};
@@ -31,6 +29,11 @@ pub struct WidgetVertex {
     pub(crate) tex_coord: [f32; 2],
     pub(crate) color: [u8; 4],
     pub(crate) widget_info_index: u32,
+}
+
+fn pack_color(c: &Color) -> [u8; 4] {
+    let rgba = c.to_linear_rgba_u8();
+    [rgba.0, rgba.1, rgba.2, rgba.3]
 }
 
 impl WidgetVertex {
@@ -86,6 +89,56 @@ impl WidgetVertex {
         tmp
     }
 
+    pub fn push_textured_quad_rel(
+        [x0, y0]: [RelSize; 2],
+        [x1, y1]: [RelSize; 2],
+        z: f32,
+        [s0, t0]: [f32; 2],
+        [s1, t1]: [f32; 2],
+        color: &Color,
+        widget_info_index: u32,
+        pool: &mut Vec<WidgetVertex>,
+    ) {
+        let x0 = x0.as_gpu();
+        let y0 = y0.as_gpu();
+        let x1 = x1.as_gpu();
+        let y1 = y1.as_gpu();
+
+        // Build 4 corner vertices.
+        let v00 = WidgetVertex {
+            position: [x0, y0, z],
+            tex_coord: [s0, t0],
+            color: pack_color(color),
+            widget_info_index,
+        };
+        let v01 = WidgetVertex {
+            position: [x0, y1, z],
+            tex_coord: [s0, t1],
+            color: pack_color(color),
+            widget_info_index,
+        };
+        let v10 = WidgetVertex {
+            position: [x1, y0, z],
+            tex_coord: [s1, t0],
+            color: pack_color(color),
+            widget_info_index,
+        };
+        let v11 = WidgetVertex {
+            position: [x1, y1, z],
+            tex_coord: [s1, t1],
+            color: pack_color(color),
+            widget_info_index,
+        };
+
+        // Push 2 triangles
+        pool.push(v00);
+        pool.push(v10);
+        pool.push(v01);
+        pool.push(v01);
+        pool.push(v10);
+        pool.push(v11);
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn push_textured_quad(
         [x0, y0]: [Size; 2],
@@ -107,25 +160,25 @@ impl WidgetVertex {
         let v00 = WidgetVertex {
             position: [x0, y0, z],
             tex_coord: [s0, t0],
-            color: color.to_u8_array(),
+            color: pack_color(color),
             widget_info_index,
         };
         let v01 = WidgetVertex {
             position: [x0, y1, z],
             tex_coord: [s0, t1],
-            color: color.to_u8_array(),
+            color: pack_color(color),
             widget_info_index,
         };
         let v10 = WidgetVertex {
             position: [x1, y0, z],
             tex_coord: [s1, t0],
-            color: color.to_u8_array(),
+            color: pack_color(color),
             widget_info_index,
         };
         let v11 = WidgetVertex {
             position: [x1, y1, z],
             tex_coord: [s1, t1],
-            color: color.to_u8_array(),
+            color: pack_color(color),
             widget_info_index,
         };
 
@@ -163,25 +216,25 @@ impl WidgetVertex {
         let v00 = WidgetVertex {
             position: [x0, y0, z],
             tex_coord: [s0, t0],
-            color: color.to_u8_array(),
+            color: pack_color(color),
             widget_info_index,
         };
         let v01 = WidgetVertex {
             position: [x0, y1, z],
             tex_coord: [s0, t1],
-            color: color.to_u8_array(),
+            color: pack_color(color),
             widget_info_index,
         };
         let v10 = WidgetVertex {
             position: [x1, y0, z],
             tex_coord: [s1, t0],
-            color: color.to_u8_array(),
+            color: pack_color(color),
             widget_info_index,
         };
         let v11 = WidgetVertex {
             position: [x1, y1, z],
             tex_coord: [s1, t1],
-            color: color.to_u8_array(),
+            color: pack_color(color),
             widget_info_index,
         };
 
@@ -240,6 +293,27 @@ impl WidgetVertex {
             color,
             widget_info_index,
             win,
+            pool,
+        )
+    }
+
+    pub fn push_region(
+        region: Region<RelSize>,
+        color: &Color,
+        widget_info_index: u32,
+        pool: &mut Vec<WidgetVertex>,
+    ) {
+        Self::push_textured_quad_rel(
+            [region.position().left(), region.position().bottom()],
+            [
+                region.position().left() + region.extent().width(),
+                region.position().bottom() + region.extent().height(),
+            ],
+            region.position().depth().as_depth(),
+            [0f32, 0f32],
+            [0f32, 0f32],
+            color,
+            widget_info_index,
             pool,
         )
     }

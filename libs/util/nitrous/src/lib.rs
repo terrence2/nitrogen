@@ -30,7 +30,7 @@ pub use crate::{
     exec::{ExecutionContext, NitrousExecutor, YieldState},
     heap::{EntityName, Heap, HeapMut, HeapRef, NamedEntityMut},
     lower::{Instr, NitrousCode},
-    memory::{LocalNamespace, ScriptComponent, ScriptResource, WorldIndex},
+    memory::{CallResult, LocalNamespace, ScriptComponent, ScriptResource, WorldIndex},
     script::NitrousScript,
     value::Value,
 };

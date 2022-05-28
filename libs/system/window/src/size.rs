@@ -13,10 +13,10 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::Window;
-use std::cmp::Ordering;
-use std::fmt::Formatter;
+use anyhow::{anyhow, Result};
 use std::{
-    fmt::{Debug, Display},
+    cmp::Ordering,
+    fmt::{Debug, Display, Formatter},
     ops::{Add, AddAssign, Div, Mul, Neg, Sub, SubAssign},
 };
 
@@ -57,7 +57,7 @@ pub enum RelSize {
     /// Webgpu: -1,-1 at bottom left corner, 1,1 at top right corner.
     Gpu(f32),
 
-    /// As percentage of screen
+    /// As percentage of screen, same axis system as Webgpu
     Percent(f32),
 }
 
@@ -77,7 +77,10 @@ impl RelSize {
     }
 
     pub fn as_depth(self) -> f32 {
-        (self.as_gpu() + 1f32) / 2f32
+        // TODO: why this calculation?
+        // println!("{} => {}", self.as_gpu(), (self.as_gpu() + 1f32) / 2f32);
+        // (self.as_gpu() + 1f32) / 2f32
+        self.as_gpu()
     }
 
     pub fn as_percent(self) -> f32 {
@@ -95,6 +98,13 @@ impl RelSize {
         };
         let f = map_range(Self::PCT_RANGE, (0., rng), self.as_percent());
         AbsSize::Px(f * win.physical_size().cast::<f32>().width)
+    }
+
+    pub fn max_rel(&self, other: &Self) -> Self {
+        match self {
+            Self::Gpu(v) => Self::Gpu(v.max(other.as_gpu())),
+            Self::Percent(f) => Self::Percent(f.max(other.as_percent())),
+        }
     }
 }
 
@@ -389,12 +399,41 @@ impl Size {
         Self::Rel(RelSize::Percent(pct))
     }
 
+    pub const fn from_gpu(f: f32) -> Self {
+        Self::Rel(RelSize::Gpu(f))
+    }
+
     pub const fn from_pts(pts: f32) -> Self {
         Self::Abs(AbsSize::Pts(pts))
     }
 
     pub const fn from_px(px: f32) -> Self {
         Self::Abs(AbsSize::Px(px))
+    }
+
+    pub fn from_str(s: &str) -> Result<Self> {
+        let s = s.trim();
+        Ok(if s.ends_with("px") {
+            Self::from_px(
+                s.strip_suffix("px")
+                    .ok_or_else(|| anyhow!("parse failed"))?
+                    .parse::<f32>()?,
+            )
+        } else if s.ends_with("pts") {
+            Self::from_pts(
+                s.strip_suffix("pts")
+                    .ok_or_else(|| anyhow!("parse failed"))?
+                    .parse::<f32>()?,
+            )
+        } else if s.ends_with("%") {
+            Self::from_percent(
+                s.strip_suffix("%")
+                    .ok_or_else(|| anyhow!("parse failed"))?
+                    .parse::<f32>()?,
+            )
+        } else {
+            Self::from_gpu(s.parse::<f32>()?)
+        })
     }
 
     pub fn as_rel(self, win: &Window, screen_dir: ScreenDir) -> RelSize {

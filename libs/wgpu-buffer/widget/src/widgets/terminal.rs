@@ -13,80 +13,216 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    color::Color,
-    font_context::FontContext,
+    font_context::FontId,
+    layout::{LayoutMeasurements, LayoutPacking},
     paint_context::PaintContext,
-    region::{Extent, Position, Region},
-    widget::{Widget, WidgetFocus},
-    LineEdit, TextEdit, VerticalBox,
+    region::Extent,
+    text_run::TextRun,
+    WidgetBuffer, WidgetInfo, WidgetRenderStep,
 };
 use anyhow::{Context, Result};
+use bevy_ecs::prelude::*;
+use csscolorparser::Color;
 use gpu::Gpu;
-use input::{ElementState, InputEvent, VirtualKeyCode};
+use input::{ElementState, InputEvent, InputEventVec, InputSystem, InputTarget, VirtualKeyCode};
 use nitrous::{
+    inject_nitrous_resource,
     ir::{Expr, Stmt, Term},
-    HeapMut, HeapRef, NitrousAst, Value,
+    method, HeapMut, HeapRef, NitrousAst, NitrousResource, Value,
 };
-use parking_lot::RwLock;
-use runtime::{ScriptCompletion, ScriptHerder, ScriptResult, ScriptRunKind};
-use std::io::Read;
+use platform_dirs::AppDirs;
+use runtime::{
+    report, Extension, Runtime, RuntimeStep, ScriptCompletion, ScriptCompletions, ScriptHerder,
+    ScriptResult, ScriptRunKind, ERROR_REPORTS,
+};
 use std::{
+    collections::VecDeque,
     fs::{File, OpenOptions},
-    io::{Seek, SeekFrom, Write},
+    io::{Read, Seek, SeekFrom, Write},
     path::Path,
-    sync::Arc,
-    time::Instant,
 };
 use window::{
-    size::{AbsSize, RelSize, Size},
+    size::{AbsSize, RelSize, ScreenDir, Size},
     Window,
 };
 
 // TODO: expand this once we have scroll bars
 const HISTORY_SIZE: usize = 80;
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum TerminalSimStep {
+    HandleEvents,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum TerminalRenderStep {
+    ReportScriptCompletions,
+    Measure,
+    Upload,
+}
+
+#[derive(Component, Debug)]
+pub struct TerminalWidgetTag;
+
 // Items packed from top to bottom.
-#[derive(Debug)]
+#[derive(NitrousResource, Debug)]
 pub struct Terminal {
-    edit: Arc<RwLock<LineEdit>>,
-    output: Arc<RwLock<TextEdit>>,
-    container: Arc<RwLock<VerticalBox>>,
+    lines: VecDeque<TextRun>,
+    edit: TextRun,
+
+    font_id: FontId,
+    font_size: Size,
     visible: bool,
+
     history: Vec<String>,
     history_file: Option<File>,
     history_cursor: usize,
 }
 
-impl Terminal {
-    const WIDTH: Size = Size::from_percent(100.);
-    const HEIGHT: Size = Size::from_percent(40.);
+impl Extension for Terminal {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        let font_size = AbsSize::Pts(14.0);
+        let font_id = {
+            let gpu = runtime.resource::<Gpu>();
+            let context = runtime.resource::<PaintContext>();
+            let font_id = context.font_context.font_id_for_name("dejavu-mono");
+            context
+                .font_context
+                .cache_ascii_glyphs(font_id, font_size, gpu)?;
+            context
+                .font_context
+                .cache_ascii_glyphs(font_id, font_size, gpu)?;
+            font_id
+        };
 
-    pub fn new(font_context: &mut FontContext, state_dir: &Path, gpu: &Gpu) -> Result<Self> {
-        let output = TextEdit::new("")
-            .with_default_font(font_context.font_id_for_name("dejavu-mono"))
-            .with_default_color(Color::Green)
-            .with_text("Nitrogen Terminal\nType `help()` for help.")
-            .wrapped();
-        let edit = LineEdit::empty()
-            .with_default_font(font_context.font_id_for_name("mono"))
-            .with_default_color(Color::White)
-            .with_text("help()")
-            .wrapped();
-        edit.write().line_mut().select_all();
-        let container = VerticalBox::new_with_children(&[output.clone(), edit.clone()])
-            .with_background_color(Color::Gray.darken(3.).opacity(0.8))
-            .with_glass_background()
-            .with_overridden_extent(Extent::new(Self::WIDTH, Self::HEIGHT))
-            .with_fill(0)
-            .wrapped();
-
-        font_context.cache_ascii_glyphs(output.read().default_font(), AbsSize::Pts(12.0), gpu)?;
-        font_context.cache_ascii_glyphs(
-            edit.read().line().default_font(),
-            AbsSize::Pts(12.0),
-            gpu,
+        let terminal = Terminal::new(
+            font_id,
+            font_size.into(),
+            &runtime.resource::<AppDirs>().state_dir,
         )?;
+        runtime.insert_named_resource("terminal", terminal);
+        let mut term_packing = LayoutPacking::default();
+        term_packing.float_start();
+        term_packing.float_top();
+        term_packing.set_background("#555a")?;
+        let term_id = runtime
+            .spawn_named("terminal")?
+            .insert(TerminalWidgetTag)
+            .insert_named(term_packing)?
+            .insert(LayoutMeasurements::default())
+            .id();
+        runtime
+            .resource_mut::<WidgetBuffer>()
+            .root_mut()
+            .push_widget(term_id)?;
 
+        runtime.add_input_system(
+            Self::sys_handle_terminal_events
+                .exclusive_system()
+                .label(TerminalSimStep::HandleEvents),
+        );
+
+        runtime.add_startup_system(
+            Self::sys_report_script_completions.label(TerminalRenderStep::ReportScriptCompletions),
+        );
+        runtime.add_frame_system(
+            Self::sys_report_script_completions
+                .label(TerminalRenderStep::ReportScriptCompletions)
+                .before(TerminalRenderStep::Measure)
+                .before(RuntimeStep::ClearCompletions),
+        );
+
+        runtime.add_frame_system(
+            Terminal::sys_measure
+                .label(TerminalRenderStep::Measure)
+                .before(WidgetRenderStep::LayoutWidgets),
+        );
+        runtime.add_frame_system(
+            Terminal::sys_upload
+                .label(TerminalRenderStep::Upload)
+                .after(WidgetRenderStep::PrepareForFrame)
+                .after(WidgetRenderStep::LayoutWidgets)
+                .before(WidgetRenderStep::EnsureUploaded),
+        );
+
+        Ok(())
+    }
+}
+
+#[inject_nitrous_resource]
+impl Terminal {
+    const WIDTH: RelSize = RelSize::from_percent(100.);
+    const HEIGHT: RelSize = RelSize::from_percent(40.);
+
+    fn sys_measure(
+        mut terminals: Query<(
+            &TerminalWidgetTag,
+            &mut LayoutPacking,
+            &mut LayoutMeasurements,
+        )>,
+        terminal: Res<Terminal>,
+        input_target: Res<InputTarget>,
+        win: Res<Window>,
+        paint_context: Res<PaintContext>,
+    ) {
+        let (_, mut packing, mut measure) = terminals.single_mut();
+        packing.set_display(input_target.terminal_active());
+        for line in &terminal.lines {
+            let _ = report!(line.measure(&win, &paint_context.font_context));
+        }
+        let metrics = report!(terminal.edit.measure(&win, &paint_context.font_context));
+        measure.set_metrics(metrics);
+        measure.set_child_extent(Extent::new(Self::WIDTH, Self::HEIGHT), &packing);
+    }
+
+    fn sys_upload(
+        terminals: Query<(&TerminalWidgetTag, &LayoutMeasurements)>,
+        terminal: Res<Terminal>,
+        input_target: Res<InputTarget>,
+        win: Res<Window>,
+        gpu: Res<Gpu>,
+        mut context: ResMut<PaintContext>,
+    ) {
+        if !input_target.terminal_active() {
+            return;
+        }
+
+        let (_, measure) = terminals.single();
+        let info = context.push_widget(&WidgetInfo::default());
+
+        let mut pos = *measure.child_allocation().position();
+        *pos.bottom_mut() -= measure.metrics().descent.as_rel(&win, ScreenDir::Vertical);
+
+        report!(terminal
+            .edit
+            .upload(pos.into(), info, &win, &gpu, &mut context));
+        let h = measure.metrics().height.as_rel(&win, ScreenDir::Vertical);
+        for line in &terminal.lines {
+            *pos.bottom_mut() += h;
+            report!(line.upload(pos.into(), info, &win, &gpu, &mut context));
+        }
+    }
+
+    fn sys_handle_terminal_events(world: &mut World) {
+        if !world.resource::<InputTarget>().terminal_active() {
+            return;
+        }
+        let events = world.resource::<InputEventVec>().to_owned();
+        world.resource_scope(|world, mut terminal: Mut<Terminal>| {
+            for event in &events {
+                report!(terminal.handle_terminal_events(&event, HeapMut::wrap(world)));
+            }
+        });
+    }
+
+    fn sys_report_script_completions(
+        mut terminal: ResMut<Terminal>,
+        completions: Res<ScriptCompletions>,
+    ) {
+        terminal.report_script_completions(&completions);
+    }
+
+    pub fn new(font_id: FontId, font_size: Size, state_dir: &Path) -> Result<Self> {
         // Load command history from state dir
         let mut history_path = state_dir.to_owned();
         history_path.push("command_history.txt");
@@ -109,29 +245,45 @@ impl Terminal {
         };
         let history_cursor = history.len();
 
-        Ok(Self {
-            edit,
-            output,
-            container,
+        let mut terminal = Self {
+            lines: VecDeque::with_capacity(HISTORY_SIZE * 4),
+            edit: TextRun::empty()
+                .with_default_font(font_id)
+                .with_default_size(font_size)
+                .with_default_color(&Color::from([1., 1., 1.]))
+                .with_text("help()"),
+            font_id,
+            font_size,
             visible: true,
             history,
             history_file,
             history_cursor,
-        })
+        };
+
+        terminal.println("Nitrogen Terminal starting up...");
+        terminal.println("Type `help()` for help.");
+
+        Ok(terminal)
     }
 
-    pub fn set_font_size(&mut self, size: AbsSize) {
-        self.output.write().set_font_size(size.into());
+    #[method]
+    pub fn set_font_size(&mut self, size_pts: f64) {
+        let sz = Size::from_pts(size_pts as f32);
+        for line in self.lines.iter_mut() {
+            line.set_default_size(sz);
+            line.select_all();
+            line.change_size(sz);
+            line.select_none();
+        }
+        self.edit.set_default_size(sz);
+        self.edit.select_all();
+        self.edit.change_size(sz);
+        self.edit.select_none();
     }
 
     fn add_command_to_history(&mut self, command: &str) -> Result<()> {
         // Echo the command into the output buffer as a literal.
-        self.output
-            .write()
-            .append_line(&("> ".to_owned() + command));
-
-        // And print to the console in case we need to copy the transaction.
-        println!("{}", command);
+        self.println(&("> ".to_owned() + command));
 
         // And save it in our local history so we don't have to re-type it
         self.history.push(command.to_owned());
@@ -149,21 +301,27 @@ impl Terminal {
         Ok(())
     }
 
-    pub fn with_visible(mut self, visible: bool) -> Self {
-        self.visible = visible;
-        self
-    }
-
+    #[method]
     pub fn set_visible(&mut self, visible: bool) {
         self.visible = visible;
     }
 
-    pub fn wrapped(self) -> Arc<RwLock<Self>> {
-        Arc::new(RwLock::new(self))
+    pub fn println(&mut self, line: &str) {
+        println!("{}", line);
+        let run = TextRun::empty()
+            .with_default_color(&Color::from([0., 1., 0.]))
+            .with_default_font(self.font_id)
+            .with_default_size(self.font_size)
+            .with_hidden_selection()
+            .with_text(line);
+        self.lines.push_front(run);
+        if self.lines.len() > HISTORY_SIZE {
+            self.lines.pop_back();
+        }
     }
 
-    pub fn println(&self, line: &str) {
-        self.output.write().append_line(line);
+    fn last_line_mut(&mut self) -> &mut TextRun {
+        self.lines.front_mut().unwrap()
     }
 
     fn try_complete_resource(partial: &NitrousAst, heap: HeapRef) -> Option<String> {
@@ -295,11 +453,11 @@ impl Terminal {
     }
 
     fn on_tab_pressed(&mut self, heap: HeapRef) {
-        let incomplete = self.edit.read().line().flatten();
+        let incomplete = self.edit.flatten();
         if let Ok(partial) = NitrousAst::parse(&incomplete) {
             if let Some(full) = self.try_completion(partial, heap) {
-                self.edit.write().line_mut().select_all();
-                self.edit.write().line_mut().insert(&full);
+                self.edit.select_all();
+                self.edit.insert(&full);
             }
         }
     }
@@ -307,25 +465,19 @@ impl Terminal {
     fn on_up_pressed(&mut self) {
         if self.history_cursor > 0 {
             self.history_cursor -= 1;
-            self.edit.write().line_mut().select_all();
-            self.edit
-                .write()
-                .line_mut()
-                .insert(&self.history[self.history_cursor]);
+            self.edit.select_all();
+            self.edit.insert(&self.history[self.history_cursor]);
         }
     }
 
     fn on_down_pressed(&mut self) {
         if self.history_cursor < self.history.len() {
             self.history_cursor += 1;
-            self.edit.write().line_mut().select_all();
+            self.edit.select_all();
             if self.history_cursor < self.history.len() {
-                self.edit
-                    .write()
-                    .line_mut()
-                    .insert(&self.history[self.history_cursor]);
+                self.edit.insert(&self.history[self.history_cursor]);
             } else {
-                self.edit.write().line_mut().insert("");
+                self.edit.insert("");
             }
         }
     }
@@ -341,9 +493,9 @@ impl Terminal {
     }
 
     fn on_enter_pressed(&mut self, herder: &mut ScriptHerder) -> Result<()> {
-        let command = self.edit.read().line().flatten();
-        self.edit.write().line_mut().select_all();
-        self.edit.write().line_mut().delete();
+        let command = self.edit.flatten();
+        self.edit.select_all();
+        self.edit.delete();
 
         self.add_command_to_history(&command)?;
 
@@ -364,33 +516,27 @@ impl Terminal {
         Ok(())
     }
 
-    fn show_line(&self, line: &str) {
-        let screen = &mut self.output.write();
-        println!("{}", line);
-        screen.append_line(line);
-        if screen.line_count() > HISTORY_SIZE {
-            screen.remove_first_line();
+    pub fn report_script_completions(&mut self, completions: &[ScriptCompletion]) {
+        for err in ERROR_REPORTS.lock().unwrap().drain(..) {
+            self.println(&err);
         }
-    }
-
-    pub fn report_script_completions(&self, completions: &[ScriptCompletion]) {
         for completion in completions {
             if completion.meta.kind() == ScriptRunKind::Interactive {
                 match &completion.result {
                     ScriptResult::Ok(v) => match v {
                         Value::String(s) => {
                             for line in s.lines() {
-                                self.show_line(line);
+                                self.println(line);
                             }
                         }
                         Value::ResourceMethod(_, _) | Value::ComponentMethod(_, _, _) => {
-                            self.show_line(&format!("{v} is a method, did you mean to call it?",));
-                            self.show_line(
+                            self.println(&format!("{v} is a method, did you mean to call it?",));
+                            self.println(
                                 "Try using up-arrow to go back and add parentheses to the end.",
                             );
                         }
                         _ => {
-                            self.show_line(&v.to_string());
+                            self.println(&v.to_string());
                         }
                     },
                     ScriptResult::Err(error) => {
@@ -403,37 +549,37 @@ impl Terminal {
         }
     }
 
-    fn show_script_error(&self, completion: &ScriptCompletion, error: &str) {
+    fn show_script_error(&mut self, completion: &ScriptCompletion, error: &str) {
         self.show_run_error(&completion.meta.context().script().to_string(), error);
     }
 
-    fn show_run_error(&self, command: &str, error: &str) {
-        let screen = &mut self.output.write();
-
+    fn show_run_error(&mut self, command: &str, error: &str) {
         let prefix = "Script Failed: ";
         let script = command.to_owned();
-        let line = format!("{prefix}{script}");
-        println!("{}", line);
-        screen.append_line(&line);
-        screen.last_line_mut().unwrap().select_all();
-        screen.last_line_mut().unwrap().change_color(Color::Yellow);
-        screen
-            .last_line_mut()
-            .unwrap()
+        self.println(&format!("{prefix}{script}"));
+        self.last_line_mut().select_all();
+        self.last_line_mut()
+            .change_color(&Color::from([1., 1., 0.]));
+        self.last_line_mut()
             .select(prefix.len()..prefix.len() + script.len());
-        screen.last_line_mut().unwrap().change_color(Color::Gray);
+        self.last_line_mut().change_color(&Color::from([0.8; 3]));
 
+        let mut errors = error.lines();
+        let error = errors.next().unwrap();
         let prefix = "  Error: ";
-        let line = format!("{prefix}{error}");
-        println!("{}", line);
-        screen.append_line(&line);
-        screen.last_line_mut().unwrap().select_all();
-        screen.last_line_mut().unwrap().change_color(Color::Gray);
-        screen
-            .last_line_mut()
-            .unwrap()
+        self.println(&format!("{prefix}{error}"));
+        self.last_line_mut().select_all();
+        self.last_line_mut().change_color(&Color::from([0.8; 3]));
+        self.last_line_mut()
             .select(prefix.len()..prefix.len() + error.len());
-        screen.last_line_mut().unwrap().change_color(Color::Red);
+        self.last_line_mut()
+            .change_color(&Color::from([1., 0., 0.]));
+        for error in errors {
+            self.println(&format!("         {error}"));
+            self.last_line_mut().select_all();
+            self.last_line_mut()
+                .change_color(&Color::from([1., 0., 0.]));
+        }
     }
 
     // We need the world in order to do completions.
@@ -471,71 +617,25 @@ impl Terminal {
                         let herder = &mut heap.resource_mut::<ScriptHerder>();
                         self.on_enter_pressed(herder)?;
                     }
+                    (false, VirtualKeyCode::Home) => self.edit.move_home(modifiers_state),
+                    (false, VirtualKeyCode::Delete) => self.edit.delete(),
+                    (false, VirtualKeyCode::Back) => self.edit.backspace(),
+                    (false, VirtualKeyCode::End) => self.edit.move_end(modifiers_state),
+                    (false, VirtualKeyCode::Left) => self.edit.move_left(modifiers_state),
+                    (false, VirtualKeyCode::Right) => self.edit.move_right(modifiers_state),
+                    (false, virtual_keycode) => {
+                        let (base, shifted) = InputSystem::code_to_char(virtual_keycode);
+                        if let Some(mut c) = base {
+                            if modifiers_state.shift() {
+                                c = shifted.unwrap_or(c);
+                            }
+                            self.edit.insert(&c.to_string());
+                        }
+                    }
                     _ => {}
                 }
             }
         }
-        Ok(())
-    }
-}
-
-impl Widget for Terminal {
-    fn measure(&self, win: &Window, font_context: &mut FontContext) -> Result<Extent<Size>> {
-        if !self.visible {
-            return Ok(Extent::zero());
-        }
-
-        self.container.read().measure(win, font_context)
-    }
-
-    fn layout(
-        &mut self,
-        now: Instant,
-        region: Region<RelSize>,
-        win: &Window,
-        font_context: &mut FontContext,
-    ) -> Result<()> {
-        if !self.visible {
-            return Ok(());
-        }
-
-        self.container
-            .write()
-            .layout(now, region, win, font_context)
-    }
-
-    fn upload(
-        &self,
-        now: Instant,
-        win: &Window,
-        gpu: &Gpu,
-        context: &mut PaintContext,
-    ) -> Result<()> {
-        if !self.visible {
-            return Ok(());
-        }
-        self.container.read().upload(now, win, gpu, context)
-    }
-
-    fn handle_event(
-        &mut self,
-        event: &InputEvent,
-        focus: WidgetFocus,
-        cursor_position: Position<AbsSize>,
-        herder: &mut ScriptHerder,
-    ) -> Result<()> {
-        // FIXME: don't hard-code the name
-        if focus != WidgetFocus::Terminal {
-            return Ok(());
-        }
-
-        // FIXME: handle keyboard focus properly; force it to the line_edit child
-        self.edit
-            .write()
-            .handle_event(event, focus, cursor_position, herder)?;
-
-        // Note: terminal-specific input is handled later in handle_terminal_input
-
         Ok(())
     }
 }

@@ -20,7 +20,8 @@ use nitrous::{
     ExecutionContext, HeapMut, HeapRef, LocalNamespace, NitrousExecutor, NitrousScript, Value,
     YieldState,
 };
-use std::sync::Arc;
+use once_cell::sync::Lazy;
+use std::sync::{Arc, Mutex};
 
 pub const GUIDE: &str = r#"
 Welcome to the Nitrogen Terminal
@@ -122,12 +123,22 @@ impl ExecutionMetadata {
             #[allow(unstable_name_collisions)]
             let resource_list: Value = heap
                 .resource_names()
-                .intersperse("\n")
+                .intersperse("\n  ")
                 .collect::<String>()
                 .into();
             self.context.locals_mut().put_if_absent(
-                "list",
+                "resources",
                 Value::RustMethod(Arc::new(move |_, _| Ok(resource_list.clone()))),
+            );
+            #[allow(unstable_name_collisions)]
+            let entity_list: Value = heap
+                .entity_names()
+                .intersperse("\n  @")
+                .collect::<String>()
+                .into();
+            self.context.locals_mut().put_if_absent(
+                "entities",
+                Value::RustMethod(Arc::new(move |_, _| Ok(entity_list.clone()))),
             );
             self.context.locals_mut().put_if_absent(
                 "help",
@@ -166,6 +177,24 @@ pub struct ScriptCompletion {
 
 /// A set of script execution results, indented for use as a resource for other systems.
 pub type ScriptCompletions = Vec<ScriptCompletion>;
+
+/// Additional reporting to make globally.
+pub static ERROR_REPORTS: Lazy<Mutex<Vec<String>>> = Lazy::new(|| Mutex::new(Vec::new()));
+
+#[macro_export]
+macro_rules! report {
+    ($expr:expr $(,)?) => {
+        match $expr {
+            $crate::reexport::result::Result::Ok(val) => val,
+            $crate::reexport::result::Result::Err(err) => {
+                $crate::reexport::log::error!("{}\n{}", err, err.backtrace());
+                $crate::ERROR_REPORTS.lock().unwrap().push(err.to_string());
+                return;
+                //return $crate::result::Result::Err($crate::convert::From::from(err));
+            }
+        }
+    };
+}
 
 /// Manage script execution state.
 #[derive(Default)]

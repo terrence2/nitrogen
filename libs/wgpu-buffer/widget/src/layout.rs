@@ -12,75 +12,24 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use crate::font_context::TextSpanMetrics;
 use crate::{
-    font_context::FontContext,
+    paint_context::PaintContext,
     region::{Border, Extent, Position, Region},
-    widget::{Widget, WidgetComponent},
+    widget_vertex::WidgetVertex,
+    WidgetInfo,
 };
-use animate::TimeStep;
 use anyhow::Result;
 use bevy_ecs::prelude::*;
-use nitrous::{inject_nitrous_component, HeapMut, NitrousComponent};
+use csscolorparser::Color;
+use gpu::Gpu;
+use nitrous::{inject_nitrous_component, method, HeapMut, NitrousComponent};
 use parking_lot::Mutex;
-use std::{cell::RefCell, sync::Arc, time::Instant};
+use std::{sync::Arc, time::Instant};
 use window::{
-    size::{AspectMath, LeftBound, RelSize, ScreenDir, Size},
+    size::{LeftBound, RelSize, ScreenDir, Size},
     Window,
 };
-
-////////////////////
-use crate::{text_run::TextRun, PaintContext};
-use gpu::Gpu;
-
-#[derive(Debug)]
-struct Button {
-    label: TextRun,
-    action: String,
-}
-
-impl Button {
-    pub fn new(text: &str) -> Self {
-        Self {
-            label: TextRun::from_text(text),
-            action: "".into(),
-        }
-    }
-
-    pub fn wrapped(self, name: &str, mut heap: HeapMut) -> Result<Entity> {
-        Ok(heap
-            .spawn_named(name)?
-            .insert_named(WidgetComponent::new(self))?
-            .id())
-    }
-}
-
-impl Widget for Button {
-    fn measure(&self, win: &Window, font_context: &FontContext) -> Result<Extent<Size>> {
-        let measure = self.label.measure(win, font_context)?;
-        Ok(measure.extent())
-    }
-
-    // fn layout(
-    //     &mut self,
-    //     now: Instant,
-    //     region: Region<Size>,
-    //     win: &Window,
-    //     font_context: &mut FontContext,
-    // ) -> Result<()> {
-    //     todo!()
-    // }
-
-    fn upload(
-        &self,
-        now: Instant,
-        win: &Window,
-        gpu: &Gpu,
-        context: &mut PaintContext,
-    ) -> Result<()> {
-        todo!()
-    }
-}
-/////////////////////////////
 
 #[derive(Copy, Clone, Debug)]
 pub enum PositionH {
@@ -112,21 +61,147 @@ pub enum LayoutKind {
 #[derive(Clone, Debug)]
 pub enum LayoutLink {
     Leaf(Entity),
-    // Even though we are only used single-threaded, we have to be Send to store in a Resource
-    Node(Arc<Mutex<LayoutNode>>),
+    Layout(Arc<Mutex<LayoutNode>>),
 }
 
 impl LayoutLink {
     pub fn widget(&self) -> Entity {
         match self {
             LayoutLink::Leaf(widget) => *widget,
-            LayoutLink::Node(layout) => layout.lock().widget,
+            LayoutLink::Layout(layout) => layout.lock().widget,
         }
     }
 }
 
-// Post layout screen-space decisions about where to place widgets.
-#[derive(Clone, Debug)]
+// Determine how the given widget should be packed into its box.
+// Owned by the parent layout, not the child.
+#[derive(Component, NitrousComponent)]
+#[Name = "packing"]
+pub struct LayoutPacking {
+    // non-client area
+    padding: Border<RelSize>,
+    margin: Border<RelSize>,
+    border: Border<RelSize>,
+
+    display: bool,
+    background_color: Option<Color>,
+    border_color: Option<Color>,
+
+    expand: Expand,
+    float_h: PositionH,
+    float_v: PositionV,
+}
+
+impl Default for LayoutPacking {
+    fn default() -> Self {
+        Self {
+            padding: Border::empty(),
+            margin: Border::empty(),
+            border: Border::empty(),
+            display: true,
+            background_color: None,
+            border_color: None,
+            expand: Expand::Shrink,
+            float_h: PositionH::Start,
+            float_v: PositionV::Top,
+        }
+    }
+}
+
+#[inject_nitrous_component]
+impl LayoutPacking {
+    #[method]
+    pub fn float_start(&mut self) -> &mut Self {
+        self.float_h = PositionH::Start;
+        self
+    }
+
+    #[method]
+    pub fn float_end(&mut self) -> &mut Self {
+        self.float_h = PositionH::End;
+        self
+    }
+
+    #[method]
+    pub fn float_middle(&mut self) -> &mut Self {
+        self.float_h = PositionH::Center;
+        self
+    }
+
+    #[method]
+    pub fn float_top(&mut self) -> &mut Self {
+        self.float_v = PositionV::Top;
+        self
+    }
+
+    #[method]
+    pub fn float_bottom(&mut self) -> &mut Self {
+        self.float_v = PositionV::Bottom;
+        self
+    }
+
+    #[method]
+    pub fn float_center(&mut self) -> &mut Self {
+        self.float_v = PositionV::Center;
+        self
+    }
+
+    #[method]
+    pub fn set_display(&mut self, display: bool) -> &mut Self {
+        self.display = display;
+        self
+    }
+
+    #[method]
+    pub fn set_background(&mut self, color: &str) -> Result<()> {
+        self.background_color = Some(color.parse()?);
+        Ok(())
+    }
+
+    pub fn padding_mut(&mut self) -> &mut Border<RelSize> {
+        &mut self.padding
+    }
+
+    #[method]
+    pub fn set_padding_left(&mut self, s: &str, heap: HeapMut) -> Result<()> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.padding.set_left(sz.as_rel(win, ScreenDir::Horizontal));
+        Ok(())
+    }
+
+    #[method]
+    pub fn set_padding_right(&mut self, s: &str, heap: HeapMut) -> Result<()> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.padding
+            .set_right(sz.as_rel(win, ScreenDir::Horizontal));
+        Ok(())
+    }
+
+    #[method]
+    pub fn set_padding_top(&mut self, s: &str, heap: HeapMut) -> Result<()> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.padding.set_top(sz.as_rel(win, ScreenDir::Vertical));
+        Ok(())
+    }
+
+    #[method]
+    pub fn set_padding_bottom(&mut self, s: &str, heap: HeapMut) -> Result<()> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.padding.set_bottom(sz.as_rel(win, ScreenDir::Vertical));
+        Ok(())
+    }
+}
+
+/// Post layout screen-space decisions about where to place widgets.
+///
+/// Widget implementations must set `child_extent` _before_ WidgetBufferStep::LayoutWidgets.
+/// Widget implementations should draw themselves clipped to `child_allocation` _before_
+/// WidgetRenderStep::EnsureUploaded. The non-child area is handled by the layout system.
+#[derive(Component, Clone, Debug)]
 pub struct LayoutMeasurements {
     // Measured size of the child area
     child_extent: Extent<RelSize>,
@@ -139,6 +214,9 @@ pub struct LayoutMeasurements {
 
     // Amount allocated to the widget in total.
     total_allocation: Region<RelSize>,
+
+    // Critical contextual information, like the rendered text aggregate baseline.
+    metrics: TextSpanMetrics,
 }
 
 impl Default for LayoutMeasurements {
@@ -148,27 +226,63 @@ impl Default for LayoutMeasurements {
             total_extent: Extent::new(RelSize::Percent(0.), RelSize::Percent(0.)),
             child_allocation: Region::empty(),
             total_allocation: Region::empty(),
+            metrics: TextSpanMetrics::default(),
         }
     }
 }
 
-/// Stored in the parent, about the child.
-#[derive(Clone, Debug)]
-pub struct LayoutChildInfo {
-    /// The child pointer
-    link: LayoutLink,
+impl LayoutMeasurements {
+    pub fn set_child_extent(&mut self, child_extent: Extent<RelSize>, packing: &LayoutPacking) {
+        self.child_extent = child_extent;
 
-    /// Cache of measurement from the last layout operation. This is logically
-    /// owned by the child, but is actually the mutablility secret sauce that
-    /// lets us do layout like this in Rust.
-    measures: LayoutMeasurements,
+        // Get the total allocation by adding the packing borders.
+        self.total_extent = child_extent;
+        self.total_extent.expand_with_border_rel(&packing.margin);
+        self.total_extent.expand_with_border_rel(&packing.border);
+        self.total_extent.expand_with_border_rel(&packing.padding);
+    }
+
+    pub fn set_metrics(&mut self, metrics: TextSpanMetrics) {
+        self.metrics = metrics;
+    }
+
+    pub fn child_allocation(&self) -> &Region<RelSize> {
+        &self.child_allocation
+    }
+
+    pub fn metrics(&self) -> &TextSpanMetrics {
+        &self.metrics
+    }
+
+    pub fn set_depth(&mut self, depth: f32) {
+        self.child_allocation
+            .position_mut()
+            .set_depth(RelSize::Gpu(depth));
+        self.total_allocation
+            .position_mut()
+            .set_depth(RelSize::Gpu(depth));
+    }
+
+    pub(crate) fn set_total_allocation(
+        &mut self,
+        total_allocation: Region<RelSize>,
+        packing: &LayoutPacking,
+    ) {
+        self.total_allocation = total_allocation.clone();
+
+        // Get the child allocation by shaving off the borders.
+        self.child_allocation = total_allocation;
+        self.child_allocation.remove_border_rel(&packing.margin);
+        self.child_allocation.remove_border_rel(&packing.border);
+        self.child_allocation.remove_border_rel(&packing.padding);
+    }
 }
 
 #[derive(Clone, Debug)]
 pub struct LayoutNode {
     kind: LayoutKind,
     widget: Entity,
-    children: Vec<LayoutChildInfo>,
+    children: Vec<LayoutLink>,
 }
 
 impl LayoutNode {
@@ -176,12 +290,17 @@ impl LayoutNode {
         let widget = heap
             .spawn_named(name)?
             .insert_named(LayoutPacking::default())?
+            .insert(LayoutMeasurements::default())
             .id();
         Ok(Self {
             kind,
             widget,
             children: Vec::new(),
         })
+    }
+
+    pub fn id(&self) -> Entity {
+        self.widget
     }
 
     pub fn new_float(name: &str, heap: HeapMut) -> Result<Self> {
@@ -196,23 +315,14 @@ impl LayoutNode {
         Self::new(LayoutKind::HBox, name, heap)
     }
 
-    pub fn push_widget(&mut self, widget: Entity, mut heap: HeapMut) -> Result<()> {
-        heap.named_entity_mut(widget)
-            .insert_named(LayoutPacking::default())?;
-        let child = LayoutChildInfo {
-            link: LayoutLink::Leaf(widget),
-            measures: LayoutMeasurements::default(),
-        };
-        self.children.push(child);
+    pub fn push_widget(&mut self, widget: Entity) -> Result<()> {
+        self.children.push(LayoutLink::Leaf(widget));
         Ok(())
     }
 
-    pub fn push_layout(&mut self, layout: LayoutNode, mut heap: HeapMut) -> Result<()> {
-        let child = LayoutChildInfo {
-            link: LayoutLink::Node(Arc::new(Mutex::new(layout))),
-            measures: LayoutMeasurements::default(),
-        };
-        self.children.push(child);
+    pub fn push_layout(&mut self, layout: LayoutNode) -> Result<()> {
+        self.children
+            .push(LayoutLink::Layout(Arc::new(Mutex::new(layout))));
         Ok(())
     }
 
@@ -224,237 +334,243 @@ impl LayoutNode {
         }
     }
 
-    pub fn measure_layout(&mut self, mut heap: HeapMut) -> Result<Extent<RelSize>> {
+    /// Recursively measure layouts by using the child measurements. This will set
+    /// the LayoutMeasurements on all layouts in the tree.
+    ///
+    /// Requirement: all widgets (components with LayoutPacking + LayoutMeasurements)
+    ///              have already been measured by setting up a measurement system that
+    ///              runs before WidgetRenderStep::LayoutWidgets
+    pub fn measure_layout(
+        &mut self,
+        packings: &Query<&LayoutPacking>,
+        measures: &mut Query<&mut LayoutMeasurements>,
+    ) -> Result<()> {
         let maybe_dir = self.pack_axis();
-        let mut extent = Extent::new(RelSize::Percent(0.), RelSize::Percent(0.));
-        for info in &mut self.children {
-            // Measure the child.
-            info.measures.child_extent = match &info.link {
-                // TODO: we should be using internal mutablitity for paint context
-                LayoutLink::Leaf(widget) => heap
-                    .get::<WidgetComponent>(*widget)
-                    .inner()
-                    .measure(
-                        heap.resource::<Window>(),
-                        &heap.resource::<PaintContext>().font_context,
-                    )?
-                    .as_rel(heap.resource::<Window>()),
-                LayoutLink::Node(layout) => layout.lock().measure_layout(heap.as_mut())?,
+        let mut own_extent = Extent::new(RelSize::Percent(0.), RelSize::Percent(0.));
+        for link in &mut self.children {
+            let child_total_extent = match link {
+                LayoutLink::Leaf(entity) => measures.get(*entity)?.total_extent,
+                LayoutLink::Layout(layout) => {
+                    // Recurse to measure the child container before continuing
+                    layout.lock().measure_layout(packings, measures)?;
+                    measures.get(layout.lock().widget)?.total_extent
+                }
             };
-
-            // Account for packing properties that add size
-            let win = heap.resource::<Window>();
-            let packing = heap.get::<LayoutPacking>(info.link.widget());
-            info.measures.total_extent = info.measures.child_extent;
-            info.measures
-                .total_extent
-                .expand_with_border(&packing.padding, win);
-            info.measures
-                .total_extent
-                .expand_with_border(&packing.margin, win);
-            info.measures
-                .total_extent
-                .expand_with_border(&packing.border, win);
 
             // Accumulate our child into our own min size allocation.
             if let Some(dir) = maybe_dir {
-                *extent.axis_mut(dir) += info.measures.total_extent.axis(dir);
-                extent.set_axis(
-                    dir.other(),
-                    extent.axis(dir.other()).max(
-                        &info.measures.total_extent.axis(dir.other()),
-                        win,
-                        dir.other(),
-                    ),
-                );
+                *own_extent.axis_mut(dir) += child_total_extent.axis(dir);
+                *own_extent.axis_mut(dir.other()) = own_extent
+                    .axis(dir.other())
+                    .max_rel(&child_total_extent.axis(dir.other()));
             }
         }
-        Ok(extent)
+
+        // Set our child extent (and compute the total extent for our parent)
+        measures
+            .get_mut(self.widget)?
+            .set_child_extent(own_extent, packings.get(self.widget)?);
+
+        Ok(())
     }
 
-    pub fn perform_layout(&mut self, region: Region<RelSize>, mut heap: HeapMut) -> Result<()> {
-        // Figure out how much size we need to actually allocate to our widgets.
-        let maybe_dir = self.pack_axis();
-        let mut total_shrink_size = RelSize::zero();
-        let mut fill_count = 0;
-        for info in &self.children {
-            let packing = heap.get::<LayoutPacking>(info.link.widget());
+    fn do_box_layout(
+        &mut self,
+        region: Region<RelSize>,
+        depth: f32,
+        packings: &Query<&LayoutPacking>,
+        measures: &mut Query<&mut LayoutMeasurements>,
+    ) -> Result<()> {
+        let dir = self.pack_axis().expect("box only");
 
-            match packing.expand {
-                Expand::Shrink => {
-                    if let Some(dir) = maybe_dir {
-                        total_shrink_size = total_shrink_size.add(
-                            &info.measures.child_extent.axis(dir),
-                            &heap.resource::<Window>(),
-                            dir,
-                        )
-                    }
-                }
+        // Figure out how much size we need to actually allocate to our widgets.
+        let total_shrink_size = measures.get(self.widget)?.child_extent;
+        let mut fill_count = 0;
+        for link in &self.children {
+            match packings.get(link.widget())?.expand {
+                Expand::Shrink => {}
                 Expand::Fill => fill_count += 1,
             }
         }
-        let fill_allocation = if let Some(dir) = maybe_dir {
-            region
-                .extent()
-                .axis(dir)
-                .sub(&total_shrink_size, &heap.resource::<Window>(), dir)
-                / fill_count as f32
-        } else {
-            RelSize::Percent(0.)
-        };
+        // We know our requested child area, but we may not have gotten it, or we
+        // may have gotten allocated more. This tells us how much more to give to each
+        // widget that is packed as fill.
+        let extra_fill_allocation =
+            (region.extent().axis(dir) - total_shrink_size.axis(dir)) / fill_count as f32;
 
-        let mut tmp_extent = *region.extent();
+        // Allocation cursor within region.
         let mut pos = *region.position();
-        if let Some(dir) = maybe_dir {
-            *pos.axis_mut(dir) += region.extent().axis(dir);
-        }
-        for info in &mut self.children {
-            let packing = heap.get::<LayoutPacking>(info.link.widget());
+        *pos.axis_mut(dir) += region.extent().axis(dir);
+
+        // Box Packing Algorithm
+        // For both horizontal and vertical boxes, using axis.
+        for link in &mut self.children {
+            measures.get_mut(link.widget())?.set_depth(depth);
+
+            let packing = packings.get(link.widget())?;
 
             // Compute our actual allocation.
-            if let Some(dir) = maybe_dir {
-                let child_alloc = match packing.expand {
-                    Expand::Shrink => info.measures.total_extent.axis(dir),
-                    Expand::Fill => fill_allocation,
-                };
-                *pos.axis_mut(dir) -= child_alloc;
-                tmp_extent.set_axis(dir, child_alloc);
-            } else {
-                Default::default()
+            // Shrink gets exactly what was asked for.
+            // Fill gets what was asked for, plus one unit of extra fill
+            // This only ever expands.
+            let mut child_alloc = measures.get(link.widget())?.total_extent.axis(dir);
+            child_alloc += match packing.expand {
+                Expand::Shrink => RelSize::Percent(0.),
+                Expand::Fill => extra_fill_allocation,
             };
-            let total_allocation = Region::new(pos, tmp_extent);
-            let mut child_allocation = total_allocation.clone();
-            let win = heap.resource::<Window>();
-            // FIXME: need to bump the region offset as well?
-            child_allocation
-                .extent_mut()
-                .remove_border(&packing.border, win);
-            child_allocation
-                .extent_mut()
-                .remove_border(&packing.margin, win);
-            child_allocation
-                .extent_mut()
-                .remove_border(&packing.padding, win);
 
-            match &info.link {
-                LayoutLink::Leaf(widget) => {
-                    // Write back our actual client allocation for the draw pass.
-                    info.measures.child_allocation = child_allocation;
-                    info.measures.total_allocation = total_allocation;
-                }
-                LayoutLink::Node(layout) => layout
+            // Region is bottom left corner to top right corner.
+            *pos.axis_mut(dir) -= child_alloc;
+
+            // Compute the region for the total
+            let mut child_total_extent = measures.get(link.widget())?.total_extent;
+            child_total_extent.set_axis(dir, child_alloc);
+            let child_total_alloc = Region::new(pos, child_total_extent);
+            measures
+                .get_mut(link.widget())?
+                .set_total_allocation(child_total_alloc, packings.get(link.widget())?);
+
+            // Recurse into any layout children to do layout.
+            if let LayoutLink::Layout(layout) = link {
+                let child_region = measures.get(layout.lock().widget)?.child_allocation.clone();
+                layout
                     .lock()
-                    .perform_layout(child_allocation, heap.as_mut())?,
+                    .perform_layout(child_region, depth - 1., packings, measures)?;
             }
         }
 
         Ok(())
     }
 
-    // Push data to the paint context
-    pub fn draw_layout(&self, mut heap: HeapMut) {}
-}
-
-// Determine how the given widget should be packed into its box.
-// Owned by the parent layout, not the child.
-#[derive(Component, NitrousComponent, Clone, Debug)]
-#[Name = "packing"]
-pub struct LayoutPacking {
-    expand: Expand,
-    padding: Border<RelSize>,
-    margin: Border<RelSize>,
-    border: Border<RelSize>,
-}
-
-impl Default for LayoutPacking {
-    fn default() -> Self {
-        Self {
-            expand: Expand::Shrink,
-            padding: Border::empty(),
-            margin: Border::empty(),
-            border: Border::empty(),
-        }
-    }
-}
-
-#[inject_nitrous_component]
-impl LayoutPacking {
-    /*
-    pub fn measure(
-        children: &mut [LayoutPacking],
-        screen_dir: ScreenDir,
-        win: &Window,
-        font_context: &mut FontContext,
-    ) -> Result<Extent<Size>> {
-        let off_dir = screen_dir.other();
-
-        // Note: we're getting the native shrunken size, so don't apply box filling in this loop.
-        let mut size = Extent::<Size>::zero();
-        for packing in children {
-            let child_extent = packing.widget_mut().measure(win, font_context)?;
-            size.set_axis(
-                screen_dir,
-                size.axis(screen_dir)
-                    .add(&child_extent.axis(screen_dir), win, screen_dir),
-            );
-            size.set_axis(
-                off_dir,
-                size.axis(off_dir)
-                    .max(&child_extent.axis(off_dir), win, off_dir),
-            );
-            packing.set_extent(child_extent);
-        }
-        Ok(size)
-    }
-
-    pub fn layout(
-        children: &mut [LayoutPacking],
-        dir: ScreenDir,
-        now: Instant,
-        region: Region<Size>,
-        win: &Window,
-        font_context: &mut FontContext,
+    fn do_float_layout(
+        &mut self,
+        region: Region<RelSize>,
+        depth: f32,
+        packings: &Query<&LayoutPacking>,
+        measures: &mut Query<&mut LayoutMeasurements>,
     ) -> Result<()> {
-        // Figure out how much size we need to actually allocate to our widgets.
-        let mut total_shrink_size = Size::zero();
-        let mut fill_count = 0;
-        for packing in children.iter() {
-            match packing.expand() {
-                Expand::Shrink => {
-                    total_shrink_size = total_shrink_size.add(&packing.extent().axis(dir), win, dir)
-                }
-                Expand::Fill => fill_count += 1,
-            }
-        }
-        let fill_allocation =
-            region.extent().axis(dir).sub(&total_shrink_size, win, dir) / fill_count as f32;
+        for (i, link) in self.children.iter().enumerate() {
+            measures.get_mut(link.widget())?.set_depth(depth);
 
-        let mut tmp_extent = *region.extent();
-        let mut pos = *region.position();
-        *pos.axis_mut(dir) = pos.axis(dir).add(&region.extent().axis(dir), win, dir);
-        for packing in children {
-            let child_alloc = match packing.expand() {
-                Expand::Shrink => packing.extent().axis(dir),
-                Expand::Fill => fill_allocation,
-            };
-            *pos.axis_mut(dir) = pos.axis(dir).sub(&child_alloc, win, dir);
-            tmp_extent.set_axis(dir, child_alloc);
-            packing
-                .widget_mut()
-                .layout(now, Region::new(pos, tmp_extent), win, font_context)?;
+            let packing = packings.get(link.widget())?;
+            let child_total_extent = measures.get(link.widget())?.total_extent;
+
+            let left_offset = region.position().left()
+                + match packing.float_h {
+                    PositionH::Start => RelSize::from_percent(0.),
+                    PositionH::Center => {
+                        (region.extent().width() / 2.) - (child_total_extent.width() / 2.)
+                    }
+                    PositionH::End => region.extent().width() - child_total_extent.width(),
+                };
+            let top_offset = region.position().bottom()
+                + match packing.float_v {
+                    PositionV::Top => region.extent().height() - child_total_extent.height(),
+                    PositionV::Center => {
+                        (region.extent().height() / 2.) - (child_total_extent.height() / 2.)
+                    }
+                    PositionV::Bottom => RelSize::zero(),
+                };
+
+            let d = depth - 1. + 0.1 * i as f32;
+            let position = Position::new_with_depth(left_offset, top_offset, RelSize::Gpu(d));
+            let child_total_alloc = Region::new(position, child_total_extent);
+            measures
+                .get_mut(link.widget())?
+                .set_total_allocation(child_total_alloc, packings.get(link.widget())?);
+
+            // Recurse into any layout children to do layout.
+            if let LayoutLink::Layout(layout) = link {
+                let child_region = measures.get(layout.lock().widget)?.child_allocation.clone();
+                layout
+                    .lock()
+                    .perform_layout(child_region, depth - 1., packings, measures)?;
+            }
         }
 
         Ok(())
     }
-     */
+
+    /// Decide what children will get drawn where. Set the regions for all children,
+    /// based on previous measurements and a the region given to us by the parent.
+    ///
+    /// Note: the region that is allocated is _only_ for the child area for this
+    /// widget, it should not take into account the margin, border, and padding of
+    /// this widget (though it will need to account for that in its children).
+    ///
+    /// Requirement: measure_layout has been called
+    pub fn perform_layout(
+        &mut self,
+        region: Region<RelSize>,
+        depth: f32,
+        packings: &Query<&LayoutPacking>,
+        measures: &mut Query<&mut LayoutMeasurements>,
+    ) -> Result<()> {
+        match self.kind {
+            LayoutKind::VBox | LayoutKind::HBox => {
+                self.do_box_layout(region, depth, packings, measures)
+            }
+            LayoutKind::Float => self.do_float_layout(region, depth, packings, measures),
+        }
+    }
+
+    // Draw backgrounds and borders, as requested.
+    pub fn draw_non_client(
+        &self,
+        now: Instant,
+        packings: &Query<&LayoutPacking>,
+        measures: &Query<&LayoutMeasurements>,
+        win: &Window,
+        gpu: &Gpu,
+        context: &mut PaintContext,
+    ) -> Result<()> {
+        for link in &self.children {
+            // We don't care if the child is a layout or a widget, we want to handle
+            // the background and border drawing for our children.
+            let packing = packings.get(link.widget())?;
+            let measure = measures.get(link.widget())?;
+
+            if !packing.display {
+                continue;
+            }
+
+            let mut info = WidgetInfo::default();
+            if let Some(color) = &packing.background_color {
+                if color.a < 1. {
+                    info.set_glass_background(true);
+                }
+            }
+            let id = context.push_widget(&info);
+            if let Some(color) = &packing.border_color {
+                let mut rect = measure.total_allocation.to_owned();
+                rect.remove_border_rel(&packing.margin);
+                WidgetVertex::push_region(rect, color, id, &mut context.background_pool);
+            }
+            if let Some(color) = &packing.background_color {
+                let mut rect = measure.total_allocation.to_owned();
+                rect.remove_border_rel(&packing.margin);
+                rect.remove_border_rel(&packing.border);
+                WidgetVertex::push_region(rect, color, id, &mut context.background_pool);
+            }
+
+            // Recurse into child layouts
+            if let LayoutLink::Layout(layout) = link {
+                layout
+                    .lock()
+                    .draw_non_client(now, packings, measures, win, gpu, context)?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::WidgetBuffer;
+    use crate::{Button, Label, WidgetBuffer};
     use gpu::Gpu;
-    use input::DemoFocus;
+    use input::InputTarget;
     use platform_dirs::AppDirs;
     use runtime::Runtime;
     use std::time::Instant;
@@ -465,38 +581,77 @@ mod test {
         runtime
             .insert_resource(AppDirs::new(Some("nitrogen"), true).unwrap())
             .insert_resource(TimeStep::new_60fps())
-            .load_extension::<WidgetBuffer<DemoFocus>>()?;
+            .load_extension::<WidgetBuffer<InputTarget>>()?
+            .load_extension::<Button>()?
+            .load_extension::<Label>()?;
 
-        let button_float = runtime
-            .spawn_named("test_button_float")?
-            .insert_named(WidgetComponent::new(Button::new("Hello, world!")))?
-            .id();
+        let button_float = Button::new_with_text("Hello, worldF!")
+            .wrapped("test_button_float", runtime.heap_mut())?;
 
-        let button_box1 = runtime
-            .spawn_named("test_button_box1")?
-            .insert_named(WidgetComponent::new(Button::new("Hello, world!")))?
-            .id();
-        let button_box2 = runtime
-            .spawn_named("test_button_box2")?
-            .insert_named(WidgetComponent::new(Button::new("Hello, world!")))?
-            .id();
+        let button_box1 = Button::new_with_text("Hello, world1!")
+            .wrapped("test_button_box1", runtime.heap_mut())?;
+        let button_box2 = Button::new_with_text("Hello, world2!")
+            .wrapped("test_button_box2", runtime.heap_mut())?;
 
-        let mut buttons = LayoutNode::new_vbox("buttons", runtime.heap_mut())?;
-        buttons.push_widget(button_box1, runtime.heap_mut())?;
-        buttons.push_widget(button_box2, runtime.heap_mut())?;
+        let mut buttons = LayoutNode::new_vbox("test_buttons", runtime.heap_mut())?;
+        buttons.push_widget(button_box1)?;
+        buttons.push_widget(button_box2)?;
 
-        let mut root = LayoutNode::new_hbox("root", runtime.heap_mut())?;
-        root.push_widget(button_float, runtime.heap_mut())?;
-        root.push_layout(buttons, runtime.heap_mut())?;
+        runtime
+            .resource_mut::<WidgetBuffer<InputTarget>>()
+            .root
+            .push_widget(button_float)?;
+        runtime
+            .resource_mut::<WidgetBuffer<InputTarget>>()
+            .root
+            .push_layout(buttons)?;
 
-        // Long-running single threaded mutable action, recursive through the layout.
-        root.measure_layout(runtime.heap_mut())?;
+        fn test_do_layout(
+            layouts: Query<&LayoutPacking>,
+            mut measures: Query<&mut LayoutMeasurements>,
+            win: Res<Window>,
+            paint_context: Res<PaintContext>,
+            mut widget_buf: ResMut<WidgetBuffer<InputTarget>>,
+        ) {
+            widget_buf
+                .root
+                .measure_layout(&layouts, &mut measures)
+                .unwrap();
 
-        // Purely internal to the layout, make mutable packing decisions about our children.
-        root.perform_layout(Region::<RelSize>::full(), runtime.heap_mut())?;
-
-        // Draw it all
-        // root.draw_layout(runtime.heap_mut())?;
+            // widget_buf
+            //     .root
+            //     .perform_layout(
+            //         Region::<RelSize>::full(),
+            //         &layouts,
+            //         &widgets,
+            //         &win,
+            //         &paint_context.font_context,
+            //     )
+            //     .unwrap();
+        }
+        fn test_do_draw(
+            layouts: Query<&LayoutPacking>,
+            widgets: Query<&WidgetComponent>,
+            win: Res<Window>,
+            gpu: Res<Gpu>,
+            widget_buf: Res<WidgetBuffer<InputTarget>>,
+            mut paint_context: ResMut<PaintContext>,
+        ) {
+            // widget_buf
+            //     .root
+            //     .draw_layout(
+            //         Instant::now(),
+            //         &layouts,
+            //         &widgets,
+            //         &win,
+            //         &gpu,
+            //         &mut paint_context,
+            //     )
+            //     .unwrap();
+        }
+        runtime.add_frame_system(test_do_layout.label("layout"));
+        runtime.add_frame_system(test_do_draw.after("layout"));
+        runtime.run_frame_once();
 
         Ok(())
     }

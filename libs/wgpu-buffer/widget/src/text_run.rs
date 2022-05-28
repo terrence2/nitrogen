@@ -13,18 +13,18 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    color::Color,
     font_context::{FontContext, FontId, TextSpanMetrics, SANS_FONT_ID},
     paint_context::PaintContext,
     region::Position,
     widget_vertex::WidgetVertex,
 };
 use anyhow::Result;
+use csscolorparser::Color;
 use gpu::Gpu;
 use input::ModifiersState;
 use parking_lot::{Mutex, MutexGuard};
 use smallvec::{smallvec, SmallVec};
-use std::{cell::RefCell, cmp::Ordering, ops::Range};
+use std::{cmp::Ordering, ops::Range};
 use window::{
     size::{AbsSize, LeftBound, Size},
     Window,
@@ -66,10 +66,10 @@ pub struct TextSpan {
 }
 
 impl TextSpan {
-    pub fn new<S: Into<String>>(text: S, size: Size, font_id: FontId, color: Color) -> Self {
+    pub fn new<S: Into<String>>(text: S, size: Size, font_id: FontId, color: &Color) -> Self {
         Self {
             text: text.into(),
-            color,
+            color: color.to_owned(),
             size,
             font_id,
             cache: Mutex::new(SpanCache::default()),
@@ -96,8 +96,8 @@ impl TextSpan {
         self.cache.lock().mark_dirty();
     }
 
-    pub fn set_color(&mut self, color: Color) {
-        self.color = color;
+    pub fn set_color(&mut self, color: &Color) {
+        self.color = color.to_owned();
         self.cache.lock().mark_dirty();
     }
 
@@ -131,6 +131,10 @@ impl TextSpan {
 
     pub fn span_cache(&self) -> MutexGuard<SpanCache> {
         self.cache.lock()
+    }
+
+    pub fn set_span_cache(&self, cache: Vec<WidgetVertex>) {
+        self.cache.lock().cached_layout = cache;
     }
 }
 
@@ -239,8 +243,6 @@ pub struct TextRun {
     default_font_id: FontId,
     default_size: Size,
     default_color: Color,
-
-    measured_metrics: Mutex<Option<TextSpanMetrics>>,
 }
 
 impl TextRun {
@@ -260,8 +262,7 @@ impl TextRun {
             pre_blend_text: false,
             default_font_id: SANS_FONT_ID,
             default_size: Size::from_pts(12.0),
-            default_color: Color::Magenta,
-            measured_metrics: Mutex::new(None),
+            default_color: Color::from([255, 0, 255]),
         }
     }
 
@@ -285,17 +286,18 @@ impl TextRun {
         self
     }
 
-    pub fn with_default_color(mut self, color: Color) -> Self {
-        self.default_color = color;
+    pub fn with_default_color(mut self, color: &Color) -> Self {
+        self.default_color = color.to_owned();
         self
     }
 
-    pub fn set_default_color(&mut self, color: Color) {
-        self.default_color = color;
+    pub fn set_default_color(&mut self, color: &Color) {
+        self.default_color = color.to_owned();
     }
 
-    pub fn default_color(&self) -> Color {
-        self.default_color
+    #[allow(unused)]
+    pub fn default_color(&self) -> &Color {
+        &self.default_color
     }
 
     pub fn with_default_font(mut self, font_id: FontId) -> Self {
@@ -307,6 +309,7 @@ impl TextRun {
         self.default_font_id = font_id;
     }
 
+    #[allow(unused)]
     pub fn default_font(&self) -> FontId {
         self.default_font_id
     }
@@ -320,19 +323,13 @@ impl TextRun {
         self.default_size = size;
     }
 
+    #[allow(unused)]
     pub fn default_size(&self) -> Size {
         self.default_size
     }
 
-    pub fn from_text(text: &str) -> Self {
-        let mut obj = TextRun::empty();
-        obj.insert(text);
-        obj.set_cursor(text.len());
-        obj
-    }
-
     /// Change the selected region's color.
-    pub fn change_color(&mut self, color: Color) {
+    pub fn change_color(&mut self, color: &Color) {
         self.change_properties(Some(color), None, None);
     }
 
@@ -348,7 +345,7 @@ impl TextRun {
 
     fn change_properties(
         &mut self,
-        color: Option<Color>,
+        color: Option<&Color>,
         size: Option<Size>,
         font_id: Option<FontId>,
     ) {
@@ -399,7 +396,7 @@ impl TextRun {
                                 &span.content()[part_range.to_owned()],
                                 size.unwrap_or_else(|| span.size()),
                                 font_id.unwrap_or_else(|| span.font()),
-                                color.unwrap_or_else(|| *span.color()),
+                                color.unwrap_or_else(|| span.color()),
                             ));
                         }
                     }
@@ -433,6 +430,7 @@ impl TextRun {
     }
 
     /// Set the cursor position in the run, deselecting any previous selection.
+    #[allow(unused)]
     pub fn set_cursor(&mut self, cursor: usize) {
         self.selection.move_to(cursor.min(self.len()));
     }
@@ -499,7 +497,7 @@ impl TextRun {
                 text,
                 self.default_size,
                 self.default_font_id,
-                self.default_color,
+                &self.default_color,
             ));
         }
         let offset = self.selection.anchor() + text.len();
@@ -571,12 +569,7 @@ impl TextRun {
             height: max_height,
             line_gap: max_line_gap,
         };
-        *self.measured_metrics.lock() = Some(metrics.clone());
         Ok(metrics)
-    }
-
-    pub fn measure_cached(&self) -> TextSpanMetrics {
-        self.measured_metrics.lock().clone().expect("measured")
     }
 
     pub fn upload(
@@ -604,7 +597,11 @@ impl TextRun {
 
             context.layout_text(
                 span,
-                Position::new(init_pos.left() + total_width, init_pos.bottom()),
+                Position::new_with_depth(
+                    init_pos.left() + total_width,
+                    init_pos.bottom(),
+                    init_pos.depth(),
+                ),
                 widget_info_index,
                 selection_area,
                 win,

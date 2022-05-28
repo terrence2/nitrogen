@@ -23,15 +23,14 @@ use anyhow::Result;
 use font_common::Font;
 use gpu::Gpu;
 use nitrous::{inject_nitrous_resource, NitrousResource};
-use std::{borrow::Borrow, mem, ops::Range};
+use std::{borrow::Borrow, ops::Range};
 use window::{
-    size::{AbsSize, LeftBound, RelSize},
+    size::{AbsSize, RelSize},
     Window,
 };
 
 #[derive(Debug, NitrousResource)]
 pub struct PaintContext {
-    pub current_depth: RelSize,
     pub font_context: FontContext,
     pub widget_info_pool: Vec<WidgetInfo>,
     pub background_pool: Vec<WidgetVertex>,
@@ -48,7 +47,6 @@ impl PaintContext {
 
     pub fn new(gpu: &Gpu) -> Self {
         Self {
-            current_depth: RelSize::zero(),
             font_context: FontContext::new(gpu),
             widget_info_pool: Vec::new(),
             background_pool: Vec::new(),
@@ -61,7 +59,6 @@ impl PaintContext {
     // struct, inconveniently, so that we need to thread fewer random parameters through our
     // entire upload call stack.
     pub fn reset_for_frame(&mut self) {
-        self.current_depth = RelSize::zero();
         self.widget_info_pool.truncate(0);
         self.background_pool.truncate(0);
         self.image_pool.truncate(0);
@@ -78,10 +75,6 @@ impl PaintContext {
 
     pub fn dump_glyphs(&mut self) -> Result<()> {
         self.font_context.dump_glyphs()
-    }
-
-    pub fn enter_box(&mut self) {
-        self.current_depth += Self::BOX_DEPTH_SIZE;
     }
 
     pub fn push_widget(&mut self, info: &WidgetInfo) -> u32 {
@@ -102,7 +95,7 @@ impl PaintContext {
         self.font_context.layout_text(
             span,
             widget_info_index,
-            offset.with_depth(self.current_depth + Self::TEXT_DEPTH),
+            offset.with_depth(offset.depth() + Self::TEXT_DEPTH),
             selection_area,
             win,
             gpu,

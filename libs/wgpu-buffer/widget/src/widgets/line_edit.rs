@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    color::Color,
     font_context::{FontContext, FontId, TextSpanMetrics},
     paint_context::PaintContext,
     region::{Extent, Position, Region},
@@ -22,6 +21,7 @@ use crate::{
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
+use csscolorparser::Color;
 use gpu::Gpu;
 use input::{ElementState, InputEvent, ModifiersState, VirtualKeyCode};
 use parking_lot::RwLock;
@@ -52,7 +52,7 @@ impl LineEdit {
         }
     }
 
-    pub fn with_default_color(mut self, color: Color) -> Self {
+    pub fn with_default_color(mut self, color: &Color) -> Self {
         self.line.set_default_color(color);
         self
     }

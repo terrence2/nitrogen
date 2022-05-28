@@ -22,32 +22,26 @@ use camera::{
 };
 use catalog::{Catalog, CatalogOpts};
 use composite::CompositeRenderPass;
+use csscolorparser::Color;
 use event_mapper::EventMapper;
 use fullscreen::FullscreenBuffer;
 use global_data::GlobalParametersBuffer;
 use gpu::{DetailLevelOpts, Gpu, GpuStep};
-use input::{DemoFocus, InputSystem};
+use input::{InputSystem, InputTarget};
 use measure::WorldSpaceFrame;
 use nitrous::{inject_nitrous_resource, HeapMut, NitrousResource};
 use orrery::Orrery;
-use parking_lot::RwLock;
 use platform_dirs::AppDirs;
 use runtime::{ExitRequest, Extension, Runtime, StartupOpts};
 use stars::StarsBuffer;
-use std::{fs::create_dir_all, sync::Arc, time::Instant};
+use std::{fs::create_dir_all, time::Instant};
 use structopt::StructOpt;
 use terminal_size::{terminal_size, Width};
 use terrain::TerrainBuffer;
 use tracelog::{TraceLog, TraceLogOpts};
 use ui::UiRenderPass;
-use widget::{
-    Border, Color, Expander, Label, Labeled, LayoutNode, PaintContext, PositionH, PositionV,
-    WidgetBuffer, WidgetComponent,
-};
-use window::{
-    size::{LeftBound, Size},
-    DisplayOpts, Window, WindowBuilder,
-};
+use widget::{Label, Labeled, LayoutNode, LayoutPacking, PaintContext, Terminal, WidgetBuffer};
+use window::{size::Size, DisplayOpts, Window, WindowBuilder};
 use world_render::WorldRenderPass;
 
 /// Demonstrate the capabilities of the Nitrogen engine
@@ -86,8 +80,8 @@ struct DemoUx {
 
 impl Extension for DemoUx {
     fn init(runtime: &mut Runtime) -> Result<()> {
-        let widgets = runtime.resource::<WidgetBuffer<DemoFocus>>();
-        let demo = DemoUx::new(widgets, runtime.heap_mut())?;
+        // let widgets = runtime.resource::<WidgetBuffer<DemoFocus>>();
+        let demo = DemoUx::new(runtime.heap_mut())?;
         runtime.insert_named_resource("demo", demo);
         runtime
             .add_frame_system(Self::sys_track_visible_state.after(GpuStep::PresentTargetSurface));
@@ -103,32 +97,40 @@ impl Extension for DemoUx {
 
 #[inject_nitrous_resource]
 impl DemoUx {
-    pub fn new(widgets: &WidgetBuffer<DemoFocus>, heap: HeapMut) -> Result<Self> {
-        let visible_widgets = Self::build_gui(widgets, heap)?;
+    pub fn new(heap: HeapMut) -> Result<Self> {
+        let visible_widgets = Self::build_gui(heap)?;
         Ok(Self { visible_widgets })
     }
 
     pub fn build_gui(
-        widgets: &WidgetBuffer<DemoFocus>,
+        // widgets: &mut WidgetBuffer<DemoFocus>,
         mut heap: HeapMut,
     ) -> Result<VisibleWidgets> {
         let sim_time = Label::new("")
-            .with_color(Color::White)
+            .with_color(&Color::from([255, 255, 255]))
             .wrapped("sim_time", heap.as_mut())?;
         let camera_direction = Label::new("")
-            .with_color(Color::White)
+            .with_color(&Color::from([255, 255, 255]))
             .wrapped("camera_direction", heap.as_mut())?;
         let camera_position = Label::new("")
-            .with_color(Color::White)
+            .with_color(&Color::from([255, 255, 255]))
             .wrapped("camera_position", heap.as_mut())?;
         let camera_fov = Label::new("")
-            .with_color(Color::White)
+            .with_color(&Color::from([255, 255, 255]))
             .wrapped("camera_fov", heap.as_mut())?;
-        let mut controls_box = LayoutNode::new_vbox("controls_box", heap)?;
-        controls_box.push_widget(sim_time, heap.as_mut())?;
-        controls_box.push_widget(camera_direction, heap.as_mut())?;
-        controls_box.push_widget(camera_position, heap.as_mut())?;
-        controls_box.push_widget(camera_fov, heap.as_mut())?;
+        let mut controls_box = LayoutNode::new_vbox("controls_box", heap.as_mut())?;
+        let controls_id = controls_box.id();
+        controls_box.push_widget(sim_time)?;
+        controls_box.push_widget(camera_direction)?;
+        controls_box.push_widget(camera_position)?;
+        controls_box.push_widget(camera_fov)?;
+        heap.resource_mut::<WidgetBuffer>()
+            .root_mut()
+            .push_layout(controls_box)?;
+        heap.get_mut::<LayoutPacking>(controls_id).float_end();
+        heap.get_mut::<LayoutPacking>(controls_id)
+            .set_background("#555a")?;
+        heap.get_mut::<LayoutPacking>(controls_id).padding_mut();
         // VerticalBox::new_with_children(&[
         //     sim_time.clone(),
         //     camera_direction.clone(),
@@ -177,12 +179,14 @@ impl DemoUx {
                     .font_context
                     .font_id_for_name("sans"),
             )
-            .with_color(Color::Red)
+            .with_color(&Color::from([255, 0, 0]))
             .with_size(Size::from_pts(13.0))
             .with_pre_blended_text()
             .wrapped("fps_label", heap.as_mut())?;
-        widgets.root_mut().push_widget(fps_label, heap.as_mut())?;
-        // .set_float(PositionH::Start, PositionV::Bottom);
+        heap.resource_mut::<WidgetBuffer>()
+            .root_mut()
+            .push_widget(fps_label)?;
+        heap.get_mut::<LayoutPacking>(fps_label).float_bottom();
         Ok(VisibleWidgets {
             sim_time,
             camera_direction,
@@ -194,7 +198,7 @@ impl DemoUx {
 
     fn sys_track_visible_state(
         query: Query<(&ArcBallController, &ScreenCameraController)>,
-        widgets: Query<&WidgetComponent>,
+        mut labels: Query<&mut Label>,
         camera: Res<ScreenCamera>,
         timestep: Res<TimeStep>,
         orrery: Res<Orrery>,
@@ -202,44 +206,38 @@ impl DemoUx {
     ) {
         for (arcball, _) in query.iter() {
             system
-                .track_visible_state(widgets, *timestep.now(), &orrery, arcball, &camera)
+                .track_visible_state(&mut labels, *timestep.now(), &orrery, arcball, &camera)
                 .ok();
         }
     }
 
     pub fn track_visible_state(
         &self,
-        mut widgets: Query<&WidgetComponent>,
+        labels: &mut Query<&mut Label>,
         now: Instant,
         orrery: &Orrery,
         arcball: &ArcBallController,
         camera: &ScreenCamera,
     ) -> Result<()> {
-        let sim_time = widgets.get_mut(self.visible_widgets.sim_time)?.inner();
-        // sim_time.set_text(format!("Date: {}", orrery.get_time()));
-        // self.visible_widgets
-        //     .sim_time
-        //     .write()
-        //     .set_text(format!("Date: {}", orrery.get_time()));
-        // self.visible_widgets
-        //     .camera_direction
-        //     .write()
-        //     .set_text(format!("Eye: {}", arcball.eye()));
-        // self.visible_widgets
-        //     .camera_position
-        //     .write()
-        //     .set_text(format!("Position: {}", arcball.target(),));
-        // self.visible_widgets
-        //     .camera_fov
-        //     .write()
-        //     .set_text(format!("FoV: {}", degrees!(camera.fov_y()),));
-        // let frame_time = now.elapsed();
-        // let ts = format!(
-        //     "frame: {}.{}ms",
-        //     frame_time.as_secs() * 1000 + u64::from(frame_time.subsec_millis()),
-        //     frame_time.subsec_micros(),
-        // );
-        // self.visible_widgets.fps_label.write().set_text(ts);
+        labels
+            .get_mut(self.visible_widgets.sim_time)?
+            .set_text(format!("Date: {}", orrery.get_time()));
+        labels
+            .get_mut(self.visible_widgets.camera_direction)?
+            .set_text(format!("Eye: {}", arcball.eye()));
+        labels
+            .get_mut(self.visible_widgets.camera_position)?
+            .set_text(format!("Position: {}", arcball.target()));
+        labels
+            .get_mut(self.visible_widgets.camera_fov)?
+            .set_text(format!("FoV: {}", degrees!(camera.fov_y())));
+        let frame_time = now.elapsed();
+        let ts = format!(
+            "frame: {}.{}ms",
+            frame_time.as_secs() * 1000 + u64::from(frame_time.subsec_millis()),
+            frame_time.subsec_micros(),
+        );
+        labels.get_mut(self.visible_widgets.fps_label)?.set_text(ts);
         Ok(())
     }
 }
@@ -271,23 +269,25 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .insert_resource(opt.detail_opts.cpu_detail())
         .insert_resource(opt.detail_opts.gpu_detail())
         .insert_resource(app_dirs)
-        .insert_resource(DemoFocus::Demo)
         .load_extension::<TraceLog>()?
         .load_extension::<StartupOpts>()?
         .load_extension::<Catalog>()?
-        .load_extension::<EventMapper<DemoFocus>>()?
+        .load_extension::<EventMapper>()?
         .load_extension::<Window>()?
         .load_extension::<Gpu>()?
+        .load_extension::<InputTarget>()?
         .load_extension::<AtmosphereBuffer>()?
         .load_extension::<FullscreenBuffer>()?
         .load_extension::<GlobalParametersBuffer>()?
         .load_extension::<StarsBuffer>()?
         .load_extension::<TerrainBuffer>()?
         .load_extension::<WorldRenderPass>()?
-        .load_extension::<WidgetBuffer<DemoFocus>>()?
-        .load_extension::<UiRenderPass<DemoFocus>>()?
-        .load_extension::<CompositeRenderPass<DemoFocus>>()?
+        .load_extension::<WidgetBuffer>()?
+        .load_extension::<UiRenderPass>()?
+        .load_extension::<CompositeRenderPass>()?
         .load_extension::<DemoUx>()?
+        .load_extension::<Label>()?
+        .load_extension::<Terminal>()?
         .load_extension::<Orrery>()?
         .load_extension::<Timeline>()?
         .load_extension::<TimeStep>()?

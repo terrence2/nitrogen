@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    color::Color,
     font_context::{FontContext, FontId, SANS_FONT_ID},
     paint_context::PaintContext,
     region::{Extent, Position, Region},
@@ -22,6 +21,7 @@ use crate::{
     widget_info::WidgetInfo,
 };
 use anyhow::Result;
+use csscolorparser::Color;
 use gpu::Gpu;
 use input::InputEvent;
 use parking_lot::RwLock;
@@ -50,7 +50,7 @@ impl TextEdit {
         let mut obj = Self {
             lines: VecDeque::new(),
             read_only: true, // NOTE: writable text edits not supported yet.
-            default_color: Color::Black,
+            default_color: Color::from([0, 0, 0]),
             default_font: SANS_FONT_ID,
             default_size: Size::from_pts(12.),
 
@@ -62,8 +62,8 @@ impl TextEdit {
         obj
     }
 
-    pub fn with_default_color(mut self, color: Color) -> Self {
-        self.default_color = color;
+    pub fn with_default_color(mut self, color: &Color) -> Self {
+        self.default_color = color.to_owned();
         self
     }
 
@@ -77,8 +77,8 @@ impl TextEdit {
         self
     }
 
-    pub fn default_color(&self) -> Color {
-        self.default_color
+    pub fn default_color(&self) -> &Color {
+        &self.default_color
     }
 
     pub fn default_font(&self) -> FontId {
@@ -136,7 +136,7 @@ impl TextEdit {
         TextRun::empty()
             .with_hidden_selection()
             .with_default_size(self.default_size)
-            .with_default_color(self.default_color)
+            .with_default_color(&self.default_color)
             .with_default_font(self.default_font)
             .with_text(text)
     }

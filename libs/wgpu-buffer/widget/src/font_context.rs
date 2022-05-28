@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    color::Color,
     region::Position,
     text_run::{SpanSelection, TextSpan},
     widget_vertex::WidgetVertex,
@@ -21,16 +20,13 @@ use crate::{
 };
 use anyhow::Result;
 use atlas::{AtlasPacker, Frame};
+use csscolorparser::Color;
 use font_common::{Font, FontAdvance};
 use gpu::Gpu;
 use image::Luma;
 use nitrous::Value;
-use ordered_float::OrderedFloat;
-use parking_lot::Mutex;
-use std::{
-    borrow::Borrow, collections::HashMap, env, hint::unreachable_unchecked, path::PathBuf,
-    sync::Arc,
-};
+use parking_lot::{Mutex, MutexGuard};
+use std::{borrow::Borrow, collections::HashMap, env, hint::unreachable_unchecked, path::PathBuf};
 use window::{
     size::{AbsSize, LeftBound, RelSize, ScreenDir},
     Window,
@@ -111,13 +107,9 @@ impl FontContext {
         self.glyph_sheet.lock().sampler_layout_entry(binding)
     }
 
-    // pub fn glyph_sheet_texture_binding(&self, binding: u32) -> wgpu::BindGroupEntry {
-    //     self.glyph_sheet.lock().texture_binding(binding)
-    // }
-    //
-    // pub fn glyph_sheet_sampler_binding(&self, binding: u32) -> wgpu::BindGroupEntry {
-    //     self.glyph_sheet.lock().sampler_binding(binding)
-    // }
+    pub fn glyph_sheet(&self) -> MutexGuard<AtlasPacker<Luma<u8>>> {
+        self.glyph_sheet.lock()
+    }
 
     pub fn get_font_by_name(&self, font_name: &str) -> Font {
         self.get_font(self.font_id_for_name(font_name))
@@ -147,7 +139,7 @@ impl FontContext {
         Ok(frame)
     }
 
-    pub fn cache_ascii_glyphs(&mut self, fid: FontId, scale: AbsSize, gpu: &Gpu) -> Result<()> {
+    pub fn cache_ascii_glyphs(&self, fid: FontId, scale: AbsSize, gpu: &Gpu) -> Result<()> {
         for c in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789`-=[[]\\;',./!@#$%^&*()_+{}|:\"<>?".chars() {
             self.load_glyph(fid, c, scale, gpu)?;
         }
@@ -247,8 +239,8 @@ impl FontContext {
             descent,
             line_gap,
         };
-        // span.set_metrics(&metrics);
-        // span.layout_cache_mut().append(&mut cache);
+        span.set_metrics(&metrics);
+        span.set_span_cache(cache);
         Ok(metrics)
     }
 
@@ -349,7 +341,7 @@ impl FontContext {
                         [bx0.into(), by0.into()],
                         [bx1.into(), by1.into()],
                         bz.as_depth(),
-                        &Color::White.opacity(0.8),
+                        &Color::from([1., 1., 1., 0.8]),
                         widget_info_index,
                         win,
                         background_pool,
@@ -378,7 +370,7 @@ impl FontContext {
                     [bx0.into(), by0.into()],
                     [bx1.into(), by1.into()],
                     bz.as_depth(),
-                    &Color::Blue,
+                    &Color::from([0, 0, 255]),
                     widget_info_index,
                     win,
                     background_pool,
@@ -401,7 +393,7 @@ impl FontContext {
                     [bx0.into(), by0.into()],
                     [bx1.into(), by1.into()],
                     bz.as_depth(),
-                    &Color::White,
+                    &Color::from([255, 255, 255]),
                     widget_info_index,
                     win,
                     background_pool,

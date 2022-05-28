@@ -13,7 +13,6 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    color::Color,
     font_context::{FontContext, FontId},
     paint_context::PaintContext,
     region::{Border, Extent, Position, Region},
@@ -24,6 +23,7 @@ use crate::{
 };
 use anyhow::Result;
 use bevy_ecs::prelude::*;
+use csscolorparser::Color;
 use gpu::Gpu;
 use input::InputEvent;
 use parking_lot::RwLock;
@@ -94,6 +94,7 @@ impl Expander {
     }
 }
 
+/*
 impl Labeled for Expander {
     fn set_text<S: AsRef<str> + Into<String>>(&mut self, content: S) {
         self.header.set_text(content);
@@ -232,3 +233,4 @@ impl Widget for Expander {
         Ok(())
     }
 }
+*/

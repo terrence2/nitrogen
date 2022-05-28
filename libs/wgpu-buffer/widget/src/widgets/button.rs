@@ -13,32 +13,64 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    color::Color,
     font_context::{FontContext, FontId},
+    layout::{LayoutMeasurements, LayoutPacking},
     paint_context::PaintContext,
-    region::{Extent, Region},
-    widget::{Labeled, Widget},
-    widgets::label::Label,
+    region::Extent,
+    text_run::TextRun,
+    widget::Labeled,
+    WidgetRenderStep,
 };
 use anyhow::Result;
+use bevy_ecs::prelude::*;
+use csscolorparser::Color;
 use gpu::Gpu;
-use parking_lot::RwLock;
+use nitrous::{inject_nitrous_component, HeapMut, NitrousComponent};
+use runtime::{Extension, Runtime};
 use std::{sync::Arc, time::Instant};
-use window::{
-    size::{RelSize, Size},
-    Window,
-};
+use window::{size::Size, Window};
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
+pub enum ButtonRenderStep {
+    Measure,
+    Upload,
+}
+
+#[derive(Component, NitrousComponent, Debug)]
 pub struct Button {
-    label: Label,
+    line: TextRun,
     action: String,
 }
 
+impl Extension for Button {
+    fn init(runtime: &mut Runtime) -> Result<()> {
+        runtime.add_frame_system(
+            Button::sys_measure
+                .label(ButtonRenderStep::Measure)
+                .before(WidgetRenderStep::LayoutWidgets),
+        );
+        runtime.add_frame_system(Button::sys_upload.label(ButtonRenderStep::Upload));
+        Ok(())
+    }
+}
+
+#[inject_nitrous_component]
 impl Button {
+    fn sys_measure(
+        mut buttons: Query<(&Button, &mut LayoutMeasurements)>,
+        win: Res<Window>,
+        paint_context: Res<PaintContext>,
+    ) {
+        for (button, mut measurements) in buttons.iter_mut() {}
+    }
+
+    fn sys_upload(labels: Query<(&Button, &mut LayoutMeasurements)>) {}
+
     pub fn new_with_text<S: AsRef<str> + Into<String>>(s: S) -> Self {
         Button {
-            label: Label::new(s),
+            line: TextRun::empty()
+                .with_hidden_selection()
+                .with_text(s.as_ref()),
             action: String::new(),
         }
     }
@@ -48,29 +80,47 @@ impl Button {
         self
     }
 
-    pub fn wrapped(self) -> Arc<RwLock<Self>> {
-        Arc::new(RwLock::new(self))
+    pub fn wrapped(self, name: &str, mut heap: HeapMut) -> Result<Entity> {
+        Ok(heap
+            .spawn_named(name)?
+            .insert_named(self)?
+            .insert_named(LayoutPacking::default())?
+            .insert(LayoutMeasurements::default())
+            .id())
     }
 }
 
 impl Labeled for Button {
     fn set_text<S: AsRef<str> + Into<String>>(&mut self, content: S) {
-        self.label.set_text(content);
+        self.line.select_all();
+        self.line.insert(content.as_ref());
     }
 
     fn set_size(&mut self, size: Size) {
-        self.label.set_size(size);
+        self.line.set_default_size(size);
+        self.line.select_all();
+        self.line.change_size(size);
+        self.line.select_none();
     }
 
-    fn set_color(&mut self, color: Color) {
-        self.label.set_color(color);
+    fn set_color(&mut self, color: &Color) {
+        self.line.set_default_color(color);
+        // Note: this is a label; we don't allow selection, so no need to save and restore it.
+        self.line.select_all();
+        self.line.change_color(color);
+        self.line.select_none();
     }
 
     fn set_font(&mut self, font_id: FontId) {
-        self.label.set_font(font_id);
+        self.line.set_default_font(font_id);
+        // Note: this is a label; we don't allow selection, so no need to save and restore it.
+        self.line.select_all();
+        self.line.change_font(font_id);
+        self.line.select_none();
     }
 }
 
+/*
 impl Widget for Button {
     fn measure(&self, win: &Window, font_context: &FontContext) -> Result<Extent<Size>> {
         self.label.measure(win, font_context)
@@ -96,3 +146,16 @@ impl Widget for Button {
         self.label.upload(now, win, gpu, context)
     }
 }
+
+#[derive(Component, NitrousComponent)]
+pub struct ButtonComponent {
+    inner: Arc<Button>,
+}
+
+#[inject_nitrous_component]
+impl ButtonComponent {
+    pub fn new(inner: Arc<Button>) -> Self {
+        Self { inner }
+    }
+}
+ */
