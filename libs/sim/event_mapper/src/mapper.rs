@@ -265,7 +265,7 @@ mod test {
         runtime
             .insert_resource(InputTarget::default())
             .insert_named_resource("player", Player::default())
-            .load_extension::<EventMapper<InputTarget>>()?;
+            .load_extension::<EventMapper>()?;
         runtime.resource_mut::<ScriptHerder>().run_string(
             r#"
                 bindings.bind("+w", "player.walk(pressed)");

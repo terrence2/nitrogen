@@ -176,7 +176,7 @@ impl FontContext {
     pub fn measure_text(&self, span: &TextSpan, win: &Window) -> Result<TextSpanMetrics> {
         if let Some(metrics) = span.metrics() {
             debug_assert_eq!(span.layout_cache_len(), span.content().chars().count() * 6);
-            return Ok(metrics.to_owned());
+            return Ok(metrics);
         }
         debug_assert_eq!(span.layout_cache_len(), 0);
 

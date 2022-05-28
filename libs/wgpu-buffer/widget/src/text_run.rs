@@ -620,7 +620,7 @@ mod test {
 
     #[test]
     fn test_text_editing() {
-        let mut run = TextRun::from_text("");
+        let mut run = TextRun::empty().with_text("");
         assert_eq!("", run.flatten());
         run.insert("a");
         assert_eq!("a", run.flatten());
@@ -642,7 +642,7 @@ mod test {
 
     #[test]
     fn test_text_selection() {
-        let mut run = TextRun::from_text("abcdefg");
+        let mut run = TextRun::empty().with_text("abcdefg");
         assert_eq!("abcdefg", run.flatten());
         run.backspace();
         assert_eq!("abcdef", run.flatten());

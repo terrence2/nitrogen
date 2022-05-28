@@ -89,6 +89,7 @@ impl WidgetVertex {
         tmp
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn push_textured_quad_rel(
         [x0, y0]: [RelSize; 2],
         [x1, y1]: [RelSize; 2],

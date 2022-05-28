@@ -503,7 +503,8 @@ mod tests {
     #[test]
     fn it_works() -> Result<()> {
         let runtime = Runtime::default()
-            .with_extension::<EventMapper<InputTarget>>()?
+            .with_extension::<InputTarget>()?
+            .with_extension::<EventMapper>()?
             .with_extension::<Orrery>()?;
         runtime.resource::<Orrery>().sun_direction();
         Ok(())
@@ -512,7 +513,8 @@ mod tests {
     #[test]
     fn test_leap_seconds() -> Result<()> {
         let mut runtime = Runtime::default()
-            .with_extension::<EventMapper<InputTarget>>()?
+            .with_extension::<InputTarget>()?
+            .with_extension::<EventMapper>()?
             .with_extension::<Orrery>()?;
         runtime
             .resource_mut::<Orrery>()

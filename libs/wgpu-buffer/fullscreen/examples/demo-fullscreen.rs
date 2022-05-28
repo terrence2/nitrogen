@@ -160,8 +160,8 @@ fn main() -> Result<()> {
 fn window_main(mut runtime: Runtime) -> Result<()> {
     runtime
         .insert_resource(DisplayOpts::default())
-        .insert_resource(InputTarget::Demo)
-        .load_extension::<EventMapper<InputTarget>>()?
+        .load_extension::<InputTarget>()?
+        .load_extension::<EventMapper>()?
         .load_extension::<Window>()?
         .load_extension::<Gpu>()?
         .load_extension::<FullscreenBuffer>()?

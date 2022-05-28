@@ -210,7 +210,7 @@ impl Terminal {
         let events = world.resource::<InputEventVec>().to_owned();
         world.resource_scope(|world, mut terminal: Mut<Terminal>| {
             for event in &events {
-                report!(terminal.handle_terminal_events(&event, HeapMut::wrap(world)));
+                report!(terminal.handle_terminal_events(event, HeapMut::wrap(world)));
             }
         });
     }

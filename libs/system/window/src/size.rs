@@ -18,6 +18,7 @@ use std::{
     cmp::Ordering,
     fmt::{Debug, Display, Formatter},
     ops::{Add, AddAssign, Div, Mul, Neg, Sub, SubAssign},
+    str::FromStr,
 };
 
 fn map_range((a, b): (f32, f32), (ap, bp): (f32, f32), v: f32) -> f32 {
@@ -411,31 +412,6 @@ impl Size {
         Self::Abs(AbsSize::Px(px))
     }
 
-    pub fn from_str(s: &str) -> Result<Self> {
-        let s = s.trim();
-        Ok(if s.ends_with("px") {
-            Self::from_px(
-                s.strip_suffix("px")
-                    .ok_or_else(|| anyhow!("parse failed"))?
-                    .parse::<f32>()?,
-            )
-        } else if s.ends_with("pts") {
-            Self::from_pts(
-                s.strip_suffix("pts")
-                    .ok_or_else(|| anyhow!("parse failed"))?
-                    .parse::<f32>()?,
-            )
-        } else if s.ends_with("%") {
-            Self::from_percent(
-                s.strip_suffix("%")
-                    .ok_or_else(|| anyhow!("parse failed"))?
-                    .parse::<f32>()?,
-            )
-        } else {
-            Self::from_gpu(s.parse::<f32>()?)
-        })
-    }
-
     pub fn as_rel(self, win: &Window, screen_dir: ScreenDir) -> RelSize {
         match self {
             Self::Rel(v) => v,
@@ -506,6 +482,35 @@ impl AspectMath for Size {
             ),
             Self::Abs(v) => Self::from_px(v.as_px().max(other.as_abs(win, screen_dir).as_px())),
         }
+    }
+}
+
+impl FromStr for Size {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        let s = s.trim();
+        Ok(if s.ends_with("px") {
+            Self::from_px(
+                s.strip_suffix("px")
+                    .ok_or_else(|| anyhow!("parse failed"))?
+                    .parse::<f32>()?,
+            )
+        } else if s.ends_with("pts") {
+            Self::from_pts(
+                s.strip_suffix("pts")
+                    .ok_or_else(|| anyhow!("parse failed"))?
+                    .parse::<f32>()?,
+            )
+        } else if s.ends_with('%') {
+            Self::from_percent(
+                s.strip_suffix('%')
+                    .ok_or_else(|| anyhow!("parse failed"))?
+                    .parse::<f32>()?,
+            )
+        } else {
+            Self::from_gpu(s.parse::<f32>()?)
+        })
     }
 }
 

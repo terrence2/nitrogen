@@ -25,7 +25,7 @@ use csscolorparser::Color;
 use gpu::Gpu;
 use nitrous::{inject_nitrous_component, method, HeapMut, NitrousComponent};
 use parking_lot::Mutex;
-use std::{sync::Arc, time::Instant};
+use std::{str::FromStr, sync::Arc, time::Instant};
 use window::{
     size::{LeftBound, RelSize, ScreenDir, Size},
     Window,
@@ -560,98 +560,6 @@ impl LayoutNode {
                     .draw_non_client(now, packings, measures, win, gpu, context)?;
             }
         }
-
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use crate::{Button, Label, WidgetBuffer};
-    use gpu::Gpu;
-    use input::InputTarget;
-    use platform_dirs::AppDirs;
-    use runtime::Runtime;
-    use std::time::Instant;
-
-    #[test]
-    fn it_can_build_a_layout() -> Result<()> {
-        let mut runtime = Gpu::for_test_unix()?;
-        runtime
-            .insert_resource(AppDirs::new(Some("nitrogen"), true).unwrap())
-            .insert_resource(TimeStep::new_60fps())
-            .load_extension::<WidgetBuffer<InputTarget>>()?
-            .load_extension::<Button>()?
-            .load_extension::<Label>()?;
-
-        let button_float = Button::new_with_text("Hello, worldF!")
-            .wrapped("test_button_float", runtime.heap_mut())?;
-
-        let button_box1 = Button::new_with_text("Hello, world1!")
-            .wrapped("test_button_box1", runtime.heap_mut())?;
-        let button_box2 = Button::new_with_text("Hello, world2!")
-            .wrapped("test_button_box2", runtime.heap_mut())?;
-
-        let mut buttons = LayoutNode::new_vbox("test_buttons", runtime.heap_mut())?;
-        buttons.push_widget(button_box1)?;
-        buttons.push_widget(button_box2)?;
-
-        runtime
-            .resource_mut::<WidgetBuffer<InputTarget>>()
-            .root
-            .push_widget(button_float)?;
-        runtime
-            .resource_mut::<WidgetBuffer<InputTarget>>()
-            .root
-            .push_layout(buttons)?;
-
-        fn test_do_layout(
-            layouts: Query<&LayoutPacking>,
-            mut measures: Query<&mut LayoutMeasurements>,
-            win: Res<Window>,
-            paint_context: Res<PaintContext>,
-            mut widget_buf: ResMut<WidgetBuffer<InputTarget>>,
-        ) {
-            widget_buf
-                .root
-                .measure_layout(&layouts, &mut measures)
-                .unwrap();
-
-            // widget_buf
-            //     .root
-            //     .perform_layout(
-            //         Region::<RelSize>::full(),
-            //         &layouts,
-            //         &widgets,
-            //         &win,
-            //         &paint_context.font_context,
-            //     )
-            //     .unwrap();
-        }
-        fn test_do_draw(
-            layouts: Query<&LayoutPacking>,
-            widgets: Query<&WidgetComponent>,
-            win: Res<Window>,
-            gpu: Res<Gpu>,
-            widget_buf: Res<WidgetBuffer<InputTarget>>,
-            mut paint_context: ResMut<PaintContext>,
-        ) {
-            // widget_buf
-            //     .root
-            //     .draw_layout(
-            //         Instant::now(),
-            //         &layouts,
-            //         &widgets,
-            //         &win,
-            //         &gpu,
-            //         &mut paint_context,
-            //     )
-            //     .unwrap();
-        }
-        runtime.add_frame_system(test_do_layout.label("layout"));
-        runtime.add_frame_system(test_do_draw.after("layout"));
-        runtime.run_frame_once();
 
         Ok(())
     }

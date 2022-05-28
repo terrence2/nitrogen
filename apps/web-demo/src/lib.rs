@@ -70,10 +70,10 @@ async fn async_main() -> Result<()> {
         // .insert_resource(opt.detail_opts.cpu_detail())
         // .insert_resource(opt.detail_opts.gpu_detail())
         // .insert_resource(app_dirs)
-        .insert_resource(InputTarget::Demo)
         // .load_extension::<StartupOpts>()?
         // .load_extension::<Catalog>()?
-        .load_extension::<EventMapper<InputTarget>>()?
+        .load_extension::<InputTarget>()?
+        .load_extension::<EventMapper>()?
         .load_extension::<Window>()?
         .load_extension::<Gpu>()?
         // .load_extension::<AtmosphereBuffer>()?

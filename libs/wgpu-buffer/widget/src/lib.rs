@@ -131,8 +131,8 @@ impl Extension for WidgetBuffer {
 
         let widget = WidgetBuffer::new(
             LayoutNode::new_float("root", runtime.heap_mut())?,
-            &runtime.resource::<Gpu>(),
-            &runtime.resource::<PaintContext>(),
+            runtime.resource::<Gpu>(),
+            runtime.resource::<PaintContext>(),
         )?;
         runtime.insert_named_resource("widget", widget);
 
@@ -385,6 +385,7 @@ impl WidgetBuffer {
             .perform_layout(Region::full(), 100., &packings, &mut measures));
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn sys_ensure_uploaded(
         mut widget: ResMut<WidgetBuffer>,
         mut paint_context: ResMut<PaintContext>,
@@ -410,6 +411,7 @@ impl WidgetBuffer {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn ensure_uploaded(
         &mut self,
         packings: Query<&LayoutPacking>,
@@ -521,6 +523,7 @@ impl WidgetBuffer {
 mod test {
     use super::*;
     use input::InputTarget;
+    use platform_dirs::AppDirs;
 
     #[test]
     fn test_label_widget() -> Result<()> {
@@ -528,6 +531,7 @@ mod test {
         runtime
             .insert_resource(AppDirs::new(Some("nitrogen"), true).unwrap())
             .insert_resource(TimeStep::new_60fps())
+            .load_extension::<InputTarget>()?
             .load_extension::<WidgetBuffer>()?;
 
         // let label = Label::new(
