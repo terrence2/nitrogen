@@ -140,47 +140,6 @@ impl DemoUx {
             .set_border_bottom("2px", heap.as_mut())?
             .to_owned();
         *heap.get_mut::<LayoutPacking>(controls_id) = controls_packing;
-        // VerticalBox::new_with_children(&[
-        //     sim_time.clone(),
-        //     camera_direction.clone(),
-        //     camera_position.clone(),
-        //     camera_fov.clone(),
-        // ])
-        // .with_background_color(Color::Gray.darken(3.).opacity(0.8))
-        // .with_glass_background()
-        // .with_padding(Border::new(
-        //     Size::zero(),
-        //     Size::from_px(8.),
-        //     Size::from_px(24.),
-        //     Size::from_px(8.),
-        // ))
-        // .wrapped();
-
-        // let expander = Expander::new_with_child("☰ Nitrogen v0.1", controls_box)
-        //     .with_color(Color::White)
-        //     .with_background_color(Color::Gray.darken(3.).opacity(0.8))
-        //     .with_glass_background()
-        //     .with_border(
-        //         Color::Black,
-        //         Border::new(
-        //             Size::zero(),
-        //             Size::from_px(2.),
-        //             Size::from_px(2.),
-        //             Size::zero(),
-        //         ),
-        //     )
-        //     .with_padding(Border::new(
-        //         Size::from_px(2.),
-        //         Size::from_px(3.),
-        //         Size::from_px(3.),
-        //         Size::from_px(2.),
-        //     ))
-        //     .wrapped();
-        // widgets
-        //     .root_container()
-        //     .write()
-        //     .add_child("controls", expander)
-        //     .set_float(PositionH::End, PositionV::Top);
 
         let fps_label = Label::new("")
             .with_font(

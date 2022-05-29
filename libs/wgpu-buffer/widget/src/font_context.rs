@@ -277,8 +277,8 @@ impl FontContext {
 
         let mut sel_range_start = None;
         let mut sel_range_end = None;
-        let mut bx0 = AbsSize::zero();
-        let mut bx1 = AbsSize::zero();
+        let mut bx0 = offset.left();
+        let mut bx1 = offset.left();
         let x_base = offset.left();
         let y_pos = offset.bottom();
         let z_depth = offset.depth().as_depth();

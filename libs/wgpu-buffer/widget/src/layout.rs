@@ -169,6 +169,18 @@ impl LayoutPacking {
     }
 
     #[method]
+    pub fn set_padding(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.padding.set_left(sz.as_rel(win, ScreenDir::Horizontal));
+        self.padding
+            .set_right(sz.as_rel(win, ScreenDir::Horizontal));
+        self.padding.set_top(sz.as_rel(win, ScreenDir::Vertical));
+        self.padding.set_bottom(sz.as_rel(win, ScreenDir::Vertical));
+        Ok(self)
+    }
+
+    #[method]
     pub fn set_padding_left(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
         let win = heap.resource::<Window>();
         let sz = Size::from_str(s)?;

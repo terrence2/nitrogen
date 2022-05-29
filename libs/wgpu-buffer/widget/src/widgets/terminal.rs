@@ -69,6 +69,7 @@ pub struct TerminalWidgetTag;
 pub struct Terminal {
     lines: VecDeque<TextRun>,
     edit: TextRun,
+    prompt: TextRun,
 
     font_id: FontId,
     font_size: Size,
@@ -101,10 +102,14 @@ impl Extension for Terminal {
             &runtime.resource::<AppDirs>().state_dir,
         )?;
         runtime.insert_named_resource("terminal", terminal);
-        let mut term_packing = LayoutPacking::default();
-        term_packing.float_start();
-        term_packing.float_top();
-        term_packing.set_background("#555a")?;
+        let term_packing = LayoutPacking::default()
+            .float_start()
+            .float_top()
+            .set_background("#555a")?
+            .set_padding("2px", runtime.heap_mut())?
+            .set_border_color("#0061cf")?
+            .set_border_bottom("3px", runtime.heap_mut())?
+            .to_owned();
         let term_id = runtime
             .spawn_named("terminal")?
             .insert(TerminalWidgetTag)
@@ -170,7 +175,8 @@ impl Terminal {
         for line in &terminal.lines {
             let _ = report!(line.measure(&win, &paint_context.font_context));
         }
-        let metrics = report!(terminal.edit.measure(&win, &paint_context.font_context));
+        report!(terminal.edit.measure(&win, &paint_context.font_context));
+        let metrics = report!(terminal.prompt.measure(&win, &paint_context.font_context));
         measure.set_metrics(metrics);
         measure.set_child_extent(Extent::new(Self::WIDTH, Self::HEIGHT), &packing);
     }
@@ -194,8 +200,14 @@ impl Terminal {
         *pos.bottom_mut() -= measure.metrics().descent.as_rel(&win, ScreenDir::Vertical);
 
         report!(terminal
+            .prompt
+            .upload(pos.into(), info, &win, &gpu, &mut context));
+        *pos.left_mut() += measure.metrics().width.as_rel(&win, ScreenDir::Horizontal);
+        report!(terminal
             .edit
             .upload(pos.into(), info, &win, &gpu, &mut context));
+        *pos.left_mut() -= measure.metrics().width.as_rel(&win, ScreenDir::Horizontal);
+
         let h = measure.metrics().height.as_rel(&win, ScreenDir::Vertical);
         for line in &terminal.lines {
             *pos.bottom_mut() += h;
@@ -252,6 +264,12 @@ impl Terminal {
                 .with_default_size(font_size)
                 .with_default_color(&Color::from([1., 1., 1.]))
                 .with_text("help()"),
+            prompt: TextRun::empty()
+                .with_hidden_selection()
+                .with_default_font(font_id)
+                .with_default_size(font_size)
+                .with_default_color(&Color::from([0.8, 0.8, 1.]))
+                .with_text("n2o\u{27a4} "),
             font_id,
             font_size,
             visible: true,

@@ -121,24 +121,18 @@ impl ExecutionMetadata {
         );
         if self.kind == ScriptRunKind::Interactive {
             #[allow(unstable_name_collisions)]
-            let resource_list: Value = heap
-                .resource_names()
-                .intersperse("\n  ")
-                .collect::<String>()
+            let item_list: Value = (String::new()
+                + "Resources:\n  "
+                + &heap
+                    .resource_names()
+                    .intersperse("\n  ")
+                    .collect::<String>()
+                + "\nEntities:\n  @"
+                + &heap.entity_names().intersperse("\n  @").collect::<String>())
                 .into();
             self.context.locals_mut().put_if_absent(
-                "resources",
-                Value::RustMethod(Arc::new(move |_, _| Ok(resource_list.clone()))),
-            );
-            #[allow(unstable_name_collisions)]
-            let entity_list: Value = heap
-                .entity_names()
-                .intersperse("\n  @")
-                .collect::<String>()
-                .into();
-            self.context.locals_mut().put_if_absent(
-                "entities",
-                Value::RustMethod(Arc::new(move |_, _| Ok(entity_list.clone()))),
+                "list",
+                Value::RustMethod(Arc::new(move |_, _| Ok(item_list.clone()))),
             );
             self.context.locals_mut().put_if_absent(
                 "help",
