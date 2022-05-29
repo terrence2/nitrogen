@@ -74,14 +74,14 @@ where
     Unit: LengthUnit,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "[{}, {}, {}]{}",
-            self.coords[0],
-            self.coords[1],
-            self.coords[2],
-            Origin::origin_name(),
-        )
+        write!(f, "[")?;
+        fmt::Display::fmt(&self.coords[0], f)?;
+        write!(f, ", ")?;
+        fmt::Display::fmt(&self.coords[1], f)?;
+        write!(f, ", ")?;
+        fmt::Display::fmt(&self.coords[2], f)?;
+        write!(f, "]")?;
+        write!(f, "{}", Origin::origin_name())
     }
 }
 

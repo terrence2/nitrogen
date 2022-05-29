@@ -281,7 +281,7 @@ impl FontContext {
         let mut bx1 = offset.left();
         let x_base = offset.left();
         let y_pos = offset.bottom();
-        let z_depth = offset.depth().as_depth();
+        let mut z_depth = offset.depth().as_depth();
         let mut cache_offset = 0;
         let span_cache = span.span_cache();
         for (i, c) in span.content().chars().enumerate() {
@@ -311,6 +311,7 @@ impl FontContext {
                     .as_gpu();
 
                 v.position[2] = z_depth;
+                z_depth += 0.0001;
 
                 v.widget_info_index = widget_info_index;
                 v.tex_coord = match j {

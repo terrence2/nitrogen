@@ -22,7 +22,7 @@ use crate::{
 use anyhow::Result;
 use font_common::Font;
 use gpu::Gpu;
-use nitrous::{inject_nitrous_resource, NitrousResource};
+use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use std::{borrow::Borrow, ops::Range};
 use window::{
     size::{AbsSize, RelSize},
@@ -73,6 +73,7 @@ impl PaintContext {
         self.font_context.add_font(font_name, font);
     }
 
+    #[method]
     pub fn dump_glyphs(&mut self) -> Result<()> {
         self.font_context.dump_glyphs()
     }

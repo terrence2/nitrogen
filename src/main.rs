@@ -240,10 +240,10 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .load_extension::<TraceLog>()?
         .load_extension::<StartupOpts>()?
         .load_extension::<Catalog>()?
+        .load_extension::<InputTarget>()?
         .load_extension::<EventMapper>()?
         .load_extension::<Window>()?
         .load_extension::<Gpu>()?
-        .load_extension::<InputTarget>()?
         .load_extension::<AtmosphereBuffer>()?
         .load_extension::<FullscreenBuffer>()?
         .load_extension::<GlobalParametersBuffer>()?
