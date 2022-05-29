@@ -75,7 +75,7 @@ impl LayoutLink {
 
 // Determine how the given widget should be packed into its box.
 // Owned by the parent layout, not the child.
-#[derive(Component, NitrousComponent)]
+#[derive(Component, NitrousComponent, Clone)]
 #[Name = "packing"]
 pub struct LayoutPacking {
     // non-client area
@@ -153,9 +153,15 @@ impl LayoutPacking {
     }
 
     #[method]
-    pub fn set_background(&mut self, color: &str) -> Result<()> {
+    pub fn set_background(&mut self, color: &str) -> Result<&mut Self> {
         self.background_color = Some(color.parse()?);
-        Ok(())
+        Ok(self)
+    }
+
+    #[method]
+    pub fn set_border_color(&mut self, color: &str) -> Result<&mut Self> {
+        self.border_color = Some(color.parse()?);
+        Ok(self)
     }
 
     pub fn padding_mut(&mut self) -> &mut Border<RelSize> {
@@ -163,36 +169,68 @@ impl LayoutPacking {
     }
 
     #[method]
-    pub fn set_padding_left(&mut self, s: &str, heap: HeapMut) -> Result<()> {
+    pub fn set_padding_left(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
         let win = heap.resource::<Window>();
         let sz = Size::from_str(s)?;
         self.padding.set_left(sz.as_rel(win, ScreenDir::Horizontal));
-        Ok(())
+        Ok(self)
     }
 
     #[method]
-    pub fn set_padding_right(&mut self, s: &str, heap: HeapMut) -> Result<()> {
+    pub fn set_padding_right(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
         let win = heap.resource::<Window>();
         let sz = Size::from_str(s)?;
         self.padding
             .set_right(sz.as_rel(win, ScreenDir::Horizontal));
-        Ok(())
+        Ok(self)
     }
 
     #[method]
-    pub fn set_padding_top(&mut self, s: &str, heap: HeapMut) -> Result<()> {
+    pub fn set_padding_top(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
         let win = heap.resource::<Window>();
         let sz = Size::from_str(s)?;
         self.padding.set_top(sz.as_rel(win, ScreenDir::Vertical));
-        Ok(())
+        Ok(self)
     }
 
     #[method]
-    pub fn set_padding_bottom(&mut self, s: &str, heap: HeapMut) -> Result<()> {
+    pub fn set_padding_bottom(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
         let win = heap.resource::<Window>();
         let sz = Size::from_str(s)?;
         self.padding.set_bottom(sz.as_rel(win, ScreenDir::Vertical));
-        Ok(())
+        Ok(self)
+    }
+
+    #[method]
+    pub fn set_border_left(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.border.set_left(sz.as_rel(win, ScreenDir::Horizontal));
+        Ok(self)
+    }
+
+    #[method]
+    pub fn set_border_right(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.border.set_right(sz.as_rel(win, ScreenDir::Horizontal));
+        Ok(self)
+    }
+
+    #[method]
+    pub fn set_border_top(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.border.set_top(sz.as_rel(win, ScreenDir::Vertical));
+        Ok(self)
+    }
+
+    #[method]
+    pub fn set_border_bottom(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.border.set_bottom(sz.as_rel(win, ScreenDir::Vertical));
+        Ok(self)
     }
 }
 
@@ -544,6 +582,7 @@ impl LayoutNode {
             if let Some(color) = &packing.border_color {
                 let mut rect = measure.total_allocation.to_owned();
                 rect.remove_border_rel(&packing.margin);
+                let rect = rect.clone_with_depth_adjust(-1.5);
                 WidgetVertex::push_region(rect, color, id, &mut context.background_pool);
             }
             if let Some(color) = &packing.background_color {

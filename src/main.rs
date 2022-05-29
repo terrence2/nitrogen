@@ -127,10 +127,19 @@ impl DemoUx {
         heap.resource_mut::<WidgetBuffer>()
             .root_mut()
             .push_layout(controls_box)?;
-        heap.get_mut::<LayoutPacking>(controls_id).float_end();
-        heap.get_mut::<LayoutPacking>(controls_id)
-            .set_background("#555a")?;
-        heap.get_mut::<LayoutPacking>(controls_id).padding_mut();
+        let controls_packing = LayoutPacking::default()
+            .float_end()
+            .float_top()
+            .set_background("#555a")?
+            .set_padding_left("10px", heap.as_mut())?
+            .set_padding_bottom("6px", heap.as_mut())?
+            .set_padding_top("4px", heap.as_mut())?
+            .set_padding_right("4px", heap.as_mut())?
+            .set_border_color("#000")?
+            .set_border_left("2px", heap.as_mut())?
+            .set_border_bottom("2px", heap.as_mut())?
+            .to_owned();
+        *heap.get_mut::<LayoutPacking>(controls_id) = controls_packing;
         // VerticalBox::new_with_children(&[
         //     sim_time.clone(),
         //     camera_direction.clone(),

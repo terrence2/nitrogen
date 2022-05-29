@@ -184,6 +184,14 @@ impl<T: Copy + Clone + LeftBound + AspectMath> Position<T> {
         }
     }
 
+    pub fn clone_with_depth_adjust(&self, delta: f32) -> Self {
+        Self {
+            left: self.left,
+            bottom: self.bottom,
+            depth: self.depth + RelSize::Gpu(delta),
+        }
+    }
+
     pub fn left(&self) -> T {
         self.left
     }
@@ -336,20 +344,24 @@ impl<T: Copy + Clone + LeftBound> Border<T> {
         self.bottom
     }
 
-    pub fn set_left(&mut self, v: T) {
+    pub fn set_left(&mut self, v: T) -> &mut Self {
         self.left = v;
+        self
     }
 
-    pub fn set_right(&mut self, v: T) {
+    pub fn set_right(&mut self, v: T) -> &mut Self {
         self.right = v;
+        self
     }
 
-    pub fn set_top(&mut self, v: T) {
+    pub fn set_top(&mut self, v: T) -> &mut Self {
         self.top = v;
+        self
     }
 
-    pub fn set_bottom(&mut self, v: T) {
+    pub fn set_bottom(&mut self, v: T) -> &mut Self {
         self.bottom = v;
+        self
     }
 }
 
@@ -389,6 +401,13 @@ impl<T: Copy + Clone + AspectMath + LeftBound> Region<T> {
 
     pub fn new(position: Position<T>, extent: Extent<T>) -> Self {
         Self { position, extent }
+    }
+
+    pub fn clone_with_depth_adjust(&self, delta: f32) -> Self {
+        Self {
+            position: self.position.clone_with_depth_adjust(delta),
+            extent: self.extent,
+        }
     }
 
     pub fn position(&self) -> &Position<T> {

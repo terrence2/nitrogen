@@ -181,6 +181,7 @@ fn lower_arg(i: usize, arg: &ArgDef) -> Expr {
         Scalar::Unit => parse2(quote! { ::nitrous::Value::True() }).unwrap(),
         Scalar::HeapMut => parse2(quote! { heap }).unwrap(),
         Scalar::HeapRef => parse2(quote! { heap.as_ref() }).unwrap(),
+        Scalar::Selfish => parse2(quote! { self }).unwrap(),
     }
 }
 
@@ -220,6 +221,9 @@ fn lower_method_call(name: &str, item: Ident, arg_exprs: &[Expr], ret: RetType) 
             Scalar::HeapMut | Scalar::HeapRef => {
                 panic!("invalid return of heap type from method")
             }
+            Scalar::Selfish => {
+                quote! { #name => { self.#item( #(#arg_exprs),* ); ::nitrous::CallResult::Selfish } }
+            }
         },
         RetType::ResultRaw(llty) => match llty {
             Scalar::Boolean => {
@@ -252,15 +256,10 @@ fn lower_method_call(name: &str, item: Ident, arg_exprs: &[Expr], ret: RetType) 
             Scalar::HeapMut | Scalar::HeapRef => {
                 panic!("invalid return of heap type from method")
             }
-        },
-        RetType::Selfish => {
-            quote! {
-                #name => {
-                    self.#item( #(#arg_exprs),* );
-                    ::nitrous::CallResult::Selfish
-                }
+            Scalar::Selfish => {
+                quote! { #name => { self.#item( #(#arg_exprs),* )?; ::nitrous::CallResult::Selfish } }
             }
-        }
+        },
     })
     .unwrap()
 }
@@ -338,6 +337,7 @@ pub(crate) enum Scalar {
     Unit,
     HeapMut,
     HeapRef,
+    Selfish, // Covering all of bare, &, mut, and &mut kinds of Self.
 }
 
 impl Scalar {
@@ -347,8 +347,9 @@ impl Scalar {
         } else if let Type::Reference(r) = ty {
             match Self::from_type(&r.elem) {
                 Scalar::StrRef => Scalar::StrRef,
+                Scalar::Selfish => Scalar::Selfish,
                 v => panic!(
-                    "nitrous Scalar only support references to str, not: {:#?}",
+                    "nitrous Scalar only support references to str and Self, not: {:#?}",
                     v
                 ),
             }
@@ -385,6 +386,7 @@ impl Scalar {
             "Value" => Scalar::Value,
             "HeapMut" => Scalar::HeapMut,
             "HeapRef" => Scalar::HeapRef,
+            "Self" => Scalar::Selfish,
             "Graticule" => {
                 if let PathArguments::AngleBracketed(args) =
                     &p.path.segments.first().unwrap().arguments
@@ -420,7 +422,6 @@ pub(crate) enum RetType {
     Nothing,
     Raw(Scalar),
     ResultRaw(Scalar),
-    Selfish,
 }
 
 impl RetType {
@@ -449,7 +450,7 @@ impl RetType {
                 } else if let Type::Reference(ref ty_ref) = ty.borrow() {
                     if let Type::Path(p) = ty_ref.elem.borrow() {
                         if Scalar::type_path_name(p).as_str() == "Self" {
-                            Self::Selfish
+                            RetType::Raw(Scalar::Selfish)
                         } else {
                             panic!(
                                 "nitrous methods can only return references to Self, not {:#?}",

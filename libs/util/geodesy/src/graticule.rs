@@ -120,7 +120,7 @@ where
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "({}, {})[{}]{}",
+            "({:0.4}, {:0.4})[{:0.4}]{}",
             degrees!(self.latitude),
             degrees!(self.longitude),
             self.distance,
