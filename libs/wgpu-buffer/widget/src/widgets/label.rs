@@ -27,7 +27,7 @@ use bevy_ecs::prelude::*;
 use csscolorparser::Color;
 use gpu::Gpu;
 use nitrous::{inject_nitrous_component, method, HeapMut, NitrousComponent, Value};
-use runtime::{Extension, Runtime};
+use runtime::{report, Extension, Runtime};
 use window::{
     size::{RelSize, ScreenDir, Size},
     Window,
@@ -71,11 +71,7 @@ impl Label {
         paint_context: Res<PaintContext>,
     ) {
         for (label, packing, mut measure) in labels.iter_mut() {
-            // FIXME: error handling
-            let metrics = label
-                .line
-                .measure(&win, &paint_context.font_context)
-                .unwrap();
+            let metrics = report!(label.line.measure(&win, &paint_context.font_context));
             let extent = Extent::<RelSize>::new(
                 metrics.width.as_rel(&win, ScreenDir::Horizontal),
                 metrics.height.as_rel(&win, ScreenDir::Vertical),
@@ -97,18 +93,13 @@ impl Label {
             // Account for descender
             let mut pos = *measure.child_allocation().position();
             *pos.bottom_mut() -= measure.metrics().descent.as_rel(&win, ScreenDir::Vertical);
-
-            // FIXME: error handling
-            label
-                .line
-                .upload(
-                    pos.into(),
-                    widget_info_index,
-                    &win,
-                    &gpu,
-                    &mut paint_context,
-                )
-                .unwrap();
+            report!(label.line.upload(
+                pos.into(),
+                widget_info_index,
+                &win,
+                &gpu,
+                &mut paint_context,
+            ));
         }
     }
 
