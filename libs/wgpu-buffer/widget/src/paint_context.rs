@@ -40,10 +40,14 @@ pub struct PaintContext {
 
 #[inject_nitrous_resource]
 impl PaintContext {
-    pub const BACKGROUND_DEPTH: RelSize = RelSize::from_percent(0.75);
-    pub const BORDER_DEPTH: RelSize = RelSize::from_percent(0.5);
-    pub const TEXT_DEPTH: RelSize = RelSize::from_percent(0.25);
-    pub const BOX_DEPTH_SIZE: RelSize = RelSize::from_percent(1.);
+    // FIXME: use these
+    pub const BACKGROUND_DEPTH: RelSize = RelSize::Gpu(0.75);
+    pub const BORDER_DEPTH: RelSize = RelSize::Gpu(0.5);
+
+    // Note: we adjust offset up by 0.2 so that selection regions can be drawn under the text
+    pub const TEXT_DEPTH: RelSize = RelSize::Gpu(0.2);
+
+    pub const BOX_DEPTH_SIZE: RelSize = RelSize::Gpu(1.);
 
     pub fn new(gpu: &Gpu) -> Self {
         Self {

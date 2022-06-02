@@ -214,6 +214,49 @@ impl LayoutPacking {
     }
 
     #[method]
+    pub fn set_margin(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.margin.set_left(sz.as_rel(win, ScreenDir::Horizontal));
+        self.margin.set_right(sz.as_rel(win, ScreenDir::Horizontal));
+        self.margin.set_top(sz.as_rel(win, ScreenDir::Vertical));
+        self.margin.set_bottom(sz.as_rel(win, ScreenDir::Vertical));
+        Ok(self)
+    }
+
+    #[method]
+    pub fn set_margin_left(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.margin.set_left(sz.as_rel(win, ScreenDir::Horizontal));
+        Ok(self)
+    }
+
+    #[method]
+    pub fn set_margin_right(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.margin.set_right(sz.as_rel(win, ScreenDir::Horizontal));
+        Ok(self)
+    }
+
+    #[method]
+    pub fn set_margin_top(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.margin.set_top(sz.as_rel(win, ScreenDir::Vertical));
+        Ok(self)
+    }
+
+    #[method]
+    pub fn set_margin_bottom(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.margin.set_bottom(sz.as_rel(win, ScreenDir::Vertical));
+        Ok(self)
+    }
+
+    #[method]
     pub fn set_border_left(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
         let win = heap.resource::<Window>();
         let sz = Size::from_str(s)?;
@@ -485,7 +528,7 @@ impl LayoutNode {
                 let child_region = measures.get(layout.lock().widget)?.child_allocation.clone();
                 layout
                     .lock()
-                    .perform_layout(child_region, depth - 1., packings, measures)?;
+                    .perform_layout(child_region, depth + 1., packings, measures)?;
             }
         }
 
@@ -522,7 +565,7 @@ impl LayoutNode {
                     PositionV::Bottom => RelSize::zero(),
                 };
 
-            let d = depth - 1. + 0.1 * i as f32;
+            let d = depth + 1. + 0.1 * i as f32;
             let position = Position::new_with_depth(left_offset, top_offset, RelSize::Gpu(d));
             let child_total_alloc = Region::new(position, child_total_extent);
             measures
@@ -534,7 +577,7 @@ impl LayoutNode {
                 let child_region = measures.get(layout.lock().widget)?.child_allocation.clone();
                 layout
                     .lock()
-                    .perform_layout(child_region, depth - 1., packings, measures)?;
+                    .perform_layout(child_region, depth + 1., packings, measures)?;
             }
         }
 
@@ -592,13 +635,12 @@ impl LayoutNode {
             }
             let id = context.push_widget(&info);
             if let Some(color) = &packing.border_color {
-                let mut rect = measure.total_allocation.to_owned();
+                let mut rect = measure.total_allocation.clone_with_depth_adjust(-0.02);
                 rect.remove_border_rel(&packing.margin);
-                let rect = rect.clone_with_depth_adjust(-1.5);
                 WidgetVertex::push_region(rect, color, id, &mut context.background_pool);
             }
             if let Some(color) = &packing.background_color {
-                let mut rect = measure.total_allocation.to_owned();
+                let mut rect = measure.total_allocation.clone_with_depth_adjust(-0.01);
                 rect.remove_border_rel(&packing.margin);
                 rect.remove_border_rel(&packing.border);
                 WidgetVertex::push_region(rect, color, id, &mut context.background_pool);

@@ -105,7 +105,7 @@ impl Extension for Terminal {
         let term_packing = LayoutPacking::default()
             .float_start()
             .float_top()
-            .set_background("#555a")?
+            .set_background("#222a")?
             .set_padding("2px", runtime.heap_mut())?
             .set_border_color("#0061cf")?
             .set_border_bottom("3px", runtime.heap_mut())?

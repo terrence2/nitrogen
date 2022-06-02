@@ -216,6 +216,10 @@ impl<T: Copy + Clone + LeftBound + AspectMath> Position<T> {
         &mut self.bottom
     }
 
+    pub fn depth_mut(&mut self) -> &mut RelSize {
+        &mut self.depth
+    }
+
     pub fn axis_mut(&mut self, dir: ScreenDir) -> &mut T {
         match dir {
             ScreenDir::Horizontal => &mut self.left,

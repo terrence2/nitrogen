@@ -130,7 +130,7 @@ impl DemoUx {
         let controls_packing = LayoutPacking::default()
             .float_end()
             .float_top()
-            .set_background("#555a")?
+            .set_background("#222a")?
             .set_padding_left("10px", heap.as_mut())?
             .set_padding_bottom("6px", heap.as_mut())?
             .set_padding_top("4px", heap.as_mut())?

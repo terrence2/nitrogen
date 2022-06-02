@@ -13,13 +13,14 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{
-    meters_per_second, meters_per_second2, Acceleration, Length, LengthUnit, Meters, Seconds,
-    TimeUnit, Velocity,
+    meters, meters_per_second, meters_per_second2, Acceleration, Length, LengthUnit, Meters,
+    Seconds, TimeUnit, Velocity,
 };
 use bevy_ecs::prelude::*;
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
 use nalgebra::{convert, Point3, Unit as NUnit, UnitQuaternion, Vector3};
 use nitrous::{inject_nitrous_component, method, NitrousComponent};
+use physical_constants::EARTH_RADIUS;
 use std::f64::consts::PI;
 
 pub struct BasisVectors<T> {
@@ -95,6 +96,10 @@ impl WorldSpaceFrame {
 
     pub fn position(&self) -> &Cartesian<GeoCenter, Meters> {
         &self.position
+    }
+
+    pub fn altitude_asl(&self) -> Length<Meters> {
+        meters!(self.position().vec64().magnitude()) - *EARTH_RADIUS
     }
 
     pub fn position_pt3(&self) -> Point3<Length<Meters>> {

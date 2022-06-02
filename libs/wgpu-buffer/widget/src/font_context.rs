@@ -28,7 +28,7 @@ use nitrous::Value;
 use parking_lot::{Mutex, MutexGuard};
 use std::{borrow::Borrow, collections::HashMap, env, hint::unreachable_unchecked, path::PathBuf};
 use window::{
-    size::{AbsSize, LeftBound, RelSize, ScreenDir},
+    size::{AbsSize, LeftBound, ScreenDir},
     Window,
 };
 
@@ -281,7 +281,7 @@ impl FontContext {
         let mut bx1 = offset.left();
         let x_base = offset.left();
         let y_pos = offset.bottom();
-        let mut z_depth = offset.depth().as_depth();
+        let mut z_depth = offset.depth().as_gpu();
         let mut cache_offset = 0;
         let span_cache = span.span_cache();
         for (i, c) in span.content().chars().enumerate() {
@@ -336,12 +336,11 @@ impl FontContext {
                     let bx1 = bx0 + AbsSize::from_px(2.);
                     let by0 = offset.bottom() + descent;
                     let by1 = offset.bottom() + ascent;
-                    let bz = offset.depth() - RelSize::from_percent(0.1);
-
+                    let bz = offset.depth().as_gpu() - 0.1;
                     WidgetVertex::push_quad(
                         [bx0.into(), by0.into()],
                         [bx1.into(), by1.into()],
-                        bz.as_depth(),
+                        bz,
                         &Color::from([1., 1., 1., 0.8]),
                         widget_info_index,
                         win,
@@ -366,11 +365,11 @@ impl FontContext {
             if let Some(bx1) = sel_range_end {
                 let by0 = offset.bottom() + descent;
                 let by1 = offset.bottom() + ascent;
-                let bz = offset.depth() - RelSize::from_percent(0.1);
+                let bz = offset.depth().as_gpu() - 0.1;
                 WidgetVertex::push_quad(
                     [bx0.into(), by0.into()],
                     [bx1.into(), by1.into()],
-                    bz.as_depth(),
+                    bz,
                     &Color::from([0, 0, 255]),
                     widget_info_index,
                     win,
@@ -388,12 +387,11 @@ impl FontContext {
                 let bx1 = bx0 + AbsSize::from_px(2.);
                 let by0 = offset.bottom() + descent;
                 let by1 = offset.bottom() + ascent;
-                let bz = offset.depth() - RelSize::from_percent(0.1);
-
+                let bz = offset.depth().as_gpu() - 0.1;
                 WidgetVertex::push_quad(
                     [bx0.into(), by0.into()],
                     [bx1.into(), by1.into()],
-                    bz.as_depth(),
+                    bz,
                     &Color::from([255, 255, 255]),
                     widget_info_index,
                     win,
