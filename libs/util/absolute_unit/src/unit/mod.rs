@@ -34,6 +34,7 @@ pub(crate) mod feet;
 pub(crate) mod kilometers;
 pub(crate) mod meters;
 pub(crate) mod miles;
+pub(crate) mod nautical_miles;
 
 // Temperature
 pub(crate) mod celsius;

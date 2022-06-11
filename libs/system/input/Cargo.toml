@@ -7,11 +7,10 @@ edition = "2021"
 [dependencies]
 anyhow = { version = "^ 1", features = ["backtrace"] }
 bevy_ecs = { version = "^ 0.7", features = ["trace"] }
+gilrs = "^ 0.9"
 log = "^ 0.4"
 parking_lot = "^ 0.12"
 smallvec = "^ 1"
-#pasts = "^ 0.8"
-#stick = "^ 0.12"
 winit = "^ 0.26"
 nitrous = { path = "../../util/nitrous" }
 runtime = { path = "../../util/runtime" }

@@ -32,6 +32,7 @@ members = [
     "libs/system/catalog",
     "libs/system/gpu",
     "libs/system/input",
+    "libs/system/jilrs",
     "libs/system/tracelog",
     "libs/system/window",
 

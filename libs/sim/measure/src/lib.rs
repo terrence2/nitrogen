@@ -149,13 +149,13 @@ impl WorldSpaceFrame {
 
 // Positive z is forward, positive x is right, positive y is up
 #[derive(Component, NitrousComponent, Copy, Clone, Debug, Default)]
-pub struct LocalMotion {
+pub struct BodyMotion {
     acceleration_m_s2: Vector3<Acceleration<Meters, Seconds>>,
     velocity_m_s: Vector3<Velocity<Meters, Seconds>>,
 }
 
 #[inject_nitrous_component]
-impl LocalMotion {
+impl BodyMotion {
     pub fn new_forward<UnitLength: LengthUnit, UnitTime: TimeUnit>(
         forward_velocity: Velocity<UnitLength, UnitTime>,
     ) -> Self {
@@ -189,7 +189,7 @@ impl LocalMotion {
         &mut self.velocity_m_s
     }
 
-    // TODO: remove
+    /// u
     pub fn forward_velocity(&self) -> Velocity<Meters, Seconds> {
         self.velocity_m_s.z
     }
@@ -198,12 +198,26 @@ impl LocalMotion {
         &mut self.velocity_m_s.z
     }
 
+    pub fn forward_acceleration(&self) -> Acceleration<Meters, Seconds> {
+        self.acceleration_m_s2.z
+    }
+
+    /// v
     pub fn sideways_velocity(&self) -> Velocity<Meters, Seconds> {
         self.velocity_m_s.x
     }
 
+    pub fn sideways_acceleration(&self) -> Acceleration<Meters, Seconds> {
+        self.acceleration_m_s2.x
+    }
+
+    /// w
     pub fn vertical_velocity(&self) -> Velocity<Meters, Seconds> {
         self.velocity_m_s.y
+    }
+
+    pub fn vertical_acceleration(&self) -> Acceleration<Meters, Seconds> {
+        self.acceleration_m_s2.y
     }
 }
 
