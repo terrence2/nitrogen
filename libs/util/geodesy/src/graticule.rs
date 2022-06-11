@@ -14,11 +14,11 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{Cartesian, GeoCenter, GeoSurface};
 use absolute_unit::{
-    degrees, kilometers, meters, radians, Angle, AngleUnit, Length, LengthUnit, Meters, Radians,
+    degrees, meters, radians, Angle, AngleUnit, Length, LengthUnit, Meters, Radians,
 };
 use nalgebra::Point3;
 use num_traits::Float;
-use physical_constants::EARTH_RADIUS_KM;
+use physical_constants::EARTH_RADIUS;
 use std::{convert::From, fmt, marker::PhantomData};
 
 pub trait GraticuleOrigin: Copy {
@@ -134,7 +134,7 @@ impl From<Graticule<GeoSurface>> for Graticule<GeoCenter> {
         Self::new(
             surface.latitude,
             surface.longitude,
-            surface.distance + kilometers!(EARTH_RADIUS_KM),
+            surface.distance + *EARTH_RADIUS,
         )
     }
 }
@@ -144,7 +144,7 @@ impl From<Graticule<GeoCenter>> for Graticule<GeoSurface> {
         Self::new(
             surface.latitude,
             surface.longitude,
-            surface.distance - kilometers!(6378),
+            surface.distance - *EARTH_RADIUS,
         )
     }
 }

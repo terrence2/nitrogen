@@ -19,13 +19,13 @@ use crate::patch::{
     queue::{MaxHeap, MinHeap, Queue},
 };
 
-use absolute_unit::Kilometers;
+use absolute_unit::{kilometers, Kilometers};
 use approx::assert_relative_eq;
 use camera::ScreenCamera;
 use geometry::{algorithm::bisect_edge, Plane};
 use log::trace;
 use nalgebra::{Point3, Vector3};
-use physical_constants::EARTH_RADIUS_KM;
+use physical_constants::EARTH_RADIUS;
 use std::{
     cmp::Reverse,
     collections::{BinaryHeap, HashSet},
@@ -201,9 +201,9 @@ impl PatchTree {
                 peers: root_peers[i],
             }));
             root.children[i] = TreeIndex(i);
-            let v0 = Point3::from(sphere.verts[face.i0()] * EARTH_RADIUS_KM);
-            let v1 = Point3::from(sphere.verts[face.i1()] * EARTH_RADIUS_KM);
-            let v2 = Point3::from(sphere.verts[face.i2()] * EARTH_RADIUS_KM);
+            let v0 = Point3::from(sphere.verts[face.i0()] * kilometers!(*EARTH_RADIUS).f64());
+            let v1 = Point3::from(sphere.verts[face.i1()] * kilometers!(*EARTH_RADIUS).f64());
+            let v2 = Point3::from(sphere.verts[face.i2()] * kilometers!(*EARTH_RADIUS).f64());
             let p = Patch::new(TreeIndex(i), [v0, v1, v2]);
             patches.push(p);
         }
@@ -506,9 +506,11 @@ impl PatchTree {
         {
             self.cached_viewable_region[i] = *f;
         }
+        // Rear plane
         self.cached_viewable_region[5] = Plane::from_normal_and_distance(
             self.cached_eye_position.coords.normalize(),
-            (((EARTH_RADIUS_KM * EARTH_RADIUS_KM) / self.cached_eye_position.coords.magnitude())
+            (((kilometers!(*EARTH_RADIUS).f64() * kilometers!(*EARTH_RADIUS).f64())
+                / self.cached_eye_position.coords.magnitude())
                 - 100f64)
                 .min(0f64),
         );
@@ -753,9 +755,15 @@ impl PatchTree {
         let leaf_peers = *node.peers();
 
         // Get new points.
-        let a = Point3::from(bisect_edge(&v0.coords, &v1.coords).normalize() * EARTH_RADIUS_KM);
-        let b = Point3::from(bisect_edge(&v1.coords, &v2.coords).normalize() * EARTH_RADIUS_KM);
-        let c = Point3::from(bisect_edge(&v2.coords, &v0.coords).normalize() * EARTH_RADIUS_KM);
+        let a = Point3::from(
+            bisect_edge(&v0.coords, &v1.coords).normalize() * kilometers!(*EARTH_RADIUS).f64(),
+        );
+        let b = Point3::from(
+            bisect_edge(&v1.coords, &v2.coords).normalize() * kilometers!(*EARTH_RADIUS).f64(),
+        );
+        let c = Point3::from(
+            bisect_edge(&v2.coords, &v0.coords).normalize() * kilometers!(*EARTH_RADIUS).f64(),
+        );
 
         // Allocate geometry to new patches.
         let children = [

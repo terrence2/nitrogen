@@ -13,7 +13,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::colorspace::{cie_color_coefficient_at_wavelength, convert_xyz_to_srgb};
+use absolute_unit::kilometers;
 use num_traits::pow::Pow;
+use physical_constants::EARTH_RADIUS;
 use static_assertions::{assert_eq_align, assert_eq_size};
 use std::{f64::consts::PI as PI64, ops::Range};
 use zerocopy::{AsBytes, FromBytes};
@@ -317,8 +319,8 @@ impl EarthParameters {
                 MAX_LUMINOUS_EFFICACY as f32,
                 MAX_LUMINOUS_EFFICACY as f32,
             ],
-            _bottom_radius: (6_360_000.0 / LENGTH_SCALE) as f32,
-            _top_radius: (6_420_000.0 / LENGTH_SCALE) as f32,
+            _bottom_radius: kilometers!(*EARTH_RADIUS).f32(),
+            _top_radius: kilometers!(6_420.000).f32(),
             _rayleigh_density: DensityProfile {
                 _layer0: Default::default(),
                 _layer1: DensityProfileLayer {
