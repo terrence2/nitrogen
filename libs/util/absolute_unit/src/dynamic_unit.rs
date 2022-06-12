@@ -18,7 +18,7 @@ use hashbag::HashBag;
 use ordered_float::OrderedFloat;
 #[cfg(debug_assertions)]
 use std::any::TypeId;
-use std::ops::{Div, Mul};
+use std::ops::{Add, Div, Mul};
 
 #[derive(Default, Debug, Clone)]
 pub struct DynamicUnits {
@@ -126,6 +126,17 @@ impl DynamicUnits {
         }
         obj.v = v;
         obj
+    }
+}
+
+impl Add<DynamicUnits> for DynamicUnits {
+    type Output = DynamicUnits;
+
+    fn add(mut self, rhs: DynamicUnits) -> Self::Output {
+        debug_assert_eq!(self.numerator, rhs.numerator);
+        debug_assert_eq!(self.denominator, rhs.denominator);
+        self.v += rhs.v;
+        self
     }
 }
 

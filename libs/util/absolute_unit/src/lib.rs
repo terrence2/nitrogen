@@ -15,6 +15,7 @@
 
 pub(crate) mod acceleration;
 pub(crate) mod angle;
+pub(crate) mod angular_velocity;
 pub(crate) mod area;
 pub(crate) mod density;
 pub(crate) mod dynamic_unit;
@@ -36,6 +37,7 @@ pub trait Quantity {}
 pub use crate::{
     acceleration::Acceleration,
     angle::{Angle, AngleUnit},
+    angular_velocity::AngularVelocity,
     area::Area,
     density::Density,
     dynamic_unit::DynamicUnits,
