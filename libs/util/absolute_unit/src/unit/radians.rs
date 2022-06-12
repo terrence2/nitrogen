@@ -38,3 +38,10 @@ macro_rules! radians_per_second {
         $crate::AngularVelocity::<$crate::Radians, $crate::Seconds>::from(&$num)
     };
 }
+
+#[macro_export]
+macro_rules! radians_per_second2 {
+    ($num:expr) => {
+        $crate::AngularAcceleration::<$crate::Radians, $crate::Seconds>::from(&$num)
+    };
+}

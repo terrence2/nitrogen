@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     impl_value_type_conversions, supports_absdiffeq, supports_quantity_ops, supports_scalar_ops,
-    supports_shift_ops, supports_value_type_conversion, Acceleration, Angle, AngleUnit,
+    supports_shift_ops, supports_value_type_conversion, Angle, AngleUnit, AngularAcceleration,
     DynamicUnits, Time, TimeUnit,
 };
 use ordered_float::OrderedFloat;
@@ -76,18 +76,18 @@ where
     }
 }
 
-// impl<LA, TA, TB> Div<Time<TB>> for AngularVelocity<LA, TA>
-// where
-//     LA: AngleUnit,
-//     TA: TimeUnit,
-//     TB: TimeUnit,
-// {
-//     type Output = Acceleration<LA, TA>;
-//
-//     fn div(self, other: Time<TB>) -> Self::Output {
-//         Acceleration::<LA, TA>::from(self.v.0 / Time::<TA>::from(&other).f64())
-//     }
-// }
+impl<LA, TA, TB> Div<Time<TB>> for AngularVelocity<LA, TA>
+where
+    LA: AngleUnit,
+    TA: TimeUnit,
+    TB: TimeUnit,
+{
+    type Output = AngularAcceleration<LA, TA>;
+
+    fn div(self, other: Time<TB>) -> Self::Output {
+        AngularAcceleration::<LA, TA>::from(self.v.0 / Time::<TA>::from(&other).f64())
+    }
+}
 
 impl<LA, TA, TB> Mul<Time<TB>> for AngularVelocity<LA, TA>
 where
@@ -118,7 +118,7 @@ mod test {
 
     #[test]
     fn test_angular_velocity_shift() {
-        let r_p_s = radians_per_second!(100) + degrees_per_second!(100);
-        assert_abs_diff_eq!(r_p_s, radians_per_second!(144.704), epsilon = 0.001);
+        let r_p_s = radians_per_second!(100) + degrees_per_second!(5_732);
+        assert_abs_diff_eq!(r_p_s, radians_per_second!(200.042), epsilon = 0.001);
     }
 }
