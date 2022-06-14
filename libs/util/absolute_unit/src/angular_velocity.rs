@@ -66,6 +66,22 @@ where
     }
 }
 
+impl<L, T> From<DynamicUnits> for AngularVelocity<L, T>
+where
+    L: AngleUnit,
+    T: TimeUnit,
+{
+    fn from(v: DynamicUnits) -> Self {
+        let f = v.ordered_float();
+        v.assert_units_equal(&DynamicUnits::new1o1::<L, T>(0f64.into()));
+        Self {
+            v: f,
+            phantom_1: PhantomData,
+            phantom_2: PhantomData,
+        }
+    }
+}
+
 impl<LA, TA> AngularVelocity<LA, TA>
 where
     LA: AngleUnit,

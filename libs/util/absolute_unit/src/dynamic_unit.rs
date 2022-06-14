@@ -12,13 +12,13 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::Unit;
+use crate::{Radians, Unit};
 #[cfg(debug_assertions)]
 use hashbag::HashBag;
 use ordered_float::OrderedFloat;
 #[cfg(debug_assertions)]
 use std::any::TypeId;
-use std::ops::{Add, Div, Mul};
+use std::ops::{Add, Div, Mul, Sub};
 
 #[derive(Default, Debug, Clone)]
 pub struct DynamicUnits {
@@ -49,6 +49,10 @@ impl DynamicUnits {
             for d in _other.denominator.iter() {
                 assert!(self.denominator.remove(d) > 0);
             }
+            // Remove any radians, from either side, as that is technically a unitless quantity.
+            self.numerator.take_all(&TypeId::of::<Radians>());
+            self.denominator.take_all(&TypeId::of::<Radians>());
+
             // Any remainder must _also_ would cancel out, exactly.
             assert_eq!(self.numerator, self.denominator);
         }
@@ -61,6 +65,19 @@ impl DynamicUnits {
         }
     }
 
+    pub fn new1o0<N0>(v: OrderedFloat<f64>) -> Self
+    where
+        N0: Unit + 'static,
+    {
+        let mut obj = DynamicUnits::default();
+        #[cfg(debug_assertions)]
+        {
+            obj.numerator.extend(&[TypeId::of::<N0>()]);
+        }
+        obj.v = v;
+        obj
+    }
+
     pub fn new1o1<N0, D0>(v: OrderedFloat<f64>) -> Self
     where
         N0: Unit + 'static,
@@ -71,6 +88,23 @@ impl DynamicUnits {
         {
             obj.numerator.extend(&[TypeId::of::<N0>()]);
             obj.denominator.extend(&[TypeId::of::<D0>()]);
+        }
+        obj.v = v;
+        obj
+    }
+
+    pub fn new1o2<N0, D0, D1>(v: OrderedFloat<f64>) -> Self
+    where
+        N0: Unit + 'static,
+        D0: Unit + 'static,
+        D1: Unit + 'static,
+    {
+        let mut obj = DynamicUnits::default();
+        #[cfg(debug_assertions)]
+        {
+            obj.numerator.extend(&[TypeId::of::<N0>()]);
+            obj.denominator
+                .extend(&[TypeId::of::<D0>(), TypeId::of::<D1>()]);
         }
         obj.v = v;
         obj
@@ -127,15 +161,46 @@ impl DynamicUnits {
         obj.v = v;
         obj
     }
+
+    pub fn new3o2<N0, N1, N2, D0, D1>(v: OrderedFloat<f64>) -> Self
+    where
+        N0: Unit + 'static,
+        N1: Unit + 'static,
+        N2: Unit + 'static,
+        D0: Unit + 'static,
+        D1: Unit + 'static,
+    {
+        let mut obj = DynamicUnits::default();
+        #[cfg(debug_assertions)]
+        {
+            obj.numerator
+                .extend(&[TypeId::of::<N0>(), TypeId::of::<N1>(), TypeId::of::<N2>()]);
+            obj.denominator
+                .extend(&[TypeId::of::<D0>(), TypeId::of::<D1>()]);
+        }
+        obj.v = v;
+        obj
+    }
 }
 
 impl Add<DynamicUnits> for DynamicUnits {
     type Output = DynamicUnits;
 
     fn add(mut self, rhs: DynamicUnits) -> Self::Output {
-        debug_assert_eq!(self.numerator, rhs.numerator);
-        debug_assert_eq!(self.denominator, rhs.denominator);
+        debug_assert_eq!(self.numerator, rhs.numerator, "numerator");
+        debug_assert_eq!(self.denominator, rhs.denominator, "denominator");
         self.v += rhs.v;
+        self
+    }
+}
+
+impl Sub<DynamicUnits> for DynamicUnits {
+    type Output = DynamicUnits;
+
+    fn sub(mut self, rhs: DynamicUnits) -> Self::Output {
+        debug_assert_eq!(self.numerator, rhs.numerator, "numerator");
+        debug_assert_eq!(self.denominator, rhs.denominator, "denominator");
+        self.v -= rhs.v;
         self
     }
 }

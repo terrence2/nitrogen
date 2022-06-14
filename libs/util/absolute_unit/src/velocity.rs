@@ -15,7 +15,7 @@
 use crate::{
     impl_value_type_conversions, supports_absdiffeq, supports_quantity_ops, supports_scalar_ops,
     supports_shift_ops, supports_value_type_conversion, Acceleration, DynamicUnits, Length,
-    LengthUnit, Time, TimeUnit,
+    LengthUnit, Time, TimeUnit, VelocitySquared,
 };
 use ordered_float::OrderedFloat;
 use std::{
@@ -102,6 +102,34 @@ where
     }
 }
 
+impl<LA, TA, LB, TB> Mul<Velocity<LB, TB>> for Velocity<LA, TA>
+where
+    LA: LengthUnit,
+    TA: TimeUnit,
+    LB: LengthUnit,
+    TB: TimeUnit,
+{
+    type Output = VelocitySquared<LA, TA>;
+
+    fn mul(self, other: Velocity<LB, TB>) -> Self::Output {
+        VelocitySquared::<LA, TA>::from(self.v.0 * Velocity::<LA, TA>::from(&other).f64())
+    }
+}
+
+impl<LA, TA, LB, TB> Div<Velocity<LB, TB>> for Velocity<LA, TA>
+where
+    LA: LengthUnit,
+    TA: TimeUnit,
+    LB: LengthUnit,
+    TB: TimeUnit,
+{
+    type Output = f64;
+
+    fn div(self, other: Velocity<LB, TB>) -> Self::Output {
+        self.v.0 / Velocity::<LA, TA>::from(&other).f64()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::{meters_per_second, miles_per_hour};
@@ -120,5 +148,10 @@ mod test {
     fn test_velocity_shift() {
         let m_p_s = meters_per_second!(100) + miles_per_hour!(100);
         assert_abs_diff_eq!(m_p_s, meters_per_second!(144.704), epsilon = 0.001);
+    }
+
+    #[test]
+    fn test_velocity_cancel() {
+        assert_abs_diff_eq!(2., meters_per_second!(6f64) / meters_per_second!(3f64))
     }
 }

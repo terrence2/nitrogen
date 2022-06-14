@@ -27,8 +27,10 @@ pub(crate) mod mass;
 pub(crate) mod pressure;
 pub(crate) mod temperature;
 pub(crate) mod time;
+pub(crate) mod torque;
 pub(crate) mod unit;
 pub(crate) mod velocity;
+pub(crate) mod velocity_squared;
 pub(crate) mod volume;
 pub(crate) mod weight;
 
@@ -49,6 +51,7 @@ pub use crate::{
     pressure::{Pressure, PressureUnit},
     temperature::{Temperature, TemperatureUnit},
     time::{Time, TimeUnit},
+    torque::Torque,
     unit::{
         arcminutes::ArcMinutes, arcseconds::ArcSeconds, celsius::Celsius, degrees::Degrees,
         fahrenheit::Fahrenheit, feet::Feet, hours::Hours, kelvin::Kelvin, kilograms::Kilograms,
@@ -58,6 +61,7 @@ pub use crate::{
         rankine::Rankine, scalar::Scalar, seconds::Seconds, slugs::Slugs, Unit,
     },
     velocity::Velocity,
+    velocity_squared::VelocitySquared,
     volume::Volume,
     weight::{Weight, WeightUnit},
 };
