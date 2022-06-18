@@ -162,6 +162,22 @@ impl DynamicUnits {
         obj
     }
 
+    pub fn new3o0<N0, N1, N2>(v: OrderedFloat<f64>) -> Self
+    where
+        N0: Unit + 'static,
+        N1: Unit + 'static,
+        N2: Unit + 'static,
+    {
+        let mut obj = DynamicUnits::default();
+        #[cfg(debug_assertions)]
+        {
+            obj.numerator
+                .extend(&[TypeId::of::<N0>(), TypeId::of::<N1>(), TypeId::of::<N2>()]);
+        }
+        obj.v = v;
+        obj
+    }
+
     pub fn new3o2<N0, N1, N2, D0, D1>(v: OrderedFloat<f64>) -> Self
     where
         N0: Unit + 'static,

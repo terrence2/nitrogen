@@ -118,6 +118,24 @@ where
     }
 }
 
+// Angular velocity is strange in that radians is a unitless quantity: squaring a velocity
+// results in acceleration directly.
+impl<LA, TA, LB, TB> Mul<AngularVelocity<LB, TB>> for AngularVelocity<LA, TA>
+where
+    LA: AngleUnit,
+    TA: TimeUnit,
+    LB: AngleUnit,
+    TB: TimeUnit,
+{
+    type Output = AngularAcceleration<LA, TA>;
+
+    fn mul(self, other: AngularVelocity<LB, TB>) -> Self::Output {
+        AngularAcceleration::<LA, TA>::from(
+            self.v.0 * AngularVelocity::<LA, TA>::from(&other).f64(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::{degrees_per_second, radians_per_second};

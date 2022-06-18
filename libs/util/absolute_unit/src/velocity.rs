@@ -14,8 +14,8 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     impl_value_type_conversions, supports_absdiffeq, supports_quantity_ops, supports_scalar_ops,
-    supports_shift_ops, supports_value_type_conversion, Acceleration, DynamicUnits, Length,
-    LengthUnit, Time, TimeUnit, VelocitySquared,
+    supports_shift_ops, supports_value_type_conversion, Acceleration, AngleUnit, AngularVelocity,
+    DynamicUnits, Length, LengthUnit, Radians, Time, TimeUnit, VelocitySquared,
 };
 use ordered_float::OrderedFloat;
 use std::{
@@ -127,6 +127,20 @@ where
 
     fn div(self, other: Velocity<LB, TB>) -> Self::Output {
         self.v.0 / Velocity::<LA, TA>::from(&other).f64()
+    }
+}
+
+impl<LA, TA, AB, TB> Mul<AngularVelocity<AB, TB>> for Velocity<LA, TA>
+where
+    LA: LengthUnit,
+    TA: TimeUnit,
+    AB: AngleUnit,
+    TB: TimeUnit,
+{
+    type Output = Acceleration<LA, TA>;
+
+    fn mul(self, other: AngularVelocity<AB, TB>) -> Self::Output {
+        Acceleration::<LA, TA>::from(self.v.0 * AngularVelocity::<Radians, TA>::from(&other).f64())
     }
 }
 

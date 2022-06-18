@@ -13,8 +13,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{
-    meters, meters_per_second, meters_per_second2, Acceleration, Length, LengthUnit, Meters,
-    Seconds, TimeUnit, Velocity,
+    meters, meters_per_second, meters_per_second2, radians_per_second, Acceleration,
+    AngularVelocity, Length, LengthUnit, Meters, Radians, Seconds, TimeUnit, Velocity,
 };
 use bevy_ecs::prelude::*;
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
@@ -147,11 +147,16 @@ impl WorldSpaceFrame {
     }
 }
 
-// Positive z is forward, positive x is right, positive y is up
+// This struct uses the Allerton definitions.
+//
+// fwd   axis: X, u, L, p
+// right axis: Y, v, M, q
+// down  axis: Z, w, N, r
 #[derive(Component, NitrousComponent, Copy, Clone, Debug, Default)]
 pub struct BodyMotion {
     acceleration_m_s2: Vector3<Acceleration<Meters, Seconds>>,
     velocity_m_s: Vector3<Velocity<Meters, Seconds>>,
+    angular_velocity: Vector3<AngularVelocity<Radians, Seconds>>,
 }
 
 #[inject_nitrous_component]
@@ -166,58 +171,93 @@ impl BodyMotion {
                 meters_per_second2!(0f64),
             ),
             velocity_m_s: Vector3::new(
-                meters_per_second!(0f64),
-                meters_per_second!(0f64),
                 meters_per_second!(forward_velocity),
+                meters_per_second!(0f64),
+                meters_per_second!(0f64),
+            ),
+            angular_velocity: Vector3::new(
+                radians_per_second!(0f64),
+                radians_per_second!(0f64),
+                radians_per_second!(0f64),
             ),
         }
-    }
-
-    pub fn acceleration_m_s2(&self) -> &Vector3<Acceleration<Meters, Seconds>> {
-        &self.acceleration_m_s2
-    }
-
-    pub fn acceleration_m_s2_mut(&mut self) -> &mut Vector3<Acceleration<Meters, Seconds>> {
-        &mut self.acceleration_m_s2
     }
 
     pub fn velocity_m_s(&self) -> &Vector3<Velocity<Meters, Seconds>> {
         &self.velocity_m_s
     }
 
+    pub fn acceleration_m_s2(&self) -> &Vector3<Acceleration<Meters, Seconds>> {
+        &self.acceleration_m_s2
+    }
+
+    /*
+    pub fn acceleration_m_s2_mut(&mut self) -> &mut Vector3<Acceleration<Meters, Seconds>> {
+        &mut self.acceleration_m_s2
+    }
+
     pub fn velocity_m_s_mut(&mut self) -> &mut Vector3<Velocity<Meters, Seconds>> {
         &mut self.velocity_m_s
     }
+     */
 
     /// u
-    pub fn forward_velocity(&self) -> Velocity<Meters, Seconds> {
-        self.velocity_m_s.z
-    }
-
-    pub fn forward_velocity_mut(&mut self) -> &mut Velocity<Meters, Seconds> {
-        &mut self.velocity_m_s.z
-    }
-
     pub fn forward_acceleration(&self) -> Acceleration<Meters, Seconds> {
-        self.acceleration_m_s2.z
-    }
-
-    /// v
-    pub fn sideways_velocity(&self) -> Velocity<Meters, Seconds> {
-        self.velocity_m_s.x
-    }
-
-    pub fn sideways_acceleration(&self) -> Acceleration<Meters, Seconds> {
         self.acceleration_m_s2.x
     }
 
-    /// w
-    pub fn vertical_velocity(&self) -> Velocity<Meters, Seconds> {
+    pub fn forward_acceleration_mut(&mut self) -> &mut Acceleration<Meters, Seconds> {
+        &mut self.acceleration_m_s2.x
+    }
+
+    pub fn forward_velocity(&self) -> Velocity<Meters, Seconds> {
+        self.velocity_m_s.x
+    }
+
+    pub fn forward_velocity_mut(&mut self) -> &mut Velocity<Meters, Seconds> {
+        &mut self.velocity_m_s.x
+    }
+
+    pub fn roll_velocity(&self) -> AngularVelocity<Radians, Seconds> {
+        self.angular_velocity.x
+    }
+
+    /// v
+    pub fn sideways_acceleration(&self) -> Acceleration<Meters, Seconds> {
+        self.acceleration_m_s2.y
+    }
+
+    pub fn sideways_acceleration_mut(&mut self) -> &mut Acceleration<Meters, Seconds> {
+        &mut self.acceleration_m_s2.y
+    }
+
+    pub fn sideways_velocity(&self) -> Velocity<Meters, Seconds> {
         self.velocity_m_s.y
     }
 
+    pub fn pitch_velocity(&self) -> AngularVelocity<Radians, Seconds> {
+        self.angular_velocity.y
+    }
+
+    pub fn pitch_velocity_mut(&mut self) -> &mut AngularVelocity<Radians, Seconds> {
+        &mut self.angular_velocity.y
+    }
+
+    /// w
     pub fn vertical_acceleration(&self) -> Acceleration<Meters, Seconds> {
-        self.acceleration_m_s2.y
+        self.acceleration_m_s2.z
+    }
+
+    pub fn vertical_acceleration_mut(&mut self) -> &mut Acceleration<Meters, Seconds> {
+        &mut self.acceleration_m_s2.z
+    }
+
+    pub fn vertical_velocity(&self) -> Velocity<Meters, Seconds> {
+        self.velocity_m_s.z
+    }
+
+    pub fn yaw_velocity(&self) -> AngularVelocity<Radians, Seconds> {
+        self.angular_velocity.z
     }
 }
 

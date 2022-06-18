@@ -66,7 +66,7 @@ where
     L: LengthUnit,
 {
     pub fn as_dyn(&self) -> DynamicUnits {
-        DynamicUnits::new2o0::<F, L>(self.v)
+        DynamicUnits::new3o2::<F::UnitMass, F::UnitLength, L, F::UnitTime, F::UnitTime>(self.v)
     }
 }
 

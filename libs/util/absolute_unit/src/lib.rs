@@ -25,6 +25,7 @@ pub(crate) mod generic;
 pub(crate) mod length;
 pub(crate) mod mass;
 pub(crate) mod pressure;
+pub(crate) mod rotational_inertia;
 pub(crate) mod temperature;
 pub(crate) mod time;
 pub(crate) mod torque;
@@ -49,6 +50,7 @@ pub use crate::{
     length::{Length, LengthUnit},
     mass::{Mass, MassUnit},
     pressure::{Pressure, PressureUnit},
+    rotational_inertia::RotationalInertia,
     temperature::{Temperature, TemperatureUnit},
     time::{Time, TimeUnit},
     torque::Torque,

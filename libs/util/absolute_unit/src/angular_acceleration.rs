@@ -14,7 +14,8 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     impl_value_type_conversions, supports_absdiffeq, supports_quantity_ops, supports_scalar_ops,
-    supports_shift_ops, supports_value_type_conversion, AngleUnit, AngularVelocity, Time, TimeUnit,
+    supports_shift_ops, supports_value_type_conversion, AngleUnit, AngularVelocity, DynamicUnits,
+    Time, TimeUnit,
 };
 use ordered_float::OrderedFloat;
 use std::{fmt, fmt::Debug, marker::PhantomData, ops::Mul};
@@ -57,6 +58,32 @@ where
             phantom_1: PhantomData,
             phantom_2: PhantomData,
         }
+    }
+}
+
+impl<L, T> From<DynamicUnits> for AngularAcceleration<L, T>
+where
+    L: AngleUnit,
+    T: TimeUnit,
+{
+    fn from(v: DynamicUnits) -> Self {
+        let f = v.ordered_float();
+        v.assert_units_equal(&DynamicUnits::new1o2::<L, T, T>(0f64.into()));
+        Self {
+            v: f,
+            phantom_1: PhantomData,
+            phantom_2: PhantomData,
+        }
+    }
+}
+
+impl<L, T> AngularAcceleration<L, T>
+where
+    L: AngleUnit,
+    T: TimeUnit,
+{
+    pub fn as_dyn(&self) -> DynamicUnits {
+        DynamicUnits::new1o2::<L, T, T>(self.v)
     }
 }
 

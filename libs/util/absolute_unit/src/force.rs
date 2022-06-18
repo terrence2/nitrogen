@@ -13,11 +13,16 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     impl_value_type_conversions, supports_absdiffeq, supports_quantity_ops, supports_scalar_ops,
-    supports_shift_ops, supports_value_type_conversion, Acceleration, DynamicUnits, LengthUnit,
-    Mass, MassUnit, TimeUnit, Unit,
+    supports_shift_ops, supports_value_type_conversion, Acceleration, DynamicUnits, Length,
+    LengthUnit, Mass, MassUnit, TimeUnit, Torque, Unit,
 };
 use ordered_float::OrderedFloat;
-use std::{fmt, fmt::Debug, marker::PhantomData, ops::Div};
+use std::{
+    fmt,
+    fmt::Debug,
+    marker::PhantomData,
+    ops::{Div, Mul},
+};
 
 pub trait ForceUnit: Unit + Copy + Debug + Eq + PartialEq + 'static {
     const NEWTONS_IN_UNIT: f64;
@@ -62,22 +67,31 @@ where
     }
 }
 
-impl<FA> From<DynamicUnits> for Force<FA>
+impl<F> From<DynamicUnits> for Force<F>
 where
-    FA: ForceUnit,
+    F: ForceUnit,
 {
     fn from(v: DynamicUnits) -> Self {
         let f = v.ordered_float();
         v.assert_units_equal(&DynamicUnits::new2o2::<
-            FA::UnitMass,
-            FA::UnitLength,
-            FA::UnitTime,
-            FA::UnitTime,
+            F::UnitMass,
+            F::UnitLength,
+            F::UnitTime,
+            F::UnitTime,
         >(0f64.into()));
         Self {
             v: f,
             phantom_1: PhantomData,
         }
+    }
+}
+
+impl<F> Force<F>
+where
+    F: ForceUnit,
+{
+    pub fn as_dyn(&self) -> DynamicUnits {
+        DynamicUnits::new2o2::<F::UnitMass, F::UnitLength, F::UnitTime, F::UnitTime>(self.v)
     }
 }
 
@@ -91,6 +105,18 @@ where
     fn div(self, rhs: Mass<M>) -> Self::Output {
         let mass = Mass::<F::UnitMass>::from(&rhs);
         Self::Output::from(self.v.0 / mass.f64())
+    }
+}
+
+impl<F, L> Mul<Length<L>> for Force<F>
+where
+    F: ForceUnit, // kg*m/s^2
+    L: LengthUnit,
+{
+    type Output = Torque<F, L>;
+
+    fn mul(self, rhs: Length<L>) -> Self::Output {
+        Self::Output::from(self.v.0 * rhs.f64())
     }
 }
 

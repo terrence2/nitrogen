@@ -19,55 +19,55 @@ use crate::{
 use ordered_float::OrderedFloat;
 use std::{fmt, fmt::Debug, marker::PhantomData};
 
-// mass / length^3
+// mass * length^2
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
-pub struct Density<UnitMass: MassUnit, UnitLength: LengthUnit> {
+pub struct RotationalInertia<UnitMass: MassUnit, UnitLength: LengthUnit> {
     v: OrderedFloat<f64>,
     phantom_1: PhantomData<UnitMass>,
     phantom_2: PhantomData<UnitLength>,
 }
-supports_quantity_ops!(Density<A, B>, MassUnit, LengthUnit);
-supports_shift_ops!(Density<A1, B1>, Density<A2, B2>, MassUnit, LengthUnit);
-supports_scalar_ops!(Density<A, B>, MassUnit, LengthUnit);
-supports_absdiffeq!(Density<A, B>, MassUnit, LengthUnit);
-supports_value_type_conversion!(Density<A, B>, MassUnit, LengthUnit, impl_value_type_conversions);
+supports_quantity_ops!(RotationalInertia<A, B>, MassUnit, LengthUnit);
+supports_shift_ops!(RotationalInertia<A1, B1>, RotationalInertia<A2, B2>, MassUnit, LengthUnit);
+supports_scalar_ops!(RotationalInertia<A, B>, MassUnit, LengthUnit);
+supports_absdiffeq!(RotationalInertia<A, B>, MassUnit, LengthUnit);
+supports_value_type_conversion!(RotationalInertia<A, B>, MassUnit, LengthUnit, impl_value_type_conversions);
 
-impl<M, L> fmt::Display for Density<M, L>
+impl<M, L> fmt::Display for RotationalInertia<M, L>
 where
     M: MassUnit,
     L: LengthUnit,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(&self.v.0, f)?;
-        write!(f, "{}/{}^3", M::UNIT_SHORT_NAME, L::UNIT_SHORT_NAME)
+        write!(f, "{}*{}^2", M::UNIT_SHORT_NAME, L::UNIT_SHORT_NAME)
     }
 }
 
-impl<'a, MA, LA, MB, LB> From<&'a Density<MB, LB>> for Density<MA, LA>
+impl<'a, MA, LA, MB, LB> From<&'a RotationalInertia<MB, LB>> for RotationalInertia<MA, LA>
 where
     MA: MassUnit,
     LA: LengthUnit,
     MB: MassUnit,
     LB: LengthUnit,
 {
-    fn from(v: &'a Density<MB, LB>) -> Self {
+    fn from(v: &'a RotationalInertia<MB, LB>) -> Self {
         let mass_ratio = MB::GRAMS_IN_UNIT / MA::GRAMS_IN_UNIT;
-        let length_ratio = LA::METERS_IN_UNIT / LB::METERS_IN_UNIT;
+        let length_ratio = LB::METERS_IN_UNIT / LA::METERS_IN_UNIT;
         Self {
-            v: v.v * mass_ratio * length_ratio * length_ratio * length_ratio,
+            v: v.v * mass_ratio * length_ratio * length_ratio,
             phantom_1: PhantomData,
             phantom_2: PhantomData,
         }
     }
 }
 
-impl<MA, LA> Density<MA, LA>
+impl<MA, LA> RotationalInertia<MA, LA>
 where
     MA: MassUnit,
     LA: LengthUnit,
 {
     pub fn as_dyn(&self) -> DynamicUnits {
-        DynamicUnits::new1o3::<MA, LA, LA, LA>(self.v)
+        DynamicUnits::new3o0::<MA, LA, LA>(self.v)
     }
 }
 
@@ -77,7 +77,7 @@ mod test {
     use approx::assert_abs_diff_eq;
 
     #[test]
-    fn test_density() {
+    fn test_rotational_inertia() {
         let s_p_f3 = slugs_per_foot3!(100f64);
         let kg_p_m3 = kilograms_per_meter3!(s_p_f3);
         println!("{}", s_p_f3);
