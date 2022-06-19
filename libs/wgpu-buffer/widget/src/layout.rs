@@ -12,7 +12,6 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::font_context::TextSpanMetrics;
 use crate::{
     paint_context::PaintContext,
     region::{Border, Extent, Position, Region},
@@ -307,9 +306,6 @@ pub struct LayoutMeasurements {
 
     // Amount allocated to the widget in total.
     total_allocation: Region<RelSize>,
-
-    // Critical contextual information, like the rendered text aggregate baseline.
-    metrics: TextSpanMetrics,
 }
 
 impl Default for LayoutMeasurements {
@@ -319,7 +315,6 @@ impl Default for LayoutMeasurements {
             total_extent: Extent::new(RelSize::Percent(0.), RelSize::Percent(0.)),
             child_allocation: Region::empty(),
             total_allocation: Region::empty(),
-            metrics: TextSpanMetrics::default(),
         }
     }
 }
@@ -335,16 +330,8 @@ impl LayoutMeasurements {
         self.total_extent.expand_with_border_rel(&packing.padding);
     }
 
-    pub fn set_metrics(&mut self, metrics: TextSpanMetrics) {
-        self.metrics = metrics;
-    }
-
     pub fn child_allocation(&self) -> &Region<RelSize> {
         &self.child_allocation
-    }
-
-    pub fn metrics(&self) -> &TextSpanMetrics {
-        &self.metrics
     }
 
     pub fn set_depth(&mut self, depth: f32) {

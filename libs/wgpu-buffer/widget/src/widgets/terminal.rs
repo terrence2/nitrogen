@@ -176,8 +176,7 @@ impl Terminal {
             let _ = report!(line.measure(&win, &paint_context.font_context));
         }
         report!(terminal.edit.measure(&win, &paint_context.font_context));
-        let metrics = report!(terminal.prompt.measure(&win, &paint_context.font_context));
-        measure.set_metrics(metrics);
+        report!(terminal.prompt.measure(&win, &paint_context.font_context));
         measure.set_child_extent(Extent::new(Self::WIDTH, Self::HEIGHT), &packing);
     }
 
@@ -197,20 +196,31 @@ impl Terminal {
         let info = context.push_widget(&WidgetInfo::default());
 
         let mut pos = *measure.child_allocation().position();
-        *pos.bottom_mut() -= measure.metrics().descent.as_rel(&win, ScreenDir::Vertical);
+        *pos.bottom_mut() -= terminal
+            .edit
+            .metrics()
+            .descent
+            .as_rel(&win, ScreenDir::Vertical);
 
         report!(terminal
             .prompt
             .upload(pos.into(), info, &win, &gpu, &mut context));
-        *pos.left_mut() += measure.metrics().width.as_rel(&win, ScreenDir::Horizontal);
+        *pos.left_mut() += terminal
+            .prompt
+            .metrics()
+            .width
+            .as_rel(&win, ScreenDir::Horizontal);
         report!(terminal
             .edit
             .upload(pos.into(), info, &win, &gpu, &mut context));
-        *pos.left_mut() -= measure.metrics().width.as_rel(&win, ScreenDir::Horizontal);
+        *pos.left_mut() -= terminal
+            .prompt
+            .metrics()
+            .width
+            .as_rel(&win, ScreenDir::Horizontal);
 
-        let h = measure.metrics().height.as_rel(&win, ScreenDir::Vertical);
         for line in &terminal.lines {
-            *pos.bottom_mut() += h;
+            *pos.bottom_mut() += line.metrics().height.as_rel(&win, ScreenDir::Vertical);
             report!(line.upload(pos.into(), info, &win, &gpu, &mut context));
         }
     }

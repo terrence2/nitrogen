@@ -77,7 +77,6 @@ impl Label {
                 metrics.height.as_rel(&win, ScreenDir::Vertical),
             );
             measure.set_child_extent(extent, packing);
-            measure.set_metrics(metrics);
         }
     }
 
@@ -92,7 +91,11 @@ impl Label {
 
             // Account for descender
             let mut pos = *measure.child_allocation().position();
-            *pos.bottom_mut() -= measure.metrics().descent.as_rel(&win, ScreenDir::Vertical);
+            *pos.bottom_mut() -= label
+                .line
+                .metrics()
+                .descent
+                .as_rel(&win, ScreenDir::Vertical);
             report!(label.line.upload(
                 pos.into(),
                 widget_info_index,
