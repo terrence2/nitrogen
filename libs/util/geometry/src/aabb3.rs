@@ -12,25 +12,26 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use nalgebra::{Point3, Vector3};
+use absolute_unit::{Length, Meters};
+use nalgebra::Point3;
 use std::fmt::Debug;
 
-#[derive(Clone, Debug)]
-pub struct Ray {
-    origin: Point3<f64>,
-    direction: Vector3<f64>,
+#[derive(Clone, Copy, Debug)]
+pub struct Aabb3 {
+    hi: Point3<Length<Meters>>,
+    lo: Point3<Length<Meters>>,
 }
 
-impl Ray {
-    pub fn new(origin: Point3<f64>, direction: Vector3<f64>) -> Self {
-        Self { origin, direction }
+impl Aabb3 {
+    pub fn from_bounds(hi: Point3<Length<Meters>>, lo: Point3<Length<Meters>>) -> Self {
+        Self { hi, lo }
     }
 
-    pub fn origin(&self) -> &Point3<f64> {
-        &self.origin
+    pub fn hi(&self) -> &Point3<Length<Meters>> {
+        &self.hi
     }
 
-    pub fn direction(&self) -> &Vector3<f64> {
-        &self.direction
+    pub fn lo(&self) -> &Point3<Length<Meters>> {
+        &self.lo
     }
 }

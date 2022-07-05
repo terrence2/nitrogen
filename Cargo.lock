@@ -15,6 +15,7 @@ dependencies = [
  "approx",
  "hashbag",
  "nalgebra",
+ "num-traits",
  "ordered-float",
 ]
 
@@ -1378,6 +1379,7 @@ dependencies = [
 name = "geometry"
 version = "0.0.0"
 dependencies = [
+ "absolute_unit",
  "approx",
  "nalgebra",
  "num-traits",
@@ -1879,6 +1881,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "marker"
+version = "0.0.0"
+dependencies = [
+ "absolute_unit",
+ "anyhow",
+ "bevy_ecs",
+ "build_shaders",
+ "camera",
+ "composite",
+ "csscolorparser",
+ "geometry",
+ "global_data",
+ "gpu",
+ "measure",
+ "memoffset",
+ "nalgebra",
+ "nitrous",
+ "runtime",
+ "shader_shared",
+ "wgpu",
+ "world",
+ "zerocopy",
+]
+
+[[package]]
 name = "matchers"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2134,6 +2161,7 @@ dependencies = [
  "image",
  "input",
  "log",
+ "marker",
  "measure",
  "nalgebra",
  "nitrous",
@@ -3141,7 +3169,6 @@ dependencies = [
  "nalgebra",
  "nitrous",
  "orrery",
- "parking_lot 0.12.0",
  "runtime",
  "star_catalog",
  "static_assertions",

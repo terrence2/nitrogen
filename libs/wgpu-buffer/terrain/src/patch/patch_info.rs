@@ -40,7 +40,7 @@ pub(crate) struct Patch {
     pts: [Point3<f64>; 3],
 
     // Planes
-    planes: [Plane<f64>; 3],
+    planes: [Plane; 3],
 
     // The leaf node that owns this patch, or None if a tombstone.
     owner: TreeIndex,
@@ -88,7 +88,7 @@ impl Patch {
 
     pub(crate) fn update_for_view(
         &mut self,
-        viewable_area: &[Plane<f64>; 6],
+        viewable_area: &[Plane; 6],
         eye_position: &Point3<f64>,
         eye_direction: &Vector3<f64>,
     ) {
@@ -132,7 +132,7 @@ impl Patch {
         }
     }
 
-    fn is_behind_plane(&self, plane: &Plane<f64>, show_msgs: bool) -> bool {
+    fn is_behind_plane(&self, plane: &Plane, show_msgs: bool) -> bool {
         // Patch Extent:
         //   outer: the three planes cutting from geocenter through each pair of points in vertices.
         //   bottom: radius of the planet
@@ -233,7 +233,7 @@ impl Patch {
         true
     }
 
-    fn keep(&self, viewable_area: &[Plane<f64>; 6]) -> bool {
+    fn keep(&self, viewable_area: &[Plane; 6]) -> bool {
         for plane in viewable_area {
             if self.is_behind_plane(plane, false) {
                 return false;

@@ -231,6 +231,16 @@ macro_rules! impl_immutable_heap_methods {
         pub fn entity_component_names(&self, entity: Entity) -> Option<impl Iterator<Item = &str>> {
             self.resource::<WorldIndex>().entity_component_names(entity)
         }
+
+        #[inline]
+        pub fn entity_component_attrs(
+            &self,
+            entity: Entity,
+            component: &str,
+        ) -> Option<Vec<String>> {
+            self.resource::<WorldIndex>()
+                .entity_component_attrs(entity, component, &self.world)
+        }
     };
 }
 

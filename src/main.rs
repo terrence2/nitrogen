@@ -28,6 +28,7 @@ use fullscreen::FullscreenBuffer;
 use global_data::GlobalParametersBuffer;
 use gpu::{DetailLevelOpts, Gpu, GpuStep};
 use input::{InputSystem, InputTarget};
+use marker::Markers;
 use measure::WorldSpaceFrame;
 use nitrous::{inject_nitrous_resource, HeapMut, NitrousResource};
 use orrery::Orrery;
@@ -252,6 +253,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .load_extension::<WorldRenderPass>()?
         .load_extension::<WidgetBuffer>()?
         .load_extension::<UiRenderPass>()?
+        .load_extension::<Markers>()?
         .load_extension::<CompositeRenderPass>()?
         .load_extension::<DemoUx>()?
         .load_extension::<Label>()?

@@ -12,25 +12,17 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use nalgebra::{Point3, Vector3};
-use std::fmt::Debug;
+#version 450
+#include <wgpu-buffer/global_data/include/global_data.glsl>
 
-#[derive(Clone, Debug)]
-pub struct Ray {
-    origin: Point3<f64>,
-    direction: Vector3<f64>,
-}
+layout(location = 0) in vec3 position;
+layout(location = 1) in vec3 normal;
+layout(location = 2) in vec4 color;
+layout(location = 0) flat out vec4 v_color;
+layout(location = 1) smooth out vec3 v_normal;
 
-impl Ray {
-    pub fn new(origin: Point3<f64>, direction: Vector3<f64>) -> Self {
-        Self { origin, direction }
-    }
-
-    pub fn origin(&self) -> &Point3<f64> {
-        &self.origin
-    }
-
-    pub fn direction(&self) -> &Vector3<f64> {
-        &self.direction
-    }
+void main() {
+    v_color = color;
+    v_normal = normal;
+    gl_Position = camera_perspective_m * vec4(position, 1.0);
 }

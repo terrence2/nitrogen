@@ -14,7 +14,11 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::DynamicUnits;
 use ordered_float::OrderedFloat;
-use std::ops::{Mul, Neg};
+use std::fmt::Formatter;
+use std::{
+    fmt::Display,
+    ops::{Mul, Neg},
+};
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Scalar(pub(crate) OrderedFloat<f64>);
@@ -30,6 +34,12 @@ impl Scalar {
 
     pub fn as_dyn(&self) -> DynamicUnits {
         DynamicUnits::new0o0(self.0)
+    }
+}
+
+impl Display for Scalar {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
 

@@ -12,6 +12,7 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use crate::Vertex;
 use nalgebra::{clamp, convert, Point3, RealField, Vector3};
 use num_traits::cast::FromPrimitive;
 
@@ -96,6 +97,10 @@ pub fn compute_normal<T: RealField>(p0: &Point3<T>, p1: &Point3<T>, p2: &Point3<
     (&p1.coords - &p0.coords)
         .cross(&(&p2.coords - &p0.coords))
         .normalize()
+}
+
+pub fn bisect_edge_verts(v0: &Vertex, v1: &Vertex) -> Vector3<f64> {
+    bisect_edge(&v0.position, &v1.position)
 }
 
 pub fn bisect_edge<T: RealField>(v0: &Vector3<T>, v1: &Vector3<T>) -> Vector3<T> {

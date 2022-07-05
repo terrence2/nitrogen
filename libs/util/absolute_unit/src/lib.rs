@@ -70,4 +70,5 @@ pub use crate::{
 
 // For use from macros
 pub use approx;
+pub use num_traits;
 pub use ordered_float;

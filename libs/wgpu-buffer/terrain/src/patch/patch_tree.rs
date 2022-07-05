@@ -169,7 +169,7 @@ pub(crate) struct PatchTree {
     visit_count: usize,
 
     frame_number: usize,
-    cached_viewable_region: [Plane<f64>; 6],
+    cached_viewable_region: [Plane; 6],
     cached_eye_position: Point3<f64>,
     cached_eye_direction: Vector3<f64>,
     cached_visible_patches: usize,
@@ -614,7 +614,14 @@ impl PatchTree {
                 self.subdivide_leaf(top_leaf);
             }
         }
-        assert!(self.cached_visible_patches <= target_patch_count);
+        assert!(
+            self.cached_visible_patches <= target_patch_count,
+            "cached: {} of {}, stuck_iterations: {}, camera: {:?}",
+            self.cached_visible_patches,
+            target_patch_count,
+            stuck_iterations,
+            camera
+        );
 
         // Prepare for next frame.
         self.compact_patches();

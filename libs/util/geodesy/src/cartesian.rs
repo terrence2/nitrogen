@@ -51,6 +51,10 @@ where
         Cartesian::new(self.coords[0], self.coords[1], self.coords[2])
     }
 
+    pub fn vec(&self) -> Vector3<Length<Unit>> {
+        Vector3::new(self.coords[0], self.coords[1], self.coords[2])
+    }
+
     pub fn vec64(&self) -> Vector3<f64> {
         Vector3::new(
             f64::from(self.coords[0]),

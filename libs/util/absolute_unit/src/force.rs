@@ -108,6 +108,20 @@ where
     }
 }
 
+impl<F, L, T> Div<Acceleration<L, T>> for Force<F>
+where
+    F: ForceUnit,
+    L: LengthUnit,
+    T: TimeUnit,
+{
+    type Output = Mass<F::UnitMass>;
+
+    fn div(self, rhs: Acceleration<L, T>) -> Self::Output {
+        let acc = Acceleration::<F::UnitLength, F::UnitTime>::from(&rhs);
+        Self::Output::from(self.v.0 / acc.f64())
+    }
+}
+
 impl<F, L> Mul<Length<L>> for Force<F>
 where
     F: ForceUnit, // kg*m/s^2

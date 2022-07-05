@@ -13,48 +13,39 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{Ray, Sphere};
-use nalgebra::{Point3, RealField, Vector3};
-use num_traits::cast::FromPrimitive;
-use std::fmt::{Debug, Display};
+use nalgebra::{Point3, Vector3};
 
-pub fn sphere_vs_ray<T>(sphere: &Sphere<T>, ray: &Ray<T>) -> Option<Point3<T>>
-where
-    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
-{
-    let two = T::one() + T::one();
-    let half = T::one() / two;
-    let four = two + two;
-
-    let ray2sphere: Vector3<T> = ray.origin() - sphere.center();
+pub fn sphere_vs_ray(sphere: &Sphere, ray: &Ray) -> Option<Point3<f64>> {
+    let ray2sphere: Vector3<f64> = ray.origin() - sphere.center();
     let a = ray.direction().dot(ray.direction());
-    let b = two * ray.direction().dot(&ray2sphere);
+    let b = 2_f64 * ray.direction().dot(&ray2sphere);
     let c = ray2sphere.dot(&ray2sphere) - sphere.radius() * sphere.radius();
 
-    let x0: T;
-    let x1: T;
-    let discriminant = b * b - four * a * c;
-    if discriminant < T::zero() {
+    let x0;
+    let x1;
+    let discriminant = b * b - 4_f64 * a * c;
+    if discriminant < 0_f64 {
         return None;
     }
-    if discriminant == T::zero() {
-        x0 = -half * b / a;
+    if discriminant == 0_f64 {
+        x0 = -0.5_f64 * b / a;
         x1 = x0;
     } else {
-        let q = if b > T::zero() {
-            -half * (b + discriminant.sqrt())
+        let q = if b > 0_f64 {
+            -0.5_f64 * (b + discriminant.sqrt())
         } else {
-            -half * (b - discriminant.sqrt())
+            -0.5_f64 * (b - discriminant.sqrt())
         };
         x0 = q / a;
         x1 = c / q;
     }
     let mut t = x0.min(x1);
     // One negative: maybe inside sphere or behind.
-    if t < T::zero() {
+    if t < 0_f64 {
         t = x0.max(x1);
     }
     // Both negative: sphere is behind us
-    if t < T::zero() {
+    if t < 0_f64 {
         return None;
     }
 
@@ -67,12 +58,12 @@ mod test {
 
     #[test]
     fn test_ray_sphere_basic() {
-        let sphere = Sphere::from_center_and_radius(&Point3::new(0f32, 0f32, 10f32), 1f32);
+        let sphere = Sphere::from_center_and_radius(&Point3::new(0f64, 0f64, 10f64), 1f64);
         let ray = Ray::new(Point3::origin(), Vector3::z_axis().into_inner());
         let intersect = sphere_vs_ray(&sphere, &ray);
         assert!(intersect.is_some());
-        assert!(intersect.unwrap().x == 0f32);
-        assert!(intersect.unwrap().y == 0f32);
-        assert!(intersect.unwrap().z == 9f32);
+        assert_eq!(intersect.unwrap().x, 0f64);
+        assert_eq!(intersect.unwrap().y, 0f64);
+        assert_eq!(intersect.unwrap().z, 9f64);
     }
 }

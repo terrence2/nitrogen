@@ -39,6 +39,18 @@ macro_rules! supports_value_type_conversion {
             pub fn f32(self) -> f32 {
                 f32::from(self)
             }
+
+            pub fn is_nan(&self) -> bool {
+                self.v.0.is_nan()
+            }
+
+            pub fn is_infinite(&self) -> bool {
+                self.v.0.is_infinite()
+            }
+
+            pub fn is_finite(&self) -> bool {
+                self.v.0.is_finite()
+            }
         }
     };
 
@@ -64,6 +76,18 @@ macro_rules! supports_value_type_conversion {
 
             pub fn f32(self) -> f32 {
                 f32::from(self)
+            }
+
+            pub fn is_nan(&self) -> bool {
+                self.v.0.is_nan()
+            }
+
+            pub fn is_infinite(&self) -> bool {
+                self.v.0.is_infinite()
+            }
+
+            pub fn is_finite(&self) -> bool {
+                self.v.0.is_finite()
             }
         }
     };
@@ -413,6 +437,20 @@ macro_rules! supports_shift_ops {
                 self.v -= <$TypeNameSelf>::from(&other).v;
             }
         }
+
+        impl<A1, B1> $crate::num_traits::identities::Zero for $TypeNameSelf
+        where
+            A1: $UnitA,
+            B1: $UnitB,
+        {
+            fn zero() -> Self {
+                <$TypeNameSelf>::from(0f64)
+            }
+
+            fn is_zero(&self) -> bool {
+                self.v == 0f64
+            }
+        }
     };
 
     ($TypeNameSelf:ty, $TypeNameOther:ty, $UnitA:path) => {
@@ -463,6 +501,19 @@ macro_rules! supports_shift_ops {
         {
             fn sub_assign(&mut self, other: $TypeNameOther) {
                 self.v -= <$TypeNameSelf>::from(&other).v;
+            }
+        }
+
+        impl<A1> $crate::num_traits::identities::Zero for $TypeNameSelf
+        where
+            A1: $UnitA,
+        {
+            fn zero() -> Self {
+                <$TypeNameSelf>::from(0f64)
+            }
+
+            fn is_zero(&self) -> bool {
+                self.v == 0f64
             }
         }
     };

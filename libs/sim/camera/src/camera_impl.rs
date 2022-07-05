@@ -251,7 +251,7 @@ impl ScreenCamera {
         UnitQuaternion::look_at_rh(self.forward(), &-self.up())
     }
 
-    pub fn world_space_frustum<T: LengthUnit>(&self) -> [Plane<f64>; 5] {
+    pub fn world_space_frustum<T: LengthUnit>(&self) -> [Plane; 5] {
         // Taken from this paper:
         //   https://www.gamedevs.org/uploads/fast-extraction-viewing-frustum-planes-from-world-view-projection-matrix.pdf
 

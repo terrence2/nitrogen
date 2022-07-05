@@ -29,6 +29,11 @@ pub struct BasisVectors<T> {
     pub up: Vector3<T>,
 }
 
+/// World space is OpenGL-style, right-handed coordinates with the
+/// prime meridian (London) on the positive z-axis, the pacific on
+/// the positive x axis and the north pole on the positive y axis.
+/// For convenience, `facing` translates into and out of the same
+/// style of local coordinate system.
 #[derive(Component, NitrousComponent, Debug, Default, Clone)]
 #[Name = "frame"]
 pub struct WorldSpaceFrame {
@@ -114,6 +119,10 @@ impl WorldSpaceFrame {
         Graticule::<GeoSurface>::from(Graticule::<GeoCenter>::from(self.position))
     }
 
+    pub fn set_position_graticule(&mut self, grat: Graticule<GeoSurface>) {
+        self.position = grat.cartesian::<Meters>();
+    }
+
     pub fn position_mut(&mut self) -> &mut Cartesian<GeoCenter, Meters> {
         &mut self.position
     }
@@ -123,6 +132,7 @@ impl WorldSpaceFrame {
     }
 
     pub fn basis(&self) -> BasisVectors<f64> {
+        // OpenGL-styled right-handed coordinate system.
         BasisVectors {
             forward: (self.facing * Vector3::z_axis()).into_inner(),
             right: (self.facing * Vector3::x_axis()).into_inner(),
@@ -147,22 +157,25 @@ impl WorldSpaceFrame {
     }
 }
 
-// This struct uses the Allerton definitions.
-//
-// fwd   axis: X, u, L, p
-// right axis: Y, v, M, q
-// down  axis: Z, w, N, r
+/// BodyMotion is body-relative motion, not frame relative. That said
+/// it is easy to decompose the body-relative motion into frame-relative
+/// motion, given a WorldSpaceFrame.
+///
+/// Note: this structure uses the same OpenGL styled coordinates as
+/// the world space frame. There are accessors for the coordinate system
+/// used in Allerton's "Principles of Flight Simulation", the standard
+/// body coordinate system for planes.
 #[derive(Component, NitrousComponent, Copy, Clone, Debug, Default)]
 pub struct BodyMotion {
     acceleration_m_s2: Vector3<Acceleration<Meters, Seconds>>,
-    velocity_m_s: Vector3<Velocity<Meters, Seconds>>,
+    linear_velocity: Vector3<Velocity<Meters, Seconds>>,
     angular_velocity: Vector3<AngularVelocity<Radians, Seconds>>,
 }
 
 #[inject_nitrous_component]
 impl BodyMotion {
     pub fn new_forward<UnitLength: LengthUnit, UnitTime: TimeUnit>(
-        forward_velocity: Velocity<UnitLength, UnitTime>,
+        vehicle_forward_velocity: Velocity<UnitLength, UnitTime>,
     ) -> Self {
         Self {
             acceleration_m_s2: Vector3::new(
@@ -170,10 +183,10 @@ impl BodyMotion {
                 meters_per_second2!(0f64),
                 meters_per_second2!(0f64),
             ),
-            velocity_m_s: Vector3::new(
-                meters_per_second!(forward_velocity),
+            linear_velocity: Vector3::new(
                 meters_per_second!(0f64),
                 meters_per_second!(0f64),
+                -meters_per_second!(vehicle_forward_velocity),
             ),
             angular_velocity: Vector3::new(
                 radians_per_second!(0f64),
@@ -183,81 +196,104 @@ impl BodyMotion {
         }
     }
 
-    pub fn velocity_m_s(&self) -> &Vector3<Velocity<Meters, Seconds>> {
-        &self.velocity_m_s
+    pub fn velocity(&self) -> &Vector3<Velocity<Meters, Seconds>> {
+        &self.linear_velocity
+    }
+
+    pub fn cg_velocity(&self) -> Velocity<Meters, Seconds> {
+        meters_per_second!(self.linear_velocity.map(|v| v.f64()).magnitude())
     }
 
     pub fn acceleration_m_s2(&self) -> &Vector3<Acceleration<Meters, Seconds>> {
         &self.acceleration_m_s2
     }
 
-    /*
-    pub fn acceleration_m_s2_mut(&mut self) -> &mut Vector3<Acceleration<Meters, Seconds>> {
-        &mut self.acceleration_m_s2
+    pub fn freeze(&mut self) {
+        self.acceleration_m_s2 = Vector3::new(
+            meters_per_second2!(0_f64),
+            meters_per_second2!(0_f64),
+            meters_per_second2!(0_f64),
+        );
+        self.linear_velocity = Vector3::new(
+            meters_per_second!(0_f64),
+            meters_per_second!(0_f64),
+            meters_per_second!(0_f64),
+        );
+        self.angular_velocity = Vector3::new(
+            radians_per_second!(0_f64),
+            radians_per_second!(0_f64),
+            radians_per_second!(0_f64),
+        );
     }
 
-    pub fn velocity_m_s_mut(&mut self) -> &mut Vector3<Velocity<Meters, Seconds>> {
-        &mut self.velocity_m_s
+    // vehicle fwd axis: X -> u, L -> p
+    // This maps to -z
+    pub fn vehicle_forward_acceleration(&self) -> Acceleration<Meters, Seconds> {
+        -self.acceleration_m_s2.z
     }
-     */
 
-    /// u
-    pub fn forward_acceleration(&self) -> Acceleration<Meters, Seconds> {
+    pub fn set_vehicle_forward_acceleration(&mut self, u_dot: Acceleration<Meters, Seconds>) {
+        self.acceleration_m_s2.z = -u_dot;
+    }
+
+    pub fn vehicle_forward_velocity(&self) -> Velocity<Meters, Seconds> {
+        -self.linear_velocity.z
+    }
+
+    pub fn set_vehicle_forward_velocity(&mut self, u: Velocity<Meters, Seconds>) {
+        self.linear_velocity.z = -u;
+    }
+
+    pub fn vehicle_roll_velocity(&self) -> AngularVelocity<Radians, Seconds> {
+        self.angular_velocity.z
+    }
+
+    // vehicle right axis: Y -> v, M -> q
+    // this maps to +x
+    pub fn vehicle_sideways_acceleration(&self) -> Acceleration<Meters, Seconds> {
         self.acceleration_m_s2.x
     }
 
-    pub fn forward_acceleration_mut(&mut self) -> &mut Acceleration<Meters, Seconds> {
-        &mut self.acceleration_m_s2.x
+    pub fn set_vehicle_sideways_acceleration(&mut self, v_dot: Acceleration<Meters, Seconds>) {
+        self.acceleration_m_s2.x = v_dot;
     }
 
-    pub fn forward_velocity(&self) -> Velocity<Meters, Seconds> {
-        self.velocity_m_s.x
+    pub fn vehicle_sideways_velocity(&self) -> Velocity<Meters, Seconds> {
+        self.linear_velocity.x
     }
 
-    pub fn forward_velocity_mut(&mut self) -> &mut Velocity<Meters, Seconds> {
-        &mut self.velocity_m_s.x
+    pub fn set_vehicle_sideways_velocity(&mut self, v: Velocity<Meters, Seconds>) {
+        self.linear_velocity.x = v;
     }
 
-    pub fn roll_velocity(&self) -> AngularVelocity<Radians, Seconds> {
+    pub fn vehicle_pitch_velocity(&self) -> AngularVelocity<Radians, Seconds> {
         self.angular_velocity.x
     }
 
-    /// v
-    pub fn sideways_acceleration(&self) -> Acceleration<Meters, Seconds> {
-        self.acceleration_m_s2.y
+    pub fn set_vehicle_pitch_velocity(&mut self, q: AngularVelocity<Radians, Seconds>) {
+        self.angular_velocity.x = q;
     }
 
-    pub fn sideways_acceleration_mut(&mut self) -> &mut Acceleration<Meters, Seconds> {
-        &mut self.acceleration_m_s2.y
+    // down  axis: Z, w, N, r
+    // this maps to -y
+    pub fn vehicle_vertical_acceleration(&self) -> Acceleration<Meters, Seconds> {
+        -self.acceleration_m_s2.y
     }
 
-    pub fn sideways_velocity(&self) -> Velocity<Meters, Seconds> {
-        self.velocity_m_s.y
+    pub fn set_vehicle_vertical_acceleration(&mut self, w_dot: Acceleration<Meters, Seconds>) {
+        self.acceleration_m_s2.z = -w_dot;
     }
 
-    pub fn pitch_velocity(&self) -> AngularVelocity<Radians, Seconds> {
-        self.angular_velocity.y
+    pub fn vehicle_vertical_velocity(&self) -> Velocity<Meters, Seconds> {
+        -self.linear_velocity.y
     }
 
-    pub fn pitch_velocity_mut(&mut self) -> &mut AngularVelocity<Radians, Seconds> {
-        &mut self.angular_velocity.y
+    pub fn set_vehicle_vertical_velocity(&mut self, w: Velocity<Meters, Seconds>) {
+        self.linear_velocity.y = -w;
     }
 
-    /// w
-    pub fn vertical_acceleration(&self) -> Acceleration<Meters, Seconds> {
-        self.acceleration_m_s2.z
-    }
-
-    pub fn vertical_acceleration_mut(&mut self) -> &mut Acceleration<Meters, Seconds> {
-        &mut self.acceleration_m_s2.z
-    }
-
-    pub fn vertical_velocity(&self) -> Velocity<Meters, Seconds> {
-        self.velocity_m_s.z
-    }
-
-    pub fn yaw_velocity(&self) -> AngularVelocity<Radians, Seconds> {
-        self.angular_velocity.z
+    pub fn vehicle_yaw_velocity(&self) -> AngularVelocity<Radians, Seconds> {
+        -self.angular_velocity.y
     }
 }
 

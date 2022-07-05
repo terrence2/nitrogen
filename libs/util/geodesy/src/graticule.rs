@@ -91,7 +91,11 @@ impl Graticule<GeoCenter> {
 }
 
 impl Graticule<GeoSurface> {
-    pub fn cartesian<Unit: LengthUnit>(&self) -> Point3<Length<Unit>> {
+    pub fn cartesian<Unit: LengthUnit>(&self) -> Cartesian<GeoCenter, Meters> {
+        Cartesian::from(Graticule::<GeoCenter>::from(*self))
+    }
+
+    pub fn cartesian_pt3<Unit: LengthUnit>(&self) -> Point3<Length<Unit>> {
         let geocenter = Graticule::<GeoCenter>::from(*self);
         let lat = geocenter.latitude;
         let lon = geocenter.longitude;

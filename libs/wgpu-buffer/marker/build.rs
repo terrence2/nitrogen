@@ -12,25 +12,6 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use nalgebra::{Point3, Vector3};
-use std::fmt::Debug;
-
-#[derive(Clone, Debug)]
-pub struct Ray {
-    origin: Point3<f64>,
-    direction: Vector3<f64>,
-}
-
-impl Ray {
-    pub fn new(origin: Point3<f64>, direction: Vector3<f64>) -> Self {
-        Self { origin, direction }
-    }
-
-    pub fn origin(&self) -> &Point3<f64> {
-        &self.origin
-    }
-
-    pub fn direction(&self) -> &Vector3<f64> {
-        &self.direction
-    }
+fn main() {
+    build_shaders::build().unwrap()
 }

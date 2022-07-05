@@ -28,21 +28,33 @@ impl Face {
             index2,
         }
     }
+
+    pub fn i0(&self) -> usize {
+        self.index0 as usize
+    }
+
+    pub fn i1(&self) -> usize {
+        self.index1 as usize
+    }
+
+    pub fn i2(&self) -> usize {
+        self.index2 as usize
+    }
 }
 
 pub struct Arrow {
-    pub verts: Vec<Point3<f32>>,
+    pub verts: Vec<Point3<f64>>,
     pub faces: Vec<Face>,
 }
 
 impl Arrow {
-    pub fn new(base: Point3<f32>, dir: Vector3<f32>) -> Self {
+    pub fn new(base: Point3<f64>, dir: Vector3<f64>) -> Self {
         // Cross with any random vector to get something perpendicular.
         // Then cross again to get a 90 degree angle to first perpendicular.
         let tmp0 = if dir.y > dir.z {
-            Vector3::new(0f32, 0f32, 1f32)
+            Vector3::new(0f64, 0f64, 1f64)
         } else {
-            Vector3::new(0f32, 1f32, 0f32)
+            Vector3::new(0f64, 1f64, 0f64)
         };
         let off0 = dir.cross(&tmp0).normalize() * 0.5;
         let off1 = dir.cross(&off0).normalize() * 0.5;

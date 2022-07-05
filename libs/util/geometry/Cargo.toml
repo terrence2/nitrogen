@@ -8,6 +8,7 @@ edition = "2021"
 approx = "^ 0.5"
 nalgebra = "^ 0.31"
 num-traits = "^ 0.2"
+absolute_unit = { path = "../../util/absolute_unit" }
 
 [dependencies.simba]
 version = "^ 0.7"
