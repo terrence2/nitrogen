@@ -13,52 +13,96 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{Face, Primitive, RenderPrimitive, Vertex};
-use nalgebra::Vector3;
-use std::f64;
+use absolute_unit::{Length, LengthUnit};
+use nalgebra::{Point3, UnitQuaternion, Vector3};
+use std::{f64, f64::consts::PI};
 
 #[derive(Clone, Debug)]
-pub struct Cylinder {
-    radius_bottom: f64,
-    height: f64,
-    radius_top: f64,
+pub struct Cylinder<Unit: LengthUnit> {
+    origin: Point3<Length<Unit>>,
+    axis: Vector3<Length<Unit>>,
+    radius_bottom: Length<Unit>,
+    radius_top: Length<Unit>,
 }
 
-impl Cylinder {
-    pub fn new(height: f64, radius: f64) -> Self {
+impl<Unit: LengthUnit> Cylinder<Unit> {
+    pub fn new(
+        origin: Point3<Length<Unit>>,
+        axis: Vector3<Length<Unit>>,
+        radius: Length<Unit>,
+    ) -> Self {
         Self {
+            origin,
+            axis,
             radius_bottom: radius,
-            height,
             radius_top: radius,
         }
     }
 
-    pub fn new_tapered(height: f64, radius_bottom: f64, radius_top: f64) -> Self {
+    pub fn new_tapered(
+        origin: Point3<Length<Unit>>,
+        axis: Vector3<Length<Unit>>,
+        radius_bottom: Length<Unit>,
+        radius_top: Length<Unit>,
+    ) -> Self {
         Self {
+            origin,
+            axis,
             radius_bottom,
-            height,
             radius_top,
         }
     }
+
+    pub fn axis(&self) -> &Vector3<Length<Unit>> {
+        &self.axis
+    }
+
+    pub fn origin(&self) -> &Point3<Length<Unit>> {
+        &self.origin
+    }
+
+    pub fn set_axis(&mut self, axis: Vector3<Length<Unit>>) {
+        self.axis = axis;
+    }
+
+    pub fn set_origin(&mut self, origin: Point3<Length<Unit>>) {
+        self.origin = origin;
+    }
 }
 
-impl RenderPrimitive for Cylinder {
+impl<Unit: LengthUnit> RenderPrimitive for Cylinder<Unit> {
     fn to_primitive(&self, detail: u32) -> Primitive {
         // Number of faces on the sides
         let steps = detail;
-        let mut bottom = make_unit_circle(steps, 0., self.radius_bottom);
-        let mut top = make_unit_circle(steps, self.height, self.radius_top);
-        bottom.append(&mut top);
+        let origin = self.origin.map(|v| v.f64());
+        let axis = self.axis.map(|v| v.f64());
 
-        let mut faces = Vec::new();
+        // Build all vertices by subdividing up two circles on +y.
+        let mut verts = make_unit_circle(steps, 0_f64, self.radius_bottom.f64());
+        let mut top = make_unit_circle(steps, axis.magnitude(), self.radius_top.f64());
+        verts.append(&mut top);
 
+        // Transform the vertices from +y into the axis basis.
+        let facing = if let Some(q) = UnitQuaternion::rotation_between(&Vector3::y(), &axis) {
+            q
+        } else {
+            UnitQuaternion::from_axis_angle(&Vector3::x_axis(), PI)
+        };
+        for vert in &mut verts {
+            vert.position = (origin + facing * vert.position).coords;
+            vert.normal = facing * vert.normal;
+        }
+
+        // Build faces
         // Sides
+        let mut faces = Vec::new();
         for i in 0..steps {
             let a = i;
             let b = (i + 1) % steps;
             let c = a + steps;
             let d = b + steps;
-            faces.push(Face::new(a, b, c, &bottom));
-            faces.push(Face::new(b, d, c, &bottom));
+            faces.push(Face::new(a, b, c, &verts));
+            faces.push(Face::new(b, d, c, &verts));
         }
         // bottom cap
         let normal = Vector3::new(0., -1., 0.);
@@ -76,10 +120,7 @@ impl RenderPrimitive for Cylinder {
             ));
         }
 
-        Primitive {
-            verts: bottom,
-            faces,
-        }
+        Primitive { verts, faces }
     }
 }
 
