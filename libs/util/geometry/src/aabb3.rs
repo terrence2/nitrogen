@@ -12,26 +12,43 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use absolute_unit::{Length, Meters};
+use absolute_unit::{Length, LengthUnit};
 use nalgebra::Point3;
-use std::fmt::Debug;
+use std::{cmp::PartialOrd, fmt::Debug};
 
 #[derive(Clone, Copy, Debug)]
-pub struct Aabb3 {
-    hi: Point3<Length<Meters>>,
-    lo: Point3<Length<Meters>>,
+pub struct Aabb3<Unit>
+where
+    Unit: LengthUnit + PartialOrd,
+{
+    hi: Point3<Length<Unit>>,
+    lo: Point3<Length<Unit>>,
 }
 
-impl Aabb3 {
-    pub fn from_bounds(hi: Point3<Length<Meters>>, lo: Point3<Length<Meters>>) -> Self {
+impl<Unit> Aabb3<Unit>
+where
+    Unit: LengthUnit + PartialOrd,
+{
+    pub fn from_bounds(lo: Point3<Length<Unit>>, hi: Point3<Length<Unit>>) -> Self {
+        debug_assert!(lo.x <= hi.x);
+        debug_assert!(lo.y <= hi.y);
+        debug_assert!(lo.z <= hi.z);
         Self { hi, lo }
     }
 
-    pub fn hi(&self) -> &Point3<Length<Meters>> {
+    pub fn hi(&self) -> &Point3<Length<Unit>> {
         &self.hi
     }
 
-    pub fn lo(&self) -> &Point3<Length<Meters>> {
+    pub fn lo(&self) -> &Point3<Length<Unit>> {
         &self.lo
+    }
+
+    pub fn low(&self, index: usize) -> &Length<Unit> {
+        &self.lo[index]
+    }
+
+    pub fn span(&self, index: usize) -> Length<Unit> {
+        self.hi[index] - self.lo[index]
     }
 }

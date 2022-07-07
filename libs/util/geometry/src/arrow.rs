@@ -12,79 +12,69 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use crate::{Cylinder, Primitive, RenderPrimitive};
+use absolute_unit::{scalar, Length, LengthUnit};
 use nalgebra::{Point3, Vector3};
 
-pub struct Face {
-    pub index0: u32,
-    pub index1: u32,
-    pub index2: u32,
+#[derive(Clone, Debug)]
+pub struct Arrow<Unit>
+where
+    Unit: LengthUnit,
+{
+    origin: Point3<Length<Unit>>,
+    axis: Vector3<Length<Unit>>,
+    radius: Length<Unit>,
 }
 
-impl Face {
-    pub fn new(index0: u32, index1: u32, index2: u32) -> Self {
+impl<Unit> Arrow<Unit>
+where
+    Unit: LengthUnit,
+{
+    pub fn new(
+        origin: Point3<Length<Unit>>,
+        axis: Vector3<Length<Unit>>,
+        radius: Length<Unit>,
+    ) -> Self {
         Self {
-            index0,
-            index1,
-            index2,
+            origin,
+            axis,
+            radius,
         }
     }
 
-    pub fn i0(&self) -> usize {
-        self.index0 as usize
+    pub fn axis(&self) -> &Vector3<Length<Unit>> {
+        &self.axis
     }
 
-    pub fn i1(&self) -> usize {
-        self.index1 as usize
+    pub fn origin(&self) -> &Point3<Length<Unit>> {
+        &self.origin
     }
 
-    pub fn i2(&self) -> usize {
-        self.index2 as usize
+    pub fn set_axis(&mut self, axis: Vector3<Length<Unit>>) {
+        self.axis = axis;
+    }
+
+    pub fn set_origin(&mut self, origin: Point3<Length<Unit>>) {
+        self.origin = origin;
     }
 }
 
-pub struct Arrow {
-    pub verts: Vec<Point3<f64>>,
-    pub faces: Vec<Face>,
-}
+impl<Unit> RenderPrimitive for Arrow<Unit>
+where
+    Unit: LengthUnit,
+{
+    fn to_primitive(&self, detail: u32) -> Primitive {
+        let to_head = self.axis.map(|v| v * scalar!(0.9));
+        let shaft = Cylinder::new(self.origin, to_head, self.radius);
+        let head = Cylinder::new_tapered(
+            self.origin + to_head,
+            self.axis.map(|v| v * scalar!(0.1_f64)),
+            self.radius * scalar!(1.4_f64),
+            Length::<Unit>::from(0_f64),
+        );
 
-impl Arrow {
-    pub fn new(base: Point3<f64>, dir: Vector3<f64>) -> Self {
-        // Cross with any random vector to get something perpendicular.
-        // Then cross again to get a 90 degree angle to first perpendicular.
-        let tmp0 = if dir.y > dir.z {
-            Vector3::new(0f64, 0f64, 1f64)
-        } else {
-            Vector3::new(0f64, 1f64, 0f64)
-        };
-        let off0 = dir.cross(&tmp0).normalize() * 0.5;
-        let off1 = dir.cross(&off0).normalize() * 0.5;
-
-        let verts = vec![
-            base - (off0 * 0.5),
-            base + (dir * 0.75),
-            base + (off0 * 0.5),
-            base - (off1 * 0.5),
-            base + (dir * 0.75),
-            base + (off1 * 0.5),
-            base + (dir * 0.75) - off0,
-            base + dir,
-            base + (dir * 0.75) + off0,
-            base + (dir * 0.75) - off1,
-            base + dir,
-            base + (dir * 0.75) + off1,
-        ];
-
-        let faces = vec![
-            Face::new(0, 1, 2),
-            Face::new(2, 1, 0),
-            Face::new(3, 4, 5),
-            Face::new(5, 4, 3),
-            Face::new(6, 7, 8),
-            Face::new(8, 7, 6),
-            Face::new(9, 10, 11),
-            Face::new(11, 10, 9),
-        ];
-
-        Self { verts, faces }
+        let mut prim = shaft.to_primitive(detail);
+        prim.extend(&mut head.to_primitive(detail));
+        prim
     }
 }

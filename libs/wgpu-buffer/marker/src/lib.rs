@@ -21,7 +21,7 @@ use bevy_ecs::prelude::*;
 use camera::ScreenCamera;
 use composite::CompositeRenderStep;
 use csscolorparser::Color;
-use geometry::{Aabb3, Cylinder, RenderPrimitive, Sphere};
+use geometry::{Aabb3, Arrow, Cylinder, RenderPrimitive, Sphere};
 use global_data::GlobalParametersBuffer;
 use gpu::{Gpu, GpuStep};
 use measure::WorldSpaceFrame;
@@ -29,15 +29,17 @@ use nalgebra::{Matrix4, Point3, UnitQuaternion, Vector3};
 use nitrous::{
     inject_nitrous_component, inject_nitrous_resource, NitrousComponent, NitrousResource,
 };
-use runtime::{Extension, Runtime};
+use runtime::{report, Extension, Runtime};
 use shader_shared::Group;
 use std::{collections::HashMap, f64::consts::PI, mem, ops::Range, sync::Arc};
+use window::{DisplayConfig, WindowStep};
 use world::{WorldRenderPass, WorldStep};
 
 /// Display points and vectors in the world for debugging purposes.
 
 #[derive(Debug)]
 struct MarkerPoint {
+    // primitive: Sphere<Meters>,
     position: Point3<Length<Meters>>,
     radius: Length<Meters>,
     color: Color,
@@ -45,23 +47,19 @@ struct MarkerPoint {
 
 #[derive(Debug)]
 struct MarkerArrow {
-    origin: Point3<Length<Meters>>,
-    vector: Vector3<Length<Meters>>,
-    radius: Length<Meters>,
+    primitive: Arrow<Meters>,
     color: Color,
 }
 
 #[derive(Debug)]
 struct MarkerBox {
-    aabb: Aabb3,
+    aabb: Aabb3<Meters>,
     color: Color,
 }
 
 #[derive(Debug)]
 struct MarkerCylinder {
-    origin: Point3<Length<Meters>>,
-    vector: Vector3<Length<Meters>>,
-    radius: Length<Meters>,
+    primitive: Cylinder<Meters>,
     color: Color,
 }
 
@@ -120,9 +118,7 @@ impl EntityMarkers {
         self.arrows.insert(
             name.to_owned(),
             MarkerArrow {
-                origin,
-                vector,
-                radius,
+                primitive: Arrow::new(origin, vector, radius),
                 color,
             },
         );
@@ -139,9 +135,17 @@ impl EntityMarkers {
         self.cylinders.insert(
             name.to_owned(),
             MarkerCylinder {
-                origin,
-                vector,
-                radius,
+                primitive: Cylinder::new(origin, vector, radius),
+                color,
+            },
+        );
+    }
+
+    pub fn add_cylinder_direct(&mut self, name: &str, cylinder: Cylinder<Meters>, color: Color) {
+        self.cylinders.insert(
+            name.to_owned(),
+            MarkerCylinder {
+                primitive: cylinder,
                 color,
             },
         );
@@ -149,33 +153,30 @@ impl EntityMarkers {
 
     pub fn update_arrow_vector(&mut self, name: &str, vector: Vector3<Length<Meters>>) {
         if let Some(mut arrow) = self.arrows.get_mut(name) {
-            arrow.vector = vector;
+            arrow.primitive.set_axis(vector);
         }
     }
 
     pub fn remove_arrow(&mut self, name: &str) {
         self.arrows.remove(name);
     }
+
+    pub fn remove_cylinder(&mut self, name: &str) {
+        self.arrows.remove(name);
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
 pub enum MarkersStep {
-    // ResetUploadCursor,
-    // AnimateDrawState,
-    // ApplyTransforms,
-    // ApplyFlags,
-    // ApplyXforms,
-    // PushToBlock,
-    // UploadChunks,
-    // UploadBlocks,
+    HandleDisplayChange,
     UploadGeometry,
     Render,
-    // CleanupOpenChunks,
 }
 
 #[derive(NitrousResource)]
 pub struct Markers {
     pipeline: wgpu::RenderPipeline,
+    deferred_depth: (wgpu::Texture, wgpu::TextureView),
     vertices: Arc<wgpu::Buffer>,
     vertex_count: u32,
     indices: Arc<wgpu::Buffer>,
@@ -190,6 +191,11 @@ impl Extension for Markers {
                 runtime.resource::<GlobalParametersBuffer>(),
                 runtime.resource::<Gpu>(),
             ),
+        );
+        runtime.add_frame_system(
+            Self::sys_handle_display_config_change
+                .label(MarkersStep::HandleDisplayChange)
+                .after(WindowStep::HandleEvents),
         );
         runtime.add_frame_system(
             Self::sys_upload_geometry
@@ -260,7 +266,7 @@ impl Markers {
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: Gpu::DEPTH_FORMAT,
                     depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::Always,
+                    depth_compare: wgpu::CompareFunction::Greater,
                     stencil: wgpu::StencilState {
                         front: wgpu::StencilFaceState::IGNORE,
                         back: wgpu::StencilFaceState::IGNORE,
@@ -283,6 +289,7 @@ impl Markers {
 
         Self {
             pipeline,
+            deferred_depth: Self::_make_deferred_depth_targets(gpu),
             vertices: Arc::new(gpu.device().create_buffer(&wgpu::BufferDescriptor {
                 label: "markers-vertex-buffer".into(),
                 size: (mem::size_of::<MarkerVertex>() * Self::MAX_VERTICIES) as wgpu::BufferAddress,
@@ -298,6 +305,47 @@ impl Markers {
             })),
             index_count: 0,
         }
+    }
+
+    pub fn sys_handle_display_config_change(
+        updated_config: Res<Option<DisplayConfig>>,
+        gpu: Res<Gpu>,
+        mut markers: ResMut<Markers>,
+    ) {
+        if updated_config.is_some() {
+            report!(markers.handle_render_extent_changed(&gpu));
+        }
+    }
+
+    fn handle_render_extent_changed(&mut self, gpu: &Gpu) -> Result<()> {
+        self.deferred_depth = Self::_make_deferred_depth_targets(gpu);
+        Ok(())
+    }
+
+    fn _make_deferred_depth_targets(gpu: &Gpu) -> (wgpu::Texture, wgpu::TextureView) {
+        let size = gpu.render_extent();
+        let depth_texture = gpu.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("markers-offscreen-depth-texture"),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: Gpu::DEPTH_FORMAT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING,
+        });
+        let depth_view = depth_texture.create_view(&wgpu::TextureViewDescriptor {
+            label: Some("markers-offscreen-depth-texture-view"),
+            format: None,
+            dimension: None,
+            aspect: wgpu::TextureAspect::All,
+            base_mip_level: 0,
+            mip_level_count: None,
+            base_array_layer: 0,
+            array_layer_count: None,
+        });
+        (depth_texture, depth_view)
     }
 
     pub fn vertex_span(&self) -> Range<u32> {
@@ -325,7 +373,7 @@ impl Markers {
         vertices: &mut Vec<MarkerVertex>,
         indices: &mut Vec<u32>,
     ) {
-        let sphere = Sphere::default().to_primitive(2);
+        let sphere = Sphere::<Meters>::default().to_primitive(2);
         let center = (pt.position + frame.position().vec()).map(|v| v.f64());
         let s = pt.radius.f64();
         let base = vertices.len() as u32;
@@ -393,36 +441,22 @@ impl Markers {
     fn draw_cylinder(
         view: &Matrix4<f64>,
         frame: &WorldSpaceFrame,
-        cylinder: &MarkerCylinder,
+        marker: &MarkerCylinder,
         vertices: &mut Vec<MarkerVertex>,
         indices: &mut Vec<u32>,
     ) {
-        // Positive y is up
-        let cyl_len = cylinder.vector.map(|v| v.f64()).magnitude();
-        let cyl = Cylinder::new(cyl_len, cylinder.radius.f64()).to_primitive(20);
-
-        // Rotate from the y-up frame to whatever our actual direction is.
-        let facing = if let Some(q) =
-            UnitQuaternion::rotation_between(&Vector3::y(), &cylinder.vector.map(|v| v.f64()))
-        {
-            q
-        } else {
-            UnitQuaternion::from_axis_angle(&Vector3::x_axis(), PI)
-        };
-
-        // Rotate into frame such that y is still "up"
-        let r = frame.facing() * facing;
-
-        // Origin in world space; we'll take it into eye space below.
-        let p = (cylinder.origin + frame.position().vec()).map(|v| v.f64());
+        let mut prim = marker.primitive.to_primitive(20);
         let base = vertices.len() as u32;
-        for vert in &cyl.verts {
-            let p0 = r * vert.position;
-            let n0 = r * vert.normal;
-            let p0 = view * (p + p0).to_homogeneous();
-            vertices.push(MarkerVertex::new(p0.xyz(), n0, &cylinder.color));
+        for vert in &mut prim.verts {
+            let p_world = frame.position().point64() + (frame.facing() * vert.position);
+            let p_eye = view * p_world.to_homogeneous();
+            vertices.push(MarkerVertex::new(
+                p_eye.xyz(),
+                frame.facing() * vert.normal,
+                &marker.color,
+            ));
         }
-        for face in &cyl.faces {
+        for face in &prim.faces {
             indices.push(base + face.index0);
             indices.push(base + face.index1);
             indices.push(base + face.index2);
@@ -432,54 +466,30 @@ impl Markers {
     fn draw_arrow(
         view: &Matrix4<f64>,
         frame: &WorldSpaceFrame,
-        arrow: &MarkerArrow,
+        marker: &MarkerArrow,
         vertices: &mut Vec<MarkerVertex>,
         indices: &mut Vec<u32>,
     ) {
-        // Positive y is up
-        let total_len = arrow.vector.map(|v| v.f64()).magnitude();
-        let cyl_len = (total_len - 1.).max(0.);
-        let head_len = 1f64.min(total_len);
-        let cyl = Cylinder::new(cyl_len, arrow.radius.f64()).to_primitive(20);
-        let mut head =
-            Cylinder::new_tapered(head_len, arrow.radius.f64() * 1.5, 0.0).to_primitive(20);
-        for vert in head.verts.iter_mut() {
-            vert.position.y += cyl_len;
+        let mut prim = marker.primitive.to_primitive(20);
+        let base = vertices.len() as u32;
+        for vert in &mut prim.verts {
+            let p_world = frame.position().point64() + (frame.facing() * vert.position);
+            let p_eye = view * p_world.to_homogeneous();
+            vertices.push(MarkerVertex::new(
+                p_eye.xyz(),
+                frame.facing() * vert.normal,
+                &marker.color,
+            ));
         }
-
-        // Rotate from the y-up frame to whatever our actual direction is.
-        let facing = if let Some(q) =
-            UnitQuaternion::rotation_between(&Vector3::y(), &arrow.vector.map(|v| v.f64()))
-        {
-            q
-        } else {
-            UnitQuaternion::from_axis_angle(&Vector3::x_axis(), PI)
-        };
-
-        // Rotate into frame such that y is still "up"
-        let r = frame.facing() * facing;
-
-        // Origin in world space; we'll take it into eye space below.
-        let p = (arrow.origin + frame.position().vec()).map(|v| v.f64());
-
-        for prim in &[cyl, head] {
-            let base = vertices.len() as u32;
-            for vert in &prim.verts {
-                let p0 = r * vert.position;
-                let n0 = r * vert.normal;
-                let p0 = view * (p + p0).to_homogeneous();
-                vertices.push(MarkerVertex::new(p0.xyz(), n0, &arrow.color));
-            }
-            for face in &prim.faces {
-                indices.push(base + face.index0);
-                indices.push(base + face.index1);
-                indices.push(base + face.index2);
-            }
+        for face in &prim.faces {
+            indices.push(base + face.index0);
+            indices.push(base + face.index1);
+            indices.push(base + face.index2);
         }
     }
 
     fn sys_upload_geometry(
-        absolute_points: Query<(&EntityMarkers, &WorldSpaceFrame)>,
+        model_markers: Query<(&EntityMarkers, &WorldSpaceFrame)>,
         mut markers: ResMut<Markers>,
         camera: Res<ScreenCamera>,
         gpu: Res<Gpu>,
@@ -489,13 +499,13 @@ impl Markers {
             let mut upload_vertices = Vec::new();
             let mut upload_indices = Vec::new();
             let view = camera.view::<Meters>().to_homogeneous();
-            for (ent_markers, frame) in absolute_points.iter() {
-                for bx in ent_markers.boxes.values() {
-                    Self::draw_box(&view, frame, bx, &mut upload_vertices, &mut upload_indices);
-                }
-                for pt in ent_markers.points.values() {
-                    Self::draw_point(&view, frame, pt, &mut upload_vertices, &mut upload_indices);
-                }
+            for (ent_markers, frame) in model_markers.iter() {
+                // for bx in ent_markers.boxes.values() {
+                //     Self::draw_box(&view, frame, bx, &mut upload_vertices, &mut upload_indices);
+                // }
+                // for pt in ent_markers.points.values() {
+                //     Self::draw_point(&view, frame, pt, &mut upload_vertices, &mut upload_indices);
+                // }
                 for arrow in ent_markers.arrows.values() {
                     Self::draw_arrow(
                         &view,
@@ -539,11 +549,19 @@ impl Markers {
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
         if let Some(encoder) = maybe_encoder.into_inner() {
-            let (color_attachments, depth_stencil_attachment) = world.offscreen_target_preserved();
+            let (color_attachments, _depth_stencil_attachment) = world.offscreen_target_preserved();
+            let depth_attachment = wgpu::RenderPassDepthStencilAttachment {
+                view: &markers.deferred_depth.1,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(0_f32),
+                    store: true,
+                }),
+                stencil_ops: None,
+            };
             let render_pass_desc_ref = wgpu::RenderPassDescriptor {
                 label: Some("shape-draw"),
                 color_attachments: &color_attachments,
-                depth_stencil_attachment,
+                depth_stencil_attachment: Some(depth_attachment),
             };
             let mut rpass = encoder.begin_render_pass(&render_pass_desc_ref);
 

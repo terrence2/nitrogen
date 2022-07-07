@@ -97,6 +97,19 @@ pub struct Primitive {
     pub faces: Vec<Face>,
 }
 
+impl Primitive {
+    pub fn extend(&mut self, other: &mut Primitive) {
+        let offset = self.verts.len() as u32;
+        for face in &mut other.faces {
+            face.index0 += offset;
+            face.index1 += offset;
+            face.index2 += offset;
+        }
+        self.verts.append(&mut other.verts);
+        self.faces.append(&mut other.faces);
+    }
+}
+
 pub trait RenderPrimitive {
     fn to_primitive(&self, detail: u32) -> Primitive;
 }
