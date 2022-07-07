@@ -29,5 +29,5 @@ void main() {
            6),
           0, 1));
 
-    f_color = ambient + diffuse + specular;
+    f_color = vec4((ambient + diffuse + specular).xyz, v_color.w);
 }

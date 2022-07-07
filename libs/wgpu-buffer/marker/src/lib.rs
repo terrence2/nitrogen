@@ -105,6 +105,16 @@ impl EntityMarkers {
         );
     }
 
+    pub fn add_box_direct(&mut self, name: &str, aabb: Aabb3<Meters>, color: Color) {
+        self.boxes.insert(
+            name.to_owned(),
+            MarkerBox {
+                primitive: aabb,
+                color,
+            },
+        );
+    }
+
     pub fn add_arrow(
         &mut self,
         name: &str,
@@ -161,6 +171,10 @@ impl EntityMarkers {
 
     pub fn remove_cylinder(&mut self, name: &str) {
         self.arrows.remove(name);
+    }
+
+    pub fn remove_box(&mut self, name: &str) {
+        self.boxes.remove(name);
     }
 }
 
@@ -248,7 +262,14 @@ impl Markers {
                     entry_point: "main",
                     targets: &[wgpu::ColorTargetState {
                         format: Gpu::SCREEN_FORMAT,
-                        blend: None,
+                        blend: Some(wgpu::BlendState {
+                            color: wgpu::BlendComponent {
+                                src_factor: wgpu::BlendFactor::SrcAlpha,
+                                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                                operation: wgpu::BlendOperation::Add,
+                            },
+                            alpha: wgpu::BlendComponent::REPLACE,
+                        }),
                         write_mask: wgpu::ColorWrites::ALL,
                     }],
                 }),
