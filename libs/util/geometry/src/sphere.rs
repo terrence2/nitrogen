@@ -53,23 +53,24 @@ impl RenderPrimitive for Sphere {
     fn to_primitive(&self, detail: u32) -> Primitive {
         // The bones of the d12 are 3 orthogonal quads at the origin.
         let t = (1f64 + 5f64.sqrt()) / 2f64;
+        let s = 1f64;
         let mut init = vec![
-            Vector3::new(-1f64, t, 0f64).normalize(),
-            Vector3::new(1f64, t, 0f64).normalize(),
-            Vector3::new(-1f64, -t, 0f64).normalize(),
-            Vector3::new(1f64, -t, 0f64).normalize(),
-            Vector3::new(0f64, -1f64, t).normalize(),
-            Vector3::new(0f64, 1f64, t).normalize(),
-            Vector3::new(0f64, -1f64, -t).normalize(),
-            Vector3::new(0f64, 1f64, -t).normalize(),
-            Vector3::new(t, 0f64, -1f64).normalize(),
-            Vector3::new(t, 0f64, 1f64).normalize(),
-            Vector3::new(-t, 0f64, -1f64).normalize(),
-            Vector3::new(-t, 0f64, 1f64).normalize(),
+            Vector3::new(-s, t, 0f64).normalize(),
+            Vector3::new(s, t, 0f64).normalize(),
+            Vector3::new(-s, -t, 0f64).normalize(),
+            Vector3::new(s, -t, 0f64).normalize(),
+            Vector3::new(0f64, -s, t).normalize(),
+            Vector3::new(0f64, s, t).normalize(),
+            Vector3::new(0f64, -s, -t).normalize(),
+            Vector3::new(0f64, s, -t).normalize(),
+            Vector3::new(t, 0f64, -s).normalize(),
+            Vector3::new(t, 0f64, s).normalize(),
+            Vector3::new(-t, 0f64, -s).normalize(),
+            Vector3::new(-t, 0f64, s).normalize(),
         ];
         let mut verts = init
             .drain(..)
-            .map(|ref position| Vertex::new(position, position))
+            .map(|ref position| Vertex::new_with_normal(position, position))
             .collect::<Vec<Vertex>>();
 
         let mut faces = vec![
@@ -108,11 +109,11 @@ impl RenderPrimitive for Sphere {
                 let c = bisect_edge_verts(&verts[face.i2()], &verts[face.i0()]).normalize();
 
                 let ia = verts.len() as u32;
-                verts.push(Vertex::new(&(self.center.coords + (a * self.radius)), &a));
+                verts.push(Vertex::new_with_normal(&a, &a));
                 let ib = verts.len() as u32;
-                verts.push(Vertex::new(&(self.center.coords + (b * self.radius)), &b));
+                verts.push(Vertex::new_with_normal(&b, &b));
                 let ic = verts.len() as u32;
-                verts.push(Vertex::new(&(self.center.coords + (c * self.radius)), &c));
+                verts.push(Vertex::new_with_normal(&c, &c));
 
                 next_faces.push(Face::new(face.index0, ia, ic, &verts));
                 next_faces.push(Face::new(face.index1, ib, ia, &verts));
@@ -120,6 +121,12 @@ impl RenderPrimitive for Sphere {
                 next_faces.push(Face::new(ia, ib, ic, &verts));
             }
             faces = next_faces;
+        }
+
+        // We use normalize to displace bisected verts, so perform scaling and
+        // displacement as a post-pass on the verts
+        for vert in &mut verts {
+            vert.position = self.center.coords + (vert.position * self.radius);
         }
 
         Primitive { verts, faces }

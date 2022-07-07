@@ -101,20 +101,20 @@ impl<Unit: LengthUnit> RenderPrimitive for Cylinder<Unit> {
             let b = (i + 1) % steps;
             let c = a + steps;
             let d = b + steps;
-            faces.push(Face::new(a, b, c, &verts));
-            faces.push(Face::new(b, d, c, &verts));
+            faces.push(Face::new(b, a, c, &verts));
+            faces.push(Face::new(d, b, c, &verts));
         }
         // bottom cap
         let normal = Vector3::new(0., -1., 0.);
         for i in 1..steps {
-            faces.push(Face::new_with_normal(0, (i + 1) % steps, i, &normal));
+            faces.push(Face::new_with_normal((i + 1) % steps, 0, i, &normal));
         }
         // top cap
         let normal = Vector3::new(0., 1., 0.);
         for i in 1..steps {
             faces.push(Face::new_with_normal(
-                steps,
                 i + steps,
+                steps,
                 (i + 1) % steps + steps,
                 &normal,
             ));

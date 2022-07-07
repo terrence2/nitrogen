@@ -41,7 +41,14 @@ pub struct Vertex {
 }
 
 impl Vertex {
-    pub fn new(position: &Vector3<f64>, normal: &Vector3<f64>) -> Self {
+    pub fn new(position: &Vector3<f64>) -> Self {
+        Self {
+            position: *position,
+            normal: position.normalize(),
+        }
+    }
+
+    pub fn new_with_normal(position: &Vector3<f64>, normal: &Vector3<f64>) -> Self {
         Self {
             position: *position,
             normal: *normal,

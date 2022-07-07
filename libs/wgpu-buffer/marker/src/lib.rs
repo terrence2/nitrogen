@@ -25,13 +25,13 @@ use geometry::{Aabb3, Arrow, Cylinder, RenderPrimitive, Sphere};
 use global_data::GlobalParametersBuffer;
 use gpu::{Gpu, GpuStep};
 use measure::WorldSpaceFrame;
-use nalgebra::{Matrix4, Point3, UnitQuaternion, Vector3};
+use nalgebra::{Matrix4, Point3, Vector3};
 use nitrous::{
     inject_nitrous_component, inject_nitrous_resource, NitrousComponent, NitrousResource,
 };
 use runtime::{report, Extension, Runtime};
 use shader_shared::Group;
-use std::{collections::HashMap, f64::consts::PI, mem, ops::Range, sync::Arc};
+use std::{collections::HashMap, mem, ops::Range, sync::Arc};
 use window::{DisplayConfig, WindowStep};
 use world::{WorldRenderPass, WorldStep};
 
@@ -39,9 +39,8 @@ use world::{WorldRenderPass, WorldStep};
 
 #[derive(Debug)]
 struct MarkerPoint {
-    // primitive: Sphere<Meters>,
-    position: Point3<Length<Meters>>,
-    radius: Length<Meters>,
+    // TODO: push units through sphere
+    primitive: Sphere,
     color: Color,
 }
 
@@ -53,7 +52,7 @@ struct MarkerArrow {
 
 #[derive(Debug)]
 struct MarkerBox {
-    aabb: Aabb3<Meters>,
+    primitive: Aabb3<Meters>,
     color: Color,
 }
 
@@ -84,8 +83,7 @@ impl EntityMarkers {
         self.points.insert(
             name.to_owned(),
             MarkerPoint {
-                position,
-                radius,
+                primitive: Sphere::from_center_and_radius(&position.map(|v| v.f64()), radius.f64()),
                 color,
             },
         );
@@ -101,7 +99,7 @@ impl EntityMarkers {
         self.boxes.insert(
             name.to_owned(),
             MarkerBox {
-                aabb: Aabb3::from_bounds(hi, lo),
+                primitive: Aabb3::from_bounds(lo, hi),
                 color,
             },
         );
@@ -152,7 +150,7 @@ impl EntityMarkers {
     }
 
     pub fn update_arrow_vector(&mut self, name: &str, vector: Vector3<Length<Meters>>) {
-        if let Some(mut arrow) = self.arrows.get_mut(name) {
+        if let Some(arrow) = self.arrows.get_mut(name) {
             arrow.primitive.set_axis(vector);
         }
     }
@@ -257,7 +255,7 @@ impl Markers {
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleList,
                     strip_index_format: None,
-                    front_face: wgpu::FrontFace::Cw,
+                    front_face: wgpu::FrontFace::Ccw,
                     cull_mode: Some(wgpu::Face::Back),
                     unclipped_depth: true,
                     polygon_mode: wgpu::PolygonMode::Fill,
@@ -369,19 +367,22 @@ impl Markers {
     fn draw_point(
         view: &Matrix4<f64>,
         frame: &WorldSpaceFrame,
-        pt: &MarkerPoint,
+        marker: &MarkerPoint,
         vertices: &mut Vec<MarkerVertex>,
         indices: &mut Vec<u32>,
     ) {
-        let sphere = Sphere::<Meters>::default().to_primitive(2);
-        let center = (pt.position + frame.position().vec()).map(|v| v.f64());
-        let s = pt.radius.f64();
+        let mut prim = marker.primitive.to_primitive(2);
         let base = vertices.len() as u32;
-        for vertex in &sphere.verts {
-            let pos = view * (center + vertex.position * s).to_homogeneous();
-            vertices.push(MarkerVertex::new(pos.xyz(), vertex.normal, &pt.color));
+        for vert in &mut prim.verts {
+            let p_world = frame.position().point64() + (frame.facing() * vert.position);
+            let p_eye = view * p_world.to_homogeneous();
+            vertices.push(MarkerVertex::new(
+                p_eye.xyz(),
+                frame.facing() * vert.normal,
+                &marker.color,
+            ));
         }
-        for face in &sphere.faces {
+        for face in &prim.faces {
             indices.push(base + face.index0);
             indices.push(base + face.index1);
             indices.push(base + face.index2);
@@ -391,50 +392,26 @@ impl Markers {
     fn draw_box(
         view: &Matrix4<f64>,
         frame: &WorldSpaceFrame,
-        aabb: &MarkerBox,
+        marker: &MarkerBox,
         vertices: &mut Vec<MarkerVertex>,
         indices: &mut Vec<u32>,
     ) {
-        let x_axis = frame.facing() * Vector3::x_axis();
-        let y_axis = frame.facing() * Vector3::y_axis();
-        let z_axis = frame.facing() * Vector3::z_axis();
-        let fp = frame.position().vec64();
-        let facing = frame.facing().inverse();
-        let hi_m = facing * aabb.aabb.hi().map(|v| v.f64());
-        let lo_m = facing * aabb.aabb.lo().map(|v| v.f64());
-        let hi_w = hi_m + fp;
-        let lo_w = lo_m + fp;
-        let hi_e = view * hi_w.to_homogeneous();
-        let lo_e = view * lo_w.to_homogeneous();
-        let lo = lo_e.xyz();
-        let hi = hi_e.xyz();
-        // let hi = aabb.aabb.hi().map(|v| v.f64());
-        // let lo = aabb.aabb.lo().map(|v| v.f64());
-        let a = [lo.x, hi.y, lo.z];
-        let b = [hi.x, hi.y, lo.z];
-        let c = [hi.x, lo.y, lo.z];
-        let d = [hi.x, lo.y, hi.z];
-        let e = [lo.x, hi.y, hi.z];
-        let f = [lo.x, lo.y, hi.z];
-        let lo = [lo.x, lo.y, lo.z];
-        let hi = [hi.x, hi.y, hi.z];
-        let faces = [
-            ([lo, a, b, c], -z_axis),
-            ([c, b, hi, d], x_axis),
-            ([d, hi, e, f], z_axis),
-            ([f, e, a, lo], -x_axis),
-            ([a, e, hi, b], y_axis),
-            ([f, lo, c, d], -y_axis),
-        ];
-        for (verts, normal) in faces {
-            let base = vertices.len() as u32;
-            for v in verts {
-                let position = Vector3::new(v[0], v[1], v[2]);
-                vertices.push(MarkerVertex::new(position.xyz(), normal.xyz(), &aabb.color));
-            }
-            for i in [0, 2, 1, 0, 3, 2] {
-                indices.push(base + i);
-            }
+        // TODO: draw with face normals?
+        let mut prim = marker.primitive.to_primitive(0);
+        let base = vertices.len() as u32;
+        for vert in &mut prim.verts {
+            let p_world = frame.position().point64() + (frame.facing() * vert.position);
+            let p_eye = view * p_world.to_homogeneous();
+            vertices.push(MarkerVertex::new(
+                p_eye.xyz(),
+                frame.facing() * vert.normal,
+                &marker.color,
+            ));
+        }
+        for face in &prim.faces {
+            indices.push(base + face.index0);
+            indices.push(base + face.index1);
+            indices.push(base + face.index2);
         }
     }
 
@@ -500,12 +477,24 @@ impl Markers {
             let mut upload_indices = Vec::new();
             let view = camera.view::<Meters>().to_homogeneous();
             for (ent_markers, frame) in model_markers.iter() {
-                // for bx in ent_markers.boxes.values() {
-                //     Self::draw_box(&view, frame, bx, &mut upload_vertices, &mut upload_indices);
-                // }
-                // for pt in ent_markers.points.values() {
-                //     Self::draw_point(&view, frame, pt, &mut upload_vertices, &mut upload_indices);
-                // }
+                for marker in ent_markers.boxes.values() {
+                    Self::draw_box(
+                        &view,
+                        frame,
+                        marker,
+                        &mut upload_vertices,
+                        &mut upload_indices,
+                    );
+                }
+                for marker in ent_markers.points.values() {
+                    Self::draw_point(
+                        &view,
+                        frame,
+                        marker,
+                        &mut upload_vertices,
+                        &mut upload_indices,
+                    );
+                }
                 for arrow in ent_markers.arrows.values() {
                     Self::draw_arrow(
                         &view,
