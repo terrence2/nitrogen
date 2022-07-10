@@ -40,10 +40,17 @@ impl DynamicUnits {
         self.v.0
     }
 
+    pub fn as_dyn(self) -> Self {
+        self
+    }
+
     #[allow(unused_mut)]
-    pub fn assert_units_equal(mut self, _other: &DynamicUnits) {
+    pub fn assert_units_equal(mut self, mut _other: DynamicUnits) {
         #[cfg(debug_assertions)]
         {
+            self.cancel_units();
+            _other.cancel_units();
+
             // Cancel out the target units, checking that there are units to cancel.
             for n in _other.numerator.iter() {
                 assert!(self.numerator.remove(n) > 0);
@@ -51,12 +58,38 @@ impl DynamicUnits {
             for d in _other.denominator.iter() {
                 assert!(self.denominator.remove(d) > 0);
             }
-            // Remove any radians, from either side, as that is technically a unitless quantity.
-            self.numerator.take_all(&TypeId::of::<Radians>());
-            self.denominator.take_all(&TypeId::of::<Radians>());
 
             // Any remainder must _also_ would cancel out, exactly.
             assert_eq!(self.numerator, self.denominator);
+        }
+    }
+
+    #[allow(unused_mut)]
+    pub fn assert_units_empty(mut self) {
+        #[cfg(debug_assertions)]
+        {
+            self.cancel_units();
+            assert!(self.numerator.is_empty());
+            assert!(self.denominator.is_empty());
+        }
+    }
+
+    pub fn cancel_units(&mut self) {
+        #[cfg(debug_assertions)]
+        {
+            // Remove unitless radians from both top and bottom
+            self.numerator.take_all(&TypeId::of::<Radians>());
+            self.denominator.take_all(&TypeId::of::<Radians>());
+
+            let mut next_denom = HashBag::new();
+            for d in self.denominator.iter() {
+                if self.numerator.contains(d) > 0 {
+                    self.numerator.remove(d);
+                } else {
+                    next_denom.insert(*d);
+                }
+            }
+            self.denominator = next_denom;
         }
     }
 
@@ -272,7 +305,7 @@ mod test {
         let v = meters_per_second!(3.);
         let v2 = v.as_dyn() * v.as_dyn();
         assert_abs_diff_eq!(v2.f64(), 9.);
-        v2.assert_units_equal(&DynamicUnits::new2o2::<Meters, Meters, Seconds, Seconds>(
+        v2.assert_units_equal(DynamicUnits::new2o2::<Meters, Meters, Seconds, Seconds>(
             0.0.into(),
         ));
     }

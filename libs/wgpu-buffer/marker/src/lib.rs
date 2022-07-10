@@ -170,7 +170,7 @@ impl EntityMarkers {
     }
 
     pub fn remove_cylinder(&mut self, name: &str) {
-        self.arrows.remove(name);
+        self.cylinders.remove(name);
     }
 
     pub fn remove_box(&mut self, name: &str) {

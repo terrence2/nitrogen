@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     impl_value_type_conversions, supports_absdiffeq, supports_quantity_ops, supports_scalar_ops,
-    supports_shift_ops, supports_value_type_conversion, Area, Length, LengthUnit,
+    supports_shift_ops, supports_value_type_conversion, Area, DynamicUnits, Length, LengthUnit,
 };
 use ordered_float::OrderedFloat;
 use std::{fmt, fmt::Debug, marker::PhantomData, ops::Div};
@@ -29,6 +29,15 @@ supports_shift_ops!(Volume<A1>, Volume<A2>, LengthUnit);
 supports_scalar_ops!(Volume<A>, LengthUnit);
 supports_absdiffeq!(Volume<A>, LengthUnit);
 supports_value_type_conversion!(Volume<A>, LengthUnit, impl_value_type_conversions);
+
+impl<Unit> Volume<Unit>
+where
+    Unit: LengthUnit,
+{
+    pub fn as_dyn(&self) -> DynamicUnits {
+        DynamicUnits::new3o0::<Unit, Unit, Unit>(self.v)
+    }
+}
 
 impl<Unit> fmt::Display for Volume<Unit>
 where

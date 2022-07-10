@@ -77,7 +77,7 @@ where
 {
     fn from(v: DynamicUnits) -> Self {
         let f = v.ordered_float();
-        v.assert_units_equal(&DynamicUnits::new3o2::<
+        v.assert_units_equal(DynamicUnits::new3o2::<
             F::UnitMass,
             F::UnitLength,
             L,

@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{Face, Primitive, RenderPrimitive, Vertex};
-use absolute_unit::{Length, LengthUnit};
+use absolute_unit::{scalar, Length, LengthUnit, Volume};
 use nalgebra::{Point3, UnitQuaternion, Vector3};
 use std::{f64, f64::consts::PI};
 
@@ -67,6 +67,28 @@ impl<Unit: LengthUnit> Cylinder<Unit> {
 
     pub fn set_origin(&mut self, origin: Point3<Length<Unit>>) {
         self.origin = origin;
+    }
+
+    pub fn radius_bottom(&self) -> Length<Unit> {
+        self.radius_bottom
+    }
+
+    pub fn radius_top(&self) -> Length<Unit> {
+        self.radius_top
+    }
+
+    // Axial length
+    pub fn length(&self) -> Length<Unit> {
+        Length::<Unit>::from(self.axis.map(|v| v.f64()).magnitude())
+    }
+
+    pub fn volume(&self) -> Volume<Unit> {
+        // Note: despite being called cylinder, this is actually the volume
+        // of a truncated cone.
+        let r0 = self.radius_top;
+        let r1 = self.radius_bottom;
+        let depth = Length::<Unit>::from(self.axis.map(|v| v.f64()).magnitude());
+        scalar!(1_f64 / 3_f64) * scalar!(PI) * (r0 * r0 + r0 * r1 + r1 * r1) * depth
     }
 }
 

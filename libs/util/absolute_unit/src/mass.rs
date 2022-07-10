@@ -14,8 +14,9 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     impl_value_type_conversions, supports_absdiffeq, supports_quantity_ops, supports_scalar_ops,
-    supports_shift_ops, supports_value_type_conversion, Acceleration, Force, ForceUnit, LengthUnit,
-    Newtons, TimeUnit, Unit,
+    supports_shift_ops, supports_value_type_conversion, Acceleration, Area, Force, ForceUnit,
+    LengthUnit, Newtons, PoundsMass, PoundsWeight, RotationalInertia, TimeUnit, Unit, Weight,
+    WeightUnit,
 };
 use ordered_float::OrderedFloat;
 use std::{fmt, fmt::Debug, marker::PhantomData, ops::Mul};
@@ -34,6 +35,16 @@ supports_shift_ops!(Mass<A1>, Mass<A2>, MassUnit);
 supports_scalar_ops!(Mass<A>, MassUnit);
 supports_absdiffeq!(Mass<A>, MassUnit);
 supports_value_type_conversion!(Mass<A>, MassUnit, impl_value_type_conversions);
+
+impl<Unit> Mass<Unit>
+where
+    Unit: MassUnit,
+{
+    pub fn weight<UnitB: WeightUnit>(&self) -> Weight<UnitB> {
+        let lb_mass = Mass::<PoundsMass>::from(self).f64();
+        Weight::<UnitB>::from(&Weight::<PoundsWeight>::from(lb_mass * 32.174_1))
+    }
+}
 
 impl<Unit> fmt::Display for Mass<Unit>
 where
@@ -73,6 +84,18 @@ where
         >::from(&rhs);
         let mass = Mass::<<Newtons as ForceUnit>::UnitMass>::from(self.v.0);
         Self::Output::from(mass.f64() * acc.f64())
+    }
+}
+
+impl<MA, LB> Mul<Area<LB>> for Mass<MA>
+where
+    MA: MassUnit,
+    LB: LengthUnit,
+{
+    type Output = RotationalInertia<MA, LB>;
+
+    fn mul(self, rhs: Area<LB>) -> Self::Output {
+        Self::Output::from(self.f64() * rhs.f64())
     }
 }
 

@@ -281,7 +281,7 @@ impl BodyMotion {
     }
 
     pub fn set_vehicle_vertical_acceleration(&mut self, w_dot: Acceleration<Meters, Seconds>) {
-        self.acceleration_m_s2.z = -w_dot;
+        self.acceleration_m_s2.y = -w_dot;
     }
 
     pub fn vehicle_vertical_velocity(&self) -> Velocity<Meters, Seconds> {

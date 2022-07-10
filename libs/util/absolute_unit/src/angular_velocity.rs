@@ -73,7 +73,7 @@ where
 {
     fn from(v: DynamicUnits) -> Self {
         let f = v.ordered_float();
-        v.assert_units_equal(&DynamicUnits::new1o1::<L, T>(0f64.into()));
+        v.assert_units_equal(DynamicUnits::new1o1::<L, T>(0f64.into()));
         Self {
             v: f,
             phantom_1: PhantomData,

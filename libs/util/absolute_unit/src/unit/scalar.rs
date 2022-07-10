@@ -24,7 +24,7 @@ use std::{
 pub struct Scalar(pub(crate) OrderedFloat<f64>);
 
 impl Scalar {
-    pub(crate) fn f64(self) -> f64 {
+    pub fn f64(self) -> f64 {
         self.into_inner()
     }
 
@@ -34,6 +34,14 @@ impl Scalar {
 
     pub fn as_dyn(&self) -> DynamicUnits {
         DynamicUnits::new0o0(self.0)
+    }
+}
+
+impl From<DynamicUnits> for Scalar {
+    fn from(v: DynamicUnits) -> Self {
+        let f = v.ordered_float();
+        v.assert_units_empty();
+        Self(f)
     }
 }
 

@@ -12,8 +12,8 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{Face, Primitive, RenderPrimitive, Vertex};
-use absolute_unit::{Length, LengthUnit};
+use crate::{Face, Primitive, RenderPrimitive, Sphere, Vertex};
+use absolute_unit::{Length, LengthUnit, Volume};
 use nalgebra::{Point3, Vector3};
 use std::{cmp::PartialOrd, fmt::Debug};
 
@@ -37,6 +37,24 @@ where
         Self { hi, lo }
     }
 
+    pub fn empty() -> Self {
+        Self {
+            hi: Point3::origin(),
+            lo: Point3::origin(),
+        }
+    }
+
+    pub fn extend(&mut self, p: &Point3<Length<Unit>>) {
+        for i in 0..3 {
+            if p[i] > self.hi[i] {
+                self.hi[i] = p[i];
+            }
+            if p[i] < self.lo[i] {
+                self.lo[i] = p[i];
+            }
+        }
+    }
+
     pub fn hi(&self) -> &Point3<Length<Unit>> {
         &self.hi
     }
@@ -45,12 +63,28 @@ where
         &self.lo
     }
 
+    pub fn high(&self, index: usize) -> &Length<Unit> {
+        &self.hi[index]
+    }
+
     pub fn low(&self, index: usize) -> &Length<Unit> {
         &self.lo[index]
     }
 
     pub fn span(&self, index: usize) -> Length<Unit> {
         self.hi[index] - self.lo[index]
+    }
+
+    pub fn bounding_sphere(&self) -> Sphere {
+        let lo = self.lo.map(|v| v.f64());
+        let hi = self.hi.map(|v| v.f64());
+        let center = hi - lo;
+        let radius = (hi - center).coords.magnitude();
+        Sphere::from_center_and_radius(&Point3::from(center), radius)
+    }
+
+    pub fn volume(&self) -> Volume<Unit> {
+        self.span(0) * self.span(1) * self.span(2)
     }
 }
 
