@@ -998,6 +998,7 @@ dependencies = [
 name = "dump-terrain-tables"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
  "nalgebra",
  "structopt",
 ]

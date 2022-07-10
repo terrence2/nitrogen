@@ -151,7 +151,7 @@ impl<T: QueueItem + Ord + fmt::Debug> Queue<T> {
         }
         for &ti in &self.contents {
             if !tree.is_mergeable_node(ti) {
-                tree.print_tree();
+                tree.print_tree().unwrap();
             }
             assert!(tree.is_mergeable_node(ti));
         }

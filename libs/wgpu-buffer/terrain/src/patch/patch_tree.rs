@@ -20,6 +20,7 @@ use crate::patch::{
 };
 
 use absolute_unit::{kilometers, Kilometers};
+use anyhow::Result;
 use approx::assert_relative_eq;
 use camera::ScreenCamera;
 use geometry::{algorithm::bisect_edge, Plane};
@@ -29,6 +30,7 @@ use physical_constants::EARTH_RADIUS;
 use std::{
     cmp::Reverse,
     collections::{BinaryHeap, HashSet},
+    fmt::Write,
     time::Instant,
 };
 
@@ -1014,7 +1016,7 @@ impl PatchTree {
             if self.is_mergeable_node(tree_index) {
                 if !self.merge_queue.contains(tree_index) {
                     println!("{:?} is mergeable, so should be in merge_queue", tree_index);
-                    self.print_tree();
+                    self.print_tree().unwrap();
                 }
                 assert!(self.merge_queue.contains(tree_index));
             }
@@ -1030,7 +1032,7 @@ impl PatchTree {
                         "{:?} is splittable, so should be in split_queue; {} < {} w/ ctx {:?}",
                         tree_index, level, self.max_level, split_context
                     );
-                    self.print_tree();
+                    self.print_tree().unwrap();
                 }
                 assert!(self.split_queue.contains(tree_index) || Some(tree_index) == split_context);
             }
@@ -1067,22 +1069,23 @@ impl PatchTree {
     }
 
     #[allow(unused)]
-    pub(crate) fn print_tree(&self) {
-        println!("{}", self.format_tree_display());
+    pub(crate) fn print_tree(&self) -> Result<()> {
+        println!("{}", self.format_tree_display()?);
+        Ok(())
     }
 
     #[allow(unused)]
-    fn format_tree_display(&self) -> String {
+    fn format_tree_display(&self) -> Result<String> {
         let mut out = String::new();
         out += "Root\n";
         for child in &self.root.children {
-            out += &self.format_tree_display_inner(1, *child);
+            out += &self.format_tree_display_inner(1, *child)?;
         }
-        out
+        Ok(out)
     }
 
     #[allow(unused)]
-    fn format_tree_display_inner(&self, lvl: usize, tree_index: TreeIndex) -> String {
+    fn format_tree_display_inner(&self, lvl: usize, tree_index: TreeIndex) -> Result<String> {
         fn fmt_peer(mp: &Option<Peer>) -> String {
             if let Some(p) = mp {
                 format!("{}", toff(p.peer))
@@ -1094,28 +1097,30 @@ impl PatchTree {
         let mut out = String::new();
         let pad = "  ".repeat(lvl);
         if node.is_node() {
-            out += &format!(
-                "{}Node @{}, [{},{},{}]\n",
+            writeln!(
+                out,
+                "{}Node @{}, [{},{},{}]",
                 pad,
                 toff(tree_index),
                 fmt_peer(&node.peers[0]),
                 fmt_peer(&node.peers[1]),
                 fmt_peer(&node.peers[2]),
-            );
+            )?;
             for child in node.children() {
-                out += &self.format_tree_display_inner(lvl + 1, *child);
+                out += &self.format_tree_display_inner(lvl + 1, *child)?;
             }
         } else {
-            out += &format!(
-                "{}Leaf @{}, peers: [{},{},{}]\n",
+            writeln!(
+                out,
+                "{}Leaf @{}, peers: [{},{},{}]",
                 pad,
                 poff(node.patch_index()),
                 fmt_peer(&node.peers[0]),
                 fmt_peer(&node.peers[1]),
                 fmt_peer(&node.peers[2]),
-            );
+            )?;
         }
-        out
+        Ok(out)
     }
 }
 
