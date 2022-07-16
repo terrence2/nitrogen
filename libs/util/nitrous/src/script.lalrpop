@@ -119,6 +119,7 @@ CallExpr: Box<Expr> = {
 
 AttrExpr: Box<Expr> = {
     <AttrExpr> "." <SymbolOrBool> => Box::new(Expr::Attr(<>)),
+    <AttrExpr> "." <SymbolOrBool> ":=" <TermExpr> => Box::new(Expr::AssignAttr(<>)),
     TermExpr
 }
 

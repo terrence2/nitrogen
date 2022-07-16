@@ -14,7 +14,9 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     dump_schedule::dump_schedule,
-    herder::{ExitRequest, ScriptCompletions, ScriptHerder, ScriptQueue, ScriptRunKind},
+    herder::{
+        ExitRequest, ScriptCompletions, ScriptHerder, ScriptQueue, ScriptReceipt, ScriptRunKind,
+    },
 };
 use anyhow::Result;
 use bevy_ecs::{
@@ -303,24 +305,28 @@ impl Runtime {
     // Script passthrough
 
     #[inline]
-    pub fn run_interactive(&mut self, script_text: &str) -> Result<()> {
+    pub fn run_interactive(&mut self, script_text: &str) -> Result<ScriptReceipt> {
         self.resource_mut::<ScriptHerder>()
             .run_interactive(script_text)
     }
 
     #[inline]
-    pub fn run_string(&mut self, script_text: &str) -> Result<()> {
+    pub fn run_string(&mut self, script_text: &str) -> Result<ScriptReceipt> {
         self.resource_mut::<ScriptHerder>().run_string(script_text)
     }
 
     #[inline]
-    pub fn run<N: Into<NitrousScript>>(&mut self, script: N) {
+    pub fn run<N: Into<NitrousScript>>(&mut self, script: N) -> ScriptReceipt {
         self.resource_mut::<ScriptHerder>()
             .run(script, ScriptRunKind::Precompiled)
     }
 
     #[inline]
-    pub fn run_with_locals<N: Into<NitrousScript>>(&mut self, locals: LocalNamespace, script: N) {
+    pub fn run_with_locals<N: Into<NitrousScript>>(
+        &mut self,
+        locals: LocalNamespace,
+        script: N,
+    ) -> ScriptReceipt {
         self.resource_mut::<ScriptHerder>().run_with_locals(
             locals,
             script,

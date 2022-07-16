@@ -94,6 +94,8 @@ pub struct ScreenCamera {
     fov_y: Angle<Radians>,
     aspect_ratio: f64,
     z_near: Length<Meters>,
+
+    #[property]
     exposure: f64,
 
     input: InputState,
@@ -145,16 +147,6 @@ impl ScreenCamera {
     #[method]
     pub fn decrease_fov(&mut self, pressed: bool) {
         self.input.fov_delta = degrees!(if pressed { -1 } else { 0 });
-    }
-
-    #[method]
-    pub fn exposure(&self) -> f64 {
-        self.exposure
-    }
-
-    #[method]
-    pub fn set_exposure(&mut self, exposure: f64) {
-        self.exposure = exposure;
     }
 
     #[method]

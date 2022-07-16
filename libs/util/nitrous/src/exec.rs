@@ -110,6 +110,11 @@ impl<'a> NitrousExecutor<'a> {
                     let target = self.state.script.atom(&atom);
                     self.state.locals.put(target, value);
                 }
+                Instr::StoreAttr(atom) => {
+                    let value = self.pop("target")?;
+                    let mut base = self.pop("value")?;
+                    base.store_attr(self.state.script.atom(&atom), value, self.heap.as_mut())?;
+                }
 
                 Instr::Multiply => {
                     let rhs = self.pop("rhs")?;
@@ -143,7 +148,8 @@ impl<'a> NitrousExecutor<'a> {
                 }
                 Instr::Attr(atom) => {
                     let base = self.pop("attr base")?;
-                    let result = base.attr(self.state.script.atom(&atom), self.heap.as_ref())?;
+                    let name = self.state.script.atom(&atom);
+                    let result = base.attr(name, self.heap.as_ref())?;
                     self.push(result);
                 }
                 Instr::Await => {

@@ -95,6 +95,7 @@ pub enum ScriptRunPhase {
 pub struct ExecutionMetadata {
     context: ExecutionContext,
     kind: ScriptRunKind,
+    receipt: ScriptReceipt,
 }
 
 impl ExecutionMetadata {
@@ -159,14 +160,32 @@ impl ScriptResult {
             Self::Err(s) => Some(s.as_str()),
         }
     }
+
+    pub fn unwrap(self) -> Value {
+        match self {
+            Self::Ok(v) => v,
+            Self::Err(e) => panic!("ScriptResult::unwrap: {}", e),
+        }
+    }
 }
+
+/// Returned by run_script so that script results can be correlated.
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
+pub struct ScriptReceipt(usize);
 
 /// Report on script execution result.
 #[derive(Clone, Debug)]
 pub struct ScriptCompletion {
+    pub receipt: ScriptReceipt,
     pub result: ScriptResult,
     pub phase: ScriptRunPhase,
     pub meta: ExecutionMetadata,
+}
+
+impl ScriptCompletion {
+    pub fn unwrap(&self) -> Value {
+        self.result.clone().unwrap()
+    }
 }
 
 /// A set of script execution results, indented for use as a resource for other systems.
@@ -193,33 +212,36 @@ macro_rules! report {
 /// Manage script execution state.
 #[derive(Default)]
 pub struct ScriptHerder {
+    receipt_offset: usize,
     gthread: Vec<ExecutionMetadata>,
 }
 
 impl ScriptHerder {
     #[inline]
-    pub fn run_interactive(&mut self, script_text: &str) -> Result<()> {
-        self.run(
+    pub fn run_interactive(&mut self, script_text: &str) -> Result<ScriptReceipt> {
+        Ok(self.run(
             NitrousScript::compile(script_text)?,
             ScriptRunKind::Interactive,
-        );
-        Ok(())
+        ))
     }
 
     #[inline]
-    pub fn run_string(&mut self, script_text: &str) -> Result<()> {
+    pub fn run_string(&mut self, script_text: &str) -> Result<ScriptReceipt> {
         trace!("run_string: {}", script_text);
-        self.run(NitrousScript::compile(script_text)?, ScriptRunKind::String);
-        Ok(())
+        Ok(self.run(NitrousScript::compile(script_text)?, ScriptRunKind::String))
     }
 
     #[inline]
-    pub fn run<N: Into<NitrousScript>>(&mut self, script: N, kind: ScriptRunKind) {
+    pub fn run<N: Into<NitrousScript>>(&mut self, script: N, kind: ScriptRunKind) -> ScriptReceipt {
         self.run_with_locals(LocalNamespace::empty(), script, kind)
     }
 
     #[inline]
-    pub fn run_binding<N: Into<NitrousScript>>(&mut self, locals: LocalNamespace, script: N) {
+    pub fn run_binding<N: Into<NitrousScript>>(
+        &mut self,
+        locals: LocalNamespace,
+        script: N,
+    ) -> ScriptReceipt {
         self.run_with_locals(locals, script, ScriptRunKind::Binding)
     }
 
@@ -229,18 +251,23 @@ impl ScriptHerder {
         locals: LocalNamespace,
         script: N,
         kind: ScriptRunKind,
-    ) {
+    ) -> ScriptReceipt {
+        self.receipt_offset += 1;
+        let receipt = ScriptReceipt(self.receipt_offset);
         self.gthread.push(ExecutionMetadata {
             context: ExecutionContext::new(locals, script.into()),
             kind,
+            receipt,
         });
+        receipt
     }
 
     #[inline]
     pub(crate) fn sys_run_startup_scripts(world: &mut World) {
         world.resource_scope(|world, mut herder: Mut<ScriptHerder>| {
-            herder.run_scripts(HeapMut::wrap(world), ScriptRunPhase::Startup);
+            herder._run_scripts(HeapMut::wrap(world), ScriptRunPhase::Startup);
         });
+        trace!("clearing startup script completions");
         world
             .get_resource_mut::<ScriptCompletions>()
             .unwrap()
@@ -250,16 +277,18 @@ impl ScriptHerder {
     #[inline]
     pub(crate) fn sys_run_sim_scripts(world: &mut World) {
         world.resource_scope(|world, mut herder: Mut<ScriptHerder>| {
-            herder.run_scripts(HeapMut::wrap(world), ScriptRunPhase::Sim);
+            herder._run_scripts(HeapMut::wrap(world), ScriptRunPhase::Sim);
         });
     }
 
     pub(crate) fn sys_clear_completions(mut completions: ResMut<ScriptCompletions>) {
         // This runs at frame schedule, whereas scripts may run each sim step.
+        trace!("clearing script completions");
         completions.clear();
     }
 
-    fn run_scripts(&mut self, mut heap: HeapMut, phase: ScriptRunPhase) {
+    // Exposed for testing the internals
+    pub fn _run_scripts(&mut self, mut heap: HeapMut, phase: ScriptRunPhase) {
         // If there are any scripts queued to run, start them up.
         for script in &heap.resource::<ScriptQueue>().queue {
             if let Err(err) = self.run_interactive(script) {
@@ -279,6 +308,7 @@ impl ScriptHerder {
                         trace!("{:?}: {} <- {}", phase, result, meta.context.script());
                         heap.resource_mut::<ScriptCompletions>()
                             .push(ScriptCompletion {
+                                receipt: meta.receipt,
                                 result: ScriptResult::Ok(result),
                                 phase,
                                 meta,
@@ -289,6 +319,7 @@ impl ScriptHerder {
                     warn!("script failed: {}", err);
                     heap.resource_mut::<ScriptCompletions>()
                         .push(ScriptCompletion {
+                            receipt: meta.receipt,
                             result: ScriptResult::Err(format!("{}", err)),
                             phase,
                             meta,

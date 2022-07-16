@@ -32,6 +32,7 @@ pub enum Instr {
     LoadEntity(Atom),
     InitLocal(Atom),
     StoreLocal(Atom),
+    StoreAttr(Atom),
 
     Multiply,
     Divide,
@@ -124,6 +125,19 @@ impl NitrousCode {
                 } else {
                     bail!("assignment must target a symbol");
                 };
+            }
+            Expr::AssignAttr(base, member, expr) => {
+                self.lower_expr(base)?;
+                self.lower_expr(expr)?;
+                if let Term::Symbol(sym) = member {
+                    let atom = self.upsert_atom(sym);
+                    self.code.push(Instr::StoreAttr(atom));
+                } else {
+                    bail!(
+                        "attribute member reference must be a symbol, not: {}",
+                        member
+                    );
+                }
             }
             Expr::BinOp(lhs, op, rhs) => {
                 self.lower_expr(lhs)?;

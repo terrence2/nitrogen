@@ -27,7 +27,7 @@ use syn::{parse2, ItemFn};
 /// These methods proxy to various _inner versions, which are built using #[method],
 /// #[getter], and #[setter] attributes on the impl block, built by using
 /// #[inject_nitrous] on an impl.
-#[proc_macro_derive(NitrousResource)]
+#[proc_macro_derive(NitrousResource, attributes(property))]
 pub fn derive_nitrous_resource(input: TokenStream) -> TokenStream {
     let ast = resource::parse(input);
     let model = resource::analyze(ast);
@@ -39,7 +39,7 @@ pub fn derive_nitrous_resource(input: TokenStream) -> TokenStream {
 /// These methods proxy to various _inner versions, which are built using #[method],
 /// #[getter], and #[setter] attributes on the impl block, built by using
 /// #[inject_nitrous] on an impl.
-#[proc_macro_derive(NitrousComponent, attributes(Name))]
+#[proc_macro_derive(NitrousComponent, attributes(Name, property))]
 pub fn derive_nitrous_component(input: TokenStream) -> TokenStream {
     let ast = component::parse(input);
     let model = component::analyze(ast);

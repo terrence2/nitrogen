@@ -284,4 +284,51 @@ mod test {
         );
         Ok(())
     }
+
+    #[test]
+    fn script_property_read() -> Result<()> {
+        let rv = NitrousAst::parse(r#"@foo.bar.bat;"#)?;
+        assert_eq!(
+            rv.stmts,
+            vec![Box::new(Stmt::Expr(Box::new(Expr::Attr(
+                Box::new(Expr::Attr(
+                    Box::new(Expr::Term(Term::AtSymbol("foo".to_owned()))),
+                    Term::Symbol("bar".to_owned())
+                )),
+                Term::Symbol("bat".to_owned())
+            ))))]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn script_component_property_assign() -> Result<()> {
+        let rv = NitrousAst::parse(r#"@foo.bar.bat := "cat";"#)?;
+        assert_eq!(
+            rv.stmts,
+            vec![Box::new(Stmt::Expr(Box::new(Expr::AssignAttr(
+                Box::new(Expr::Attr(
+                    Box::new(Expr::Term(Term::AtSymbol("foo".to_owned()))),
+                    Term::Symbol("bar".to_owned())
+                )),
+                Term::Symbol("bat".to_owned()),
+                Box::new(Expr::Term(Term::String("cat".to_owned())))
+            ))))]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn script_resource_property_assign() -> Result<()> {
+        let rv = NitrousAst::parse(r#"camera.exposure := 0.001;"#)?;
+        assert_eq!(
+            rv.stmts,
+            vec![Box::new(Stmt::Expr(Box::new(Expr::AssignAttr(
+                Box::new(Expr::Term(Term::Symbol("camera".to_owned()))),
+                Term::Symbol("exposure".to_owned()),
+                Box::new(Expr::Term(Term::Float(OrderedFloat(0.001)))),
+            ))))]
+        );
+        Ok(())
+    }
 }

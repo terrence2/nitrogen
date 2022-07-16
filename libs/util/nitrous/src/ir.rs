@@ -38,6 +38,7 @@ pub enum Expr {
     Call(Box<Expr>, Vec<Box<Expr>>),
     BinOp(Box<Expr>, Operator, Box<Expr>),
     Assign(Term, Box<Expr>),
+    AssignAttr(Box<Expr>, Term, Box<Expr>),
     Term(Term),
 }
 
@@ -58,6 +59,7 @@ impl fmt::Display for Expr {
             }
             Self::BinOp(a, op, b) => write!(f, "{} {} {}", a, op, b),
             Self::Assign(t, e) => write!(f, "{} := {}", t, e),
+            Self::AssignAttr(t, n, e) => write!(f, "{}.{} := {}", t, n, e),
             Self::Term(t) => write!(f, "{}", t),
         }
     }
