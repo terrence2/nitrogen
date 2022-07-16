@@ -92,6 +92,7 @@ impl Value {
         Self::Float(OrderedFloat(v))
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str<S: ToString>(v: S) -> Self {
         Self::String(v.to_string())
     }

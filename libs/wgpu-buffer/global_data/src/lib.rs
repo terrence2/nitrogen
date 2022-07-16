@@ -134,7 +134,7 @@ impl Globals {
                 .to_rotation_matrix()
                 .to_homogeneous(),
         );
-        self.camera_exposure = camera.exposure() as f32;
+        self.camera_exposure = camera.exposure();
     }
 
     pub fn set_orrery(&mut self, orrery: &Orrery) {
@@ -159,7 +159,9 @@ pub struct GlobalParametersBuffer {
     buffer_size: wgpu::BufferAddress,
     parameters_buffer: Arc<wgpu::Buffer>,
     globals: Globals,
-    tone_gamma: f32,
+
+    #[property]
+    tone_gamma: f64,
 }
 
 impl Extension for GlobalParametersBuffer {
@@ -195,7 +197,7 @@ impl Extension for GlobalParametersBuffer {
 
 #[inject_nitrous_resource]
 impl GlobalParametersBuffer {
-    const INITIAL_GAMMA: f32 = 2.2f32;
+    const INITIAL_GAMMA: f64 = 2.2f64;
 
     pub fn new(device: &wgpu::Device) -> Self {
         let buffer_size = mem::size_of::<Globals>() as wgpu::BufferAddress;
@@ -253,11 +255,6 @@ impl GlobalParametersBuffer {
         self.tone_gamma /= 1.1;
     }
 
-    #[method]
-    pub fn tone_gamma(&self) -> f64 {
-        self.tone_gamma as f64
-    }
-
     pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
         &self.bind_group_layout
     }
@@ -282,7 +279,7 @@ impl GlobalParametersBuffer {
     pub fn track_state_changes(&mut self, camera: &ScreenCamera, orrery: &Orrery, win: &Window) {
         self.globals.set_camera(camera);
         self.globals.set_orrery(orrery);
-        self.globals.set_tone(self.tone_gamma);
+        self.globals.set_tone(self.tone_gamma as f32);
         self.globals.set_window_info(win);
     }
 
@@ -320,7 +317,7 @@ mod tests {
     fn it_can_create_a_buffer() -> Result<()> {
         let mut runtime = Gpu::for_test_unix()?;
         runtime.load_extension::<GlobalParametersBuffer>()?;
-        assert!(runtime.resource::<GlobalParametersBuffer>().tone_gamma() > 0.0);
+        assert!(runtime.resource::<GlobalParametersBuffer>().tone_gamma > 0.0);
         Ok(())
     }
 }

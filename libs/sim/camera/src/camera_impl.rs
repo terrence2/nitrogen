@@ -159,6 +159,10 @@ impl ScreenCamera {
         self.exposure /= 1.1;
     }
 
+    pub fn exposure(&self) -> f32 {
+        self.exposure as f32
+    }
+
     pub fn fov_y(&self) -> Angle<Radians> {
         self.fov_y
     }

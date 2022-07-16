@@ -36,9 +36,8 @@ pub struct Globals {
     string_resource: String,
 }
 
-#[inject_nitrous_resource]
-impl Globals {
-    pub fn new() -> Self {
+impl Default for Globals {
+    fn default() -> Self {
         Self {
             bool_resource: true,
             int_resource: 42_i64,
@@ -46,7 +45,10 @@ impl Globals {
             string_resource: "Foobar".to_owned(),
         }
     }
+}
 
+#[inject_nitrous_resource]
+impl Globals {
     #[method]
     fn add_float(&self, v: f64) -> f64 {
         self.float_resource + v
@@ -75,14 +77,16 @@ pub struct Item {
     float_resource: f64,
 }
 
-#[inject_nitrous_component]
-impl Item {
-    pub fn new() -> Self {
+impl Default for Item {
+    fn default() -> Self {
         Self {
             float_resource: 42_f64,
         }
     }
+}
 
+#[inject_nitrous_component]
+impl Item {
     #[method]
     fn add_float(&self, v: f64) -> f64 {
         self.float_resource + v
@@ -94,8 +98,10 @@ fn integration_test() -> Result<()> {
     env_logger::init();
 
     let mut runtime = Runtime::default();
-    runtime.insert_named_resource("globals", Globals::new());
-    runtime.spawn_named("player")?.insert_named(Item::new())?;
+    runtime.insert_named_resource("globals", Globals::default());
+    runtime
+        .spawn_named("player")?
+        .insert_named(Item::default())?;
 
     // Resource
     let br0 = runtime.run_string("globals.bool_resource")?;
@@ -146,9 +152,9 @@ fn integration_test() -> Result<()> {
     assert_eq!(completions[&sr2].unwrap(), Value::from_str("Hello, World!"));
 
     // Entity
-    assert_eq!(completions[&fr0].unwrap(), Value::from_float(42_f64));
-    assert_eq!(completions[&fr1].unwrap(), Value::True());
-    assert_eq!(completions[&fr2].unwrap(), Value::from_float(4_f64));
+    assert_eq!(completions[&fe0].unwrap(), Value::from_float(42_f64));
+    assert_eq!(completions[&fe1].unwrap(), Value::True());
+    assert_eq!(completions[&fe2].unwrap(), Value::from_float(4_f64));
 
     Ok(())
 }
