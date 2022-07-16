@@ -5,6 +5,7 @@ authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 edition = "2021"
 
 [dependencies]
+anyhow = { version = "^ 1", features = ["backtrace"] }
 nalgebra = "^ 0.31"
 structopt = "^ 0.3"
 

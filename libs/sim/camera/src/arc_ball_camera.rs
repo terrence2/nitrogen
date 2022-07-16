@@ -23,7 +23,7 @@ use measure::WorldSpaceFrame;
 use nalgebra::{Unit as NUnit, UnitQuaternion, Vector3};
 use nitrous::{inject_nitrous_component, method, NitrousComponent};
 use runtime::{Extension, Runtime};
-use std::f64::consts::PI;
+use std::{f64::consts::PI, fmt::Write};
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
 pub enum ArcBallStep {
@@ -149,34 +149,40 @@ impl ArcBallController {
     }
 
     #[method]
-    pub fn show_parameters(&self) -> String {
+    pub fn show_parameters(&self) -> Result<String> {
         let mut out = String::new();
-        out += &format!(
-            "arcball.set_target_latitude_degrees({});\n",
+        writeln!(
+            out,
+            "arcball.set_target_latitude_degrees({});",
             self.target_latitude_degrees()
-        );
-        out += &format!(
-            "arcball.set_target_longitude_degrees({});\n",
+        )?;
+        writeln!(
+            out,
+            "arcball.set_target_longitude_degrees({});",
             self.target_longitude_degrees()
-        );
-        out += &format!(
-            "arcball.set_target_height_meters({});\n",
+        )?;
+        writeln!(
+            out,
+            "arcball.set_target_height_meters({});",
             self.target_height_meters()
-        );
-        out += &format!(
-            "arcball.set_eye_latitude_degrees({});\n",
+        )?;
+        writeln!(
+            out,
+            "arcball.set_eye_latitude_degrees({});",
             self.eye_latitude_degrees()
-        );
-        out += &format!(
-            "arcball.set_eye_longitude_degrees({});\n",
+        )?;
+        writeln!(
+            out,
+            "arcball.set_eye_longitude_degrees({});",
             self.eye_longitude_degrees()
-        );
-        out += &format!(
-            "arcball.set_eye_distance_meters({});\n",
+        )?;
+        writeln!(
+            out,
+            "arcball.set_eye_distance_meters({});",
             self.eye_distance_meters()
-        );
+        )?;
         println!("{}", out);
-        out
+        Ok(out)
     }
 
     #[method]
@@ -410,7 +416,7 @@ mod tests {
     use super::*;
     use absolute_unit::{kilometers, Kilometers};
     use approx::assert_abs_diff_eq;
-    use physical_constants::EARTH_RADIUS_KM;
+    use physical_constants::EARTH_RADIUS;
 
     #[test]
     fn it_can_compute_eye_positions_at_origin() -> Result<()> {
@@ -422,7 +428,7 @@ mod tests {
         let t = c.cartesian_target_position::<Kilometers>();
         assert_abs_diff_eq!(t.coords[0], kilometers!(0));
         assert_abs_diff_eq!(t.coords[1], kilometers!(0));
-        assert_abs_diff_eq!(t.coords[2], kilometers!(EARTH_RADIUS_KM));
+        assert_abs_diff_eq!(t.coords[2], kilometers!(*EARTH_RADIUS));
 
         // Target: 0/0; at latitude of 0:
         {
@@ -436,7 +442,7 @@ mod tests {
             let e = c.cartesian_eye_position::<Kilometers>();
             assert_abs_diff_eq!(e.coords[0], kilometers!(0));
             assert_abs_diff_eq!(e.coords[1], kilometers!(-0.001));
-            assert_abs_diff_eq!(e.coords[2], kilometers!(EARTH_RADIUS_KM));
+            assert_abs_diff_eq!(e.coords[2], kilometers!(*EARTH_RADIUS));
 
             c.set_eye(Graticule::<Target>::new(
                 degrees!(0),
@@ -446,7 +452,7 @@ mod tests {
             let e = c.cartesian_eye_position::<Kilometers>();
             assert_abs_diff_eq!(e.coords[0], kilometers!(-0.001));
             assert_abs_diff_eq!(e.coords[1], kilometers!(0));
-            assert_abs_diff_eq!(e.coords[2], kilometers!(EARTH_RADIUS_KM));
+            assert_abs_diff_eq!(e.coords[2], kilometers!(*EARTH_RADIUS));
 
             c.set_eye(Graticule::<Target>::new(
                 degrees!(0),
@@ -456,7 +462,7 @@ mod tests {
             let e = c.cartesian_eye_position::<Kilometers>();
             assert_abs_diff_eq!(e.coords[0], kilometers!(0.001));
             assert_abs_diff_eq!(e.coords[1], kilometers!(0));
-            assert_abs_diff_eq!(e.coords[2], kilometers!(EARTH_RADIUS_KM));
+            assert_abs_diff_eq!(e.coords[2], kilometers!(*EARTH_RADIUS));
 
             c.set_eye(Graticule::<Target>::new(
                 degrees!(0),
@@ -466,7 +472,7 @@ mod tests {
             let e = c.cartesian_eye_position::<Kilometers>();
             assert_abs_diff_eq!(e.coords[0], kilometers!(0));
             assert_abs_diff_eq!(e.coords[1], kilometers!(0.001));
-            assert_abs_diff_eq!(e.coords[2], kilometers!(EARTH_RADIUS_KM));
+            assert_abs_diff_eq!(e.coords[2], kilometers!(*EARTH_RADIUS));
         }
 
         Ok(())
@@ -482,7 +488,7 @@ mod tests {
         let t = c.cartesian_target_position::<Kilometers>();
         assert_abs_diff_eq!(t.coords[0], kilometers!(0));
         assert_abs_diff_eq!(t.coords[1], kilometers!(0));
-        assert_abs_diff_eq!(t.coords[2], kilometers!(EARTH_RADIUS_KM));
+        assert_abs_diff_eq!(t.coords[2], kilometers!(*EARTH_RADIUS));
 
         // Target: 0/0; at latitude of 45
         {
@@ -500,7 +506,7 @@ mod tests {
             );
             assert_abs_diff_eq!(
                 e.coords[2],
-                kilometers!(EARTH_RADIUS_KM + 0.000_707_106_781)
+                kilometers!(*EARTH_RADIUS) + kilometers!(0.000_707_106_781)
             );
 
             c.set_eye(Graticule::<Target>::new(
@@ -517,7 +523,7 @@ mod tests {
             assert_abs_diff_eq!(e.coords[1], kilometers!(0));
             assert_abs_diff_eq!(
                 e.coords[2],
-                kilometers!(EARTH_RADIUS_KM + 0.000_707_106_781),
+                kilometers!(*EARTH_RADIUS) + kilometers!(0.000_707_106_781),
                 epsilon = 0.000_000_000_001
             );
         }
@@ -535,7 +541,7 @@ mod tests {
         let t = c.cartesian_target_position::<Kilometers>();
         assert_abs_diff_eq!(t.coords[0], kilometers!(0));
         assert_abs_diff_eq!(t.coords[1], kilometers!(0));
-        assert_abs_diff_eq!(t.coords[2], kilometers!(EARTH_RADIUS_KM));
+        assert_abs_diff_eq!(t.coords[2], kilometers!(*EARTH_RADIUS));
         // Target: 0/90; at eye latitude of 0
         {
             c.set_target(Graticule::<GeoSurface>::new(
@@ -550,7 +556,7 @@ mod tests {
                 kilometers!(1),
             ))?;
             let e = c.cartesian_eye_position::<Kilometers>();
-            assert_abs_diff_eq!(e.coords[0], kilometers!(-EARTH_RADIUS_KM));
+            assert_abs_diff_eq!(e.coords[0], kilometers!(-*EARTH_RADIUS));
             assert_abs_diff_eq!(e.coords[1], kilometers!(-1));
             assert_abs_diff_eq!(e.coords[2], kilometers!(0), epsilon = 0.000_000_000_001);
 
@@ -562,7 +568,7 @@ mod tests {
             let e = c.cartesian_eye_position::<Kilometers>();
             assert_abs_diff_eq!(
                 e.coords[0],
-                kilometers!(-EARTH_RADIUS_KM),
+                kilometers!(-*EARTH_RADIUS),
                 epsilon = 0.000_000_000_001
             );
             assert_abs_diff_eq!(e.coords[1], kilometers!(0), epsilon = 0.000_000_000_001);

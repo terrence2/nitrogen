@@ -39,7 +39,7 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(&self.v.0, f)?;
-        write!(f, "{}/{}^3", L::UNIT_SHORT_NAME, M::UNIT_SHORT_NAME)
+        write!(f, "{}/{}^3", M::UNIT_SHORT_NAME, L::UNIT_SHORT_NAME)
     }
 }
 
@@ -83,11 +83,5 @@ mod test {
         println!("{}", s_p_f3);
         println!("{}", kg_p_m3);
         assert_abs_diff_eq!(s_p_f3, slugs_per_foot3!(kg_p_m3), epsilon = 0.000_000_1);
-    }
-
-    #[test]
-    fn test_density_shift() {
-        // let m_p_s = meters_per_second!(100) + miles_per_hour!(100);
-        // assert_abs_diff_eq!(m_p_s, meters_per_second!(144.704), epsilon = 0.001);
     }
 }

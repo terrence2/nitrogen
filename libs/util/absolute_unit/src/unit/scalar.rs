@@ -14,13 +14,17 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::DynamicUnits;
 use ordered_float::OrderedFloat;
-use std::ops::{Mul, Neg};
+use std::fmt::Formatter;
+use std::{
+    fmt::Display,
+    ops::{Div, Mul, Neg},
+};
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Scalar(pub(crate) OrderedFloat<f64>);
 
 impl Scalar {
-    pub(crate) fn f64(self) -> f64 {
+    pub fn f64(self) -> f64 {
         self.into_inner()
     }
 
@@ -30,6 +34,20 @@ impl Scalar {
 
     pub fn as_dyn(&self) -> DynamicUnits {
         DynamicUnits::new0o0(self.0)
+    }
+}
+
+impl From<DynamicUnits> for Scalar {
+    fn from(v: DynamicUnits) -> Self {
+        let f = v.ordered_float();
+        v.assert_units_empty();
+        Self(f)
+    }
+}
+
+impl Display for Scalar {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
 
@@ -46,6 +64,14 @@ impl Mul<Scalar> for Scalar {
 
     fn mul(self, rhs: Scalar) -> Self::Output {
         Self(OrderedFloat(self.into_inner() * rhs.into_inner()))
+    }
+}
+
+impl Div<Scalar> for Scalar {
+    type Output = Scalar;
+
+    fn div(self, rhs: Scalar) -> Self::Output {
+        Self(OrderedFloat(self.into_inner() / rhs.into_inner()))
     }
 }
 

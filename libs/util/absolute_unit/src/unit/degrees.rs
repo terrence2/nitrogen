@@ -32,3 +32,17 @@ macro_rules! degrees {
         $crate::Angle::<$crate::Degrees>::from(&$num)
     };
 }
+
+#[macro_export]
+macro_rules! degrees_per_second {
+    ($num:expr) => {
+        $crate::AngularVelocity::<$crate::Degrees, $crate::Seconds>::from(&$num)
+    };
+}
+
+#[macro_export]
+macro_rules! degrees_per_second2 {
+    ($num:expr) => {
+        $crate::AngularAcceleration::<$crate::Degrees, $crate::Seconds>::from(&$num)
+    };
+}

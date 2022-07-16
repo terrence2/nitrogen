@@ -12,13 +12,15 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+#[cfg(debug_assertions)]
+use crate::Radians;
 use crate::Unit;
 #[cfg(debug_assertions)]
 use hashbag::HashBag;
 use ordered_float::OrderedFloat;
 #[cfg(debug_assertions)]
 use std::any::TypeId;
-use std::ops::{Div, Mul};
+use std::ops::{Add, Div, Mul, Sub};
 
 #[derive(Default, Debug, Clone)]
 pub struct DynamicUnits {
@@ -38,10 +40,17 @@ impl DynamicUnits {
         self.v.0
     }
 
+    pub fn as_dyn(self) -> Self {
+        self
+    }
+
     #[allow(unused_mut)]
-    pub fn assert_units_equal(mut self, _other: &DynamicUnits) {
+    pub fn assert_units_equal(mut self, mut _other: DynamicUnits) {
         #[cfg(debug_assertions)]
         {
+            self.cancel_units();
+            _other.cancel_units();
+
             // Cancel out the target units, checking that there are units to cancel.
             for n in _other.numerator.iter() {
                 assert!(self.numerator.remove(n) > 0);
@@ -49,15 +58,61 @@ impl DynamicUnits {
             for d in _other.denominator.iter() {
                 assert!(self.denominator.remove(d) > 0);
             }
+
             // Any remainder must _also_ would cancel out, exactly.
             assert_eq!(self.numerator, self.denominator);
+        }
+    }
+
+    #[allow(unused_mut)]
+    pub fn assert_units_empty(mut self) {
+        #[cfg(debug_assertions)]
+        {
+            self.cancel_units();
+            assert!(self.numerator.is_empty());
+            assert!(self.denominator.is_empty());
+        }
+    }
+
+    pub fn cancel_units(&mut self) {
+        #[cfg(debug_assertions)]
+        {
+            // Remove unitless radians from both top and bottom
+            self.numerator.take_all(&TypeId::of::<Radians>());
+            self.denominator.take_all(&TypeId::of::<Radians>());
+
+            let mut next_denom = HashBag::new();
+            for d in self.denominator.iter() {
+                if self.numerator.contains(d) > 0 {
+                    self.numerator.remove(d);
+                } else {
+                    next_denom.insert(*d);
+                }
+            }
+            self.denominator = next_denom;
         }
     }
 
     pub fn new0o0(v: OrderedFloat<f64>) -> Self {
         Self {
             v,
-            ..DynamicUnits::default()
+            #[cfg(debug_assertions)]
+            numerator: HashBag::default(),
+            #[cfg(debug_assertions)]
+            denominator: HashBag::default(),
+        }
+    }
+
+    pub fn new1o0<N0>(v: OrderedFloat<f64>) -> Self
+    where
+        N0: Unit + 'static,
+    {
+        DynamicUnits {
+            v,
+            #[cfg(debug_assertions)]
+            numerator: HashBag::from_iter([TypeId::of::<N0>()]),
+            #[cfg(debug_assertions)]
+            denominator: HashBag::default(),
         }
     }
 
@@ -66,14 +121,28 @@ impl DynamicUnits {
         N0: Unit + 'static,
         D0: Unit + 'static,
     {
-        let mut obj = DynamicUnits::default();
-        #[cfg(debug_assertions)]
-        {
-            obj.numerator.extend(&[TypeId::of::<N0>()]);
-            obj.denominator.extend(&[TypeId::of::<D0>()]);
+        DynamicUnits {
+            v,
+            #[cfg(debug_assertions)]
+            numerator: HashBag::from_iter([TypeId::of::<N0>()]),
+            #[cfg(debug_assertions)]
+            denominator: HashBag::from_iter([TypeId::of::<D0>()]),
         }
-        obj.v = v;
-        obj
+    }
+
+    pub fn new1o2<N0, D0, D1>(v: OrderedFloat<f64>) -> Self
+    where
+        N0: Unit + 'static,
+        D0: Unit + 'static,
+        D1: Unit + 'static,
+    {
+        DynamicUnits {
+            v,
+            #[cfg(debug_assertions)]
+            numerator: HashBag::from_iter([TypeId::of::<N0>()]),
+            #[cfg(debug_assertions)]
+            denominator: HashBag::from_iter([TypeId::of::<D0>(), TypeId::of::<D1>()]),
+        }
     }
 
     pub fn new1o3<N0, D0, D1, D2>(v: OrderedFloat<f64>) -> Self
@@ -83,15 +152,17 @@ impl DynamicUnits {
         D1: Unit + 'static,
         D2: Unit + 'static,
     {
-        let mut obj = DynamicUnits::default();
-        #[cfg(debug_assertions)]
-        {
-            obj.numerator.extend(&[TypeId::of::<N0>()]);
-            obj.denominator
-                .extend(&[TypeId::of::<D0>(), TypeId::of::<D1>(), TypeId::of::<D2>()]);
+        DynamicUnits {
+            v,
+            #[cfg(debug_assertions)]
+            numerator: HashBag::from_iter([TypeId::of::<N0>()]),
+            #[cfg(debug_assertions)]
+            denominator: HashBag::from_iter([
+                TypeId::of::<D0>(),
+                TypeId::of::<D1>(),
+                TypeId::of::<D2>(),
+            ]),
         }
-        obj.v = v;
-        obj
     }
 
     pub fn new2o0<N0, N1>(v: OrderedFloat<f64>) -> Self
@@ -99,14 +170,13 @@ impl DynamicUnits {
         N0: Unit + 'static,
         N1: Unit + 'static,
     {
-        let mut obj = DynamicUnits::default();
-        #[cfg(debug_assertions)]
-        {
-            obj.numerator
-                .extend(&[TypeId::of::<N0>(), TypeId::of::<N1>()]);
+        DynamicUnits {
+            v,
+            #[cfg(debug_assertions)]
+            numerator: HashBag::from_iter([TypeId::of::<N0>(), TypeId::of::<N1>()]),
+            #[cfg(debug_assertions)]
+            denominator: HashBag::default(),
         }
-        obj.v = v;
-        obj
     }
 
     pub fn new2o2<N0, N1, D0, D1>(v: OrderedFloat<f64>) -> Self
@@ -116,16 +186,81 @@ impl DynamicUnits {
         D0: Unit + 'static,
         D1: Unit + 'static,
     {
-        let mut obj = DynamicUnits::default();
+        DynamicUnits {
+            v,
+            #[cfg(debug_assertions)]
+            numerator: HashBag::from_iter([TypeId::of::<N0>(), TypeId::of::<N1>()]),
+            #[cfg(debug_assertions)]
+            denominator: HashBag::from_iter([TypeId::of::<D0>(), TypeId::of::<D1>()]),
+        }
+    }
+
+    pub fn new3o0<N0, N1, N2>(v: OrderedFloat<f64>) -> Self
+    where
+        N0: Unit + 'static,
+        N1: Unit + 'static,
+        N2: Unit + 'static,
+    {
+        DynamicUnits {
+            v,
+            #[cfg(debug_assertions)]
+            numerator: HashBag::from_iter([
+                TypeId::of::<N0>(),
+                TypeId::of::<N1>(),
+                TypeId::of::<N2>(),
+            ]),
+            #[cfg(debug_assertions)]
+            denominator: HashBag::default(),
+        }
+    }
+
+    pub fn new3o2<N0, N1, N2, D0, D1>(v: OrderedFloat<f64>) -> Self
+    where
+        N0: Unit + 'static,
+        N1: Unit + 'static,
+        N2: Unit + 'static,
+        D0: Unit + 'static,
+        D1: Unit + 'static,
+    {
+        DynamicUnits {
+            v,
+            #[cfg(debug_assertions)]
+            numerator: HashBag::from_iter([
+                TypeId::of::<N0>(),
+                TypeId::of::<N1>(),
+                TypeId::of::<N2>(),
+            ]),
+            #[cfg(debug_assertions)]
+            denominator: HashBag::from_iter([TypeId::of::<D0>(), TypeId::of::<D1>()]),
+        }
+    }
+}
+
+impl Add<DynamicUnits> for DynamicUnits {
+    type Output = DynamicUnits;
+
+    fn add(mut self, rhs: DynamicUnits) -> Self::Output {
         #[cfg(debug_assertions)]
         {
-            obj.numerator
-                .extend(&[TypeId::of::<N0>(), TypeId::of::<N1>()]);
-            obj.denominator
-                .extend(&[TypeId::of::<D0>(), TypeId::of::<D1>()]);
+            debug_assert_eq!(self.numerator, rhs.numerator, "numerator");
+            debug_assert_eq!(self.denominator, rhs.denominator, "denominator");
         }
-        obj.v = v;
-        obj
+        self.v += rhs.v;
+        self
+    }
+}
+
+impl Sub<DynamicUnits> for DynamicUnits {
+    type Output = DynamicUnits;
+
+    fn sub(mut self, rhs: DynamicUnits) -> Self::Output {
+        #[cfg(debug_assertions)]
+        {
+            debug_assert_eq!(self.numerator, rhs.numerator, "numerator");
+            debug_assert_eq!(self.denominator, rhs.denominator, "denominator");
+        }
+        self.v -= rhs.v;
+        self
     }
 }
 
@@ -170,7 +305,7 @@ mod test {
         let v = meters_per_second!(3.);
         let v2 = v.as_dyn() * v.as_dyn();
         assert_abs_diff_eq!(v2.f64(), 9.);
-        v2.assert_units_equal(&DynamicUnits::new2o2::<Meters, Meters, Seconds, Seconds>(
+        v2.assert_units_equal(DynamicUnits::new2o2::<Meters, Meters, Seconds, Seconds>(
             0.0.into(),
         ));
     }

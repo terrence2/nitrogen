@@ -77,13 +77,6 @@ impl RelSize {
         }
     }
 
-    pub fn as_depth(self) -> f32 {
-        // TODO: why this calculation?
-        // println!("{} => {}", self.as_gpu(), (self.as_gpu() + 1f32) / 2f32);
-        // (self.as_gpu() + 1f32) / 2f32
-        self.as_gpu()
-    }
-
     pub fn as_percent(self) -> f32 {
         match self {
             Self::Gpu(v) => map_range(Self::GPU_RANGE, Self::PCT_RANGE, v),
@@ -119,7 +112,10 @@ impl Div<f32> for RelSize {
     type Output = Self;
 
     fn div(self, rhs: f32) -> Self::Output {
-        Self::Percent(self.as_percent() / rhs)
+        match self {
+            Self::Gpu(gpu) => Self::Gpu(gpu / rhs),
+            Self::Percent(pct) => Self::Percent(pct / rhs),
+        }
     }
 }
 
@@ -127,7 +123,10 @@ impl Mul<f32> for RelSize {
     type Output = Self;
 
     fn mul(self, rhs: f32) -> Self::Output {
-        Self::Percent(self.as_percent() * rhs)
+        match self {
+            Self::Gpu(gpu) => Self::Gpu(gpu * rhs),
+            Self::Percent(pct) => Self::Percent(pct * rhs),
+        }
     }
 }
 
@@ -135,13 +134,16 @@ impl Sub<RelSize> for RelSize {
     type Output = Self;
 
     fn sub(self, rhs: RelSize) -> Self::Output {
-        Self::Percent(self.as_percent() - rhs.as_percent())
+        match self {
+            Self::Gpu(gpu) => Self::Gpu(gpu - rhs.as_gpu()),
+            Self::Percent(pct) => Self::Percent(pct - rhs.as_percent()),
+        }
     }
 }
 
 impl SubAssign for RelSize {
     fn sub_assign(&mut self, rhs: Self) {
-        *self = Self::Percent(self.as_percent() - rhs.as_percent())
+        *self = *self - rhs;
     }
 }
 
@@ -149,13 +151,16 @@ impl Add<RelSize> for RelSize {
     type Output = Self;
 
     fn add(self, rhs: RelSize) -> Self::Output {
-        Self::Percent(self.as_percent() + rhs.as_percent())
+        match self {
+            Self::Gpu(gpu) => Self::Gpu(gpu + rhs.as_gpu()),
+            Self::Percent(pct) => Self::Percent(pct + rhs.as_percent()),
+        }
     }
 }
 
 impl AddAssign for RelSize {
     fn add_assign(&mut self, rhs: Self) {
-        *self = Self::Percent(self.as_percent() + rhs.as_percent())
+        *self = *self + rhs;
     }
 }
 

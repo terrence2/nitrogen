@@ -19,16 +19,18 @@ use crate::patch::{
     queue::{MaxHeap, MinHeap, Queue},
 };
 
-use absolute_unit::Kilometers;
+use absolute_unit::{kilometers, Kilometers};
+use anyhow::Result;
 use approx::assert_relative_eq;
 use camera::ScreenCamera;
 use geometry::{algorithm::bisect_edge, Plane};
 use log::trace;
 use nalgebra::{Point3, Vector3};
-use physical_constants::EARTH_RADIUS_KM;
+use physical_constants::EARTH_RADIUS;
 use std::{
     cmp::Reverse,
     collections::{BinaryHeap, HashSet},
+    fmt::Write,
     time::Instant,
 };
 
@@ -169,7 +171,7 @@ pub(crate) struct PatchTree {
     visit_count: usize,
 
     frame_number: usize,
-    cached_viewable_region: [Plane<f64>; 6],
+    cached_viewable_region: [Plane; 6],
     cached_eye_position: Point3<f64>,
     cached_eye_direction: Vector3<f64>,
     cached_visible_patches: usize,
@@ -201,9 +203,9 @@ impl PatchTree {
                 peers: root_peers[i],
             }));
             root.children[i] = TreeIndex(i);
-            let v0 = Point3::from(sphere.verts[face.i0()] * EARTH_RADIUS_KM);
-            let v1 = Point3::from(sphere.verts[face.i1()] * EARTH_RADIUS_KM);
-            let v2 = Point3::from(sphere.verts[face.i2()] * EARTH_RADIUS_KM);
+            let v0 = Point3::from(sphere.verts[face.i0()] * kilometers!(*EARTH_RADIUS).f64());
+            let v1 = Point3::from(sphere.verts[face.i1()] * kilometers!(*EARTH_RADIUS).f64());
+            let v2 = Point3::from(sphere.verts[face.i2()] * kilometers!(*EARTH_RADIUS).f64());
             let p = Patch::new(TreeIndex(i), [v0, v1, v2]);
             patches.push(p);
         }
@@ -506,9 +508,11 @@ impl PatchTree {
         {
             self.cached_viewable_region[i] = *f;
         }
+        // Rear plane
         self.cached_viewable_region[5] = Plane::from_normal_and_distance(
             self.cached_eye_position.coords.normalize(),
-            (((EARTH_RADIUS_KM * EARTH_RADIUS_KM) / self.cached_eye_position.coords.magnitude())
+            (((kilometers!(*EARTH_RADIUS).f64() * kilometers!(*EARTH_RADIUS).f64())
+                / self.cached_eye_position.coords.magnitude())
                 - 100f64)
                 .min(0f64),
         );
@@ -612,7 +616,14 @@ impl PatchTree {
                 self.subdivide_leaf(top_leaf);
             }
         }
-        assert!(self.cached_visible_patches <= target_patch_count);
+        assert!(
+            self.cached_visible_patches <= target_patch_count,
+            "cached: {} of {}, stuck_iterations: {}, camera: {:?}",
+            self.cached_visible_patches,
+            target_patch_count,
+            stuck_iterations,
+            camera
+        );
 
         // Prepare for next frame.
         self.compact_patches();
@@ -753,9 +764,15 @@ impl PatchTree {
         let leaf_peers = *node.peers();
 
         // Get new points.
-        let a = Point3::from(bisect_edge(&v0.coords, &v1.coords).normalize() * EARTH_RADIUS_KM);
-        let b = Point3::from(bisect_edge(&v1.coords, &v2.coords).normalize() * EARTH_RADIUS_KM);
-        let c = Point3::from(bisect_edge(&v2.coords, &v0.coords).normalize() * EARTH_RADIUS_KM);
+        let a = Point3::from(
+            bisect_edge(&v0.coords, &v1.coords).normalize() * kilometers!(*EARTH_RADIUS).f64(),
+        );
+        let b = Point3::from(
+            bisect_edge(&v1.coords, &v2.coords).normalize() * kilometers!(*EARTH_RADIUS).f64(),
+        );
+        let c = Point3::from(
+            bisect_edge(&v2.coords, &v0.coords).normalize() * kilometers!(*EARTH_RADIUS).f64(),
+        );
 
         // Allocate geometry to new patches.
         let children = [
@@ -999,7 +1016,7 @@ impl PatchTree {
             if self.is_mergeable_node(tree_index) {
                 if !self.merge_queue.contains(tree_index) {
                     println!("{:?} is mergeable, so should be in merge_queue", tree_index);
-                    self.print_tree();
+                    self.print_tree().unwrap();
                 }
                 assert!(self.merge_queue.contains(tree_index));
             }
@@ -1015,7 +1032,7 @@ impl PatchTree {
                         "{:?} is splittable, so should be in split_queue; {} < {} w/ ctx {:?}",
                         tree_index, level, self.max_level, split_context
                     );
-                    self.print_tree();
+                    self.print_tree().unwrap();
                 }
                 assert!(self.split_queue.contains(tree_index) || Some(tree_index) == split_context);
             }
@@ -1052,22 +1069,23 @@ impl PatchTree {
     }
 
     #[allow(unused)]
-    pub(crate) fn print_tree(&self) {
-        println!("{}", self.format_tree_display());
+    pub(crate) fn print_tree(&self) -> Result<()> {
+        println!("{}", self.format_tree_display()?);
+        Ok(())
     }
 
     #[allow(unused)]
-    fn format_tree_display(&self) -> String {
+    fn format_tree_display(&self) -> Result<String> {
         let mut out = String::new();
         out += "Root\n";
         for child in &self.root.children {
-            out += &self.format_tree_display_inner(1, *child);
+            out += &self.format_tree_display_inner(1, *child)?;
         }
-        out
+        Ok(out)
     }
 
     #[allow(unused)]
-    fn format_tree_display_inner(&self, lvl: usize, tree_index: TreeIndex) -> String {
+    fn format_tree_display_inner(&self, lvl: usize, tree_index: TreeIndex) -> Result<String> {
         fn fmt_peer(mp: &Option<Peer>) -> String {
             if let Some(p) = mp {
                 format!("{}", toff(p.peer))
@@ -1079,28 +1097,30 @@ impl PatchTree {
         let mut out = String::new();
         let pad = "  ".repeat(lvl);
         if node.is_node() {
-            out += &format!(
-                "{}Node @{}, [{},{},{}]\n",
+            writeln!(
+                out,
+                "{}Node @{}, [{},{},{}]",
                 pad,
                 toff(tree_index),
                 fmt_peer(&node.peers[0]),
                 fmt_peer(&node.peers[1]),
                 fmt_peer(&node.peers[2]),
-            );
+            )?;
             for child in node.children() {
-                out += &self.format_tree_display_inner(lvl + 1, *child);
+                out += &self.format_tree_display_inner(lvl + 1, *child)?;
             }
         } else {
-            out += &format!(
-                "{}Leaf @{}, peers: [{},{},{}]\n",
+            writeln!(
+                out,
+                "{}Leaf @{}, peers: [{},{},{}]",
                 pad,
                 poff(node.patch_index()),
                 fmt_peer(&node.peers[0]),
                 fmt_peer(&node.peers[1]),
                 fmt_peer(&node.peers[2]),
-            );
+            )?;
         }
-        out
+        Ok(out)
     }
 }
 

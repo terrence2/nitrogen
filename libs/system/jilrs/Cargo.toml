@@ -1,0 +1,10 @@
+[package]
+name = "jilrs"
+description = "Cross platform JoyStick Input Library"
+authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { version = "^ 1", features = ["backtrace"] }
+evdev = "^ 0.11"

@@ -27,6 +27,7 @@ pub use crate::{
     layout::{Expand, LayoutMeasurements, LayoutNode, LayoutPacking, PositionH, PositionV},
     paint_context::PaintContext,
     region::{Border, Extent, Position, Region},
+    text_run::TextRun,
     widget::{Labeled, Widget, WidgetComponent, WidgetFocus},
     widget_info::WidgetInfo,
     widget_vertex::WidgetVertex,

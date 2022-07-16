@@ -14,8 +14,8 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     impl_value_type_conversions, supports_absdiffeq, supports_quantity_ops, supports_scalar_ops,
-    supports_shift_ops, supports_value_type_conversion, Acceleration, Force, ForceUnit, LengthUnit,
-    Newtons, TimeUnit, Unit,
+    supports_shift_ops, supports_value_type_conversion, Acceleration, Area, Force, ForceUnit,
+    LengthUnit, Newtons, RotationalInertia, TimeUnit, Unit,
 };
 use ordered_float::OrderedFloat;
 use std::{fmt, fmt::Debug, marker::PhantomData, ops::Mul};
@@ -76,6 +76,18 @@ where
     }
 }
 
+impl<MA, LB> Mul<Area<LB>> for Mass<MA>
+where
+    MA: MassUnit,
+    LB: LengthUnit,
+{
+    type Output = RotationalInertia<MA, LB>;
+
+    fn mul(self, rhs: Area<LB>) -> Self::Output {
+        Self::Output::from(self.f64() * rhs.f64())
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::{kilograms, pounds_mass, scalar};
@@ -83,10 +95,10 @@ mod test {
 
     #[test]
     fn test_mass() {
-        let lb = pounds_mass!(2);
-        println!("lb: {}", lb);
-        println!("kg: {}", kilograms!(lb));
-        assert_abs_diff_eq!(kilograms!(lb), kilograms!(0.907_184_74));
+        let lb = pounds_mass!(60_000_f64);
+        let kg = kilograms!(27_215.5_f64);
+        assert_abs_diff_eq!(kg, kilograms!(lb), epsilon = 0.1);
+        assert_abs_diff_eq!(lb, pounds_mass!(kg), epsilon = 0.1);
     }
 
     #[test]

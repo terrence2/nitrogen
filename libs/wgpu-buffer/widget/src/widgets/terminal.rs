@@ -69,6 +69,7 @@ pub struct TerminalWidgetTag;
 pub struct Terminal {
     lines: VecDeque<TextRun>,
     edit: TextRun,
+    prompt: TextRun,
 
     font_id: FontId,
     font_size: Size,
@@ -101,10 +102,14 @@ impl Extension for Terminal {
             &runtime.resource::<AppDirs>().state_dir,
         )?;
         runtime.insert_named_resource("terminal", terminal);
-        let mut term_packing = LayoutPacking::default();
-        term_packing.float_start();
-        term_packing.float_top();
-        term_packing.set_background("#555a")?;
+        let term_packing = LayoutPacking::default()
+            .float_start()
+            .float_top()
+            .set_background("#222a")?
+            .set_padding("2px", runtime.heap_mut())?
+            .set_border_color("#0061cf")?
+            .set_border_bottom("3px", runtime.heap_mut())?
+            .to_owned();
         let term_id = runtime
             .spawn_named("terminal")?
             .insert(TerminalWidgetTag)
@@ -170,8 +175,8 @@ impl Terminal {
         for line in &terminal.lines {
             let _ = report!(line.measure(&win, &paint_context.font_context));
         }
-        let metrics = report!(terminal.edit.measure(&win, &paint_context.font_context));
-        measure.set_metrics(metrics);
+        report!(terminal.edit.measure(&win, &paint_context.font_context));
+        report!(terminal.prompt.measure(&win, &paint_context.font_context));
         measure.set_child_extent(Extent::new(Self::WIDTH, Self::HEIGHT), &packing);
     }
 
@@ -191,14 +196,31 @@ impl Terminal {
         let info = context.push_widget(&WidgetInfo::default());
 
         let mut pos = *measure.child_allocation().position();
-        *pos.bottom_mut() -= measure.metrics().descent.as_rel(&win, ScreenDir::Vertical);
+        *pos.bottom_mut() -= terminal
+            .edit
+            .metrics()
+            .descent
+            .as_rel(&win, ScreenDir::Vertical);
 
+        report!(terminal
+            .prompt
+            .upload(pos.into(), info, &win, &gpu, &mut context));
+        *pos.left_mut() += terminal
+            .prompt
+            .metrics()
+            .width
+            .as_rel(&win, ScreenDir::Horizontal);
         report!(terminal
             .edit
             .upload(pos.into(), info, &win, &gpu, &mut context));
-        let h = measure.metrics().height.as_rel(&win, ScreenDir::Vertical);
+        *pos.left_mut() -= terminal
+            .prompt
+            .metrics()
+            .width
+            .as_rel(&win, ScreenDir::Horizontal);
+
         for line in &terminal.lines {
-            *pos.bottom_mut() += h;
+            *pos.bottom_mut() += line.metrics().height.as_rel(&win, ScreenDir::Vertical);
             report!(line.upload(pos.into(), info, &win, &gpu, &mut context));
         }
     }
@@ -252,6 +274,12 @@ impl Terminal {
                 .with_default_size(font_size)
                 .with_default_color(&Color::from([1., 1., 1.]))
                 .with_text("help()"),
+            prompt: TextRun::empty()
+                .with_hidden_selection()
+                .with_default_font(font_id)
+                .with_default_size(font_size)
+                .with_default_color(&Color::from([0.8, 0.8, 1.]))
+                .with_text("n2o\u{27a4} "),
             font_id,
             font_size,
             visible: true,
@@ -324,24 +352,32 @@ impl Terminal {
         self.lines.front_mut().unwrap()
     }
 
-    fn try_complete_resource(partial: &NitrousAst, heap: HeapRef) -> Option<String> {
+    fn try_complete_resource(&mut self, partial: &NitrousAst, heap: HeapRef) -> Option<String> {
         if let Stmt::Expr(ref e) = partial.statements()[0].as_ref() {
             if let Expr::Term(Term::Symbol(sym)) = e.as_ref() {
                 let matching_resources = heap
                     .resource_names()
                     .filter(|&s| s.starts_with(sym.as_str()))
                     .collect::<Vec<&str>>();
-                if matching_resources.len() == 1 {
-                    return Some(matching_resources[0].to_owned());
-                } else {
-                    // TODO: show top N potential completions?
+                match matching_resources.len() {
+                    0 => self.println("no such resources"),
+                    1 => return Some(matching_resources[0].to_owned()),
+                    _ => {
+                        for m in &matching_resources {
+                            self.println(&format!("  @{}", m));
+                        }
+                    }
                 }
             }
         }
         None
     }
 
-    fn try_complete_resource_attrs(partial: &NitrousAst, heap: HeapRef) -> Option<String> {
+    fn try_complete_resource_attrs(
+        &mut self,
+        partial: &NitrousAst,
+        heap: HeapRef,
+    ) -> Option<String> {
         if let Stmt::Expr(ref e) = partial.statements()[0].as_ref() {
             if let Expr::Attr(lhs_name_term, Term::Symbol(sym)) = e.as_ref() {
                 if let Expr::Term(Term::Symbol(res_name)) = lhs_name_term.as_ref() {
@@ -352,74 +388,12 @@ impl Terminal {
                             .filter(|&s| s.starts_with(sym.as_str()))
                             .map(|s| s.to_owned().to_owned())
                             .collect::<Vec<String>>();
-                        if matching_attrs.len() == 1 {
-                            return Some(format!("{}.{}", res_name, matching_attrs[0]));
-                        } else {
-                            // TODO: show top N potential completions
-                        }
-                    }
-                }
-            }
-        }
-        None
-    }
-
-    fn try_complete_entity(partial: &NitrousAst, heap: HeapRef) -> Option<String> {
-        if let Stmt::Expr(ref e) = partial.statements()[0].as_ref() {
-            if let Expr::Term(Term::AtSymbol(sym)) = e.as_ref() {
-                let matching_entities = heap
-                    .entity_names()
-                    .filter(|&s| s.starts_with(sym.as_str()))
-                    .collect::<Vec<&str>>();
-                if matching_entities.len() == 1 {
-                    return Some("@".to_owned() + matching_entities[0]);
-                } else {
-                    // TODO: show top N potential completions?
-                }
-            }
-        }
-        None
-    }
-
-    fn try_complete_entity_component(partial: &NitrousAst, heap: HeapRef) -> Option<String> {
-        if let Stmt::Expr(ref e) = partial.statements()[0].as_ref() {
-            if let Expr::Attr(lhs_name_term, Term::Symbol(sym)) = e.as_ref() {
-                if let Expr::Term(Term::AtSymbol(ent_name)) = lhs_name_term.as_ref() {
-                    if let Some(entity) = heap.maybe_entity_by_name(ent_name) {
-                        if let Some(attrs) = heap.entity_component_names(entity) {
-                            let matching_components = attrs
-                                .filter(|&s| s.starts_with(sym.as_str()))
-                                .collect::<Vec<_>>();
-                            if matching_components.len() == 1 {
-                                return Some(format!("@{}.{}", ent_name, matching_components[0]));
-                            } else {
-                                // TODO: show top N potential completions
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        None
-    }
-
-    fn try_complete_entity_component_attrs(partial: &NitrousAst, heap: HeapRef) -> Option<String> {
-        if let Stmt::Expr(ref e) = partial.statements()[0].as_ref() {
-            if let Expr::Attr(attr_term, Term::Symbol(attr_sym)) = e.as_ref() {
-                if let Expr::Attr(ent_term, Term::Symbol(comp_sym)) = attr_term.as_ref() {
-                    if let Expr::Term(Term::AtSymbol(ent_sym)) = ent_term.as_ref() {
-                        if let Some(entity) = heap.maybe_entity_by_name(ent_sym) {
-                            if let Some(attrs) = heap.entity_component_names(entity) {
-                                let matching_attrs = attrs
-                                    .filter(|&s| s.starts_with(attr_sym.as_str()))
-                                    .collect::<Vec<_>>();
-                                if matching_attrs.len() == 1 {
-                                    return Some(format!(
-                                        "@{}.{}.{}",
-                                        ent_sym, comp_sym, matching_attrs[0]
-                                    ));
-                                } else {
-                                    // TODO: show top N potential completions
+                        match matching_attrs.len() {
+                            0 => self.println("no such attrs"),
+                            1 => return Some(format!("{}.{}", res_name, matching_attrs[0])),
+                            _ => {
+                                for m in &matching_attrs {
+                                    self.println(&format!("  @{}", m));
                                 }
                             }
                         }
@@ -430,23 +404,120 @@ impl Terminal {
         None
     }
 
-    fn try_completion(&self, partial: NitrousAst, heap: HeapRef) -> Option<String> {
+    fn try_complete_entity(&mut self, partial: &NitrousAst, heap: HeapRef) -> Option<String> {
+        if let Stmt::Expr(ref e) = partial.statements()[0].as_ref() {
+            if let Expr::Term(Term::AtSymbol(sym)) = e.as_ref() {
+                let matching_entities = heap
+                    .entity_names()
+                    .filter(|&s| s.starts_with(sym.as_str()))
+                    .collect::<Vec<&str>>();
+                match matching_entities.len() {
+                    0 => self.println("no such entity"),
+                    1 => return Some("@".to_owned() + matching_entities[0]),
+                    _ => {
+                        for m in &matching_entities {
+                            self.println(&format!("  @{}", m));
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn try_complete_entity_component(
+        &mut self,
+        partial: &NitrousAst,
+        heap: HeapRef,
+    ) -> Option<String> {
+        if let Stmt::Expr(ref e) = partial.statements()[0].as_ref() {
+            if let Expr::Attr(lhs_name_term, Term::Symbol(sym)) = e.as_ref() {
+                if let Expr::Term(Term::AtSymbol(ent_name)) = lhs_name_term.as_ref() {
+                    if let Some(entity) = heap.maybe_entity_by_name(ent_name) {
+                        if let Some(attrs) = heap.entity_component_names(entity) {
+                            let matching_components = attrs
+                                .filter(|&s| s.starts_with(sym.as_str()))
+                                .collect::<Vec<_>>();
+                            match matching_components.len() {
+                                0 => self.println("no such component"),
+                                1 => {
+                                    return Some(format!(
+                                        "@{}.{}",
+                                        ent_name, matching_components[0]
+                                    ))
+                                }
+                                _ => {
+                                    for m in &matching_components {
+                                        self.println(&format!("  {}", m));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn try_complete_entity_component_attrs(
+        &mut self,
+        partial: &NitrousAst,
+        heap: HeapRef,
+    ) -> Option<String> {
+        if let Stmt::Expr(ref e) = partial.statements()[0].as_ref() {
+            if let Expr::Attr(attr_term, Term::Symbol(attr_sym)) = e.as_ref() {
+                if let Expr::Attr(ent_term, Term::Symbol(comp_sym)) = attr_term.as_ref() {
+                    if let Expr::Term(Term::AtSymbol(ent_sym)) = ent_term.as_ref() {
+                        if let Some(entity) = heap.maybe_entity_by_name(ent_sym) {
+                            if let Some(attrs) =
+                                heap.entity_component_attrs(entity, comp_sym.as_str())
+                            {
+                                let mut matching_attrs = attrs
+                                    .iter()
+                                    .filter(|&s| s.starts_with(attr_sym.as_str()))
+                                    .collect::<Vec<_>>();
+                                matching_attrs.sort();
+                                match matching_attrs.len() {
+                                    0 => self.println("no such attr"),
+                                    1 => {
+                                        return Some(format!(
+                                            "@{}.{}.{}",
+                                            ent_sym, comp_sym, matching_attrs[0]
+                                        ));
+                                    }
+                                    _ => {
+                                        for m in &matching_attrs {
+                                            self.println(&format!("  {}", m));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn try_completion(&mut self, partial: NitrousAst, heap: HeapRef) -> Option<String> {
         if partial.statements().len() != 1 {
             return None;
         }
-        if let Some(s) = Self::try_complete_resource(&partial, heap) {
+        if let Some(s) = self.try_complete_resource(&partial, heap) {
             return Some(s);
         }
-        if let Some(s) = Self::try_complete_resource_attrs(&partial, heap) {
+        if let Some(s) = self.try_complete_resource_attrs(&partial, heap) {
             return Some(s);
         }
-        if let Some(s) = Self::try_complete_entity_component_attrs(&partial, heap) {
+        if let Some(s) = self.try_complete_entity_component_attrs(&partial, heap) {
             return Some(s);
         }
-        if let Some(s) = Self::try_complete_entity(&partial, heap) {
+        if let Some(s) = self.try_complete_entity(&partial, heap) {
             return Some(s);
         }
-        if let Some(s) = Self::try_complete_entity_component(&partial, heap) {
+        if let Some(s) = self.try_complete_entity_component(&partial, heap) {
             return Some(s);
         }
         None

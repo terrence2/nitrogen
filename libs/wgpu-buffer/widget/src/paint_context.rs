@@ -22,7 +22,7 @@ use crate::{
 use anyhow::Result;
 use font_common::Font;
 use gpu::Gpu;
-use nitrous::{inject_nitrous_resource, NitrousResource};
+use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use std::{borrow::Borrow, ops::Range};
 use window::{
     size::{AbsSize, RelSize},
@@ -40,10 +40,14 @@ pub struct PaintContext {
 
 #[inject_nitrous_resource]
 impl PaintContext {
-    pub const BACKGROUND_DEPTH: RelSize = RelSize::from_percent(0.75);
-    pub const BORDER_DEPTH: RelSize = RelSize::from_percent(0.5);
-    pub const TEXT_DEPTH: RelSize = RelSize::from_percent(0.25);
-    pub const BOX_DEPTH_SIZE: RelSize = RelSize::from_percent(1.);
+    // FIXME: use these
+    pub const BACKGROUND_DEPTH: RelSize = RelSize::Gpu(0.75);
+    pub const BORDER_DEPTH: RelSize = RelSize::Gpu(0.5);
+
+    // Note: we adjust offset up by 0.2 so that selection regions can be drawn under the text
+    pub const TEXT_DEPTH: RelSize = RelSize::Gpu(0.2);
+
+    pub const BOX_DEPTH_SIZE: RelSize = RelSize::Gpu(1.);
 
     pub fn new(gpu: &Gpu) -> Self {
         Self {
@@ -73,6 +77,7 @@ impl PaintContext {
         self.font_context.add_font(font_name, font);
     }
 
+    #[method]
     pub fn dump_glyphs(&mut self) -> Result<()> {
         self.font_context.dump_glyphs()
     }

@@ -14,11 +14,11 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{Cartesian, GeoCenter, GeoSurface};
 use absolute_unit::{
-    degrees, kilometers, meters, radians, Angle, AngleUnit, Length, LengthUnit, Meters, Radians,
+    degrees, meters, radians, Angle, AngleUnit, Length, LengthUnit, Meters, Radians,
 };
 use nalgebra::Point3;
 use num_traits::Float;
-use physical_constants::EARTH_RADIUS_KM;
+use physical_constants::EARTH_RADIUS;
 use std::{convert::From, fmt, marker::PhantomData};
 
 pub trait GraticuleOrigin: Copy {
@@ -91,7 +91,11 @@ impl Graticule<GeoCenter> {
 }
 
 impl Graticule<GeoSurface> {
-    pub fn cartesian<Unit: LengthUnit>(&self) -> Point3<Length<Unit>> {
+    pub fn cartesian<Unit: LengthUnit>(&self) -> Cartesian<GeoCenter, Meters> {
+        Cartesian::from(Graticule::<GeoCenter>::from(*self))
+    }
+
+    pub fn cartesian_pt3<Unit: LengthUnit>(&self) -> Point3<Length<Unit>> {
         let geocenter = Graticule::<GeoCenter>::from(*self);
         let lat = geocenter.latitude;
         let lon = geocenter.longitude;
@@ -120,7 +124,7 @@ where
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "({}, {})[{}]{}",
+            "({:0.4}, {:0.4})[{:0.4}]{}",
             degrees!(self.latitude),
             degrees!(self.longitude),
             self.distance,
@@ -134,7 +138,7 @@ impl From<Graticule<GeoSurface>> for Graticule<GeoCenter> {
         Self::new(
             surface.latitude,
             surface.longitude,
-            surface.distance + kilometers!(EARTH_RADIUS_KM),
+            surface.distance + *EARTH_RADIUS,
         )
     }
 }
@@ -144,7 +148,7 @@ impl From<Graticule<GeoCenter>> for Graticule<GeoSurface> {
         Self::new(
             surface.latitude,
             surface.longitude,
-            surface.distance - kilometers!(6378),
+            surface.distance - *EARTH_RADIUS,
         )
     }
 }

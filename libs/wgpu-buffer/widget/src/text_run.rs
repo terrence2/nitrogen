@@ -235,6 +235,7 @@ impl TextSelection {
 #[derive(Debug)]
 pub struct TextRun {
     pub spans: Vec<TextSpan>,
+    cached_metrics: Mutex<TextSpanMetrics>,
 
     selection: TextSelection,
     hide_selection: bool, // e.g. for Label
@@ -257,6 +258,7 @@ impl TextRun {
     pub fn empty() -> Self {
         Self {
             spans: vec![],
+            cached_metrics: Mutex::new(TextSpanMetrics::default()),
             selection: Default::default(),
             hide_selection: false,
             pre_blend_text: false,
@@ -264,6 +266,10 @@ impl TextRun {
             default_size: Size::from_pts(12.0),
             default_color: Color::from([255, 0, 255]),
         }
+    }
+
+    pub fn metrics(&self) -> MutexGuard<TextSpanMetrics> {
+        self.cached_metrics.lock()
     }
 
     pub fn is_empty(&self) -> bool {
@@ -569,6 +575,7 @@ impl TextRun {
             height: max_height,
             line_gap: max_line_gap,
         };
+        *self.cached_metrics.lock() = metrics.clone();
         Ok(metrics)
     }
 

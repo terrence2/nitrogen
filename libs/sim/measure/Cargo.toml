@@ -10,3 +10,4 @@ nalgebra = "^ 0.31"
 absolute_unit = { path = "../../util/absolute_unit" }
 geodesy = { path = "../../util/geodesy" }
 nitrous = { path = "../../util/nitrous" }
+physical_constants = { path = "../../util/physical_constants" }

@@ -72,11 +72,12 @@ impl<'w> NamedEntityMut<'w> {
         Ok(self)
     }
 
-    pub fn remove<T>(&mut self)
+    pub fn remove<T>(&mut self) -> &mut Self
     where
         T: Component + 'static,
     {
         self.entity.remove::<T>();
+        self
     }
 
     pub fn remove_named<T>(&mut self, component_name: &str) -> Result<()>
@@ -90,6 +91,29 @@ impl<'w> NamedEntityMut<'w> {
             .remove_named_component(id, component_name);
         self.entity.remove::<T>();
         Ok(())
+    }
+
+    pub fn rename(&mut self, target_name: &str) {
+        let id = self.id();
+        let mut index = unsafe { self.entity.world_mut() }.resource_mut::<WorldIndex>();
+        let own_name = index.lookup_entity_name(id).unwrap();
+        index.rename_entity(&own_name, target_name);
+    }
+
+    pub fn rename_numbered(&mut self, base_name: &str) {
+        let id = self.id();
+        let mut index = unsafe { self.entity.world_mut() }.resource_mut::<WorldIndex>();
+        let mut i = 0;
+        loop {
+            let target_name = format!("{}{}", base_name, i);
+            i += 1;
+            if index.get_entity(&target_name).is_some() {
+                continue;
+            }
+            let own_name = index.lookup_entity_name(id).unwrap();
+            index.rename_entity(&own_name, target_name);
+            break;
+        }
     }
 }
 
@@ -145,6 +169,7 @@ macro_rules! impl_immutable_heap_methods {
                 panic!("no entity named {}", name)
             }
         }
+
         #[inline]
         pub fn maybe_entity_by_name(&self, name: &str) -> Option<Entity> {
             if let Some(Value::Entity(entity)) = self.resource::<WorldIndex>().lookup_entity(name) {
@@ -205,6 +230,16 @@ macro_rules! impl_immutable_heap_methods {
         #[inline]
         pub fn entity_component_names(&self, entity: Entity) -> Option<impl Iterator<Item = &str>> {
             self.resource::<WorldIndex>().entity_component_names(entity)
+        }
+
+        #[inline]
+        pub fn entity_component_attrs(
+            &self,
+            entity: Entity,
+            component: &str,
+        ) -> Option<Vec<String>> {
+            self.resource::<WorldIndex>()
+                .entity_component_attrs(entity, component, &self.world)
         }
     };
 }

@@ -32,7 +32,7 @@ pub struct WidgetVertex {
 }
 
 fn pack_color(c: &Color) -> [u8; 4] {
-    let rgba = c.to_linear_rgba_u8();
+    let rgba = c.rgba_u8();
     [rgba.0, rgba.1, rgba.2, rgba.3]
 }
 
@@ -87,6 +87,20 @@ impl WidgetVertex {
         );
 
         tmp
+    }
+
+    pub fn new(
+        position: [f32; 3],
+        tex_coord: [f32; 2],
+        color: [u8; 4],
+        widget_info_index: u32,
+    ) -> Self {
+        Self {
+            position,
+            tex_coord,
+            color,
+            widget_info_index,
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -288,7 +302,7 @@ impl WidgetVertex {
                     .bottom()
                     .add(&extent.height(), win, ScreenDir::Vertical),
             ],
-            position.depth().as_depth(),
+            position.depth().as_gpu(),
             [0f32, 0f32],
             [0f32, 0f32],
             color,
@@ -310,7 +324,7 @@ impl WidgetVertex {
                 region.position().left() + region.extent().width(),
                 region.position().bottom() + region.extent().height(),
             ],
-            region.position().depth().as_depth(),
+            region.position().depth().as_gpu(),
             [0f32, 0f32],
             [0f32, 0f32],
             color,

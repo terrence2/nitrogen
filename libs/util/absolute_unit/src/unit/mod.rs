@@ -34,6 +34,7 @@ pub(crate) mod feet;
 pub(crate) mod kilometers;
 pub(crate) mod meters;
 pub(crate) mod miles;
+pub(crate) mod nautical_miles;
 
 // Temperature
 pub(crate) mod celsius;
@@ -45,9 +46,6 @@ pub(crate) mod rankine;
 pub(crate) mod kilograms;
 pub(crate) mod pounds_mass;
 pub(crate) mod slugs;
-
-// Weight
-pub(crate) mod pounds_weight;
 
 // Time
 pub(crate) mod hours;

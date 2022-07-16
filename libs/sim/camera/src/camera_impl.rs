@@ -94,6 +94,8 @@ pub struct ScreenCamera {
     fov_y: Angle<Radians>,
     aspect_ratio: f64,
     z_near: Length<Meters>,
+
+    #[property]
     exposure: f64,
 
     input: InputState,
@@ -148,16 +150,6 @@ impl ScreenCamera {
     }
 
     #[method]
-    pub fn exposure(&self) -> f64 {
-        self.exposure
-    }
-
-    #[method]
-    pub fn set_exposure(&mut self, exposure: f64) {
-        self.exposure = exposure;
-    }
-
-    #[method]
     pub fn increase_exposure(&mut self) {
         self.exposure *= 1.1;
     }
@@ -165,6 +157,10 @@ impl ScreenCamera {
     #[method]
     pub fn decrease_exposure(&mut self) {
         self.exposure /= 1.1;
+    }
+
+    pub fn exposure(&self) -> f32 {
+        self.exposure as f32
     }
 
     pub fn fov_y(&self) -> Angle<Radians> {
@@ -251,7 +247,7 @@ impl ScreenCamera {
         UnitQuaternion::look_at_rh(self.forward(), &-self.up())
     }
 
-    pub fn world_space_frustum<T: LengthUnit>(&self) -> [Plane<f64>; 5] {
+    pub fn world_space_frustum<T: LengthUnit>(&self) -> [Plane; 5] {
         // Taken from this paper:
         //   https://www.gamedevs.org/uploads/fast-extraction-viewing-frustum-planes-from-world-view-projection-matrix.pdf
 

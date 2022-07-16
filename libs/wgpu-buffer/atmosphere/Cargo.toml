@@ -18,7 +18,9 @@ parking_lot = "^ 0.12"
 static_assertions = "^ 1"
 wgpu = { version = "^ 0.12", features = ["spirv"] }
 zerocopy = "^ 0.6"
+absolute_unit = { path = "../../util/absolute_unit" }
 gpu = { path = "../../system/gpu" }
+physical_constants = { path = "../../util/physical_constants" }
 runtime = { path = "../../util/runtime" }
 
 [dev-dependencies]

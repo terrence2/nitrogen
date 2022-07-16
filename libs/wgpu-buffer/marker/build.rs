@@ -12,22 +12,6 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::{Unit, WeightUnit};
-
-#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
-pub struct PoundsWeight;
-impl Unit for PoundsWeight {
-    const UNIT_NAME: &'static str = "pounds";
-    const UNIT_SHORT_NAME: &'static str = "lb";
-    const UNIT_SUFFIX: &'static str = "lb";
-}
-impl WeightUnit for PoundsWeight {
-    const POUNDS_IN_UNIT: f64 = 1.;
-}
-
-#[macro_export]
-macro_rules! pounds_weight {
-    ($num:expr) => {
-        $crate::Weight::<$crate::PoundsWeight>::from(&$num)
-    };
+fn main() {
+    build_shaders::build().unwrap()
 }

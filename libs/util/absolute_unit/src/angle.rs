@@ -15,7 +15,7 @@
 use crate::{
     impl_value_type_conversions, radians, scalar, supports_absdiffeq, supports_quantity_ops,
     supports_scalar_ops, supports_shift_ops, supports_value_type_conversion, ArcSeconds, Degrees,
-    Scalar, Unit,
+    DynamicUnits, Scalar, Unit,
 };
 use ordered_float::OrderedFloat;
 use std::{fmt, fmt::Debug, marker::PhantomData};
@@ -119,6 +119,10 @@ impl<Unit: AngleUnit> Angle<Unit> {
         };
         let (lon_d, lon_m, lon_s) = lon.split_degrees_minutes_seconds();
         format!("{}{:03}d{:02}m{:02}s", lon_hemi, lon_d, lon_m, lon_s)
+    }
+
+    pub fn as_dyn(&self) -> DynamicUnits {
+        DynamicUnits::new1o0::<Unit>(self.v)
     }
 }
 

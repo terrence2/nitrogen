@@ -19,6 +19,7 @@ pub use winit::event::{ButtonId, ElementState, ModifiersState, VirtualKeyCode};
 
 use anyhow::{bail, Result};
 use bevy_ecs::prelude::*;
+use gilrs::{Button as GilButton, Event as GilEvent, GilrsBuilder};
 use log::warn;
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use parking_lot::Mutex;
@@ -35,7 +36,6 @@ use std::{
     },
     time::Instant,
 };
-// use stick::{Controller, Event as StickEvent};
 use winit::{
     event::{
         DeviceEvent, DeviceId, Event, KeyboardInput, MouseScrollDelta, StartCause, WindowEvent,
@@ -462,6 +462,26 @@ impl InputSystem {
                 println!("Error: {:?}", e);
             }
             input_controller.lock().quit().ok();
+        });
+
+        // Spawn a thread to play with joysticks
+        std::thread::spawn(move || {
+            let mut gilrs = GilrsBuilder::new()
+                .add_included_mappings(true)
+                .add_env_mappings(true)
+                .build()
+                .expect("Gilrs load");
+            let mut _active_gamepad = None;
+            for (id, gamepad) in gilrs.gamepads() {
+                println!("{}: {} is {:?}", id, gamepad.name(), gamepad.power_info());
+                println!("MAPPING: {:?}", gamepad.mapping_source());
+                println!("STATE: {:?}", gamepad.state());
+                println!("BUTTON: {:?}", gamepad.button_code(GilButton::LeftTrigger));
+            }
+            while let Some(GilEvent { id, event, time }) = gilrs.next_event() {
+                println!("{:?} New event from {}: {:?}", time, id, event);
+                _active_gamepad = Some(id);
+            }
         });
 
         // Hijack the main thread.

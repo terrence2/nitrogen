@@ -75,6 +75,9 @@ impl fmt::Debug for NitrousScript {
                 Instr::StoreLocal(atom) => {
                     writeln!(f, "{:03} <-- {}", i, &self.atoms.get(atom).unwrap())?
                 }
+                Instr::StoreAttr(atom) => {
+                    writeln!(f, "{:03} <-- {}", i, &self.atoms.get(atom).unwrap())?
+                }
                 Instr::Multiply => writeln!(f, "{:03} <-> Multiply", i)?,
                 Instr::Divide => writeln!(f, "{:03} <-> Divide", i)?,
                 Instr::Add => writeln!(f, "{:03} <-> Add", i)?,

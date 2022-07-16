@@ -25,7 +25,7 @@ pub mod reexport {
 pub use crate::{
     herder::{
         ExecutionMetadata, ExitRequest, ScriptCompletion, ScriptCompletions, ScriptHerder,
-        ScriptQueue, ScriptResult, ScriptRunKind, ScriptRunPhase, ERROR_REPORTS,
+        ScriptQueue, ScriptReceipt, ScriptResult, ScriptRunKind, ScriptRunPhase, ERROR_REPORTS,
     },
     runtime::{Extension, FrameStage, Runtime, RuntimeStep, ShutdownStage, SimStage, StartupStage},
     startup::StartupOpts,

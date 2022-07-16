@@ -12,7 +12,6 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use crate::font_context::TextSpanMetrics;
 use crate::{
     paint_context::PaintContext,
     region::{Border, Extent, Position, Region},
@@ -75,7 +74,7 @@ impl LayoutLink {
 
 // Determine how the given widget should be packed into its box.
 // Owned by the parent layout, not the child.
-#[derive(Component, NitrousComponent)]
+#[derive(Component, NitrousComponent, Clone)]
 #[Name = "packing"]
 pub struct LayoutPacking {
     // non-client area
@@ -153,9 +152,15 @@ impl LayoutPacking {
     }
 
     #[method]
-    pub fn set_background(&mut self, color: &str) -> Result<()> {
+    pub fn set_background(&mut self, color: &str) -> Result<&mut Self> {
         self.background_color = Some(color.parse()?);
-        Ok(())
+        Ok(self)
+    }
+
+    #[method]
+    pub fn set_border_color(&mut self, color: &str) -> Result<&mut Self> {
+        self.border_color = Some(color.parse()?);
+        Ok(self)
     }
 
     pub fn padding_mut(&mut self) -> &mut Border<RelSize> {
@@ -163,36 +168,123 @@ impl LayoutPacking {
     }
 
     #[method]
-    pub fn set_padding_left(&mut self, s: &str, heap: HeapMut) -> Result<()> {
+    pub fn set_padding(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
         let win = heap.resource::<Window>();
         let sz = Size::from_str(s)?;
         self.padding.set_left(sz.as_rel(win, ScreenDir::Horizontal));
-        Ok(())
+        self.padding
+            .set_right(sz.as_rel(win, ScreenDir::Horizontal));
+        self.padding.set_top(sz.as_rel(win, ScreenDir::Vertical));
+        self.padding.set_bottom(sz.as_rel(win, ScreenDir::Vertical));
+        Ok(self)
     }
 
     #[method]
-    pub fn set_padding_right(&mut self, s: &str, heap: HeapMut) -> Result<()> {
+    pub fn set_padding_left(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.padding.set_left(sz.as_rel(win, ScreenDir::Horizontal));
+        Ok(self)
+    }
+
+    #[method]
+    pub fn set_padding_right(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
         let win = heap.resource::<Window>();
         let sz = Size::from_str(s)?;
         self.padding
             .set_right(sz.as_rel(win, ScreenDir::Horizontal));
-        Ok(())
+        Ok(self)
     }
 
     #[method]
-    pub fn set_padding_top(&mut self, s: &str, heap: HeapMut) -> Result<()> {
+    pub fn set_padding_top(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
         let win = heap.resource::<Window>();
         let sz = Size::from_str(s)?;
         self.padding.set_top(sz.as_rel(win, ScreenDir::Vertical));
-        Ok(())
+        Ok(self)
     }
 
     #[method]
-    pub fn set_padding_bottom(&mut self, s: &str, heap: HeapMut) -> Result<()> {
+    pub fn set_padding_bottom(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
         let win = heap.resource::<Window>();
         let sz = Size::from_str(s)?;
         self.padding.set_bottom(sz.as_rel(win, ScreenDir::Vertical));
-        Ok(())
+        Ok(self)
+    }
+
+    #[method]
+    pub fn set_margin(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.margin.set_left(sz.as_rel(win, ScreenDir::Horizontal));
+        self.margin.set_right(sz.as_rel(win, ScreenDir::Horizontal));
+        self.margin.set_top(sz.as_rel(win, ScreenDir::Vertical));
+        self.margin.set_bottom(sz.as_rel(win, ScreenDir::Vertical));
+        Ok(self)
+    }
+
+    #[method]
+    pub fn set_margin_left(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.margin.set_left(sz.as_rel(win, ScreenDir::Horizontal));
+        Ok(self)
+    }
+
+    #[method]
+    pub fn set_margin_right(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.margin.set_right(sz.as_rel(win, ScreenDir::Horizontal));
+        Ok(self)
+    }
+
+    #[method]
+    pub fn set_margin_top(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.margin.set_top(sz.as_rel(win, ScreenDir::Vertical));
+        Ok(self)
+    }
+
+    #[method]
+    pub fn set_margin_bottom(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.margin.set_bottom(sz.as_rel(win, ScreenDir::Vertical));
+        Ok(self)
+    }
+
+    #[method]
+    pub fn set_border_left(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.border.set_left(sz.as_rel(win, ScreenDir::Horizontal));
+        Ok(self)
+    }
+
+    #[method]
+    pub fn set_border_right(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.border.set_right(sz.as_rel(win, ScreenDir::Horizontal));
+        Ok(self)
+    }
+
+    #[method]
+    pub fn set_border_top(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.border.set_top(sz.as_rel(win, ScreenDir::Vertical));
+        Ok(self)
+    }
+
+    #[method]
+    pub fn set_border_bottom(&mut self, s: &str, heap: HeapMut) -> Result<&mut Self> {
+        let win = heap.resource::<Window>();
+        let sz = Size::from_str(s)?;
+        self.border.set_bottom(sz.as_rel(win, ScreenDir::Vertical));
+        Ok(self)
     }
 }
 
@@ -214,9 +306,6 @@ pub struct LayoutMeasurements {
 
     // Amount allocated to the widget in total.
     total_allocation: Region<RelSize>,
-
-    // Critical contextual information, like the rendered text aggregate baseline.
-    metrics: TextSpanMetrics,
 }
 
 impl Default for LayoutMeasurements {
@@ -226,7 +315,6 @@ impl Default for LayoutMeasurements {
             total_extent: Extent::new(RelSize::Percent(0.), RelSize::Percent(0.)),
             child_allocation: Region::empty(),
             total_allocation: Region::empty(),
-            metrics: TextSpanMetrics::default(),
         }
     }
 }
@@ -242,16 +330,8 @@ impl LayoutMeasurements {
         self.total_extent.expand_with_border_rel(&packing.padding);
     }
 
-    pub fn set_metrics(&mut self, metrics: TextSpanMetrics) {
-        self.metrics = metrics;
-    }
-
     pub fn child_allocation(&self) -> &Region<RelSize> {
         &self.child_allocation
-    }
-
-    pub fn metrics(&self) -> &TextSpanMetrics {
-        &self.metrics
     }
 
     pub fn set_depth(&mut self, depth: f32) {
@@ -435,7 +515,7 @@ impl LayoutNode {
                 let child_region = measures.get(layout.lock().widget)?.child_allocation.clone();
                 layout
                     .lock()
-                    .perform_layout(child_region, depth - 1., packings, measures)?;
+                    .perform_layout(child_region, depth + 1., packings, measures)?;
             }
         }
 
@@ -472,7 +552,7 @@ impl LayoutNode {
                     PositionV::Bottom => RelSize::zero(),
                 };
 
-            let d = depth - 1. + 0.1 * i as f32;
+            let d = depth + 1. + 0.1 * i as f32;
             let position = Position::new_with_depth(left_offset, top_offset, RelSize::Gpu(d));
             let child_total_alloc = Region::new(position, child_total_extent);
             measures
@@ -484,7 +564,7 @@ impl LayoutNode {
                 let child_region = measures.get(layout.lock().widget)?.child_allocation.clone();
                 layout
                     .lock()
-                    .perform_layout(child_region, depth - 1., packings, measures)?;
+                    .perform_layout(child_region, depth + 1., packings, measures)?;
             }
         }
 
@@ -542,12 +622,12 @@ impl LayoutNode {
             }
             let id = context.push_widget(&info);
             if let Some(color) = &packing.border_color {
-                let mut rect = measure.total_allocation.to_owned();
+                let mut rect = measure.total_allocation.clone_with_depth_adjust(-0.02);
                 rect.remove_border_rel(&packing.margin);
                 WidgetVertex::push_region(rect, color, id, &mut context.background_pool);
             }
             if let Some(color) = &packing.background_color {
-                let mut rect = measure.total_allocation.to_owned();
+                let mut rect = measure.total_allocation.clone_with_depth_adjust(-0.01);
                 rect.remove_border_rel(&packing.margin);
                 rect.remove_border_rel(&packing.border);
                 WidgetVertex::push_region(rect, color, id, &mut context.background_pool);

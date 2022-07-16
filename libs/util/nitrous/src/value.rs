@@ -80,6 +80,23 @@ impl Value {
         Value::Component(entity, lookup.to_owned())
     }
 
+    pub fn from_bool(v: bool) -> Self {
+        Self::Boolean(v)
+    }
+
+    pub fn from_int(v: i64) -> Self {
+        Self::Integer(v)
+    }
+
+    pub fn from_float(v: f64) -> Self {
+        Self::Float(OrderedFloat(v))
+    }
+
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str<S: ToString>(v: S) -> Self {
+        Self::String(v.to_string())
+    }
+
     pub fn to_bool(&self) -> Result<bool> {
         if let Self::Boolean(b) = self {
             return Ok(*b);
@@ -184,6 +201,23 @@ impl Value {
                 .get_ref(*entity, heap.world())
                 .ok_or_else(|| anyhow!("no such component for attr: {}", name))?
                 .get(*entity, name),
+            _ => bail!(
+                "attribute base must be a resource, entity, or component, not {:?}",
+                self
+            ),
+        }
+    }
+
+    pub fn store_attr(&mut self, name: &str, value: Value, mut heap: HeapMut) -> Result<()> {
+        match self {
+            Value::Resource(lookup) => lookup
+                .get_mut(heap.world_mut())
+                .ok_or_else(|| anyhow!("no such resource for attr: {}", name))?
+                .put(name, value),
+            Value::Component(entity, lookup) => lookup
+                .get_mut(*entity, heap.world_mut())
+                .ok_or_else(|| anyhow!("no such component for attr: {}", name))?
+                .put(*entity, name, value),
             _ => bail!(
                 "attribute base must be a resource, entity, or component, not {:?}",
                 self

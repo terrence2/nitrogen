@@ -38,3 +38,17 @@ macro_rules! kilograms_per_meter3 {
         $crate::Density::<$crate::Kilograms, $crate::Meters>::from(&$num)
     };
 }
+
+#[macro_export]
+macro_rules! kilograms_meter2 {
+    ($num:expr) => {
+        $crate::RotationalInertia::<$crate::Kilograms, $crate::Meters>::from(&$num)
+    };
+}
+
+#[macro_export]
+macro_rules! kilograms_per_second {
+    ($num:expr) => {
+        $crate::MassRate::<$crate::Kilograms, $crate::Seconds>::from(&$num)
+    };
+}

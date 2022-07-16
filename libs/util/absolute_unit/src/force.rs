@@ -13,11 +13,16 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     impl_value_type_conversions, supports_absdiffeq, supports_quantity_ops, supports_scalar_ops,
-    supports_shift_ops, supports_value_type_conversion, Acceleration, DynamicUnits, LengthUnit,
-    Mass, MassUnit, TimeUnit, Unit,
+    supports_shift_ops, supports_value_type_conversion, Acceleration, DynamicUnits, Length,
+    LengthUnit, Mass, MassUnit, TimeUnit, Torque, Unit,
 };
 use ordered_float::OrderedFloat;
-use std::{fmt, fmt::Debug, marker::PhantomData, ops::Div};
+use std::{
+    fmt,
+    fmt::Debug,
+    marker::PhantomData,
+    ops::{Div, Mul},
+};
 
 pub trait ForceUnit: Unit + Copy + Debug + Eq + PartialEq + 'static {
     const NEWTONS_IN_UNIT: f64;
@@ -62,22 +67,31 @@ where
     }
 }
 
-impl<FA> From<DynamicUnits> for Force<FA>
+impl<F> From<DynamicUnits> for Force<F>
 where
-    FA: ForceUnit,
+    F: ForceUnit,
 {
     fn from(v: DynamicUnits) -> Self {
         let f = v.ordered_float();
-        v.assert_units_equal(&DynamicUnits::new2o2::<
-            FA::UnitMass,
-            FA::UnitLength,
-            FA::UnitTime,
-            FA::UnitTime,
+        v.assert_units_equal(DynamicUnits::new2o2::<
+            F::UnitMass,
+            F::UnitLength,
+            F::UnitTime,
+            F::UnitTime,
         >(0f64.into()));
         Self {
             v: f,
             phantom_1: PhantomData,
         }
+    }
+}
+
+impl<F> Force<F>
+where
+    F: ForceUnit,
+{
+    pub fn as_dyn(&self) -> DynamicUnits {
+        DynamicUnits::new2o2::<F::UnitMass, F::UnitLength, F::UnitTime, F::UnitTime>(self.v)
     }
 }
 
@@ -94,21 +108,57 @@ where
     }
 }
 
+impl<F, L, T> Div<Acceleration<L, T>> for Force<F>
+where
+    F: ForceUnit,
+    L: LengthUnit,
+    T: TimeUnit,
+{
+    type Output = Mass<F::UnitMass>;
+
+    fn div(self, rhs: Acceleration<L, T>) -> Self::Output {
+        let acc = Acceleration::<F::UnitLength, F::UnitTime>::from(&rhs);
+        Self::Output::from(self.v.0 / acc.f64())
+    }
+}
+
+impl<F, L> Mul<Length<L>> for Force<F>
+where
+    F: ForceUnit, // kg*m/s^2
+    L: LengthUnit,
+{
+    type Output = Torque<F, L>;
+
+    fn mul(self, rhs: Length<L>) -> Self::Output {
+        Self::Output::from(self.v.0 * rhs.f64())
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use crate::{newtons, pounds_force, scalar};
+    use crate::{kilograms, newtons, pounds_force, pounds_mass, scalar};
     use approx::assert_abs_diff_eq;
 
     #[test]
     fn test_force() {
-        let lbf = pounds_force!(2);
-        println!("pdl: {}", lbf);
-        println!("N  : {}", newtons!(lbf));
-        assert_abs_diff_eq!(newtons!(lbf), newtons!(0.224_809 * 2.));
+        let lbf = pounds_force!(35_000_f64);
+        let n = newtons!(155_687.7_f64);
+        assert_abs_diff_eq!(newtons!(lbf), n, epsilon = 0.1);
+        let lbf = pounds_force!(n);
+        assert_abs_diff_eq!(lbf, pounds_force!(35_000_f64), epsilon = 0.1);
     }
 
     #[test]
     fn test_force_scalar() {
         assert_abs_diff_eq!(newtons!(2) * scalar!(2), newtons!(4));
+    }
+
+    #[test]
+    fn test_force_to_acceleration() {
+        let lbf = pounds_force!(70_000_f64);
+        let lb = pounds_mass!(55_000_f64);
+        let imperial_units_should_be_a_capital_offense = (lbf / lb).f64() / 32.1742;
+        assert!(imperial_units_should_be_a_capital_offense < 1_f64);
+        assert!((newtons!(lbf) / kilograms!(lb)).f64() / 9.80665 > 1_f64);
     }
 }

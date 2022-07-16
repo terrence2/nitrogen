@@ -18,8 +18,8 @@ use std::borrow::Borrow;
 use syn::{
     parse2,
     visit::{self, Visit},
-    Arm, Expr, FnArg, GenericArgument, Ident, ImplItemMethod, ItemFn, ItemImpl, Pat, PathArguments,
-    ReturnType, Type, TypePath,
+    Arm, Data, DeriveInput, Expr, FnArg, GenericArgument, Ident, ImplItemMethod, ItemFn, ItemImpl,
+    Pat, PathArguments, ReturnType, Type, TypePath,
 };
 
 pub(crate) fn make_augment_method(item: ItemFn) -> TokenStream2 {
@@ -181,6 +181,7 @@ fn lower_arg(i: usize, arg: &ArgDef) -> Expr {
         Scalar::Unit => parse2(quote! { ::nitrous::Value::True() }).unwrap(),
         Scalar::HeapMut => parse2(quote! { heap }).unwrap(),
         Scalar::HeapRef => parse2(quote! { heap.as_ref() }).unwrap(),
+        Scalar::Selfish => parse2(quote! { self }).unwrap(),
     }
 }
 
@@ -220,6 +221,9 @@ fn lower_method_call(name: &str, item: Ident, arg_exprs: &[Expr], ret: RetType) 
             Scalar::HeapMut | Scalar::HeapRef => {
                 panic!("invalid return of heap type from method")
             }
+            Scalar::Selfish => {
+                quote! { #name => { self.#item( #(#arg_exprs),* ); ::nitrous::CallResult::Selfish } }
+            }
         },
         RetType::ResultRaw(llty) => match llty {
             Scalar::Boolean => {
@@ -252,15 +256,50 @@ fn lower_method_call(name: &str, item: Ident, arg_exprs: &[Expr], ret: RetType) 
             Scalar::HeapMut | Scalar::HeapRef => {
                 panic!("invalid return of heap type from method")
             }
+            Scalar::Selfish => {
+                quote! { #name => { self.#item( #(#arg_exprs),* )?; ::nitrous::CallResult::Selfish } }
+            }
         },
-        RetType::Selfish => {
-            quote! {
-                #name => {
-                    self.#item( #(#arg_exprs),* );
-                    ::nitrous::CallResult::Selfish
+    })
+    .unwrap()
+}
+
+pub(crate) fn find_properties_in_struct(ast: &DeriveInput) -> Vec<(Ident, Scalar)> {
+    let mut properties = Vec::new();
+    if let Data::Struct(data) = &ast.data {
+        for field in &data.fields {
+            for attr in &field.attrs {
+                if attr.path.is_ident("property") {
+                    let ident = field.ident.as_ref().unwrap().to_owned();
+                    let scalar = Scalar::from_type(&field.ty);
+                    properties.push((ident, scalar));
                 }
             }
         }
+    }
+    properties
+}
+
+pub(crate) fn make_property_get_arm(name_str: &str, name: &Ident, ty: &Scalar) -> Arm {
+    parse2(match ty {
+        Scalar::Boolean => quote! { #name_str => { Ok(::nitrous::Value::Boolean(self.#name)) } },
+        Scalar::Integer => quote! { #name_str => { Ok(::nitrous::Value::Integer(self.#name)) } },
+        Scalar::Float => quote! { #name_str => { Ok(::nitrous::Value::Float(::nitrous::ordered_float::OrderedFloat(self.#name))) } },
+        Scalar::String => quote! { #name_str => { Ok(::nitrous::Value::String(self.#name.clone())) } },
+        _ => panic!("unsupported property type"),
+    })
+        .unwrap()
+}
+
+pub(crate) fn make_property_put_arm(name_str: &str, name: &Ident, ty: &Scalar) -> Arm {
+    parse2(match ty {
+        Scalar::Boolean => quote! { #name_str => { self.#name = value.to_bool()?; Ok(()) } },
+        Scalar::Integer => quote! { #name_str => { self.#name = value.to_int()?; Ok(()) } },
+        Scalar::Float => quote! { #name_str => { self.#name = value.to_float()?; Ok(()) } },
+        Scalar::String => {
+            quote! { #name_str => { self.#name = value.to_str()?.to_owned(); Ok(()) } }
+        }
+        _ => panic!("unsupported property type"),
     })
     .unwrap()
 }
@@ -338,6 +377,7 @@ pub(crate) enum Scalar {
     Unit,
     HeapMut,
     HeapRef,
+    Selfish, // Covering all of bare, &, mut, and &mut kinds of Self.
 }
 
 impl Scalar {
@@ -347,8 +387,9 @@ impl Scalar {
         } else if let Type::Reference(r) = ty {
             match Self::from_type(&r.elem) {
                 Scalar::StrRef => Scalar::StrRef,
+                Scalar::Selfish => Scalar::Selfish,
                 v => panic!(
-                    "nitrous Scalar only support references to str, not: {:#?}",
+                    "nitrous Scalar only support references to str and Self, not: {:#?}",
                     v
                 ),
             }
@@ -385,6 +426,7 @@ impl Scalar {
             "Value" => Scalar::Value,
             "HeapMut" => Scalar::HeapMut,
             "HeapRef" => Scalar::HeapRef,
+            "Self" => Scalar::Selfish,
             "Graticule" => {
                 if let PathArguments::AngleBracketed(args) =
                     &p.path.segments.first().unwrap().arguments
@@ -420,7 +462,6 @@ pub(crate) enum RetType {
     Nothing,
     Raw(Scalar),
     ResultRaw(Scalar),
-    Selfish,
 }
 
 impl RetType {
@@ -449,7 +490,7 @@ impl RetType {
                 } else if let Type::Reference(ref ty_ref) = ty.borrow() {
                     if let Type::Path(p) = ty_ref.elem.borrow() {
                         if Scalar::type_path_name(p).as_str() == "Self" {
-                            Self::Selfish
+                            RetType::Raw(Scalar::Selfish)
                         } else {
                             panic!(
                                 "nitrous methods can only return references to Self, not {:#?}",

@@ -13,9 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{Circle, Plane, Sphere};
-use nalgebra::RealField;
-use num_traits::cast::FromPrimitive;
-use std::fmt::{Debug, Display};
+use std::fmt::Debug;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum PlaneSide {
@@ -25,10 +23,10 @@ pub enum PlaneSide {
 }
 
 impl PlaneSide {
-    pub fn from_distance<T: RealField>(d: T) -> Self {
-        if d < T::zero() {
+    pub fn from_distance(d: f64) -> Self {
+        if d < 0_f64 {
             PlaneSide::Below
-        } else if d > T::zero() {
+        } else if d > 0_f64 {
             PlaneSide::Above
         } else {
             PlaneSide::On
@@ -37,21 +35,15 @@ impl PlaneSide {
 }
 
 #[derive(Debug, Clone)]
-pub enum SpherePlaneIntersection<T>
-where
-    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
-{
+pub enum SpherePlaneIntersection {
     NoIntersection {
-        distance: T,     // Closest distance between the sphere and the plane
+        distance: f64,   // Closest distance between the sphere and the plane
         side: PlaneSide, // What side of the plane is the sphere on.
     },
-    Intersection(Circle<T>),
+    Intersection(Circle),
 }
 
-impl<T> SpherePlaneIntersection<T>
-where
-    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
-{
+impl SpherePlaneIntersection {
     pub fn is_intersecting(&self) -> bool {
         match self {
             Self::NoIntersection { .. } => false,
@@ -60,10 +52,7 @@ where
     }
 }
 
-pub fn sphere_vs_plane<T>(sphere: &Sphere<T>, plane: &Plane<T>) -> SpherePlaneIntersection<T>
-where
-    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
-{
+pub fn sphere_vs_plane(sphere: &Sphere, plane: &Plane) -> SpherePlaneIntersection {
     let dist = plane.distance_to_point(sphere.center());
 
     if dist.abs() < sphere.radius() {

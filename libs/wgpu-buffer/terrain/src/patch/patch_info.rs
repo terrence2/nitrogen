@@ -14,6 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::patch::patch_tree::TreeIndex;
 
+use absolute_unit::kilometers;
 use geometry::{
     algorithm::{compute_normal, solid_angle_tri},
     intersect,
@@ -21,7 +22,7 @@ use geometry::{
     Plane, Sphere,
 };
 use nalgebra::{Point3, Vector3};
-use physical_constants::{EARTH_RADIUS_KM, EVEREST_HEIGHT_KM};
+use physical_constants::{EARTH_RADIUS, EVEREST_HEIGHT};
 
 // We introduce a substantial amount of error in our intersection computations below
 // with all the dot products and re-normalizations. This is fine, as long as we use a
@@ -39,7 +40,7 @@ pub(crate) struct Patch {
     pts: [Point3<f64>; 3],
 
     // Planes
-    planes: [Plane<f64>; 3],
+    planes: [Plane; 3],
 
     // The leaf node that owns this patch, or None if a tombstone.
     owner: TreeIndex,
@@ -87,7 +88,7 @@ impl Patch {
 
     pub(crate) fn update_for_view(
         &mut self,
-        viewable_area: &[Plane<f64>; 6],
+        viewable_area: &[Plane; 6],
         eye_position: &Point3<f64>,
         eye_direction: &Vector3<f64>,
     ) {
@@ -131,41 +132,7 @@ impl Patch {
         }
     }
 
-    // Might be useful later?
-    #[allow(unused)]
-    pub(crate) fn distance_squared_to(&self, point: &Point3<f64>) -> f64 {
-        if self.point_is_in_cone(point) {
-            let m = point.coords.magnitude();
-            if m < EARTH_RADIUS_KM + EVEREST_HEIGHT_KM {
-                return 0.0;
-            }
-            return m - (EARTH_RADIUS_KM + EVEREST_HEIGHT_KM);
-        }
-
-        let mut minimum = 999_999_999f64;
-
-        // bottom points
-        for p in &self.pts {
-            let v = p - point;
-            let d = v.dot(&v);
-            if d < minimum {
-                minimum = d;
-            }
-        }
-        // top points
-        for p in &self.pts {
-            let top_point = p + (p.coords.normalize() * EARTH_RADIUS_KM);
-            let v = top_point - point;
-            let d = v.dot(&v);
-            if d < minimum {
-                minimum = d;
-            }
-        }
-
-        minimum
-    }
-
-    fn is_behind_plane(&self, plane: &Plane<f64>, show_msgs: bool) -> bool {
+    fn is_behind_plane(&self, plane: &Plane, show_msgs: bool) -> bool {
         // Patch Extent:
         //   outer: the three planes cutting from geocenter through each pair of points in vertices.
         //   bottom: radius of the planet
@@ -183,16 +150,17 @@ impl Patch {
         }
         // top points
         for p in &self.pts {
-            let top_point = p + (p.coords.normalize() * EARTH_RADIUS_KM);
+            let top_point = p + (p.coords.normalize() * kilometers!(*EARTH_RADIUS).f64());
             if plane.point_is_in_front_with_offset(&top_point, SIDEDNESS_OFFSET) {
                 return false;
             }
         }
 
         // plane vs top sphere
+        // FIXME: This seems super wrong. Shouldn't the top sphere be EARTH_HEIGHT + EVEREST_HEGHT? Guessing this is just a bug.
         let top_sphere = Sphere::from_center_and_radius(
             &Point3::new(0f64, 0f64, 0f64),
-            EVEREST_HEIGHT_KM + EVEREST_HEIGHT_KM,
+            kilometers!(*EARTH_RADIUS).f64() + kilometers!(*EVEREST_HEIGHT).f64(),
         );
         let intersection = intersect::sphere_vs_plane(&top_sphere, plane);
         match intersection {
@@ -265,7 +233,7 @@ impl Patch {
         true
     }
 
-    fn keep(&self, viewable_area: &[Plane<f64>; 6]) -> bool {
+    fn keep(&self, viewable_area: &[Plane; 6]) -> bool {
         for plane in viewable_area {
             if self.is_behind_plane(plane, false) {
                 return false;

@@ -35,3 +35,10 @@ macro_rules! newtons {
         $crate::Force::<$crate::Newtons>::from(&$num)
     };
 }
+
+#[macro_export]
+macro_rules! newton_meters {
+    ($num:expr) => {
+        $crate::Torque::<$crate::Newtons, $crate::Meters>::from(&$num)
+    };
+}

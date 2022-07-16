@@ -325,11 +325,29 @@ impl WorldIndex {
         self.named_entities.get(name).cloned()
     }
 
+    // Panics if new_name is already set or old_name is not present.
+    pub fn rename_entity<S: ToString>(&mut self, old_name: &str, new_name: S) {
+        let new_name = new_name.to_string();
+        assert!(self.named_entities.contains_key(old_name));
+        assert!(!self.named_entities.contains_key(&new_name));
+        let id = self.named_entities.remove(old_name).unwrap();
+        self.named_entities.insert(new_name, id);
+    }
+
     /// Look up a named entity in the index.
     pub fn lookup_entity(&self, name: &str) -> Option<Value> {
         self.named_entities
             .get(name)
             .map(|entity| Value::new_entity(*entity))
+    }
+
+    pub fn lookup_entity_name(&self, lookup: Entity) -> Option<String> {
+        for (name, id) in self.named_entities.iter() {
+            if *id == lookup {
+                return Some(name.to_owned());
+            }
+        }
+        None
     }
 
     /// Look up a named component within an entity.

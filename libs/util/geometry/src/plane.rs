@@ -13,96 +13,82 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use approx::relative_eq;
-use nalgebra::{convert, Point3, RealField, Vector3};
-use num_traits::cast::FromPrimitive;
-use simba::scalar::{SubsetOf, SupersetOf};
-use std::fmt::{Debug, Display};
+use nalgebra::{Point3, Vector3};
+use std::fmt::Debug;
 
 #[derive(Clone, Copy, Debug)]
-pub struct Plane<T> {
-    normal: Vector3<T>,
-    distance: T,
+pub struct Plane {
+    normal: Vector3<f64>,
+    distance: f64,
 }
 
-impl<T> Plane<T>
-where
-    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
-{
+impl Plane {
     pub fn xy() -> Self {
         Self {
-            normal: Vector3::new(T::zero(), T::zero(), T::one()),
-            distance: T::zero(),
+            normal: Vector3::new(0_f64, 0_f64, 1_f64),
+            distance: 0_f64,
         }
     }
 
     pub fn yz() -> Self {
         Self {
-            normal: Vector3::new(T::one(), T::zero(), T::zero()),
-            distance: T::zero(),
+            normal: Vector3::new(1_f64, 0_f64, 0_f64),
+            distance: 0_f64,
         }
     }
 
     pub fn xz() -> Self {
         Self {
-            normal: Vector3::new(T::zero(), T::one(), T::zero()),
-            distance: T::zero(),
+            normal: Vector3::new(0_f64, 1_f64, 0_f64),
+            distance: 0_f64,
         }
     }
 
-    pub fn from_point_and_normal(p: &Point3<T>, n: &Vector3<T>) -> Self {
+    pub fn from_point_and_normal(p: &Point3<f64>, n: &Vector3<f64>) -> Self {
         Self {
             normal: n.to_owned(),
             distance: p.coords.dot(n),
         }
     }
 
-    pub fn from_normal_and_distance(normal: Vector3<T>, distance: T) -> Self {
+    pub fn from_normal_and_distance(normal: Vector3<f64>, distance: f64) -> Self {
         Self { normal, distance }
     }
 
-    pub fn point_on_plane(&self, p: &Point3<T>) -> bool {
-        relative_eq!(self.normal.dot(&p.coords) - self.distance(), T::zero())
+    pub fn point_on_plane(&self, p: &Point3<f64>) -> bool {
+        relative_eq!(self.normal.dot(&p.coords) - self.distance(), 0_f64)
     }
 
-    pub fn distance_to_point(&self, p: &Point3<T>) -> T {
+    pub fn distance_to_point(&self, p: &Point3<f64>) -> f64 {
         self.normal.dot(&p.coords) - self.distance()
     }
 
-    pub fn closest_point_on_plane(&self, p: &Point3<T>) -> Point3<T> {
+    pub fn closest_point_on_plane(&self, p: &Point3<f64>) -> Point3<f64> {
         p - (self.normal * self.distance_to_point(p))
     }
 
-    pub fn point_is_in_front(&self, p: &Point3<T>) -> bool {
-        self.normal.dot(&p.coords) - self.distance() >= T::zero()
+    pub fn point_is_in_front(&self, p: &Point3<f64>) -> bool {
+        self.normal.dot(&p.coords) - self.distance() >= 0_f64
     }
 
-    pub fn point_is_in_front_with_offset(&self, p: &Point3<T>, offset: T) -> bool {
+    pub fn point_is_in_front_with_offset(&self, p: &Point3<f64>, offset: f64) -> bool {
         self.normal.dot(&p.coords) - self.distance() >= offset
     }
 
-    pub fn normal(&self) -> &Vector3<T> {
+    pub fn normal(&self) -> &Vector3<f64> {
         &self.normal
     }
 
-    pub fn distance(&self) -> T {
+    pub fn distance(&self) -> f64 {
         self.distance
     }
 
-    pub fn d(&self) -> T {
+    pub fn d(&self) -> f64 {
         -self.distance
     }
 
-    pub fn vec4<To>(&self) -> [To; 4]
-    where
-        To: SupersetOf<T>,
-        T: SubsetOf<To>,
-    {
-        [
-            convert::<T, To>(self.normal.x),
-            convert::<T, To>(self.normal.y),
-            convert::<T, To>(self.normal.z),
-            convert::<T, To>(self.distance),
-        ]
+    pub fn vec4<To>(&self) -> [f64; 4] {
+        [self.normal.x, self.normal.y, self.normal.z, self.distance]
     }
 }
 

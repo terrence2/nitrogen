@@ -20,7 +20,7 @@ use global_data::{GlobalParametersBuffer, GlobalsStep};
 use gpu::{DisplayConfig, Gpu, GpuStep};
 use log::trace;
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
-use runtime::{Extension, Runtime};
+use runtime::{report, Extension, Runtime};
 use shader_shared::Group;
 use stars::StarsBuffer;
 use terrain::{TerrainBuffer, TerrainStep, TerrainVertex};
@@ -473,9 +473,7 @@ impl WorldRenderPass {
         mut world: ResMut<WorldRenderPass>,
     ) {
         if updated_config.is_some() {
-            world
-                .handle_render_extent_changed(&gpu)
-                .expect("World::handle_render_extent_changed")
+            report!(world.handle_render_extent_changed(&gpu));
         }
     }
 

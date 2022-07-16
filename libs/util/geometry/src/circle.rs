@@ -14,25 +14,18 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::algorithm::perpendicular_vector;
 use crate::Plane;
-use nalgebra::{Point3, RealField, Unit, UnitQuaternion};
-use num_traits::cast::FromPrimitive;
-use std::fmt::{Debug, Display};
+use nalgebra::{Point3, Unit, UnitQuaternion};
+use std::fmt::Debug;
 
 #[derive(Debug, Clone)]
-pub struct Circle<T>
-where
-    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
-{
-    plane: Plane<T>,
-    center: Point3<T>,
-    radius: T,
+pub struct Circle {
+    plane: Plane,
+    center: Point3<f64>,
+    radius: f64,
 }
 
-impl<T> Circle<T>
-where
-    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
-{
-    pub fn from_plane_center_and_radius(plane: &Plane<T>, center: &Point3<T>, radius: T) -> Self {
+impl Circle {
+    pub fn from_plane_center_and_radius(plane: &Plane, center: &Point3<f64>, radius: f64) -> Self {
         Self {
             plane: *plane,
             center: *center,
@@ -40,19 +33,19 @@ where
         }
     }
 
-    pub fn radius(&self) -> T {
+    pub fn radius(&self) -> f64 {
         self.radius
     }
 
-    pub fn center(&self) -> &Point3<T> {
+    pub fn center(&self) -> &Point3<f64> {
         &self.center
     }
 
-    pub fn plane(&self) -> &Plane<T> {
+    pub fn plane(&self) -> &Plane {
         &self.plane
     }
 
-    pub fn point_at_angle(&self, angle: T) -> Point3<T> {
+    pub fn point_at_angle(&self, angle: f64) -> Point3<f64> {
         // Find a vector at 90 degrees to the plane normal.
         let p0 = perpendicular_vector(self.plane.normal());
         let p = p0 * self.radius;

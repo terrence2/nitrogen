@@ -32,6 +32,7 @@ members = [
     "libs/system/catalog",
     "libs/system/gpu",
     "libs/system/input",
+    "libs/system/jilrs",
     "libs/system/tracelog",
     "libs/system/window",
 
@@ -51,6 +52,7 @@ members = [
     "libs/wgpu-buffer/font_ttf",
     "libs/wgpu-buffer/fullscreen",
     "libs/wgpu-buffer/global_data",
+    "libs/wgpu-buffer/marker",
     "libs/wgpu-buffer/shader_shared",
     "libs/wgpu-buffer/stars",
     "libs/wgpu-buffer/terrain",
@@ -87,6 +89,7 @@ geodesy = { path = "libs/util/geodesy" }
 global_data = { path = "libs/wgpu-buffer/global_data" }
 gpu = { path = "libs/system/gpu" }
 input = { path = "libs/system/input" }
+marker = { path = "libs/wgpu-buffer/marker" }
 measure = { path = "libs/sim/measure" }
 nitrous = { path = "libs/util/nitrous" }
 orrery = { path = "libs/sim/orrery" }

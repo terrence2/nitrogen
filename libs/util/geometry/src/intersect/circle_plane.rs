@@ -14,36 +14,29 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{Circle, Plane};
 use approx::relative_eq;
-use nalgebra::{Point3, RealField};
-use num_traits::cast::FromPrimitive;
-use std::fmt::{Debug, Display};
+use nalgebra::Point3;
+use std::fmt::Debug;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum CirclePlaneIntersection<T>
-where
-    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
-{
+#[derive(Debug, Clone, Copy)]
+pub enum CirclePlaneIntersection {
     Parallel,
     InFrontOfPlane,
     BehindPlane,
-    Intersection(Point3<T>, Point3<T>),
-    Tangent(Point3<T>),
+    Intersection(Point3<f64>, Point3<f64>),
+    Tangent(Point3<f64>),
 }
 
-pub fn circle_vs_plane<T>(
-    circle: &Circle<T>,
-    plane: &Plane<T>,
-    sidedness_offset: T,
-) -> CirclePlaneIntersection<T>
-where
-    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
-{
+pub fn circle_vs_plane(
+    circle: &Circle,
+    plane: &Plane,
+    sidedness_offset: f64,
+) -> CirclePlaneIntersection {
     // We can get the direction by crossing normals.
     let d = circle.plane().normal().cross(plane.normal());
 
     // Detect and reject the parallel case: e.g. direction is ~0.
-    if relative_eq!(d.dot(&d), T::zero()) {
-        return CirclePlaneIntersection::<T>::Parallel;
+    if relative_eq!(d.dot(&d), 0_f64) {
+        return CirclePlaneIntersection::Parallel;
     }
     let d = d.normalize();
 
@@ -76,6 +69,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
+    use approx::assert_relative_eq;
     use nalgebra::{Point3, Vector3};
 
     #[test]
@@ -107,13 +101,17 @@ mod test {
 
         let i = circle_vs_plane(&c, &p, 0f64);
         println!("i: {:?}", i);
-        assert_eq!(
-            i,
-            CirclePlaneIntersection::Intersection(
-                Point3::new(-0.5f64, 0f64, 0.75f64.sqrt()),
-                Point3::new(-0.5f64, 0f64, -(0.75f64.sqrt()))
-            )
-        );
+        match i {
+            CirclePlaneIntersection::Intersection(a, b) => {
+                assert_relative_eq!(a.x, -0.5_f64);
+                assert_relative_eq!(a.y, 0_f64);
+                assert_relative_eq!(a.z, 0.75_f64.sqrt());
+                assert_relative_eq!(b.x, -0.5_f64);
+                assert_relative_eq!(b.y, 0_f64);
+                assert_relative_eq!(b.z, -(0.75_f64.sqrt()));
+            }
+            _ => panic!("expected circle-plane intersect"),
+        }
     }
 
     #[test]
@@ -132,10 +130,14 @@ mod test {
         );
 
         let i = circle_vs_plane(&c, &p, 0f64);
-        assert_eq!(
-            i,
-            CirclePlaneIntersection::Tangent(Point3::new(1f64, 0f64, 0f64))
-        );
+        match i {
+            CirclePlaneIntersection::Tangent(pt) => {
+                assert_relative_eq!(pt.x, 1_f64);
+                assert_relative_eq!(pt.y, 0_f64);
+                assert_relative_eq!(pt.z, 0_f64);
+            }
+            _ => panic!("expected circle-plane intersect"),
+        }
     }
 
     #[test]
@@ -153,14 +155,14 @@ mod test {
             &Vector3::new(1f64, 0f64, 0f64).normalize(),
         );
         let i = circle_vs_plane(&c, &p, 0f64);
-        assert_eq!(i, CirclePlaneIntersection::BehindPlane);
+        assert!(matches!(i, CirclePlaneIntersection::BehindPlane));
 
         let p = Plane::from_point_and_normal(
             &Point3::new(10f64, 0f64, 0f64),
             &Vector3::new(-1f64, 0f64, 0f64).normalize(),
         );
         let i = circle_vs_plane(&c, &p, 0f64);
-        assert_eq!(i, CirclePlaneIntersection::InFrontOfPlane);
+        assert!(matches!(i, CirclePlaneIntersection::InFrontOfPlane));
     }
 
     #[test]
@@ -180,6 +182,6 @@ mod test {
         // Point is a 1 up, why is d -1?
 
         let i = circle_vs_plane(&c, &p, 0f64);
-        assert_eq!(i, CirclePlaneIntersection::Parallel);
+        assert!(matches!(i, CirclePlaneIntersection::Parallel));
     }
 }

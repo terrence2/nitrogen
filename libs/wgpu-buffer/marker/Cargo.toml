@@ -1,0 +1,28 @@
+[package]
+name = "marker"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { version = "^ 1", features = ["backtrace"] }
+bevy_ecs = { version = "^ 0.7", features = ["trace"] }
+csscolorparser = "^ 0.6"
+memoffset = "^ 0.6"
+nalgebra = "^ 0.31"
+wgpu = { version = "^ 0.12", features = ["spirv"] }
+zerocopy = "^ 0.6"
+absolute_unit = { path = "../../util/absolute_unit" }
+camera = { path = "../../sim/camera" }
+composite = { path = "../../wgpu-buffer/composite" }
+geometry = { path = "../../util/geometry" }
+global_data = { path = "../../wgpu-buffer/global_data" }
+gpu = { path = "../../system/gpu" }
+measure = { path = "../../sim/measure" }
+nitrous = { path = "../../util/nitrous" }
+runtime = { path = "../../util/runtime" }
+shader_shared = { path = "../../wgpu-buffer/shader_shared" }
+world = { path = "../../wgpu-buffer/world" }
+window = { path = "../../system/window" }
+
+[build-dependencies]
+build_shaders = { path = "../../util/build_shaders" }

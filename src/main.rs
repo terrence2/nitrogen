@@ -28,6 +28,7 @@ use fullscreen::FullscreenBuffer;
 use global_data::GlobalParametersBuffer;
 use gpu::{DetailLevelOpts, Gpu, GpuStep};
 use input::{InputSystem, InputTarget};
+use marker::Markers;
 use measure::WorldSpaceFrame;
 use nitrous::{inject_nitrous_resource, HeapMut, NitrousResource};
 use orrery::Orrery;
@@ -127,51 +128,19 @@ impl DemoUx {
         heap.resource_mut::<WidgetBuffer>()
             .root_mut()
             .push_layout(controls_box)?;
-        heap.get_mut::<LayoutPacking>(controls_id).float_end();
-        heap.get_mut::<LayoutPacking>(controls_id)
-            .set_background("#555a")?;
-        heap.get_mut::<LayoutPacking>(controls_id).padding_mut();
-        // VerticalBox::new_with_children(&[
-        //     sim_time.clone(),
-        //     camera_direction.clone(),
-        //     camera_position.clone(),
-        //     camera_fov.clone(),
-        // ])
-        // .with_background_color(Color::Gray.darken(3.).opacity(0.8))
-        // .with_glass_background()
-        // .with_padding(Border::new(
-        //     Size::zero(),
-        //     Size::from_px(8.),
-        //     Size::from_px(24.),
-        //     Size::from_px(8.),
-        // ))
-        // .wrapped();
-
-        // let expander = Expander::new_with_child("☰ Nitrogen v0.1", controls_box)
-        //     .with_color(Color::White)
-        //     .with_background_color(Color::Gray.darken(3.).opacity(0.8))
-        //     .with_glass_background()
-        //     .with_border(
-        //         Color::Black,
-        //         Border::new(
-        //             Size::zero(),
-        //             Size::from_px(2.),
-        //             Size::from_px(2.),
-        //             Size::zero(),
-        //         ),
-        //     )
-        //     .with_padding(Border::new(
-        //         Size::from_px(2.),
-        //         Size::from_px(3.),
-        //         Size::from_px(3.),
-        //         Size::from_px(2.),
-        //     ))
-        //     .wrapped();
-        // widgets
-        //     .root_container()
-        //     .write()
-        //     .add_child("controls", expander)
-        //     .set_float(PositionH::End, PositionV::Top);
+        let controls_packing = LayoutPacking::default()
+            .float_end()
+            .float_top()
+            .set_background("#222a")?
+            .set_padding_left("10px", heap.as_mut())?
+            .set_padding_bottom("6px", heap.as_mut())?
+            .set_padding_top("4px", heap.as_mut())?
+            .set_padding_right("4px", heap.as_mut())?
+            .set_border_color("#000")?
+            .set_border_left("2px", heap.as_mut())?
+            .set_border_bottom("2px", heap.as_mut())?
+            .to_owned();
+        *heap.get_mut::<LayoutPacking>(controls_id) = controls_packing;
 
         let fps_label = Label::new("")
             .with_font(
@@ -272,10 +241,10 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .load_extension::<TraceLog>()?
         .load_extension::<StartupOpts>()?
         .load_extension::<Catalog>()?
+        .load_extension::<InputTarget>()?
         .load_extension::<EventMapper>()?
         .load_extension::<Window>()?
         .load_extension::<Gpu>()?
-        .load_extension::<InputTarget>()?
         .load_extension::<AtmosphereBuffer>()?
         .load_extension::<FullscreenBuffer>()?
         .load_extension::<GlobalParametersBuffer>()?
@@ -284,6 +253,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .load_extension::<WorldRenderPass>()?
         .load_extension::<WidgetBuffer>()?
         .load_extension::<UiRenderPass>()?
+        .load_extension::<Markers>()?
         .load_extension::<CompositeRenderPass>()?
         .load_extension::<DemoUx>()?
         .load_extension::<Label>()?

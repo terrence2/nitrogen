@@ -12,31 +12,25 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use nalgebra::{Point3, RealField, Vector3};
-use num_traits::cast::FromPrimitive;
-use std::fmt::{Debug, Display};
+use nalgebra::{Point3, Vector3};
+use std::fmt::Debug;
 
-pub struct Ray<T>
-where
-    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
-{
-    origin: Point3<T>,
-    direction: Vector3<T>,
+#[derive(Clone, Debug)]
+pub struct Ray {
+    origin: Point3<f64>,
+    direction: Vector3<f64>,
 }
 
-impl<T> Ray<T>
-where
-    T: Copy + Clone + Debug + Display + PartialEq + FromPrimitive + RealField + 'static,
-{
-    pub fn new(origin: Point3<T>, direction: Vector3<T>) -> Self {
+impl Ray {
+    pub fn new(origin: Point3<f64>, direction: Vector3<f64>) -> Self {
         Self { origin, direction }
     }
 
-    pub fn origin(&self) -> &Point3<T> {
+    pub fn origin(&self) -> &Point3<f64> {
         &self.origin
     }
 
-    pub fn direction(&self) -> &Vector3<T> {
+    pub fn direction(&self) -> &Vector3<f64> {
         &self.direction
     }
 }
