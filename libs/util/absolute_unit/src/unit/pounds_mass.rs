@@ -31,3 +31,10 @@ macro_rules! pounds_mass {
         $crate::Mass::<$crate::PoundsMass>::from(&$num)
     };
 }
+
+#[macro_export]
+macro_rules! pounds_mass_per_second {
+    ($num:expr) => {
+        $crate::MassRate::<$crate::PoundsMass, $crate::Seconds>::from(&$num)
+    };
+}

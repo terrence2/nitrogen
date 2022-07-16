@@ -2907,6 +2907,7 @@ dependencies = [
  "anyhow",
  "bevy_ecs",
  "bevy_tasks",
+ "env_logger",
  "itertools",
  "log",
  "nitrous",

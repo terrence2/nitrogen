@@ -17,7 +17,7 @@ use ordered_float::OrderedFloat;
 use std::fmt::Formatter;
 use std::{
     fmt::Display,
-    ops::{Mul, Neg},
+    ops::{Div, Mul, Neg},
 };
 
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
@@ -64,6 +64,14 @@ impl Mul<Scalar> for Scalar {
 
     fn mul(self, rhs: Scalar) -> Self::Output {
         Self(OrderedFloat(self.into_inner() * rhs.into_inner()))
+    }
+}
+
+impl Div<Scalar> for Scalar {
+    type Output = Scalar;
+
+    fn div(self, rhs: Scalar) -> Self::Output {
+        Self(OrderedFloat(self.into_inner() / rhs.into_inner()))
     }
 }
 

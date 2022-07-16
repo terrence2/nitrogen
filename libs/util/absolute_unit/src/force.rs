@@ -136,19 +136,29 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::{newtons, pounds_force, scalar};
+    use crate::{kilograms, newtons, pounds_force, pounds_mass, scalar};
     use approx::assert_abs_diff_eq;
 
     #[test]
     fn test_force() {
-        let lbf = pounds_force!(2);
-        println!("pdl: {}", lbf);
-        println!("N  : {}", newtons!(lbf));
-        assert_abs_diff_eq!(newtons!(lbf), newtons!(0.224_809 * 2.));
+        let lbf = pounds_force!(35_000_f64);
+        let n = newtons!(155_687.7_f64);
+        assert_abs_diff_eq!(newtons!(lbf), n, epsilon = 0.1);
+        let lbf = pounds_force!(n);
+        assert_abs_diff_eq!(lbf, pounds_force!(35_000_f64), epsilon = 0.1);
     }
 
     #[test]
     fn test_force_scalar() {
         assert_abs_diff_eq!(newtons!(2) * scalar!(2), newtons!(4));
+    }
+
+    #[test]
+    fn test_force_to_acceleration() {
+        let lbf = pounds_force!(70_000_f64);
+        let lb = pounds_mass!(55_000_f64);
+        let imperial_units_should_be_a_capital_offense = (lbf / lb).f64() / 32.1742;
+        assert!(imperial_units_should_be_a_capital_offense < 1_f64);
+        assert!((newtons!(lbf) / kilograms!(lb)).f64() / 9.80665 > 1_f64);
     }
 }

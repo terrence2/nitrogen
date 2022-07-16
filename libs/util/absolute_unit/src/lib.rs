@@ -24,6 +24,7 @@ pub(crate) mod force;
 pub(crate) mod generic;
 pub(crate) mod length;
 pub(crate) mod mass;
+pub(crate) mod mass_rate;
 pub(crate) mod pressure;
 pub(crate) mod rotational_inertia;
 pub(crate) mod temperature;
@@ -33,7 +34,6 @@ pub(crate) mod unit;
 pub(crate) mod velocity;
 pub(crate) mod velocity_squared;
 pub(crate) mod volume;
-pub(crate) mod weight;
 
 /// Must be implemented by all quantity types.
 pub trait Quantity {}
@@ -49,6 +49,7 @@ pub use crate::{
     force::{Force, ForceUnit},
     length::{Length, LengthUnit},
     mass::{Mass, MassUnit},
+    mass_rate::MassRate,
     pressure::{Pressure, PressureUnit},
     rotational_inertia::RotationalInertia,
     temperature::{Temperature, TemperatureUnit},
@@ -59,13 +60,12 @@ pub use crate::{
         fahrenheit::Fahrenheit, feet::Feet, hours::Hours, kelvin::Kelvin, kilograms::Kilograms,
         kilometers::Kilometers, meters::Meters, miles::Miles, nautical_miles::NauticalMiles,
         newtons::Newtons, pascals::Pascals, pounds_force::PoundsForce, pounds_mass::PoundsMass,
-        pounds_square_foot::PoundsSquareFoot, pounds_weight::PoundsWeight, radians::Radians,
-        rankine::Rankine, scalar::Scalar, seconds::Seconds, slugs::Slugs, Unit,
+        pounds_square_foot::PoundsSquareFoot, radians::Radians, rankine::Rankine, scalar::Scalar,
+        seconds::Seconds, slugs::Slugs, Unit,
     },
     velocity::Velocity,
     velocity_squared::VelocitySquared,
     volume::Volume,
-    weight::{Weight, WeightUnit},
 };
 
 // For use from macros

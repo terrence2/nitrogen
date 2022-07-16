@@ -15,8 +15,7 @@
 use crate::{
     impl_value_type_conversions, supports_absdiffeq, supports_quantity_ops, supports_scalar_ops,
     supports_shift_ops, supports_value_type_conversion, Acceleration, Area, Force, ForceUnit,
-    LengthUnit, Newtons, PoundsMass, PoundsWeight, RotationalInertia, TimeUnit, Unit, Weight,
-    WeightUnit,
+    LengthUnit, Newtons, RotationalInertia, TimeUnit, Unit,
 };
 use ordered_float::OrderedFloat;
 use std::{fmt, fmt::Debug, marker::PhantomData, ops::Mul};
@@ -35,16 +34,6 @@ supports_shift_ops!(Mass<A1>, Mass<A2>, MassUnit);
 supports_scalar_ops!(Mass<A>, MassUnit);
 supports_absdiffeq!(Mass<A>, MassUnit);
 supports_value_type_conversion!(Mass<A>, MassUnit, impl_value_type_conversions);
-
-impl<Unit> Mass<Unit>
-where
-    Unit: MassUnit,
-{
-    pub fn weight<UnitB: WeightUnit>(&self) -> Weight<UnitB> {
-        let lb_mass = Mass::<PoundsMass>::from(self).f64();
-        Weight::<UnitB>::from(&Weight::<PoundsWeight>::from(lb_mass * 32.174_1))
-    }
-}
 
 impl<Unit> fmt::Display for Mass<Unit>
 where
@@ -106,10 +95,10 @@ mod test {
 
     #[test]
     fn test_mass() {
-        let lb = pounds_mass!(2);
-        println!("lb: {}", lb);
-        println!("kg: {}", kilograms!(lb));
-        assert_abs_diff_eq!(kilograms!(lb), kilograms!(0.907_184_74));
+        let lb = pounds_mass!(60_000_f64);
+        let kg = kilograms!(27_215.5_f64);
+        assert_abs_diff_eq!(kg, kilograms!(lb), epsilon = 0.1);
+        assert_abs_diff_eq!(lb, pounds_mass!(kg), epsilon = 0.1);
     }
 
     #[test]

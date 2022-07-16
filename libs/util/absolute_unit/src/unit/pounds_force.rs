@@ -22,7 +22,7 @@ impl Unit for PoundsForce {
     const UNIT_SUFFIX: &'static str = "pdl";
 }
 impl ForceUnit for PoundsForce {
-    const NEWTONS_IN_UNIT: f64 = 0.224_809;
+    const NEWTONS_IN_UNIT: f64 = 1. / 0.224_809;
 
     type UnitMass = PoundsMass;
     type UnitLength = Feet;

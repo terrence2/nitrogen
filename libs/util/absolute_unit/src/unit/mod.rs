@@ -47,9 +47,6 @@ pub(crate) mod kilograms;
 pub(crate) mod pounds_mass;
 pub(crate) mod slugs;
 
-// Weight
-pub(crate) mod pounds_weight;
-
 // Time
 pub(crate) mod hours;
 pub(crate) mod seconds;

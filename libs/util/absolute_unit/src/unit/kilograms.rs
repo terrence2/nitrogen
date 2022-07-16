@@ -45,3 +45,10 @@ macro_rules! kilograms_meter2 {
         $crate::RotationalInertia::<$crate::Kilograms, $crate::Meters>::from(&$num)
     };
 }
+
+#[macro_export]
+macro_rules! kilograms_per_second {
+    ($num:expr) => {
+        $crate::MassRate::<$crate::Kilograms, $crate::Seconds>::from(&$num)
+    };
+}

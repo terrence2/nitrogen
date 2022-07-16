@@ -14,8 +14,8 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
     impl_value_type_conversions, supports_absdiffeq, supports_quantity_ops, supports_scalar_ops,
-    supports_shift_ops, supports_value_type_conversion, DynamicUnits, LengthUnit, Time, TimeUnit,
-    Velocity,
+    supports_shift_ops, supports_value_type_conversion, DynamicUnits, LengthUnit, Meters, Seconds,
+    Time, TimeUnit, Velocity,
 };
 use ordered_float::OrderedFloat;
 use std::{fmt, fmt::Debug, marker::PhantomData, ops::Mul};
@@ -82,6 +82,10 @@ where
     LA: LengthUnit,
     TA: TimeUnit,
 {
+    pub fn g_number(&self) -> f64 {
+        Acceleration::<Meters, Seconds>::from(self).f64() / 9.806_65_f64
+    }
+
     pub fn as_dyn(&self) -> DynamicUnits {
         DynamicUnits::new1o2::<LA, TA, TA>(self.v)
     }
