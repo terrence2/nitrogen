@@ -32,6 +32,10 @@
   * [x] ECS Driven Memory System
   * [ ] pretty output and entities lists
   * [ ] Scripted Functions
+* Flight Modeling
+  * [x] Pick an algorithm: [Allerton's Principles of Flight Simulation](https://www.wiley.com/en-us/Principles+of+Flight+Simulation-p-9780470754368)
+  * [ ] Expose relevant controls and surfaces
+  * [ ] Framework for providing forces and moments to the flight model
 * Entity/Runtime System
   * [ ] Save/Load support
   * [ ] Replay recording
