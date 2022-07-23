@@ -45,6 +45,24 @@ use widget::{Label, Labeled, LayoutNode, LayoutPacking, PaintContext, Terminal, 
 use window::{size::Size, DisplayOpts, Window, WindowBuilder};
 use world_render::WorldRenderPass;
 
+const PRELUDE: &str = r#"
+// Default camera bindings
+bindings.bind("+mouse1", "@camera.arcball.pan_view(pressed)");
+bindings.bind("+mouse3", "@camera.arcball.move_view(pressed)");
+bindings.bind("mouseMotion", "@camera.arcball.handle_mousemotion(dx, dy)");
+bindings.bind("mouseWheel", "@camera.arcball.handle_mousewheel(vertical_delta)");
+bindings.bind("+Shift+Up", "@camera.arcball.target_up_fast(pressed)");
+bindings.bind("+Shift+Down", "@camera.arcball.target_down_fast(pressed)");
+bindings.bind("+Up", "@camera.arcball.target_up(pressed)");
+bindings.bind("+Down", "@camera.arcball.target_down(pressed)");
+
+// By default start out pointing at Mt Everest.
+let location := "Everest";
+@camera.arcball.set_target(@camera.arcball.notable_location(location));
+@camera.arcball.set_eye(@camera.arcball.eye_for(location));
+orrery.set_date_time(1964, 2, 24, 12, 0, 0);
+"#;
+
 /// Demonstrate the capabilities of the Nitrogen engine
 #[derive(Clone, Debug, StructOpt)]
 #[structopt(set_term_width = if let Some((Width(w), _)) = terminal_size() { w as usize } else { 80 })]
@@ -233,7 +251,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
     runtime
         .insert_resource(opt.catalog_opts)
         .insert_resource(opt.display_opts)
-        .insert_resource(opt.startup_opts)
+        .insert_resource(opt.startup_opts.with_prelude(PRELUDE))
         .insert_resource(opt.tracelog_opts)
         .insert_resource(opt.detail_opts.cpu_detail())
         .insert_resource(opt.detail_opts.gpu_detail())
