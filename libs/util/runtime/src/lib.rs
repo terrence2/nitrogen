@@ -30,3 +30,8 @@ pub use crate::{
     runtime::{Extension, FrameStage, Runtime, RuntimeStep, ShutdownStage, SimStage, StartupStage},
     startup::StartupOpts,
 };
+
+use bevy_ecs::prelude::*;
+
+#[derive(Debug, Default, Component)]
+pub struct PlayerMarker;
