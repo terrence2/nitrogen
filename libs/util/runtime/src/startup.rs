@@ -30,6 +30,18 @@ pub struct StartupOpts {
     /// Dump schedules after startup
     #[structopt(long)]
     dump_schedules: bool,
+
+    // Allow setting a prelude script to run from caller
+    prelude: Option<String>,
+}
+
+impl StartupOpts {
+    /// Provide a default prelude if none has been
+    pub fn with_prelude<S: ToString>(mut self, prelude: S) -> Self {
+        assert!(self.prelude.is_none());
+        self.prelude = Some(prelude.to_string());
+        self
+    }
 }
 
 impl Extension for StartupOpts {
@@ -39,6 +51,9 @@ impl Extension for StartupOpts {
         }
         if let Some(opts) = runtime.maybe_resource::<StartupOpts>() {
             let opts = opts.to_owned();
+            if let Some(prelude) = opts.prelude.as_ref() {
+                runtime.run_string(prelude)?;
+            }
             if let Some(command) = opts.command.as_ref() {
                 runtime.run_string(command)?;
             }

@@ -1,16 +1,2 @@
 // autoexec.n2o: Runs after startup, before the main loop starts.
 
-// Bind our camera
-bindings.bind("+mouse1", "@camera.arcball.pan_view(pressed)");
-bindings.bind("+mouse3", "@camera.arcball.move_view(pressed)");
-bindings.bind("mouseMotion", "@camera.arcball.handle_mousemotion(dx, dy)");
-bindings.bind("mouseWheel", "@camera.arcball.handle_mousewheel(vertical_delta)");
-bindings.bind("+Shift+Up", "@camera.arcball.target_up_fast(pressed)");
-bindings.bind("+Shift+Down", "@camera.arcball.target_down_fast(pressed)");
-bindings.bind("+Up", "@camera.arcball.target_up(pressed)");
-bindings.bind("+Down", "@camera.arcball.target_down(pressed)");
-
-let location := "Everest";
-@camera.arcball.set_target(@camera.arcball.notable_location(location));
-@camera.arcball.set_eye(@camera.arcball.eye_for(location));
-orrery.set_date_time(1964, 2, 24, 12, 0, 0);

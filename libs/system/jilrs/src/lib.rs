@@ -80,19 +80,19 @@ mod linux {
 
 pub use linux::EvdevDriver as Jilrs;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use anyhow::Result;
-
-    #[test]
-    fn it_works() -> Result<()> {
-        let mut jil = Jilrs::new()?;
-        for _ in 0..1_000 {
-            while let Ok(Some(event)) = jil.next_event() {
-                println!("EVENT: {:?}", event);
-            }
-        }
-        Ok(())
-    }
-}
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use anyhow::Result;
+//
+//     #[test]
+//     fn it_works() -> Result<()> {
+//         let mut jil = Jilrs::new()?;
+//         for _ in 0..1_000 {
+//             while let Ok(Some(event)) = jil.next_event() {
+//                 println!("EVENT: {:?}", event);
+//             }
+//         }
+//         Ok(())
+//     }
+// }
