@@ -293,6 +293,10 @@ impl ScriptHerder {
         for script in &heap.resource::<ScriptQueue>().queue {
             if let Err(err) = self.run_interactive(script) {
                 warn!("script failed: {}", err);
+                #[cfg(debug_assertions)]
+                {
+                    println!("script failed: {}", err);
+                }
             }
         }
         heap.resource_mut::<ScriptQueue>().queue.clear();
