@@ -31,11 +31,6 @@ pub struct WidgetVertex {
     pub(crate) widget_info_index: u32,
 }
 
-fn pack_color(c: &Color) -> [u8; 4] {
-    let rgba = c.rgba_u8();
-    [rgba.0, rgba.1, rgba.2, rgba.3]
-}
-
 impl WidgetVertex {
     pub fn descriptor() -> wgpu::VertexBufferLayout<'static> {
         let tmp = wgpu::VertexBufferLayout {
@@ -120,28 +115,29 @@ impl WidgetVertex {
         let y1 = y1.as_gpu();
 
         // Build 4 corner vertices.
+        let color = color.to_rgba8();
         let v00 = WidgetVertex {
             position: [x0, y0, z],
             tex_coord: [s0, t0],
-            color: pack_color(color),
+            color,
             widget_info_index,
         };
         let v01 = WidgetVertex {
             position: [x0, y1, z],
             tex_coord: [s0, t1],
-            color: pack_color(color),
+            color,
             widget_info_index,
         };
         let v10 = WidgetVertex {
             position: [x1, y0, z],
             tex_coord: [s1, t0],
-            color: pack_color(color),
+            color,
             widget_info_index,
         };
         let v11 = WidgetVertex {
             position: [x1, y1, z],
             tex_coord: [s1, t1],
-            color: pack_color(color),
+            color,
             widget_info_index,
         };
 
@@ -172,28 +168,29 @@ impl WidgetVertex {
         let y1 = y1.as_gpu(win, ScreenDir::Vertical);
 
         // Build 4 corner vertices.
+        let color = color.to_rgba8();
         let v00 = WidgetVertex {
             position: [x0, y0, z],
             tex_coord: [s0, t0],
-            color: pack_color(color),
+            color,
             widget_info_index,
         };
         let v01 = WidgetVertex {
             position: [x0, y1, z],
             tex_coord: [s0, t1],
-            color: pack_color(color),
+            color,
             widget_info_index,
         };
         let v10 = WidgetVertex {
             position: [x1, y0, z],
             tex_coord: [s1, t0],
-            color: pack_color(color),
+            color,
             widget_info_index,
         };
         let v11 = WidgetVertex {
             position: [x1, y1, z],
             tex_coord: [s1, t1],
-            color: pack_color(color),
+            color,
             widget_info_index,
         };
 
@@ -228,28 +225,29 @@ impl WidgetVertex {
         let widget_info_index = 0;
 
         // Build 4 corner vertices.
+        let color = color.to_rgba8();
         let v00 = WidgetVertex {
             position: [x0, y0, z],
             tex_coord: [s0, t0],
-            color: pack_color(color),
+            color,
             widget_info_index,
         };
         let v01 = WidgetVertex {
             position: [x0, y1, z],
             tex_coord: [s0, t1],
-            color: pack_color(color),
+            color,
             widget_info_index,
         };
         let v10 = WidgetVertex {
             position: [x1, y0, z],
             tex_coord: [s1, t0],
-            color: pack_color(color),
+            color,
             widget_info_index,
         };
         let v11 = WidgetVertex {
             position: [x1, y1, z],
             tex_coord: [s1, t1],
-            color: pack_color(color),
+            color,
             widget_info_index,
         };
 
