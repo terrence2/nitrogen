@@ -197,9 +197,8 @@ impl Gpu {
         })
     }
 
-    #[cfg(unix)]
-    pub fn for_test_unix() -> Result<Runtime> {
-        let mut runtime = input::InputController::for_test_unix()?;
+    pub fn for_test() -> Result<Runtime> {
+        let mut runtime = input::InputController::for_test()?;
         runtime
             .insert_resource(window::DisplayOpts::default())
             .insert_resource(CpuDetailLevel::High)
@@ -792,10 +791,9 @@ impl Gpu {
 mod tests {
     use super::*;
 
-    #[cfg(unix)]
     #[test]
     fn test_create() -> Result<()> {
-        let runtime = Gpu::for_test_unix()?;
+        let runtime = Gpu::for_test()?;
         assert!(runtime.resource::<Gpu>().render_extent().width > 0);
         Ok(())
     }

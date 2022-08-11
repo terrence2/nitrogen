@@ -41,7 +41,7 @@ use winit::{
         DeviceEvent, DeviceId, Event, KeyboardInput, MouseScrollDelta, StartCause, WindowEvent,
     },
     event_loop::{ControlFlow, EventLoop, EventLoopProxy},
-    window::{Window, WindowBuilder},
+    window::{WindowBuilder},
 };
 
 pub type InputEventVec = SmallVec<[InputEvent; 8]>;
@@ -263,9 +263,14 @@ impl InputController {
         };
     }
 
-    #[cfg(unix)]
-    pub fn for_test_unix() -> Result<Runtime> {
-        use winit::platform::{run_return::EventLoopExtRunReturn, unix::EventLoopExtUnix};
+    pub fn for_test() -> Result<Runtime> {
+        use winit::{window::Window, platform::run_return::EventLoopExtRunReturn};
+
+        #[cfg(unix)]
+        use winit::platform::unix::EventLoopExtUnix;
+        #[cfg(windows)]
+        use winit::platform::windows::EventLoopExtWindows;
+
         let mut event_loop = EventLoop::<MetaEvent>::new_any_thread();
         let os_window = Window::new(&event_loop).unwrap();
         let mut have_config = 0;
