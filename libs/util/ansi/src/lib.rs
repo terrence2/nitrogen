@@ -44,7 +44,7 @@ pub fn terminal_size() -> (u16, u16) {
     (80, 24)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Color {
     Black = 30,
     Red = 31,
@@ -135,7 +135,7 @@ impl StyleFlags {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Escape {
     foreground: Option<Color>,
     background: Option<Color>,
