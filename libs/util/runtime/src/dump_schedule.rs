@@ -22,7 +22,12 @@
 
 // http://www.gnu.org/licenses/license-list.html#Expat
 
-use bevy_ecs::{component::ComponentId, prelude::*, schedule::SystemContainer};
+use bevy_ecs::{
+    component::ComponentId,
+    prelude::*,
+    schedule::SystemContainer,
+    schedule::{StageLabelId, SystemLabelId},
+};
 use dot::DotGraph;
 use pretty_type_name::pretty_type_name_str;
 use std::{fs::File, io::Write, path::Path};
@@ -280,8 +285,7 @@ fn build_schedule_graph(
     schedule_name: &str,
     style: &ScheduleGraphStyle,
 ) {
-    let is_startup_schedule =
-        |stage_name: &dyn StageLabel| format!("{:?}", stage_name) == "Startup";
+    let is_startup_schedule = |stage_name: StageLabelId| format!("{:?}", stage_name) == "Startup";
 
     for (stage_name, stage) in schedule.iter_stages() {
         if let Some(system_stage) = stage.downcast_ref::<SystemStage>() {
@@ -310,14 +314,14 @@ fn build_schedule_graph(
     }
 }
 
-fn marker_id(schedule_name: &str, stage_name: &dyn StageLabel) -> String {
-    format!("MARKER_{}_{:?}", schedule_name, stage_name,)
+fn marker_id(schedule_name: &str, stage_name: StageLabelId) -> String {
+    format!("MARKER_{}_{:?}", schedule_name, stage_name)
 }
 
 fn system_stage_subgraph(
     world: &World,
     schedule_name: &str,
-    stage_name: &dyn StageLabel,
+    stage_name: StageLabelId,
     system_stage: &SystemStage,
     style: &ScheduleGraphStyle,
 ) -> DotGraph {
@@ -511,7 +515,7 @@ fn add_dependency_labels(
     schedule_name: &str,
     system_node_id: &str,
     direction: SystemDirection,
-    requirements: &[Box<dyn SystemLabel>],
+    requirements: &[SystemLabelId],
     other_systems: &[&impl SystemContainer],
 ) {
     for requirement in requirements {
