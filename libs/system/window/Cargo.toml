@@ -7,7 +7,7 @@ edition = "2021"
 [dependencies]
 log = "^ 0.4"
 anyhow = { version = "^ 1", features = ["backtrace"] }
-bevy_ecs = { version = "^ 0.7", features = ["trace"] }
+bevy_ecs = { version = "^ 0.8", features = ["trace"] }
 ordered-float = "^ 3"
 parking_lot = "^ 0.12"
 structopt = "^ 0.3"
