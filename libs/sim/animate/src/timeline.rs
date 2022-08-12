@@ -48,7 +48,7 @@ impl CubicBezierCurve {
 
     pub fn interpolate(&self, x: f64) -> f64 {
         let ts = self.bezier.solve_t_for_x(x);
-        if let Some(&t) = ts.get(0) {
+        if let Some(&t) = ts.first() {
             self.bezier.y(t)
         } else {
             1.
