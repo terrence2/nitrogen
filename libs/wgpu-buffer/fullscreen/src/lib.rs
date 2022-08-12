@@ -92,7 +92,6 @@ mod tests {
     use super::*;
     use anyhow::Result;
 
-    #[cfg(unix)]
     #[test]
     fn it_can_create_a_buffer() -> Result<()> {
         let runtime = Gpu::for_test()?.with_extension::<FullscreenBuffer>()?;
