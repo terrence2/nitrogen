@@ -528,7 +528,7 @@ mod test {
 
     #[test]
     fn test_label_widget() -> Result<()> {
-        let mut runtime = Gpu::for_test_unix()?;
+        let mut runtime = Gpu::for_test()?;
         runtime
             .insert_resource(AppDirs::new(Some("nitrogen"), true).unwrap())
             .insert_resource(TimeStep::new_60fps())

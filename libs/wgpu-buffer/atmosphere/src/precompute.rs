@@ -1646,10 +1646,9 @@ mod test {
     use super::*;
     use std::time::Instant;
 
-    #[cfg(unix)]
     #[test]
     fn test_create() -> Result<()> {
-        let mut runtime = Gpu::for_test_unix()?;
+        let mut runtime = Gpu::for_test()?;
         let mut gpu = runtime.resource_mut::<Gpu>();
         let precompute_start = Instant::now();
         let pcp = Precompute::new(&gpu)?;

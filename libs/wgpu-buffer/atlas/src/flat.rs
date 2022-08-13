@@ -836,10 +836,9 @@ mod test {
         Ok(packer.texture)
     }
 
-    #[cfg(unix)]
     #[test]
     fn test_random_packing() -> Result<()> {
-        let mut runtime = Gpu::for_test_unix()?;
+        let mut runtime = Gpu::for_test()?;
         let mut gpu = runtime.resource_mut::<Gpu>();
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
@@ -905,10 +904,9 @@ mod test {
         Ok(())
     }
 
-    #[cfg(unix)]
     #[test]
     fn test_finish() -> Result<()> {
-        let mut runtime = Gpu::for_test_unix()?;
+        let mut runtime = Gpu::for_test()?;
         let mut gpu = runtime.resource_mut::<Gpu>();
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(
@@ -928,10 +926,9 @@ mod test {
         Ok(())
     }
 
-    #[cfg(unix)]
     #[test]
     fn test_grayscale() -> Result<()> {
-        let mut runtime = Gpu::for_test_unix()?;
+        let mut runtime = Gpu::for_test()?;
         let mut gpu = runtime.resource_mut::<Gpu>();
 
         let mut packer = AtlasPacker::<Luma<u8>>::new(
@@ -951,10 +948,9 @@ mod test {
         Ok(())
     }
 
-    #[cfg(unix)]
     #[test]
     fn test_incremental_upload() -> Result<()> {
-        let runtime = Gpu::for_test_unix()?;
+        let runtime = Gpu::for_test()?;
         let gpu = runtime.resource::<Gpu>();
 
         let mut packer = AtlasPacker::<Rgba<u8>>::new(

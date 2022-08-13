@@ -383,7 +383,7 @@ mod tests {
 
     #[test]
     fn it_works() -> Result<()> {
-        let mut runtime = input::InputController::for_test_unix()?;
+        let mut runtime = input::InputController::for_test()?;
         runtime
             .insert_resource(DisplayOpts::default())
             .load_extension::<Window>()?;

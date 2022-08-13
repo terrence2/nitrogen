@@ -312,10 +312,9 @@ mod tests {
     use super::*;
     use gpu::Gpu;
 
-    #[cfg(unix)]
     #[test]
     fn it_can_create_a_buffer() -> Result<()> {
-        let mut runtime = Gpu::for_test_unix()?;
+        let mut runtime = Gpu::for_test()?;
         runtime.load_extension::<GlobalParametersBuffer>()?;
         assert!(runtime.resource::<GlobalParametersBuffer>().tone_gamma > 0.0);
         Ok(())
