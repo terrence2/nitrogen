@@ -297,26 +297,32 @@ impl Window {
             self.os_window.inner_size().width,
             self.os_window.inner_size().height,
         );
-
-        // On X11 (maybe others?), the w/h pair we get in the change event maybe has not
-        // made it to / been fully processed by, the window, so try to make sure the window
-        // knows what size the window is. :facepalm:
         let new_size = PhysicalSize {
             width: width as u32,
             height: height as u32,
         };
-        self.os_window.set_inner_size(new_size);
+
+        // On X11 (maybe others?), the w/h pair we get in the change event maybe has not
+        // made it to / been fully processed by, the window, so try to make sure the window
+        // knows what size the window is. :facepalm:
+        #[cfg(unix)]
+        {
+            self.os_window.set_inner_size(new_size);
+        }
 
         // note: the OS doesn't always give us the option to set the exact window size,
         // so use whatever is real, regardless of what happened above. It is possible
         // (AwesomeWM, X11) that the size change event reflects the full usable area
         // and not the ultimate client size, in which case using the new numbers passed
         // in the change event will cause us to resize every frame. :facepalm:
-        let new_size = self.os_window.inner_size();
-        info!(
-            "after resize, size is: {}x{}",
-            new_size.width, new_size.height
-        );
+        #[cfg(unix)]
+        {
+            let new_size = self.os_window.inner_size();
+            info!(
+                "after resize, size is: {}x{}",
+                new_size.width, new_size.height
+            );
+        }
 
         self.config.on_window_resized(new_size);
         self.note_display_config_change();
