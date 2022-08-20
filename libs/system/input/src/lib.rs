@@ -225,6 +225,7 @@ impl InputController {
 
         // Hack so that our window APIs work properly from the get-go.
         // TODO: is this needed (or even working) on all platforms?
+        #[cfg(unix)]
         input_controller.lock().wait_for_window_configuration().ok();
 
         runtime.insert_resource(input_controller.clone());
@@ -684,13 +685,17 @@ impl InputSystem {
             DeviceEvent::MouseWheel {
                 delta: MouseScrollDelta::LineDelta(dh, dv),
             } => {
+                let horizontal_delta = *dh as f64;
+                let vertical_delta = *dv as f64;
+                #[cfg(windows)]
+                let vertical_delta = -vertical_delta;
                 let in_window = *input_state
                     .cursor_in_window
                     .get(device_id)
                     .unwrap_or(&false);
                 out.push(InputEvent::MouseWheel {
-                    horizontal_delta: *dh as f64,
-                    vertical_delta: *dv as f64,
+                    horizontal_delta,
+                    vertical_delta,
                     modifiers_state: input_state.modifiers_state,
                     in_window,
                     window_focused: input_state.window_focused,

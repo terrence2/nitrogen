@@ -67,14 +67,10 @@ use window::{
 
 pub const SANS_FONT_NAME: &str = "sans";
 pub const MONO_FONT_NAME: &str = "mono";
-const DEJAVU_SANS_REGULAR_TTF_DATA: &[u8] =
-    include_bytes!("../../../../assets/font/DejaVuSans.ttf");
-const DEJAVU_MONO_REGULAR_TTF_DATA: &[u8] =
-    include_bytes!("../../../../assets/font/DejaVuSansMono.ttf");
-const FIRA_SANS_REGULAR_TTF_DATA: &[u8] =
-    include_bytes!("../../../../assets/font/FiraSans-Regular.ttf");
-const FIRA_MONO_REGULAR_TTF_DATA: &[u8] =
-    include_bytes!("../../../../assets/font/FiraMono-Regular.ttf");
+const DEJAVU_SANS_REGULAR_TTF_DATA: &[u8] = include_bytes!("../assets/font/DejaVuSans.ttf");
+const DEJAVU_MONO_REGULAR_TTF_DATA: &[u8] = include_bytes!("../assets/font/DejaVuSansMono.ttf");
+const FIRA_SANS_REGULAR_TTF_DATA: &[u8] = include_bytes!("../assets/font/FiraSans-Regular.ttf");
+const FIRA_MONO_REGULAR_TTF_DATA: &[u8] = include_bytes!("../assets/font/FiraMono-Regular.ttf");
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
 pub enum WidgetRenderStep {
