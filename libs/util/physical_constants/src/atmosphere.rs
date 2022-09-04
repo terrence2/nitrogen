@@ -634,4 +634,18 @@ mod test {
             );
         }
     }
+
+    #[test]
+    fn test_atmosphere_feet() {
+        use absolute_unit::feet;
+        for i in 0..9 {
+            let altitude = feet!(i * 5000);
+            let atmos = StandardAtmosphere::at_altitude(altitude);
+            println!(
+                "{}\t{:0.6}",
+                altitude.f64(),
+                atmos.density::<Kilograms, Meters>().f64()
+            );
+        }
+    }
 }

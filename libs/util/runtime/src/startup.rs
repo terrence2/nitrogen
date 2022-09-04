@@ -46,9 +46,6 @@ impl StartupOpts {
 
 impl Extension for StartupOpts {
     fn init(runtime: &mut Runtime) -> Result<()> {
-        if let Ok(code) = std::fs::read_to_string("autoexec.n2o") {
-            runtime.run_interactive(&code)?;
-        }
         if let Some(opts) = runtime.maybe_resource::<StartupOpts>() {
             let opts = opts.to_owned();
             if let Some(prelude) = opts.prelude.as_ref() {
@@ -70,6 +67,9 @@ impl Extension for StartupOpts {
             if opts.dump_schedules {
                 runtime.set_dump_schedules_on_startup();
             }
+        }
+        if let Ok(code) = std::fs::read_to_string("autoexec.n2o") {
+            runtime.run_interactive(&code)?;
         }
         Ok(())
     }

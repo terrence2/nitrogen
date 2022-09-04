@@ -13,6 +13,7 @@ log = "^ 0.4"
 once_cell = "^ 1"
 pretty-type-name = "1.0"
 structopt = "^ 0.3"
+ansi = { path = "../../util/ansi" }
 nitrous = { path = "../../util/nitrous" }
 
 [dev-dependencies]

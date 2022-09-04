@@ -12,10 +12,11 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+use ansi::{ansi, Color};
 use anyhow::Result;
 use bevy_ecs::prelude::*;
 use itertools::*;
-use log::{trace, warn};
+use log::{info, trace, warn};
 use nitrous::{
     ExecutionContext, HeapMut, HeapRef, LocalNamespace, NitrousExecutor, NitrousScript, Value,
     YieldState,
@@ -309,7 +310,7 @@ impl ScriptHerder {
                 Ok(yield_state) => match yield_state {
                     YieldState::Yielded => next_gthreads.push(meta),
                     YieldState::Finished(result) => {
-                        trace!("{:?}: {} <- {}", phase, result, meta.context.script());
+                        info!("{:?}: {} <- {}", phase, result, meta.context.script());
                         heap.resource_mut::<ScriptCompletions>()
                             .push(ScriptCompletion {
                                 receipt: meta.receipt,
@@ -320,6 +321,13 @@ impl ScriptHerder {
                     }
                 },
                 Err(err) => {
+                    #[cfg(debug_assertions)]
+                    println!(
+                        "{}SCRIPT ERROR{}: {}",
+                        ansi().fg(Color::Red).bold(),
+                        ansi(),
+                        err
+                    );
                     warn!("script failed: {}", err);
                     heap.resource_mut::<ScriptCompletions>()
                         .push(ScriptCompletion {
