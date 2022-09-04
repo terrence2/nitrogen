@@ -1,0 +1,12 @@
+[package]
+name = "vehicle"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { version = "^ 1", features = ["backtrace"] }
+bevy_ecs = { version = "^ 0.8", features = ["trace"] }
+log = "^ 0.4"
+animate = { path = "../../sim/animate" }
+nitrous = { path = "../../util/nitrous" }
+runtime = { path = "../../util/runtime" }

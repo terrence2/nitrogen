@@ -43,6 +43,7 @@ members = [
     "libs/sim/event_mapper",
     "libs/sim/measure",
     "libs/sim/orrery",
+    "libs/sim/vehicle",
 
     # GPU buffer management and drawing pass implementations.
     "libs/wgpu-buffer/atlas",
@@ -98,6 +99,7 @@ stars = { path = "libs/wgpu-buffer/stars" }
 terrain = { path = "libs/wgpu-buffer/terrain" }
 tracelog = { path = "libs/system/tracelog" }
 ui = { path = "libs/wgpu-buffer/ui" }
+vehicle = { path = "libs/sim/vehicle" }
 widget = { path = "libs/wgpu-buffer/widget" }
 window = { path = "libs/system/window" }
 world_render = { package = "world", path = "libs/wgpu-buffer/world" }

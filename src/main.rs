@@ -41,6 +41,10 @@ use terminal_size::{terminal_size, Width};
 use terrain::TerrainBuffer;
 use tracelog::{TraceLog, TraceLogOpts};
 use ui::UiRenderPass;
+use vehicle::{
+    AirbrakeEffector, BayEffector, FlapsEffector, GearEffector, HookEffector, PitchInceptor,
+    RollInceptor, YawInceptor,
+};
 use widget::{Label, Labeled, LayoutNode, LayoutPacking, PaintContext, Terminal, WidgetBuffer};
 use window::{size::Size, DisplayOpts, Window, WindowBuilder};
 use world_render::WorldRenderPass;
@@ -280,7 +284,15 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .load_extension::<Timeline>()?
         .load_extension::<TimeStep>()?
         .load_extension::<CameraSystem>()?
-        .load_extension::<ArcBallSystem>()?;
+        .load_extension::<ArcBallSystem>()?
+        .load_extension::<PitchInceptor>()?
+        .load_extension::<RollInceptor>()?
+        .load_extension::<YawInceptor>()?
+        .load_extension::<AirbrakeEffector>()?
+        .load_extension::<BayEffector>()?
+        .load_extension::<FlapsEffector>()?
+        .load_extension::<GearEffector>()?
+        .load_extension::<HookEffector>()?;
 
     // We need at least one entity with a camera controller for the screen camera
     // before the sim is fully ready to run.
