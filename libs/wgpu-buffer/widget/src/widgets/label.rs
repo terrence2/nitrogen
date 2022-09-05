@@ -87,6 +87,9 @@ impl Label {
         mut paint_context: ResMut<PaintContext>,
     ) {
         for (label, measure) in labels.iter() {
+            if !measure.display() {
+                continue;
+            }
             let widget_info_index = paint_context.push_widget(&WidgetInfo::default());
 
             // Account for descender

@@ -3590,6 +3590,7 @@ checksum = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
 name = "vehicle"
 version = "0.0.0"
 dependencies = [
+ "absolute_unit",
  "animate",
  "anyhow",
  "bevy_ecs",

@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    font_context::FontContext,
+    font_context::{FontContext, FontId},
     region::Position,
     text_run::{SpanSelection, TextSpan},
     widget_info::WidgetInfo,
@@ -71,6 +71,10 @@ impl PaintContext {
 
     pub fn widget_mut(&mut self, offset: u32) -> &mut WidgetInfo {
         &mut self.widget_info_pool[offset as usize]
+    }
+
+    pub fn font_id_for_name(&self, font_name: &str) -> FontId {
+        self.font_context.font_id_for_name(font_name)
     }
 
     pub fn add_font<S: Borrow<str> + Into<String>>(&mut self, font_name: S, font: Font) {

@@ -12,19 +12,4 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-mod controls;
-mod effectors;
-mod systems;
-
-pub use crate::{
-    controls::{
-        absolute_control::{AirbrakeControl, FlapsControl},
-        symmetric_inceptor::{PitchInceptor, RollInceptor, YawInceptor},
-        throttle_inceptor::{ThrottleInceptor, ThrottlePosition},
-        toggle_control::{BayControl, GearControl, HookControl},
-    },
-    effectors::toggle_effector::{
-        AirbrakeEffector, BayEffector, FlapsEffector, GearEffector, HookEffector,
-    },
-    systems::simple_jet_engine::SimpleJetEngine,
-};
+pub(crate) mod simple_jet_engine;

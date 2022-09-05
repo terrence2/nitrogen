@@ -69,7 +69,7 @@ impl ThrottleInceptor {
     }
 
     #[method]
-    fn set_miltary(&mut self, percent: f64) {
+    fn set_military(&mut self, percent: f64) {
         self.position = ThrottlePosition::Military(percent);
     }
 
