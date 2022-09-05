@@ -176,6 +176,18 @@ impl EntityMarkers {
     pub fn remove_box(&mut self, name: &str) {
         self.boxes.remove(name);
     }
+
+    pub fn clear_arrows(&mut self) {
+        self.arrows.clear();
+    }
+
+    pub fn clear_cylinders(&mut self) {
+        self.cylinders.clear();
+    }
+
+    pub fn clear_boxes(&mut self) {
+        self.boxes.clear();
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
@@ -230,8 +242,8 @@ impl Extension for Markers {
 
 #[inject_nitrous_resource]
 impl Markers {
-    const MAX_VERTICIES: usize = 4096;
-    const MAX_INDICES: usize = 8192;
+    const MAX_VERTICIES: usize = 262144;
+    const MAX_INDICES: usize = 262144 * 2;
 
     fn new(globals: &GlobalParametersBuffer, gpu: &Gpu) -> Self {
         let vert_shader =
@@ -392,7 +404,7 @@ impl Markers {
         vertices: &mut Vec<MarkerVertex>,
         indices: &mut Vec<u32>,
     ) {
-        let mut prim = marker.primitive.to_primitive(2);
+        let mut prim = marker.primitive.to_primitive(0);
         let base = vertices.len() as u32;
         for vert in &mut prim.verts {
             let p_world = frame.position().point64() + (frame.facing() * vert.position);
@@ -443,7 +455,7 @@ impl Markers {
         vertices: &mut Vec<MarkerVertex>,
         indices: &mut Vec<u32>,
     ) {
-        let mut prim = marker.primitive.to_primitive(20);
+        let mut prim = marker.primitive.to_primitive(5);
         let base = vertices.len() as u32;
         for vert in &mut prim.verts {
             let p_world = frame.position().point64() + (frame.facing() * vert.position);
@@ -468,7 +480,7 @@ impl Markers {
         vertices: &mut Vec<MarkerVertex>,
         indices: &mut Vec<u32>,
     ) {
-        let mut prim = marker.primitive.to_primitive(20);
+        let mut prim = marker.primitive.to_primitive(5);
         let base = vertices.len() as u32;
         for vert in &mut prim.verts {
             let p_world = frame.position().point64() + (frame.facing() * vert.position);

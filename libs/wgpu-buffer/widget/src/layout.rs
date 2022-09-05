@@ -306,6 +306,9 @@ pub struct LayoutMeasurements {
 
     // Amount allocated to the widget in total.
     total_allocation: Region<RelSize>,
+
+    // Whether parent container is hidden.
+    display: bool,
 }
 
 impl Default for LayoutMeasurements {
@@ -315,6 +318,7 @@ impl Default for LayoutMeasurements {
             total_extent: Extent::new(RelSize::Percent(0.), RelSize::Percent(0.)),
             child_allocation: Region::empty(),
             total_allocation: Region::empty(),
+            display: true,
         }
     }
 }
@@ -330,10 +334,6 @@ impl LayoutMeasurements {
         self.total_extent.expand_with_border_rel(&packing.padding);
     }
 
-    pub fn child_allocation(&self) -> &Region<RelSize> {
-        &self.child_allocation
-    }
-
     pub fn set_depth(&mut self, depth: f32) {
         self.child_allocation
             .position_mut()
@@ -341,6 +341,18 @@ impl LayoutMeasurements {
         self.total_allocation
             .position_mut()
             .set_depth(RelSize::Gpu(depth));
+    }
+
+    pub fn set_display(&mut self, display: bool) {
+        self.display = display;
+    }
+
+    pub fn display(&self) -> bool {
+        self.display
+    }
+
+    pub fn child_allocation(&self) -> &Region<RelSize> {
+        &self.child_allocation
     }
 
     pub(crate) fn set_total_allocation(
