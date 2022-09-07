@@ -342,11 +342,11 @@ where
                             include_bytes!("../target/unaligned_blit.frag.spirv"),
                         ),
                         entry_point: "main",
-                        targets: &[wgpu::ColorTargetState {
+                        targets: &[Some(wgpu::ColorTargetState {
                             format,
                             blend: None,
                             write_mask: wgpu::ColorWrites::all(),
-                        }],
+                        })],
                     }),
                     primitive: wgpu::PrimitiveState {
                         topology: wgpu::PrimitiveTopology::TriangleStrip,
@@ -714,14 +714,14 @@ where
         // Encode unaligned texture blits, including unaligned.
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("atlas-finish-render-pass"),
-            color_attachments: &[wgpu::RenderPassColorAttachment {
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &self.texture_view,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Load,
                     store: true,
                 },
-            }],
+            })],
             depth_stencil_attachment: None,
         });
         rpass.set_pipeline(&self.unaligned_blit_pipeline);

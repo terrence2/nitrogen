@@ -99,11 +99,11 @@ impl App {
                 fragment: Some(wgpu::FragmentState {
                     module: &frag_shader,
                     entry_point: "main",
-                    targets: &[wgpu::ColorTargetState {
+                    targets: &[Some(wgpu::ColorTargetState {
                         format: Gpu::SCREEN_FORMAT,
                         blend: None,
                         write_mask: wgpu::ColorWrites::COLOR,
-                    }],
+                    })],
                 }),
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleStrip,
@@ -160,7 +160,7 @@ impl App {
                     .create_view(&::wgpu::TextureViewDescriptor::default());
                 let render_pass_desc_ref = wgpu::RenderPassDescriptor {
                     label: Some("screen-composite-render-pass"),
-                    color_attachments: &[Gpu::color_attachment(&view)],
+                    color_attachments: &[Some(Gpu::color_attachment(&view))],
                     depth_stencil_attachment: Some(gpu.depth_stencil_attachment()),
                 };
                 let mut rpass = encoder.begin_render_pass(&render_pass_desc_ref);

@@ -197,6 +197,7 @@ impl WorldRenderPass {
                 });
 
         let composite_pipeline = Self::make_fullscreen_pipeline(
+            "world-composite-pipeline",
             gpu.device(),
             &fullscreen_layout,
             &fullscreen_shared_vert,
@@ -206,6 +207,7 @@ impl WorldRenderPass {
             ),
         );
         let dbg_deferred_pipeline = Self::make_fullscreen_pipeline(
+            "world-dbg-pipeline-deferred",
             gpu.device(),
             &fullscreen_layout,
             &fullscreen_shared_vert,
@@ -215,6 +217,7 @@ impl WorldRenderPass {
             ),
         );
         let dbg_depth_pipeline = Self::make_fullscreen_pipeline(
+            "world-dbg-pipeline-depth",
             gpu.device(),
             &fullscreen_layout,
             &fullscreen_shared_vert,
@@ -224,6 +227,7 @@ impl WorldRenderPass {
             ),
         );
         let dbg_color_pipeline = Self::make_fullscreen_pipeline(
+            "world-dbg-pipeline-color",
             gpu.device(),
             &fullscreen_layout,
             &fullscreen_shared_vert,
@@ -233,6 +237,7 @@ impl WorldRenderPass {
             ),
         );
         let dbg_normal_local_pipeline = Self::make_fullscreen_pipeline(
+            "world-dbg-pipeline-normals-local",
             gpu.device(),
             &fullscreen_layout,
             &fullscreen_shared_vert,
@@ -242,6 +247,7 @@ impl WorldRenderPass {
             ),
         );
         let dbg_normal_global_pipeline = Self::make_fullscreen_pipeline(
+            "world-dbg-pipeline-normals-global",
             gpu.device(),
             &fullscreen_layout,
             &fullscreen_shared_vert,
@@ -276,11 +282,11 @@ impl WorldRenderPass {
                             include_bytes!("../target/dbg-wireframe.frag.spirv"),
                         ),
                         entry_point: "main",
-                        targets: &[wgpu::ColorTargetState {
+                        targets: &[Some(wgpu::ColorTargetState {
                             format: Gpu::SCREEN_FORMAT,
                             blend: None,
                             write_mask: wgpu::ColorWrites::ALL,
-                        }],
+                        })],
                     }),
                     primitive: wgpu::PrimitiveState {
                         topology: wgpu::PrimitiveTopology::LineList,
@@ -410,13 +416,14 @@ impl WorldRenderPass {
     }
 
     pub fn make_fullscreen_pipeline(
+        name: &'static str,
         device: &wgpu::Device,
         layout: &wgpu::PipelineLayout,
         vert_shader: &wgpu::ShaderModule,
         frag_shader: &wgpu::ShaderModule,
     ) -> wgpu::RenderPipeline {
         device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("world-dbg-deferred-pipeline"),
+            label: Some(name),
             layout: Some(layout),
             vertex: wgpu::VertexState {
                 module: vert_shader,
@@ -426,11 +433,11 @@ impl WorldRenderPass {
             fragment: Some(wgpu::FragmentState {
                 module: frag_shader,
                 entry_point: "main",
-                targets: &[wgpu::ColorTargetState {
+                targets: &[Some(wgpu::ColorTargetState {
                     format: Gpu::SCREEN_FORMAT,
                     blend: None,
                     write_mask: wgpu::ColorWrites::ALL,
-                }],
+                })],
             }),
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleStrip,
@@ -524,7 +531,7 @@ impl WorldRenderPass {
     pub fn offscreen_target_cleared(
         &self,
     ) -> (
-        [wgpu::RenderPassColorAttachment; 1],
+        [Option<wgpu::RenderPassColorAttachment>; 1],
         Option<wgpu::RenderPassDepthStencilAttachment>,
     ) {
         self.offscreen_target_maybe_clear(
@@ -536,7 +543,7 @@ impl WorldRenderPass {
     pub fn offscreen_target_preserved(
         &self,
     ) -> (
-        [wgpu::RenderPassColorAttachment; 1],
+        [Option<wgpu::RenderPassColorAttachment>; 1],
         Option<wgpu::RenderPassDepthStencilAttachment>,
     ) {
         self.offscreen_target_maybe_clear(wgpu::LoadOp::Load, wgpu::LoadOp::Load)
@@ -547,18 +554,18 @@ impl WorldRenderPass {
         color_load: wgpu::LoadOp<wgpu::Color>,
         depth_load: wgpu::LoadOp<f32>,
     ) -> (
-        [wgpu::RenderPassColorAttachment; 1],
+        [Option<wgpu::RenderPassColorAttachment>; 1],
         Option<wgpu::RenderPassDepthStencilAttachment>,
     ) {
         (
-            [wgpu::RenderPassColorAttachment {
+            [Some(wgpu::RenderPassColorAttachment {
                 view: &self.deferred_texture.1,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: color_load,
                     store: true,
                 },
-            }],
+            })],
             Some(wgpu::RenderPassDepthStencilAttachment {
                 view: &self.deferred_depth.1,
                 depth_ops: Some(wgpu::Operations {

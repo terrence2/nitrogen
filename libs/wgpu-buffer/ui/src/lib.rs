@@ -161,7 +161,7 @@ impl UiRenderPass {
                             include_bytes!("../target/ui-background.frag.spirv"),
                         ),
                         entry_point: "main",
-                        targets: &[wgpu::ColorTargetState {
+                        targets: &[Some(wgpu::ColorTargetState {
                             format: Gpu::SCREEN_FORMAT,
                             blend: Some(wgpu::BlendState {
                                 color: wgpu::BlendComponent {
@@ -172,7 +172,7 @@ impl UiRenderPass {
                                 alpha: wgpu::BlendComponent::REPLACE,
                             }),
                             write_mask: wgpu::ColorWrites::ALL,
-                        }],
+                        })],
                     }),
                     primitive: wgpu::PrimitiveState {
                         topology: wgpu::PrimitiveTopology::TriangleList,
@@ -226,7 +226,7 @@ impl UiRenderPass {
                         include_bytes!("../target/ui-text.frag.spirv"),
                     ),
                     entry_point: "main",
-                    targets: &[wgpu::ColorTargetState {
+                    targets: &[Some(wgpu::ColorTargetState {
                         format: Gpu::SCREEN_FORMAT,
                         blend: Some(wgpu::BlendState {
                             color: wgpu::BlendComponent {
@@ -241,7 +241,7 @@ impl UiRenderPass {
                             },
                         }),
                         write_mask: wgpu::ColorWrites::ALL,
-                    }],
+                    })],
                 }),
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleList,
@@ -396,18 +396,18 @@ impl UiRenderPass {
     pub fn offscreen_target(
         &self,
     ) -> (
-        [wgpu::RenderPassColorAttachment; 1],
+        [Option<wgpu::RenderPassColorAttachment>; 1],
         Option<wgpu::RenderPassDepthStencilAttachment>,
     ) {
         (
-            [wgpu::RenderPassColorAttachment {
+            [Some(wgpu::RenderPassColorAttachment {
                 view: &self.deferred_texture.1,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
                     store: true,
                 },
-            }],
+            })],
             Some(wgpu::RenderPassDepthStencilAttachment {
                 view: &self.deferred_depth.1,
                 depth_ops: Some(wgpu::Operations {

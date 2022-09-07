@@ -8,7 +8,7 @@ edition = "2021"
 anyhow = { version = "^ 1", features = ["backtrace"] }
 bevy_ecs = { version = "^ 0.8", features = ["trace"] }
 log = "^ 0.4"
-wgpu = { version = "^ 0.12", features = ["spirv"] }
+wgpu = { version = "^ 0.13", features = ["spirv"] }
 fullscreen = { path = "../../wgpu-buffer/fullscreen" }
 global_data = { path = "../../wgpu-buffer/global_data" }
 gpu = { path = "../../system/gpu" }

@@ -272,7 +272,7 @@ impl Markers {
                 fragment: Some(wgpu::FragmentState {
                     module: &frag_shader,
                     entry_point: "main",
-                    targets: &[wgpu::ColorTargetState {
+                    targets: &[Some(wgpu::ColorTargetState {
                         format: Gpu::SCREEN_FORMAT,
                         blend: Some(wgpu::BlendState {
                             color: wgpu::BlendComponent {
@@ -283,7 +283,7 @@ impl Markers {
                             alpha: wgpu::BlendComponent::REPLACE,
                         }),
                         write_mask: wgpu::ColorWrites::ALL,
-                    }],
+                    })],
                 }),
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleList,

@@ -19,12 +19,12 @@ use crate::{
     table_helpers::{IRRADIANCE_EXTENT, SCATTERING_EXTENT, TRANSMITTANCE_EXTENT},
 };
 use anyhow::Result;
-use futures::executor::block_on;
 use gpu::Gpu;
 use image::{ImageBuffer, Luma, Rgb};
 use log::trace;
+use parking_lot::Mutex;
 use std::num::NonZeroU32;
-use std::{mem, num::NonZeroU64, slice, time::Instant};
+use std::{mem, num::NonZeroU64, slice, sync::Arc, time::Instant};
 
 const NUM_PRECOMPUTED_WAVELENGTHS: usize = 40;
 const NUM_SCATTERING_PASSES: usize = 4;
@@ -669,34 +669,34 @@ impl Precompute {
         self.compute_transmittance_at(RGB_LAMBDAS, gpu, &srgb_atmosphere_buffer);
 
         if DUMP_FINAL {
-            block_on(Self::dump_texture(
+            Self::dump_texture(
                 "final-transmittance".to_owned(),
                 RGB_LAMBDAS,
                 gpu,
                 TRANSMITTANCE_EXTENT,
                 &self.transmittance_texture,
-            ));
-            block_on(Self::dump_texture(
+            );
+            Self::dump_texture(
                 "final-irradiance".to_owned(),
                 RGB_LAMBDAS,
                 gpu,
                 IRRADIANCE_EXTENT,
                 &self.irradiance_texture,
-            ));
-            block_on(Self::dump_texture(
+            );
+            Self::dump_texture(
                 "final-scattering".to_owned(),
                 RGB_LAMBDAS,
                 gpu,
                 SCATTERING_EXTENT,
                 &self.scattering_texture,
-            ));
-            block_on(Self::dump_texture(
+            );
+            Self::dump_texture(
                 "final-single-mie-scattering".to_owned(),
                 RGB_LAMBDAS,
                 gpu,
                 SCATTERING_EXTENT,
                 &self.single_mie_scattering_texture,
-            ));
+            );
         }
 
         Ok(srgb_atmosphere_buffer)
@@ -883,7 +883,7 @@ impl Precompute {
             });
             cpass.set_pipeline(&self.build_transmittance_lut_pipeline);
             cpass.set_bind_group(0, &bind_group, &[]);
-            cpass.dispatch(
+            cpass.dispatch_workgroups(
                 TRANSMITTANCE_EXTENT.width / BLOCK_SIZE,
                 TRANSMITTANCE_EXTENT.height / BLOCK_SIZE,
                 1,
@@ -892,13 +892,13 @@ impl Precompute {
         gpu.queue_mut().submit(vec![encoder.finish()]);
 
         if DUMP_TRANSMITTANCE {
-            block_on(Self::dump_texture(
+            Self::dump_texture(
                 "transmittance".to_owned(),
                 lambdas,
                 gpu,
                 TRANSMITTANCE_EXTENT,
                 &self.transmittance_texture,
-            ));
+            );
         }
     }
 
@@ -948,7 +948,7 @@ impl Precompute {
             });
             cpass.set_pipeline(&self.build_direct_irradiance_lut_pipeline);
             cpass.set_bind_group(0, &bind_group, &[]);
-            cpass.dispatch(
+            cpass.dispatch_workgroups(
                 IRRADIANCE_EXTENT.width / BLOCK_SIZE,
                 IRRADIANCE_EXTENT.height / BLOCK_SIZE,
                 1,
@@ -957,13 +957,13 @@ impl Precompute {
         gpu.queue_mut().submit(vec![encoder.finish()]);
 
         if DUMP_DIRECT_IRRADIANCE {
-            block_on(Self::dump_texture(
+            Self::dump_texture(
                 "direct-irradiance".to_owned(),
                 lambdas,
                 gpu,
                 IRRADIANCE_EXTENT,
                 &self.delta_irradiance_texture,
-            ));
+            );
         }
     }
 
@@ -1048,7 +1048,7 @@ impl Precompute {
             });
             cpass.set_pipeline(&self.build_single_scattering_lut_pipeline);
             cpass.set_bind_group(0, &bind_group, &[]);
-            cpass.dispatch(
+            cpass.dispatch_workgroups(
                 SCATTERING_EXTENT.width / BLOCK_SIZE,
                 SCATTERING_EXTENT.height / BLOCK_SIZE,
                 SCATTERING_EXTENT.depth_or_array_layers / BLOCK_SIZE,
@@ -1057,40 +1057,40 @@ impl Precompute {
         gpu.queue_mut().submit(vec![encoder.finish()]);
 
         if DUMP_SINGLE_RAYLEIGH {
-            block_on(Self::dump_texture(
+            Self::dump_texture(
                 "single-scattering-delta-rayleigh".to_owned(),
                 lambdas,
                 gpu,
                 SCATTERING_EXTENT,
                 &self.delta_rayleigh_scattering_texture,
-            ));
+            );
         }
         if DUMP_SINGLE_ACC {
-            block_on(Self::dump_texture(
+            Self::dump_texture(
                 "single-scattering-acc".to_owned(),
                 lambdas,
                 gpu,
                 SCATTERING_EXTENT,
                 &self.scattering_texture,
-            ));
+            );
         }
         if DUMP_SINGLE_MIE {
-            block_on(Self::dump_texture(
+            Self::dump_texture(
                 "single-scattering-delta-mie".to_owned(),
                 lambdas,
                 gpu,
                 SCATTERING_EXTENT,
                 &self.delta_mie_scattering_texture,
-            ));
+            );
         }
         if DUMP_SINGLE_MIE_ACC {
-            block_on(Self::dump_texture(
+            Self::dump_texture(
                 "single-scattering-mie-acc".to_owned(),
                 lambdas,
                 gpu,
                 SCATTERING_EXTENT,
                 &self.single_mie_scattering_texture,
-            ));
+            );
         }
     }
 
@@ -1205,7 +1205,7 @@ impl Precompute {
             });
             cpass.set_pipeline(&self.build_scattering_density_lut_pipeline);
             cpass.set_bind_group(0, &bind_group, &[]);
-            cpass.dispatch(
+            cpass.dispatch_workgroups(
                 SCATTERING_EXTENT.width / BLOCK_SIZE,
                 SCATTERING_EXTENT.height / BLOCK_SIZE,
                 SCATTERING_EXTENT.depth_or_array_layers / BLOCK_SIZE,
@@ -1214,13 +1214,13 @@ impl Precompute {
         gpu.queue_mut().submit(vec![encoder.finish()]);
 
         if DUMP_SCATTERING_DENSITY {
-            block_on(Self::dump_texture(
+            Self::dump_texture(
                 format!("delta-scattering-density-{}", scattering_order),
                 lambdas,
                 gpu,
                 SCATTERING_EXTENT,
                 &self.delta_scattering_density_texture,
-            ));
+            );
         }
     }
 
@@ -1329,7 +1329,7 @@ impl Precompute {
             });
             cpass.set_pipeline(&self.build_indirect_irradiance_lut_pipeline);
             cpass.set_bind_group(0, &bind_group, &[]);
-            cpass.dispatch(
+            cpass.dispatch_workgroups(
                 IRRADIANCE_EXTENT.width / BLOCK_SIZE,
                 IRRADIANCE_EXTENT.height / BLOCK_SIZE,
                 1,
@@ -1338,22 +1338,22 @@ impl Precompute {
         gpu.queue_mut().submit(vec![encoder.finish()]);
 
         if DUMP_INDIRECT_IRRADIANCE_DELTA {
-            block_on(Self::dump_texture(
+            Self::dump_texture(
                 format!("indirect-delta-irradiance-{}", scattering_order),
                 lambdas,
                 gpu,
                 IRRADIANCE_EXTENT,
                 &self.delta_irradiance_texture,
-            ));
+            );
         }
         if DUMP_INDIRECT_IRRADIANCE_ACC {
-            block_on(Self::dump_texture(
+            Self::dump_texture(
                 format!("indirect-irradiance-acc-{}", scattering_order),
                 lambdas,
                 gpu,
                 IRRADIANCE_EXTENT,
                 &self.irradiance_texture,
-            ));
+            );
         }
     }
 
@@ -1448,7 +1448,7 @@ impl Precompute {
             });
             cpass.set_pipeline(&self.build_multiple_scattering_lut_pipeline);
             cpass.set_bind_group(0, &bind_group, &[]);
-            cpass.dispatch(
+            cpass.dispatch_workgroups(
                 SCATTERING_EXTENT.width / BLOCK_SIZE,
                 SCATTERING_EXTENT.height / BLOCK_SIZE,
                 SCATTERING_EXTENT.depth_or_array_layers / BLOCK_SIZE,
@@ -1457,20 +1457,20 @@ impl Precompute {
         gpu.queue_mut().submit(vec![encoder.finish()]);
 
         if DUMP_MULTIPLE_SCATTERING {
-            block_on(Self::dump_texture(
+            Self::dump_texture(
                 format!("delta-multiple-scattering-{}", scattering_order),
                 lambdas,
                 gpu,
                 SCATTERING_EXTENT,
                 &self.delta_multiple_scattering_texture,
-            ));
-            block_on(Self::dump_texture(
+            );
+            Self::dump_texture(
                 format!("multiple-scattering-{}", scattering_order),
                 lambdas,
                 gpu,
                 SCATTERING_EXTENT,
                 &self.scattering_texture,
-            ));
+            );
         }
     }
 
@@ -1490,7 +1490,7 @@ impl Precompute {
         &self.single_mie_scattering_texture
     }
 
-    async fn dump_texture(
+    fn dump_texture(
         prefix: String,
         lambdas: [f64; 4],
         gpu: &mut Gpu,
@@ -1530,9 +1530,17 @@ impl Precompute {
         gpu.queue_mut().submit(vec![encoder.finish()]);
         gpu.device().poll(wgpu::Maintain::Wait);
 
-        let reader = staging_buffer.slice(..).map_async(wgpu::MapMode::Read);
-        gpu.device().poll(wgpu::Maintain::Wait);
-        reader.await.unwrap();
+        let waiter = Arc::new(Mutex::new(false));
+        let waiter_ref = waiter.clone();
+        staging_buffer
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |err| {
+                err.expect("failed to dump texture");
+                *waiter_ref.lock() = true;
+            });
+        while !*waiter.lock() {
+            gpu.device().poll(wgpu::Maintain::Wait);
+        }
         let mapping = staging_buffer.slice(..).get_mapped_range();
 
         let offset = mapping.as_ptr().align_offset(mem::align_of::<f32>());

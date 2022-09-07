@@ -10,7 +10,7 @@ bevy_ecs = { version = "^ 0.8", features = ["trace"] }
 log = "^ 0.4"
 nalgebra = "^ 0.31"
 ordered-float = "^ 3"
-wgpu = { version = "^ 0.12", features = ["spirv"] }
+wgpu = { version = "^ 0.13", features = ["spirv"] }
 zerocopy = "^ 0.6"
 absolute_unit = { path = "../../util/absolute_unit" }
 geodesy = { path = "../../util/geodesy" }

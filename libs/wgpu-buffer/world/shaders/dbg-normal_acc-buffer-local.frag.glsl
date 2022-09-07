@@ -18,14 +18,21 @@
 #include <wgpu-buffer/terrain/include/layout_composite.glsl>
 
 layout(location = 0) out vec4 f_color;
-layout(location = 0) in vec2 v_tc;
-layout(location = 1) in vec3 v_ray_world;
-layout(location = 2) in vec2 v_fullscreen;
-layout(location = 3) in vec2 v_tc_idx;
+layout(location = 0) in vec3 v_ray_world;
+layout(location = 1) in vec2 v_fullscreen;
+layout(location = 2) in vec2 v_tc_idx;
 
 void
 main()
 {
+    // Fake usage
+    if (v_ray_world.x > 1000.0) {
+        f_color = vec4(v_ray_world, 0);
+    }
+    if (v_fullscreen.x > 1000.0) {
+        f_color = vec4(v_fullscreen, 0, 0);
+    }
+
     float depth = texelFetch(sampler2D(terrain_deferred_depth, terrain_linear_sampler), ivec2(v_tc_idx), 0).x;
     ivec2 raw_normal = texelFetch(isampler2D(terrain_normal_acc_texture, terrain_nearest_sampler), ivec2(v_tc_idx), 0).xy;
     if (depth > -1) {

@@ -24,10 +24,9 @@
 #include <wgpu-buffer/world/include/world.glsl>
 
 layout(location = 0) out vec4 f_color;
-layout(location = 0) in vec2 v_tc;
-layout(location = 1) in vec3 v_ray_world;
-layout(location = 2) in vec2 v_fullscreen;
-layout(location = 3) in vec2 v_tc_idx;
+layout(location = 0) in vec3 v_ray_world;
+layout(location = 1) in vec2 v_fullscreen;
+layout(location = 2) in vec2 v_tc_idx;
 
 vec4
 fullscreen_to_world_km(vec2 v_fullscreen, float z_ndc)

@@ -16,7 +16,7 @@ parking_lot = "^ 0.12"
 platform-dirs = "^ 0.3"
 rayon = "^ 1.5"
 smallvec = "^ 1"
-wgpu = { version = "^ 0.12", features = ["spirv"] }
+wgpu = { version = "^ 0.13", features = ["spirv"] }
 zerocopy = "^ 0.6"
 animate = { path = "../../sim/animate" }
 atlas = { path = "../../wgpu-buffer/atlas" }

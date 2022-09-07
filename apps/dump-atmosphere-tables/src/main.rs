@@ -15,7 +15,6 @@
 
 use anyhow::Result;
 use atmosphere::{Precompute, TableHelpers};
-use futures_lite::future::block_on;
 use gpu::Gpu;
 use input::InputSystem;
 use runtime::Runtime;
@@ -63,7 +62,7 @@ fn window_main(mut runtime: Runtime) -> Result<()> {
     scattering_path.push("solar_scattering.wgpu.bin");
     let mut single_mie_scattering_path = opt.output;
     single_mie_scattering_path.push("solar_single_mie_scattering.wgpu.bin");
-    block_on(TableHelpers::write_textures(
+    TableHelpers::write_textures(
         pcp.transmittance_texture(),
         &transmittance_path,
         pcp.irradiance_texture(),
@@ -73,7 +72,7 @@ fn window_main(mut runtime: Runtime) -> Result<()> {
         pcp.single_mie_scattering_texture(),
         &single_mie_scattering_path,
         &mut runtime.resource_mut::<Gpu>(),
-    ))?;
+    )?;
     println!("Write time: {:?}", write_start.elapsed());
 
     Ok(())
