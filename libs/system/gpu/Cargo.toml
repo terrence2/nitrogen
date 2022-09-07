@@ -13,7 +13,7 @@ ordered-float = "^ 3"
 parking_lot = "^ 0.12"
 raw-window-handle = "^ 0.4"
 structopt = "^ 0.3"
-wgpu = { version = "^ 0.12", features = ["spirv"] }
+wgpu = { version = "^ 0.13", features = ["spirv"] }
 winit = "^ 0.26"
 zerocopy = "^ 0.6"
 input = { path = "../../system/input" }

@@ -15,7 +15,8 @@
 use crate::earth_consts::{EarthParameters, RGB_LAMBDAS};
 use anyhow::Result;
 use gpu::{texture_format_size, Gpu};
-use std::{fs, num::NonZeroU32, path::Path};
+use parking_lot::Mutex;
+use std::{fs, num::NonZeroU32, path::Path, sync::Arc};
 
 pub const TRANSMITTANCE_EXTENT: wgpu::Extent3d = wgpu::Extent3d {
     width: 256,
@@ -187,7 +188,7 @@ impl TableHelpers {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub async fn write_textures(
+    pub fn write_textures(
         transmittance_texture: &wgpu::Texture,
         transmittance_path: &Path,
         irradiance_texture: &wgpu::Texture,
@@ -290,19 +291,40 @@ impl TableHelpers {
         gpu.queue_mut().submit(vec![encoder.finish()]);
         gpu.device().poll(wgpu::Maintain::Wait);
 
-        let transmittance_reader = transmittance_buffer
+        let waiter = Arc::new(Mutex::new(0usize));
+        let transmittance_waiter = waiter.clone();
+        let irradiance_waiter = waiter.clone();
+        let scatter_waiter = waiter.clone();
+        let single_mie_scatter_waiter = waiter.clone();
+
+        transmittance_buffer
             .slice(..)
-            .map_async(wgpu::MapMode::Read);
-        let irradiance_reader = irradiance_buffer.slice(..).map_async(wgpu::MapMode::Read);
-        let scatter_reader = scattering_buffer.slice(..).map_async(wgpu::MapMode::Read);
-        let single_mie_scatter_reader = single_mie_scattering_buffer
+            .map_async(wgpu::MapMode::Read, move |err| {
+                err.expect("failed to read transmittance texture");
+                *transmittance_waiter.lock() += 1;
+            });
+        irradiance_buffer
             .slice(..)
-            .map_async(wgpu::MapMode::Read);
-        gpu.device().poll(wgpu::Maintain::Wait);
-        transmittance_reader.await?;
-        irradiance_reader.await?;
-        scatter_reader.await?;
-        single_mie_scatter_reader.await?;
+            .map_async(wgpu::MapMode::Read, move |err| {
+                err.expect("failed to read irradiance texture");
+                *irradiance_waiter.lock() += 1;
+            });
+        scattering_buffer
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |err| {
+                err.expect("failed to read scatter texture");
+                *scatter_waiter.lock() += 1;
+            });
+        single_mie_scattering_buffer
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |err| {
+                err.expect("failed to read single_mie_scatter texture");
+                *single_mie_scatter_waiter.lock() += 1;
+            });
+
+        while *waiter.lock() != 4 {
+            gpu.device().poll(wgpu::Maintain::Wait);
+        }
         fs::write(
             transmittance_path,
             &transmittance_buffer.slice(..).get_mapped_range(),

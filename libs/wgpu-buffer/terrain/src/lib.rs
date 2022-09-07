@@ -331,11 +331,11 @@ impl TerrainBuffer {
                             include_bytes!("../target/draw_deferred_texture.frag.spirv"),
                         ),
                         entry_point: "main",
-                        targets: &[wgpu::ColorTargetState {
+                        targets: &[Some(wgpu::ColorTargetState {
                             format: Self::DEFERRED_TEXTURE_FORMAT,
                             blend: None,
                             write_mask: wgpu::ColorWrites::ALL,
-                        }],
+                        })],
                     }),
                     primitive: wgpu::PrimitiveState {
                         topology: wgpu::PrimitiveTopology::TriangleStrip,
@@ -968,18 +968,18 @@ impl TerrainBuffer {
     fn deferred_texture_target(
         &self,
     ) -> (
-        [wgpu::RenderPassColorAttachment; 1],
+        [Option<wgpu::RenderPassColorAttachment>; 1],
         Option<wgpu::RenderPassDepthStencilAttachment>,
     ) {
         (
-            [wgpu::RenderPassColorAttachment {
+            [Some(wgpu::RenderPassColorAttachment {
                 view: &self.deferred_texture.1,
                 resolve_target: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color::RED),
                     store: true,
                 },
-            }],
+            })],
             Some(wgpu::RenderPassDepthStencilAttachment {
                 view: &self.deferred_depth.1,
                 depth_ops: Some(wgpu::Operations {
@@ -1072,7 +1072,7 @@ impl TerrainBuffer {
             &self.accumulate_common_bind_group,
             &[],
         );
-        cpass.dispatch(self.acc_extent.width / 8, self.acc_extent.height / 8, 1);
+        cpass.dispatch_workgroups(self.acc_extent.width / 8, self.acc_extent.height / 8, 1);
     }
 
     fn accumulate_normals(

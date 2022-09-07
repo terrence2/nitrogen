@@ -148,7 +148,7 @@ impl HeightsTileSet for SphericalHeightTileSet {
         const WORKGROUP_WIDTH: u32 = 65536;
         let wg_x = (vertex_count % WORKGROUP_WIDTH).max(1);
         let wg_y = (vertex_count / WORKGROUP_WIDTH).max(1);
-        cpass.dispatch(wg_x, wg_y, 1);
+        cpass.dispatch_workgroups(wg_x, wg_y, 1);
     }
 }
 
@@ -272,7 +272,7 @@ impl ColorsTileSet for SphericalColorTileSet {
             self.common.bind_group(),
             &[],
         );
-        cpass.dispatch(extent.width / 8, extent.height / 8, 1);
+        cpass.dispatch_workgroups(extent.width / 8, extent.height / 8, 1);
     }
 }
 
@@ -396,6 +396,6 @@ impl NormalsTileSet for SphericalNormalsTileSet {
             self.common.bind_group(),
             &[],
         );
-        cpass.dispatch(extent.width / 8, extent.height / 8, 1);
+        cpass.dispatch_workgroups(extent.width / 8, extent.height / 8, 1);
     }
 }

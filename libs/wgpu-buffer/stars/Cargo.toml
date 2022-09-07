@@ -12,7 +12,7 @@ lazy_static = "^ 1"
 log = "^ 0.4"
 nalgebra = "^ 0.31"
 static_assertions = "^ 1"
-wgpu = { version = "^ 0.12", features = ["spirv"] }
+wgpu = { version = "^ 0.13", features = ["spirv"] }
 zerocopy = "^ 0.6"
 star_catalog = { path = "../../util/star_catalog" }
 gpu = { path = "../../system/gpu" }

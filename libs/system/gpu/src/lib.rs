@@ -26,6 +26,7 @@ use bevy_ecs::prelude::*;
 use futures_lite::future::block_on;
 use log::{info, trace};
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
+use parking_lot::Mutex;
 use runtime::{Extension, Runtime};
 use std::{borrow::Cow, fmt::Debug, fs, mem, num::NonZeroU32, path::PathBuf, ptr, sync::Arc};
 use wgpu::util::DeviceExt;
@@ -294,9 +295,6 @@ impl Gpu {
             "{:^6} - PARTIALLY_BOUND_BINDING_ARRAY\n",
             f.contains(wgpu::Features::PARTIALLY_BOUND_BINDING_ARRAY)
         ) + &format!(
-            "{:^6} - UNSIZED_BINDING_ARRAY\n",
-            f.contains(wgpu::Features::UNSIZED_BINDING_ARRAY)
-        ) + &format!(
             "{:^6} - MULTI_DRAW_INDIRECT\n",
             f.contains(wgpu::Features::MULTI_DRAW_INDIRECT)
         ) + &format!(
@@ -335,9 +333,6 @@ impl Gpu {
         ) + &format!(
             "{:^6} - VERTEX_WRITABLE_STORAGE\n",
             f.contains(wgpu::Features::VERTEX_WRITABLE_STORAGE)
-        ) + &format!(
-            "{:^6} - CLEAR_COMMANDS\n",
-            f.contains(wgpu::Features::CLEAR_COMMANDS)
         ) + &format!(
             "{:^6} - SPIRV_SHADER_PASSTHROUGH\n",
             f.contains(wgpu::Features::SPIRV_SHADER_PASSTHROUGH)
@@ -474,13 +469,6 @@ impl Gpu {
             };
         }
     }
-
-    // pub fn register_render_extent_change_receiver<T: RenderExtentChangeReceiver>(
-    //     &mut self,
-    //     observer: Arc<RwLock<T>>,
-    // ) {
-    //     self.render_extent_change_receivers.push(observer);
-    // }
 
     pub fn attachment_extent(&self) -> wgpu::Extent3d {
         self.render_extent
@@ -701,7 +689,7 @@ impl Gpu {
     pub fn create_shader_module(&self, name: &str, spirv: &[u8]) -> wgpu::ShaderModule {
         let spirv_words = Self::make_spirv(spirv);
         self.device
-            .create_shader_module(&wgpu::ShaderModuleDescriptor {
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some(name),
                 source: spirv_words,
             })
@@ -762,9 +750,20 @@ impl Gpu {
         );
         gpu.queue_mut().submit(vec![encoder.finish()]);
         gpu.device().poll(wgpu::Maintain::Wait);
-        let reader = download_buffer.slice(..).map_async(wgpu::MapMode::Read);
-        gpu.device().poll(wgpu::Maintain::Wait);
-        block_on(reader)?;
+        let waiter = Arc::new(Mutex::new(false));
+        let waiter_ref = waiter.clone();
+        download_buffer
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |err| {
+                if let Err(e) = err {
+                    println!("Failed to dump texture: {}", e);
+                }
+                *waiter_ref.lock() = true;
+            });
+        while !*waiter.lock() {
+            gpu.device().poll(wgpu::Maintain::Wait);
+        }
+        // block_on(reader)?;
         let raw = download_buffer.slice(..).get_mapped_range().to_owned();
         callback(extent, format, raw);
         Ok(())
