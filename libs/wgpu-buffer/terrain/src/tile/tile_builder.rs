@@ -46,6 +46,7 @@
 
 use crate::{
     tile::{
+        null_tile_set::NullHeightTileSet,
         spherical_tile_set::{
             SphericalColorTileSet, SphericalHeightTileSet, SphericalNormalsTileSet,
         },
@@ -135,6 +136,7 @@ pub(crate) enum GenericTileSet {
     SphericalHeights(SphericalHeightTileSet),
     SphericalNormals(SphericalNormalsTileSet),
     SphericalColors(SphericalColorTileSet),
+    NullHeights(NullHeightTileSet),
 }
 
 #[derive(Debug)]
@@ -244,6 +246,21 @@ impl TileSetBuilder {
                     panic!("unimplemented polar tiles")
                 }
             });
+        if !self
+            .descriptors
+            .iter()
+            .any(|v| v.kind == DataSetDataKind::Height)
+        {
+            self.descriptors.push(TileSetDescriptor {
+                prefix: "null_tile_set".to_owned(),
+                kind: DataSetDataKind::Height,
+                coordinates: DataSetCoordinates::Spherical,
+                tile_set: Some(GenericTileSet::NullHeights(NullHeightTileSet::new(
+                    displace_height_bind_group_layout,
+                    gpu,
+                ))),
+            });
+        }
         Ok(self)
     }
 
@@ -259,6 +276,9 @@ impl TileSetBuilder {
                 GenericTileSet::SphericalColors(tile_set) => runtime
                     .spawn_named(&make_symbol(desc.prefix))?
                     .insert_named(tile_set)?,
+                GenericTileSet::NullHeights(tile_set) => {
+                    runtime.spawn_named(desc.prefix)?.insert_named(tile_set)?
+                }
             };
         }
         Ok(())

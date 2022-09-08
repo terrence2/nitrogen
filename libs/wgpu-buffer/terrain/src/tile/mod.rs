@@ -14,6 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 mod index_paint_vertex;
 mod layer_pack;
+pub(crate) mod null_tile_set;
 mod quad_tree;
 mod spherical_common;
 pub(crate) mod spherical_tile_set;
