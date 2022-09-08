@@ -20,6 +20,7 @@ pub mod tile;
 use crate::{
     patch::PatchManager,
     tile::{
+        null_tile_set::NullHeightTileSet,
         spherical_tile_set::{
             SphericalColorTileSet, SphericalHeightTileSet, SphericalNormalsTileSet,
         },
@@ -134,7 +135,7 @@ pub enum TerrainStep {
     // Encoder
     EncodeUploads,
     PaintAtlasIndices,
-    Tesselate,
+    Tessellate,
     RenderDeferredTexture,
     AccumulateNormalsAndColor,
 
@@ -248,7 +249,7 @@ impl Extension for TerrainBuffer {
         );
         runtime.add_frame_system(
             Self::sys_terrain_tesselate
-                .label(TerrainStep::Tesselate)
+                .label(TerrainStep::Tessellate)
                 .after(TerrainStep::PaintAtlasIndices)
                 .after(GpuStep::CreateCommandEncoder)
                 .before(GpuStep::SubmitCommands),
@@ -256,7 +257,7 @@ impl Extension for TerrainBuffer {
         runtime.add_frame_system(
             Self::sys_deferred_texture
                 .label(TerrainStep::RenderDeferredTexture)
-                .after(TerrainStep::Tesselate)
+                .after(TerrainStep::Tessellate)
                 .after(GpuStep::CreateCommandEncoder)
                 .before(GpuStep::SubmitCommands),
         );
@@ -949,12 +950,20 @@ impl TerrainBuffer {
 
     fn sys_terrain_tesselate(
         terrain: ResMut<TerrainBuffer>,
+        null_ts_query: Query<&NullHeightTileSet, Without<SphericalHeightTileSet>>,
         heights_ts_query: Query<&SphericalHeightTileSet>,
         maybe_encoder: ResMut<Option<wgpu::CommandEncoder>>,
     ) {
         if let Some(encoder) = maybe_encoder.into_inner() {
             terrain.patch_manager.tessellate(encoder);
 
+            for tile_set in null_ts_query.iter() {
+                tile_set.displace_height(
+                    terrain.patch_manager.target_vertex_count(),
+                    terrain.patch_manager.displace_height_bind_group(),
+                    encoder,
+                );
+            }
             for tile_set in heights_ts_query.iter() {
                 tile_set.displace_height(
                     terrain.patch_manager.target_vertex_count(),

@@ -33,7 +33,7 @@ use std::any::Any;
 // TODO: tweak load depth of each type of tile... we don't need as much height data as normal data
 
 #[derive(Debug, Component, NitrousComponent)]
-#[Name = "tile_set"]
+#[Name = "spherical_height_tile_set"]
 pub(crate) struct SphericalHeightTileSet {
     common: SphericalTileSetCommon,
     displace_height_pipeline: wgpu::ComputePipeline,
@@ -136,7 +136,7 @@ impl HeightsTileSet for SphericalHeightTileSet {
         encoder: &mut wgpu::CommandEncoder,
     ) {
         let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-            label: Some("terrain-displace-height-cpass"),
+            label: Some("terrain-spherical-ts-displace-height-cpass"),
         });
         cpass.set_pipeline(&self.displace_height_pipeline);
         cpass.set_bind_group(Group::TerrainDisplaceMesh.index(), mesh_bind_group, &[]);
@@ -153,7 +153,7 @@ impl HeightsTileSet for SphericalHeightTileSet {
 }
 
 #[derive(Debug, Component, NitrousComponent)]
-#[Name = "tile_set"]
+#[Name = "spherical_color_tile_set"]
 pub(crate) struct SphericalColorTileSet {
     common: SphericalTileSetCommon,
     accumulate_spherical_colors_pipeline: wgpu::ComputePipeline,
@@ -277,7 +277,7 @@ impl ColorsTileSet for SphericalColorTileSet {
 }
 
 #[derive(Debug, Component, NitrousComponent)]
-#[Name = "tile_set"]
+#[Name = "spherical_normals_tile_set"]
 pub(crate) struct SphericalNormalsTileSet {
     common: SphericalTileSetCommon,
     accumulate_spherical_normals_pipeline: wgpu::ComputePipeline,
