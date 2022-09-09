@@ -321,7 +321,6 @@ impl ScriptHerder {
                     }
                 },
                 Err(err) => {
-                    #[cfg(debug_assertions)]
                     println!(
                         "{}SCRIPT ERROR{}: {}",
                         ansi().fg(Color::Red).bold(),
