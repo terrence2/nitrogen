@@ -14,7 +14,7 @@
 use crate::{
     impl_value_type_conversions, supports_absdiffeq, supports_quantity_ops, supports_scalar_ops,
     supports_shift_ops, supports_value_type_conversion, Acceleration, DynamicUnits, Length,
-    LengthUnit, Mass, MassUnit, TimeUnit, Torque, Unit,
+    LengthUnit, Mass, MassUnit, Scalar, TimeUnit, Torque, Unit,
 };
 use ordered_float::OrderedFloat;
 use std::{
@@ -105,6 +105,19 @@ where
     fn div(self, rhs: Mass<M>) -> Self::Output {
         let mass = Mass::<F::UnitMass>::from(&rhs);
         Self::Output::from(self.v.0 / mass.f64())
+    }
+}
+
+impl<F0, F1> Div<Force<F1>> for Force<F0>
+where
+    F0: ForceUnit, // kg*m/s^2
+    F1: ForceUnit, // kg*m/s^2
+{
+    type Output = Scalar;
+
+    fn div(self, rhs: Force<F1>) -> Self::Output {
+        let rhs = Force::<F0>::from(&rhs);
+        Self::Output::from(self.v.0 / rhs.v.0)
     }
 }
 

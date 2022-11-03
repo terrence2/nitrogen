@@ -13,11 +13,11 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    impl_value_type_conversions, supports_absdiffeq, supports_quantity_ops, supports_scalar_ops,
-    supports_shift_ops, supports_value_type_conversion, Unit,
+    impl_value_type_conversions, scalar, supports_absdiffeq, supports_quantity_ops,
+    supports_scalar_ops, supports_shift_ops, supports_value_type_conversion, Scalar, Unit,
 };
 use ordered_float::OrderedFloat;
-use std::{fmt, fmt::Debug, marker::PhantomData};
+use std::{fmt, fmt::Debug, marker::PhantomData, ops::Div};
 
 pub trait PressureUnit: Unit + Copy + Debug + Eq + PartialEq + 'static {
     const PASCALS_IN_UNIT: f64;
@@ -61,18 +61,17 @@ where
     }
 }
 
-// impl<LA, TA, TB> Div<Time<TB>> for Pressure<LA, TA>
-//     where
-//         LA: LengthUnit,
-//         TA: TimeUnit,
-//         TB: TimeUnit,
-// {
-//     type Output = Acceleration<LA, TA>;
-//
-//     fn div(self, other: Time<TB>) -> Self::Output {
-//         Acceleration::<LA, TA>::from(self.v.0 / Time::<TA>::from(&other).f64())
-//     }
-// }
+impl<PA, PB> Div<Pressure<PB>> for Pressure<PA>
+where
+    PA: PressureUnit,
+    PB: PressureUnit,
+{
+    type Output = Scalar;
+
+    fn div(self, other: Pressure<PB>) -> Self::Output {
+        scalar!(self.v.0 / other.f64())
+    }
+}
 
 #[cfg(test)]
 mod test {

@@ -9,5 +9,7 @@ bevy_ecs = { version = "^ 0.8", features = ["trace"] }
 log = "^ 0.4"
 absolute_unit = { path = "../../util/absolute_unit" }
 animate = { path = "../../sim/animate" }
+measure = { path = "../../sim/measure" }
 nitrous = { path = "../../util/nitrous" }
+physical_constants = { path = "../../util/physical_constants" }
 runtime = { path = "../../util/runtime" }

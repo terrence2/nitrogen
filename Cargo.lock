@@ -3622,7 +3622,9 @@ dependencies = [
  "anyhow",
  "bevy_ecs",
  "log",
+ "measure",
  "nitrous",
+ "physical_constants",
  "runtime",
 ]
 

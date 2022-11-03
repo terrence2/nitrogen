@@ -17,7 +17,12 @@ use crate::{
     supports_shift_ops, supports_value_type_conversion, Area, DynamicUnits, Unit,
 };
 use ordered_float::OrderedFloat;
-use std::{fmt, fmt::Debug, marker::PhantomData, ops::Mul};
+use std::{
+    fmt,
+    fmt::Debug,
+    marker::PhantomData,
+    ops::{Div, Mul},
+};
 
 pub trait LengthUnit: Unit + Copy + Debug + Eq + PartialEq + 'static {
     const METERS_IN_UNIT: f64;
@@ -66,15 +71,27 @@ where
     }
 }
 
-impl<UnitA, UnitB> Mul<Length<UnitA>> for Length<UnitB>
+impl<UnitA, UnitB> Mul<Length<UnitB>> for Length<UnitA>
 where
     UnitA: LengthUnit,
     UnitB: LengthUnit,
 {
-    type Output = Area<UnitB>;
+    type Output = Area<UnitA>;
 
-    fn mul(self, other: Length<UnitA>) -> Self::Output {
-        Area::<UnitB>::from(self.v.0 * Length::<UnitB>::from(&other).f64())
+    fn mul(self, other: Length<UnitB>) -> Self::Output {
+        Area::<UnitA>::from(self.v.0 * Length::<UnitA>::from(&other).f64())
+    }
+}
+
+impl<UnitA, UnitB> Div<Length<UnitB>> for Length<UnitA>
+where
+    UnitA: LengthUnit,
+    UnitB: LengthUnit,
+{
+    type Output = f64;
+
+    fn div(self, other: Length<UnitB>) -> Self::Output {
+        self.v.0 / Length::<UnitA>::from(&other).f64()
     }
 }
 

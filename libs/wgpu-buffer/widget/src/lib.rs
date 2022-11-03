@@ -399,7 +399,7 @@ impl WidgetBuffer {
                     packings,
                     measures,
                     &mut paint_context,
-                    *timestep.now(),
+                    *timestep.sim_time(),
                     &gpu,
                     &window,
                     encoder,

@@ -14,7 +14,7 @@
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use anyhow::Result;
 use bevy_ecs::prelude::*;
-use nitrous::{inject_nitrous_resource, NitrousResource};
+use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use runtime::{Extension, Runtime};
 use std::time::{Duration, Instant};
 
@@ -25,9 +25,13 @@ pub enum TimeStepStep {
 
 #[derive(Debug, NitrousResource)]
 pub struct TimeStep {
-    start: Instant,
-    now: Instant,
-    delta: Duration,
+    sim_start_time: Instant,
+    real_time: Instant,
+    sim_time: Instant,
+    next_sim_time: Instant,
+    sim_step: Duration,
+
+    time_compression: u32,
 }
 
 impl Extension for TimeStep {
@@ -44,32 +48,78 @@ impl TimeStep {
         let delta = Duration::from_micros(1_000_000 / 60);
         let start = Instant::now();
         Self {
-            start,
+            sim_start_time: start,
             // Note: start one tick behind now so that the sim schedule will always
             //       run at least once before the frame scheduler.
-            now: start - delta,
-            delta,
+            sim_time: start,
+            next_sim_time: start + delta,
+            real_time: start,
+            sim_step: delta,
+            time_compression: 1,
         }
     }
 
+    #[method]
+    pub fn time_compression(&self) -> i64 {
+        self.time_compression as i64
+    }
+
+    #[method]
+    pub fn set_time_compression(&mut self, time_compression: i64) -> Result<()> {
+        self.time_compression = u32::try_from(time_compression)?;
+        Ok(())
+    }
+
+    #[method]
+    pub fn next_time_compression(&mut self) {
+        if self.time_compression >= 8 {
+            self.time_compression = 1;
+        } else if self.time_compression >= 4 {
+            self.time_compression = 8;
+        } else if self.time_compression >= 2 {
+            self.time_compression = 4;
+        } else if self.time_compression >= 1 {
+            self.time_compression = 2;
+        } else {
+            self.time_compression = 1;
+        }
+    }
+
+    /// Call once per frame to keep the sim updated.
+    pub fn run_sim_loop(runtime: &mut Runtime) {
+        // Find the amount of time elapsed in the sim, as the amount of real time elapsed
+        // since the last call, times the compression.
+        let now = Instant::now();
+        {
+            let mut ts = runtime.resource_mut::<TimeStep>();
+            let real_elapsed = now - ts.real_time;
+            let time_compression = ts.time_compression;
+            ts.next_sim_time += real_elapsed * time_compression;
+            ts.real_time = now;
+        }
+        while runtime.resource::<TimeStep>().need_step() {
+            runtime.run_sim_once();
+        }
+    }
+
+    pub fn need_step(&self) -> bool {
+        self.sim_time + self.sim_step < self.next_sim_time
+    }
+
     pub fn sys_tick_time(mut timestep: ResMut<TimeStep>) {
-        let dt = timestep.delta;
-        timestep.now += dt;
+        let dt = timestep.sim_step;
+        timestep.sim_time += dt;
     }
 
-    pub fn start(&self) -> &Instant {
-        &self.start
+    pub fn sim_start_time(&self) -> &Instant {
+        &self.sim_start_time
     }
 
-    pub fn now(&self) -> &Instant {
-        &self.now
+    pub fn sim_time(&self) -> &Instant {
+        &self.sim_time
     }
 
     pub fn step(&self) -> &Duration {
-        &self.delta
-    }
-
-    pub fn next_now(&self) -> Instant {
-        self.now + self.delta
+        &self.sim_step
     }
 }

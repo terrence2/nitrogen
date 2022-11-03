@@ -12,7 +12,23 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-pub(crate) mod airframe;
-pub(crate) mod engine;
-pub(crate) mod fuel;
-pub(crate) mod power;
+use absolute_unit::{Kilograms, Mass};
+use bevy_ecs::prelude::*;
+use nitrous::{inject_nitrous_component, NitrousComponent};
+
+#[derive(Component, NitrousComponent, Debug, Clone)]
+#[Name = "airframe"]
+pub struct Airframe {
+    dry_mass: Mass<Kilograms>,
+}
+
+#[inject_nitrous_component]
+impl Airframe {
+    pub fn new(dry_mass: Mass<Kilograms>) -> Self {
+        Self { dry_mass }
+    }
+
+    pub fn dry_mass(&self) -> Mass<Kilograms> {
+        self.dry_mass
+    }
+}

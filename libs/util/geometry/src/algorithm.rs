@@ -82,9 +82,9 @@ pub fn solid_angle_tri<T: RealField>(
     projarea / T::two_pi()
 }
 
-pub fn perpendicular_vector<T: FromPrimitive + RealField>(v: &Vector3<T>) -> Vector3<T> {
+pub fn perpendicular_vector<T: FromPrimitive + RealField + Copy>(v: &Vector3<T>) -> Vector3<T> {
     let n = v.normalize();
-    if (&n[2]).abs() > T::from_f64(0.5).unwrap() {
+    if n[2].abs() > T::from_f64(0.5).unwrap() {
         n.cross(&Vector3::new(T::zero(), T::one(), T::zero()))
             .normalize()
     } else {

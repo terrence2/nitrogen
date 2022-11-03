@@ -43,7 +43,7 @@ use tracelog::{TraceLog, TraceLogOpts};
 use ui::UiRenderPass;
 use vehicle::{
     AirbrakeEffector, BayEffector, FlapsEffector, GearEffector, HookEffector, PitchInceptor,
-    RollInceptor, SimpleJetEngine, YawInceptor,
+    PowerSystem, RollInceptor, YawInceptor,
 };
 use widget::{Label, Labeled, LayoutNode, LayoutPacking, PaintContext, Terminal, WidgetBuffer};
 use window::{size::Size, DisplayOpts, Window, WindowBuilder};
@@ -197,7 +197,7 @@ impl DemoUx {
     ) {
         for (arcball, _) in query.iter() {
             system
-                .track_visible_state(&mut labels, *timestep.now(), &orrery, arcball, &camera)
+                .track_visible_state(&mut labels, *timestep.sim_time(), &orrery, arcball, &camera)
                 .ok();
         }
     }
@@ -288,7 +288,7 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
         .load_extension::<PitchInceptor>()?
         .load_extension::<RollInceptor>()?
         .load_extension::<YawInceptor>()?
-        .load_extension::<SimpleJetEngine>()?
+        .load_extension::<PowerSystem>()?
         .load_extension::<AirbrakeEffector>()?
         .load_extension::<BayEffector>()?
         .load_extension::<FlapsEffector>()?
@@ -306,12 +306,8 @@ fn simulation_main(mut runtime: Runtime) -> Result<()> {
 
     runtime.run_startup();
     while runtime.resource::<ExitRequest>().still_running() {
-        // Catch monotonic sim time up to system time. Nitrous uses a monotonic time-step game
-        // loop. Ideally the sim steps should be a multiple of the frame time.
-        let frame_start = Instant::now();
-        while runtime.resource::<TimeStep>().next_now() < frame_start {
-            runtime.run_sim_once();
-        }
+        // Catch monotonic sim time up to system time.
+        TimeStep::run_sim_loop(&mut runtime);
 
         // Display a frame
         runtime.run_frame_once();
