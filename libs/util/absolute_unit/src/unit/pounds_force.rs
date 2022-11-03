@@ -17,9 +17,9 @@ use crate::{Feet, ForceUnit, PoundsMass, Seconds, Unit};
 #[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd)]
 pub struct PoundsForce;
 impl Unit for PoundsForce {
-    const UNIT_NAME: &'static str = "poundals";
-    const UNIT_SHORT_NAME: &'static str = "pdl";
-    const UNIT_SUFFIX: &'static str = "pdl";
+    const UNIT_NAME: &'static str = "pounds(force)";
+    const UNIT_SHORT_NAME: &'static str = "lbf";
+    const UNIT_SUFFIX: &'static str = "lbf";
 }
 impl ForceUnit for PoundsForce {
     const NEWTONS_IN_UNIT: f64 = 1. / 0.224_809;

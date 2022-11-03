@@ -27,7 +27,6 @@ use measure::WorldSpaceFrame;
 use orrery::Orrery;
 use runtime::{ExitRequest, Extension, Runtime};
 use stars::StarsBuffer;
-use std::time::Instant;
 use window::{DisplayOpts, Window, WindowBuilder};
 
 struct App {
@@ -222,10 +221,7 @@ fn window_main(mut runtime: Runtime) -> Result<()> {
 
     while runtime.resource::<ExitRequest>().still_running() {
         // Catch monotonic sim time up to system time.
-        let frame_start = Instant::now();
-        while runtime.resource::<TimeStep>().next_now() < frame_start {
-            runtime.run_sim_once();
-        }
+        TimeStep::run_sim_loop(&mut runtime);
 
         runtime.run_frame_once();
 

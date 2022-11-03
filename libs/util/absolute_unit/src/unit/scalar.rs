@@ -28,6 +28,10 @@ impl Scalar {
         self.into_inner()
     }
 
+    pub fn ln(self) -> f64 {
+        self.0.ln()
+    }
+
     pub fn into_inner(self) -> f64 {
         self.0.into_inner()
     }

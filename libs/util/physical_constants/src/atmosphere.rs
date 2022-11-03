@@ -122,6 +122,10 @@ impl StandardAtmosphere {
         }
     }
 
+    pub fn geopotential_altitude(&self) -> Length<Meters> {
+        self.geopotential_altitude
+    }
+
     fn compute_geopotential_altitude(geometric_altitude: Length<Meters>) -> Length<Meters> {
         let r = EARTH_RADIUS.f64();
         let h = geometric_altitude.f64();
@@ -637,14 +641,14 @@ mod test {
 
     #[test]
     fn test_atmosphere_feet() {
-        use absolute_unit::feet;
+        use absolute_unit::{feet, Feet, PoundsMass};
         for i in 0..9 {
             let altitude = feet!(i * 5000);
             let atmos = StandardAtmosphere::at_altitude(altitude);
             println!(
                 "{}\t{:0.6}",
                 altitude.f64(),
-                atmos.density::<Kilograms, Meters>().f64()
+                atmos.density::<PoundsMass, Feet>().f64()
             );
         }
     }

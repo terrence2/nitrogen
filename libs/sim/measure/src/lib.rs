@@ -13,7 +13,7 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use absolute_unit::{
-    meters, meters_per_second, meters_per_second2, radians_per_second, Acceleration,
+    feet, meters, meters_per_second, meters_per_second2, radians_per_second, Acceleration,
     AngularVelocity, Length, LengthUnit, Meters, Radians, Seconds, TimeUnit, Velocity,
 };
 use bevy_ecs::prelude::*;
@@ -96,6 +96,10 @@ impl WorldSpaceFrame {
     pub fn new(position: Cartesian<GeoCenter, Meters>, forward: Vector3<f64>) -> Self {
         let up_like = position.vec64().normalize();
         let facing = UnitQuaternion::face_towards(&forward, &up_like);
+        debug_assert!(facing.i.is_finite(), "NaN facing");
+        debug_assert!(facing.j.is_finite(), "NaN facing");
+        debug_assert!(facing.k.is_finite(), "NaN facing");
+        debug_assert!(facing.w.is_finite(), "NaN facing");
         Self { position, facing }
     }
 
@@ -105,6 +109,13 @@ impl WorldSpaceFrame {
 
     pub fn altitude_asl(&self) -> Length<Meters> {
         meters!(self.position().vec64().magnitude()) - *EARTH_RADIUS
+    }
+
+    #[method]
+    pub fn set_altitude_ft(&mut self, v: f64) {
+        let mut grat = self.position_graticule();
+        grat.distance = meters!(feet!(v));
+        self.set_position_graticule(grat);
     }
 
     pub fn position_pt3(&self) -> Point3<Length<Meters>> {
@@ -166,6 +177,7 @@ impl WorldSpaceFrame {
 /// used in Allerton's "Principles of Flight Simulation", the standard
 /// body coordinate system for planes.
 #[derive(Component, NitrousComponent, Copy, Clone, Debug, Default)]
+#[Name = "motion"]
 pub struct BodyMotion {
     acceleration_m_s2: Vector3<Acceleration<Meters, Seconds>>,
     linear_velocity: Vector3<Velocity<Meters, Seconds>>,
@@ -244,6 +256,10 @@ impl BodyMotion {
         self.linear_velocity.z = -u;
     }
 
+    pub fn set_vehicle_roll_velocity(&mut self, p: AngularVelocity<Radians, Seconds>) {
+        self.angular_velocity.z = p;
+    }
+
     pub fn vehicle_roll_velocity(&self) -> AngularVelocity<Radians, Seconds> {
         self.angular_velocity.z
     }
@@ -294,6 +310,10 @@ impl BodyMotion {
 
     pub fn vehicle_yaw_velocity(&self) -> AngularVelocity<Radians, Seconds> {
         -self.angular_velocity.y
+    }
+
+    pub fn set_vehicle_yaw_velocity(&mut self, r: AngularVelocity<Radians, Seconds>) {
+        self.angular_velocity.y = -r;
     }
 }
 

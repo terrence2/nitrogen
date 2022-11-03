@@ -64,6 +64,7 @@ struct MarkerCylinder {
 
 /// Put on an entity with a WorldSpaceFrame component and add points and arrows.
 #[derive(Component, NitrousComponent, Debug, Default)]
+#[Name = "markers"]
 pub struct EntityMarkers {
     points: HashMap<String, MarkerPoint>,
     boxes: HashMap<String, MarkerBox>,

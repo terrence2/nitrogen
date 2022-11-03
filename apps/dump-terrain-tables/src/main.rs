@@ -712,7 +712,7 @@ fn collect_unique_rows(tris: &[Triangle]) -> Vec<(i64, i64)> {
     }
     let mut v = uniq.drain().collect::<Vec<i64>>();
     v.sort_unstable();
-    let mut bins = (&v).windows(2).map(|v| (v[0], v[1])).collect::<Vec<_>>();
+    let mut bins = v.windows(2).map(|v| (v[0], v[1])).collect::<Vec<_>>();
     bins.reverse();
     bins
 }

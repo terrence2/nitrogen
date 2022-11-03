@@ -22,7 +22,6 @@ use input::{InputController, InputSystem, InputTarget};
 use measure::WorldSpaceFrame;
 use orrery::Orrery;
 use runtime::Runtime;
-use std::time::Instant;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::console;
@@ -116,10 +115,7 @@ fn window_loop(
     runtime: &mut Runtime,
 ) -> Result<()> {
     // Catch monotonic sim time up to system time.
-    let frame_start = Instant::now();
-    while runtime.resource::<TimeStep>().next_now() < frame_start {
-        runtime.run_sim_once();
-    }
+    TimeStep::run_sim_loop(runtime);
 
     // Display a frame
     runtime.run_frame_once();

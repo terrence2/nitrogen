@@ -56,6 +56,7 @@ impl<'w> NamedEntityMut<'w> {
         T: Component + ScriptComponent + 'static,
     {
         let component_name = value.component_name();
+        assert!(!component_name.is_empty());
 
         // Record the component in the store.
         self.entity.insert(value);

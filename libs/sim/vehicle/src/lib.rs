@@ -26,5 +26,10 @@ pub use crate::{
     effectors::toggle_effector::{
         AirbrakeEffector, BayEffector, FlapsEffector, GearEffector, HookEffector,
     },
-    systems::simple_jet_engine::SimpleJetEngine,
+    systems::{
+        airframe::Airframe,
+        engine::{Engine, EnginePower},
+        fuel::{ConsumeResult, FuelSystem, FuelTank, FuelTankKind},
+        power::PowerSystem,
+    },
 };

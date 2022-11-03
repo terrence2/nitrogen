@@ -38,3 +38,10 @@ macro_rules! pounds_mass_per_second {
         $crate::MassRate::<$crate::PoundsMass, $crate::Seconds>::from(&$num)
     };
 }
+
+#[macro_export]
+macro_rules! pounds_per_feet3 {
+    ($num:expr) => {
+        $crate::Density::<$crate::PoundsMass, $crate::Feet>::from(&$num)
+    };
+}
