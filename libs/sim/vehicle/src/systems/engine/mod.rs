@@ -12,6 +12,8 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
+pub(crate) mod glider;
+
 use crate::ThrottlePosition;
 use absolute_unit::{Force, Kilograms, Mass, Meters, Newtons, Seconds, Velocity};
 use physical_constants::StandardAtmosphere;
@@ -58,6 +60,12 @@ impl EnginePower {
             let next = (*current - delta).max(min.military());
             *self = Self::Military(next);
         }
+    }
+}
+
+impl Default for EnginePower {
+    fn default() -> Self {
+        EnginePower::Military(0.)
     }
 }
 
