@@ -28,7 +28,7 @@ pub use crate::{
     },
     systems::{
         airframe::Airframe,
-        engine::{Engine, EnginePower},
+        engine::{glider::GliderEngine, Engine, EnginePower},
         fuel::{ConsumeResult, FuelSystem, FuelTank, FuelTankKind},
         power::PowerSystem,
     },
