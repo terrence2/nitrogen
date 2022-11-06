@@ -1,13 +1,20 @@
 [package]
 name = "measure"
 description = "Base component set for things like the camera"
-version = "0.0.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-bevy_ecs = { version = "^ 0.8", features = ["trace"] }
-nalgebra = "^ 0.31"
-absolute_unit = { path = "../../util/absolute_unit" }
-geodesy = { path = "../../util/geodesy" }
-nitrous = { path = "../../util/nitrous" }
-physical_constants = { path = "../../util/physical_constants" }
+bevy_ecs.workspace = true
+nalgebra.workspace = true
+# Internal
+absolute_unit.workspace = true
+geodesy.workspace = true
+nitrous.workspace = true
+physical_constants.workspace = true

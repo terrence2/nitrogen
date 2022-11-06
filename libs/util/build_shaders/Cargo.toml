@@ -1,11 +1,17 @@
 [package]
 name = "build_shaders"
-version = "0.0.0"
-authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2021"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-log = "^ 0.4"
-anyhow = { version = "^ 1", features = ["backtrace"] }
-naga = { version = "^ 0.8", features = ["spv-in", "spv-out", "dot-out", "glsl-in", "glsl-out", "glsl-validate"] }
-shaderc = "^ 0.8"
+anyhow.workspace = true
+log.workspace = true
+naga.workspace = true
+shaderc.workspace = true

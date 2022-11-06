@@ -1,8 +1,29 @@
 [package]
 name = "nitrogen"
-version = "0.0.0"
+description = "A game engine for making flight simulation games."
+version = "0.0.1"
 authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
 edition = "2021"
+readme = "https://gitlab.com/terrence_too/nitrogen/-/blob/main/README.md"
+homepage = "https://gitlab.com/terrence_too/nitrogen"
+documentation = "https://gitlab.com/terrence_too/nitrogen"
+repository = "https://gitlab.com/terrence_too/nitrogen"
+license = "GPL-3.0-only"
+exclude = []
+include = []
+keywords = ["aerospace", "game-engines", "rendering", "simulation"]
+categories = ["aerospace", "game-engines", "rendering", "simulation"]
+
+[workspace.package]
+description = "A game engine for making flight simulation games."
+version = "0.0.1"
+authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
+edition = "2021"
+readme = "https://gitlab.com/terrence_too/nitrogen/-/blob/main/README.md"
+homepage = "https://gitlab.com/terrence_too/nitrogen"
+documentation = "https://gitlab.com/terrence_too/nitrogen"
+repository = "https://gitlab.com/terrence_too/nitrogen"
+license = "GPL-3.0-only"
 
 [workspace]
 members = [
@@ -23,6 +44,7 @@ members = [
     "libs/util/nitrous",
     "libs/util/nitrous_injector",
     "libs/util/packed_struct",
+    "libs/util/packed_injector",
     "libs/util/physical_constants",
     "libs/util/runtime",
     "libs/util/star_catalog",
@@ -62,44 +84,154 @@ members = [
     "libs/wgpu-buffer/world",
 ]
 
-[dependencies]
-chrono = "^ 0.4"
-env_logger = "^ 0.9"
+[workspace.dependencies]
+# Internal Deps
+absolute_unit = { path = "libs/util/absolute_unit" }
+ansi = { path = "libs/util/ansi" }
+build_shaders = { path = "libs/util/build_shaders" }
+geodesy = { path = "libs/util/geodesy" }
+geometry = { path = "libs/util/geometry" }
+nitrous = { path = "libs/util/nitrous" }
+nitrous_injector = { path = "libs/util/nitrous_injector" }
+packed_struct = { path = "libs/util/packed_struct" }
+packed_injector = { path = "libs/util/packed_injector" }
+physical_constants = { path = "libs/util/physical_constants" }
+runtime = { path = "libs/util/runtime" }
+star_catalog = { path = "libs/util/star_catalog" }
+catalog = { path = "libs/system/catalog" }
+gpu = { path = "libs/system/gpu" }
+input = { path = "libs/system/input" }
+jilrs = { path = "libs/system/jilrs" }
+tracelog = { path = "libs/system/tracelog" }
+window = { path = "libs/system/window" }
+animate = { path = "libs/sim/animate" }
+camera = { path = "libs/sim/camera" }
+event_mapper = { path = "libs/sim/event_mapper" }
+measure = { path = "libs/sim/measure" }
+orrery = { path = "libs/sim/orrery" }
+vehicle = { path = "libs/sim/vehicle" }
+atlas = { path = "libs/wgpu-buffer/atlas" }
+atmosphere = { path = "libs/wgpu-buffer/atmosphere" }
+composite = { path = "libs/wgpu-buffer/composite" }
+font_common = { path = "libs/wgpu-buffer/font_common" }
+font_ttf = { path = "libs/wgpu-buffer/font_ttf" }
+fullscreen = { path = "libs/wgpu-buffer/fullscreen" }
+global_data = { path = "libs/wgpu-buffer/global_data" }
+marker = { path = "libs/wgpu-buffer/marker" }
+shader_shared = { path = "libs/wgpu-buffer/shader_shared" }
+stars = { path = "libs/wgpu-buffer/stars" }
+terrain = { path = "libs/wgpu-buffer/terrain" }
+ui = { path = "libs/wgpu-buffer/ui" }
+widget = { path = "libs/wgpu-buffer/widget" }
+world = { path = "libs/wgpu-buffer/world" }
+
+# External Deps
 anyhow = { version = "^ 1", features = ["backtrace"] }
+approx = "^ 0.5"
 bevy_ecs = { version = "^ 0.8", features = ["trace"] }
+bevy_tasks = "^ 0.8"
+bitflags = "^ 1"
+bzip2 = "^ 0.4"
+chrono = "^ 0.4"
+console_error_panic_hook = "^ 0.1"
+crossbeam = "^ 0.8"
 csscolorparser = "^ 0.6"
+ellipse = "^ 0.2"
+env_logger = "^ 0.9"
+float-ord = "^ 0.3"
+futures = "^ 0.3"
+futures-lite = "^ 1"
+fxhash = "^ 0.2"
+gilrs = "^ 0.9"
+glob = "^ 0.3"
+hashbag = "^ 0.1"
 image = "^ 0.24"
+itertools = "^ 0.10"
+json = "^ 0.12"
+lalrpop = "0.19.4"
+lalrpop-util = { version = "^ 0.19", features = ["lexer"] }
+lazy_static = "^ 1"
+libc = "0.2"
 log = "^ 0.4"
+lyon_geom = "^ 0.17"
+memmap = "^ 0.7"
+memoffset = "^ 0.6"
+naga = { version = "^ 0.8", features = ["spv-in", "spv-out", "dot-out", "glsl-in", "glsl-out", "glsl-validate"] }
 nalgebra = "^ 0.31"
+num = "^ 0.4"
+num-traits = "^ 0.2"
+once_cell = "^ 1"
+ordered-float = "^ 3"
 parking_lot = "^ 0.12"
 paste = "^ 1"
 platform-dirs = "^ 0.3"
+pretty-type-name = "1.0"
+proc-macro2 = "^ 1"
+quote = "^ 1"
+rand = "^ 0.8"
+raw-window-handle = "^ 0.4"
 rayon = "^ 1.5"
+regex = "^ 1"
+rusttype = "^ 0.9"
+shaderc = "^ 0.8"
+simba = { version = "^ 0.7", default-features = false }
+smallvec = "^ 1"
+spirv-reflect = "^ 0.2"
+static_assertions = "^ 1"
+strsim = "^ 0.10"
 structopt = "^ 0.3"
+syn = { version = "= 1.0.92", features = ["default", "extra-traits", "full", "visit"] }
 terminal_size = "^ 0.1"
+tracing = { version = "0.1", features = ["release_max_level_info"] }
+tracing-subscriber = { version = "0.3.1", features = ["registry", "env-filter"] }
+tracing-chrome = "0.4.0"
+tracing-log = "0.1.2"
+tracing-error = "0.2.0"
+triggered = "^ 0.1"
+unicase = "^ 2.6"
+wasm-bindgen = "=0.2.82"
+wasm-bindgen-futures = "=0.4.32"
+web-sys = { version = "=0.3.59", features = ["console"] }
 wgpu = { version = "^ 0.13", features = ["spirv"] }
-absolute_unit = { path = "libs/util/absolute_unit" }
-animate = { path = "libs/sim/animate" }
-atmosphere = { path = "libs/wgpu-buffer/atmosphere" }
-camera = { path = "libs/sim/camera" }
-catalog = { path = "libs/system/catalog" }
-composite = { path = "libs/wgpu-buffer/composite" }
-event_mapper = { path = "libs/sim/event_mapper" }
-fullscreen = { path = "libs/wgpu-buffer/fullscreen" }
-geodesy = { path = "libs/util/geodesy" }
-global_data = { path = "libs/wgpu-buffer/global_data" }
-gpu = { path = "libs/system/gpu" }
-input = { path = "libs/system/input" }
-marker = { path = "libs/wgpu-buffer/marker" }
-measure = { path = "libs/sim/measure" }
-nitrous = { path = "libs/util/nitrous" }
-orrery = { path = "libs/sim/orrery" }
-runtime = { path = "libs/util/runtime" }
-stars = { path = "libs/wgpu-buffer/stars" }
-terrain = { path = "libs/wgpu-buffer/terrain" }
-tracelog = { path = "libs/system/tracelog" }
-ui = { path = "libs/wgpu-buffer/ui" }
-vehicle = { path = "libs/sim/vehicle" }
-widget = { path = "libs/wgpu-buffer/widget" }
-window = { path = "libs/system/window" }
-world_render = { package = "world", path = "libs/wgpu-buffer/world" }
+winit = "^ 0.26"
+zerocopy = "^ 0.6"
+
+[dependencies]
+anyhow.workspace = true
+bevy_ecs.workspace = true
+chrono.workspace = true
+csscolorparser.workspace = true
+env_logger.workspace = true
+image.workspace = true
+log.workspace = true
+nalgebra.workspace = true
+platform-dirs.workspace = true
+structopt.workspace = true
+terminal_size.workspace = true
+wgpu.workspace = true
+# Internal
+absolute_unit.workspace = true
+animate.workspace = true
+atmosphere.workspace = true
+camera.workspace = true
+catalog.workspace = true
+composite.workspace = true
+event_mapper.workspace = true
+fullscreen.workspace = true
+geodesy.workspace = true
+global_data.workspace = true
+gpu.workspace = true
+input.workspace = true
+marker.workspace = true
+measure.workspace = true
+nitrous.workspace = true
+orrery.workspace = true
+runtime.workspace = true
+stars.workspace = true
+terrain.workspace = true
+tracelog.workspace = true
+ui.workspace = true
+vehicle.workspace = true
+widget.workspace = true
+window.workspace = true
+world.workspace = true

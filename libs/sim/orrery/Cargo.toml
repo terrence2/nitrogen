@@ -1,21 +1,29 @@
 [package]
 name = "orrery"
-version = "0.0.0"
-authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2021"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-chrono = "^ 0.4"
-anyhow = { version = "^ 1", features = ["backtrace"] }
-bevy_ecs = { version = "^ 0.8", features = ["trace"] }
-lazy_static = "^ 1"
-log = "^ 0.4"
-nalgebra = "^ 0.31"
-ordered-float = "^ 3"
-animate = { path = "../../sim/animate" }
-nitrous = { path = "../../util/nitrous" }
-runtime = { path = "../../util/runtime" }
+chrono.workspace = true
+anyhow.workspace = true
+bevy_ecs.workspace = true
+lazy_static.workspace = true
+log.workspace = true
+nalgebra.workspace = true
+ordered-float.workspace = true
+# Internal
+animate.workspace = true
+nitrous.workspace = true
+runtime.workspace = true
 
 [dev-dependencies]
-event_mapper = { path = "../../sim/event_mapper" }
-input = { path = "../../system/input" }
+# Internal
+event_mapper.workspace = true
+input.workspace = true

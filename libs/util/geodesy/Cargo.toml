@@ -1,15 +1,21 @@
 [package]
 name = "geodesy"
 description = "Geometric coordinates with units built on absolute_unit."
-version = "0.0.0"
-authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-nalgebra = "^ 0.31"
-num-traits = "^ 0.2"
-absolute_unit = { path = "../../util/absolute_unit" }
-physical_constants = { path = "../../util/physical_constants" }
+nalgebra.workspace = true
+num-traits.workspace = true
+# Internal
+absolute_unit.workspace = true
+physical_constants.workspace = true
 
 [dev-dependencies]
-approx = "^ 0.5"
+approx.workspace = true

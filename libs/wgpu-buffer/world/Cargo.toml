@@ -1,26 +1,32 @@
 [package]
 name = "world"
 description = "Pull together all of the main planetary related buffers with a mega-shader."
-version = "0.0.0"
-authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-anyhow = { version = "^ 1", features = ["backtrace"] }
-bevy_ecs = { version = "^ 0.8", features = ["trace"] }
-log = "^ 0.4"
-parking_lot = "^ 0.12"
-wgpu = { version = "^ 0.13", features = ["spirv"] }
-atmosphere = { path = "../../wgpu-buffer/atmosphere" }
-fullscreen = { path = "../../wgpu-buffer/fullscreen" }
-global_data = { path = "../../wgpu-buffer/global_data" }
-gpu = { path = "../../system/gpu" }
-nitrous = { path = "../../util/nitrous" }
-runtime = { path = "../../util/runtime" }
-shader_shared = { path = "../../wgpu-buffer/shader_shared" }
-stars = { path = "../../wgpu-buffer/stars" }
-terrain = { path = "../../wgpu-buffer/terrain" }
-window = { path = "../../system/window" }
+anyhow.workspace = true
+bevy_ecs.workspace = true
+log.workspace = true
+parking_lot.workspace = true
+wgpu.workspace = true
+# Internal
+atmosphere.workspace = true
+fullscreen.workspace = true
+global_data.workspace = true
+gpu.workspace = true
+nitrous.workspace = true
+runtime.workspace = true
+shader_shared.workspace = true
+stars.workspace = true
+terrain.workspace = true
+window.workspace = true
 
 [build-dependencies]
-build_shaders = { path = "../../util/build_shaders" }
+build_shaders.workspace = true

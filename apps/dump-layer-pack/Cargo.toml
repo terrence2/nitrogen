@@ -1,12 +1,19 @@
 [package]
 name = "dump-layer-pack"
-version = "0.0.0"
-authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2021"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-anyhow = { version = "^ 1", features = ["backtrace"] }
-memmap = "^ 0.7"
-structopt = "^ 0.3"
-zerocopy = "^ 0.6"
-terrain = { path = "../../libs/wgpu-buffer/terrain" }
+anyhow.workspace = true
+memmap.workspace = true
+structopt.workspace = true
+zerocopy.workspace = true
+# Internal
+terrain.workspace = true

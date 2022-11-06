@@ -1,19 +1,26 @@
 [package]
 name = "animate"
-version = "0.0.0"
-authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2021"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-anyhow = { version = "^ 1", features = ["backtrace"] }
-approx = "^ 0.5"
-bevy_ecs = { version = "^ 0.8", features = ["trace"] }
-futures = "^ 0.3"
-log = "^ 0.4"
-lyon_geom = "^ 0.17"
-parking_lot = "^ 0.12"
-triggered = "^ 0.1"
-absolute_unit = { path = "../../util/absolute_unit" }
-geodesy = { path = "../../util/geodesy" }
-nitrous = { path = "../../util/nitrous" }
-runtime = { path = "../../util/runtime" }
+anyhow.workspace = true
+approx.workspace = true
+bevy_ecs.workspace = true
+futures.workspace = true
+log.workspace = true
+lyon_geom.workspace = true
+parking_lot.workspace = true
+triggered.workspace = true
+# Internal
+absolute_unit.workspace = true
+geodesy.workspace = true
+nitrous.workspace = true
+runtime.workspace = true

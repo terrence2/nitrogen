@@ -1,13 +1,20 @@
 [package]
 name = "font_common"
-version = "0.0.0"
-authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2021"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-anyhow = { version = "^ 1", features = ["backtrace"] }
-image = "^ 0.24"
-ordered-float = "^ 3"
-parking_lot = "^ 0.12"
-atlas = { path = "../../wgpu-buffer/atlas" }
-window = { path = "../../system/window" }
+anyhow.workspace = true
+image.workspace = true
+ordered-float.workspace = true
+parking_lot.workspace = true
+# Internal
+atlas.workspace = true
+window.workspace = true

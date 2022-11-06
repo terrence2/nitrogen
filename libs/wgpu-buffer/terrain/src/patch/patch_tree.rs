@@ -477,10 +477,7 @@ impl PatchTree {
     }
 
     fn count_in_view_patches(&self) -> usize {
-        self.patches
-            .iter()
-            .map(|p| if p.in_view() { 1 } else { 0 })
-            .sum()
+        self.patches.iter().map(|p| usize::from(p.in_view())).sum()
     }
 
     pub(crate) fn optimize_for_view(

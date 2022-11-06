@@ -47,7 +47,7 @@ use vehicle::{
 };
 use widget::{Label, Labeled, LayoutNode, LayoutPacking, PaintContext, Terminal, WidgetBuffer};
 use window::{size::Size, DisplayOpts, Window, WindowBuilder};
-use world_render::WorldRenderPass;
+use world::WorldRenderPass;
 
 const PRELUDE: &str = r#"
 // Default camera bindings

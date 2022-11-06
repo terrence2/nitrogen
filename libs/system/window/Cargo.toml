@@ -1,17 +1,24 @@
 [package]
 name = "window"
 description = "Clonable Send+Sync wrapper around raw-window-handle"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-log = "^ 0.4"
-anyhow = { version = "^ 1", features = ["backtrace"] }
-bevy_ecs = { version = "^ 0.8", features = ["trace"] }
-ordered-float = "^ 3"
-parking_lot = "^ 0.12"
-structopt = "^ 0.3"
-winit = "^ 0.26"
-input = { path = "../../system/input" }
-nitrous = { path = "../../util/nitrous" }
-runtime = { path = "../../util/runtime" }
+log.workspace = true
+anyhow.workspace = true
+bevy_ecs.workspace = true
+ordered-float.workspace = true
+parking_lot.workspace = true
+structopt.workspace = true
+winit.workspace = true
+# Internal
+input.workspace = true
+nitrous.workspace = true
+runtime.workspace = true

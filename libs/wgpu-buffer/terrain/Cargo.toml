@@ -1,43 +1,49 @@
 [package]
 name = "terrain"
 description = "Mesh for sampling terrain properties."
-version = "0.0.0"
-authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-anyhow = { version = "^ 1", features = ["backtrace"] }
-approx = "^ 0.5"
-bevy_ecs = { version = "^ 0.8", features = ["trace"] }
-bzip2 = "^ 0.4"
-crossbeam = "^ 0.8"
-float-ord = "^ 0.3"
-fxhash = "^ 0.2"
-image = "^ 0.24"
-json = "^ 0.12"
-lazy_static = "^ 1"
-log = "^ 0.4"
-memoffset = "^ 0.6"
-nalgebra = "^ 0.31"
-num-traits = "^ 0.2"
-parking_lot = "^ 0.12"
-rayon = "^ 1.5"
-smallvec = "^ 1"
-static_assertions = "^ 1"
-wgpu = { version = "^ 0.13", features = ["spirv"] }
-zerocopy = "^ 0.6"
-absolute_unit = { path = "../../util/absolute_unit" }
-camera = { path = "../../sim/camera" }
-catalog = { path = "../../system/catalog" }
-geodesy = { path = "../../util/geodesy" }
-geometry = { path = "../../util/geometry" }
-global_data = { path = "../../wgpu-buffer/global_data" }
-gpu = { path = "../../system/gpu" }
-nitrous = { path = "../../util/nitrous" }
-packed_struct = { path = "../../util/packed_struct" }
-physical_constants = { path = "../../util/physical_constants" }
-runtime = { path = "../../util/runtime" }
-shader_shared = { path = "../../wgpu-buffer/shader_shared" }
+anyhow.workspace = true
+approx.workspace = true
+bevy_ecs.workspace = true
+bzip2.workspace = true
+crossbeam.workspace = true
+float-ord.workspace = true
+fxhash.workspace = true
+image.workspace = true
+json.workspace = true
+lazy_static.workspace = true
+log.workspace = true
+memoffset.workspace = true
+nalgebra.workspace = true
+num-traits.workspace = true
+parking_lot.workspace = true
+rayon.workspace = true
+smallvec.workspace = true
+static_assertions.workspace = true
+wgpu.workspace = true
+zerocopy.workspace = true
+# Internal
+absolute_unit.workspace = true
+camera.workspace = true
+catalog.workspace = true
+geodesy.workspace = true
+geometry.workspace = true
+global_data.workspace = true
+gpu.workspace = true
+nitrous.workspace = true
+packed_struct.workspace = true
+physical_constants.workspace = true
+runtime.workspace = true
+shader_shared.workspace = true
 
 [build-dependencies]
-build_shaders = { path = "../../util/build_shaders" }
+build_shaders.workspace = true

@@ -1,14 +1,19 @@
 [package]
 name = "font_ttf"
-version = "0.0.0"
-authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-anyhow = { version = "^ 1", features = ["backtrace"] }
-image = "^ 0.24"
-rusttype = "^ 0.9"
-window = { path = "../../system/window" }
-font_common = { path = "../../wgpu-buffer/font_common" }
+anyhow.workspace = true
+image.workspace = true
+rusttype.workspace = true
+# Internal
+window.workspace = true
+font_common.workspace = true
