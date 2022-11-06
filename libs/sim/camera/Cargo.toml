@@ -1,24 +1,32 @@
 [package]
 name = "camera"
-version = "0.0.0"
-authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2021"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-anyhow = { version = "^ 1", features = ["backtrace"] }
-bevy_ecs = { version = "^ 0.8", features = ["trace"] }
-log = "^ 0.4"
-nalgebra = "^ 0.31"
-num = "^ 0.4"
-ordered-float = "^ 3"
-absolute_unit = { path = "../../util/absolute_unit" }
-geodesy = { path = "../../util/geodesy" }
-geometry = { path = "../../util/geometry" }
-measure = { path = "../../sim/measure" }
-nitrous = { path = "../../util/nitrous" }
-runtime = { path = "../../util/runtime" }
-window = { path = "../../system/window" }
+anyhow.workspace = true
+bevy_ecs.workspace = true
+log.workspace = true
+nalgebra.workspace = true
+num.workspace = true
+ordered-float.workspace = true
+# Internal
+absolute_unit.workspace = true
+geodesy.workspace = true
+geometry.workspace = true
+measure.workspace = true
+nitrous.workspace = true
+runtime.workspace = true
+window.workspace = true
 
 [dev-dependencies]
-approx = "^ 0.5"
-physical_constants = { path = "../../util/physical_constants" }
+approx.workspace = true
+# Internal
+physical_constants.workspace = true

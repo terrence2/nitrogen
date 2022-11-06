@@ -609,11 +609,11 @@ impl LayoutNode {
     // Draw backgrounds and borders, as requested.
     pub fn draw_non_client(
         &self,
-        now: Instant,
+        _now: Instant,
         packings: &Query<&LayoutPacking>,
         measures: &Query<&LayoutMeasurements>,
-        win: &Window,
-        gpu: &Gpu,
+        _win: &Window,
+        _gpu: &Gpu,
         context: &mut PaintContext,
     ) -> Result<()> {
         for link in &self.children {
@@ -649,7 +649,7 @@ impl LayoutNode {
             if let LayoutLink::Layout(layout) = link {
                 layout
                     .lock()
-                    .draw_non_client(now, packings, measures, win, gpu, context)?;
+                    .draw_non_client(_now, packings, measures, _win, _gpu, context)?;
             }
         }
 

@@ -1,15 +1,22 @@
 [package]
 name = "catalog"
-version = "0.0.0"
-authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2021"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-anyhow = { version = "^ 1", features = ["backtrace"] }
-bevy_ecs = { version = "^ 0.8", features = ["trace"] }
-glob = "^ 0.3"
-log = "^ 0.4"
-memmap = "^ 0.7"
-smallvec = "^ 1"
-structopt = "^ 0.3"
-runtime = { path = "../../util/runtime" }
+anyhow.workspace = true
+bevy_ecs.workspace = true
+glob.workspace = true
+log.workspace = true
+memmap.workspace = true
+smallvec.workspace = true
+structopt.workspace = true
+# Internal
+runtime.workspace = true

@@ -1,15 +1,23 @@
 [package]
 name = "vehicle"
-version = "0.0.0"
-edition = "2021"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-anyhow = { version = "^ 1", features = ["backtrace"] }
-bevy_ecs = { version = "^ 0.8", features = ["trace"] }
-log = "^ 0.4"
-absolute_unit = { path = "../../util/absolute_unit" }
-animate = { path = "../../sim/animate" }
-measure = { path = "../../sim/measure" }
-nitrous = { path = "../../util/nitrous" }
-physical_constants = { path = "../../util/physical_constants" }
-runtime = { path = "../../util/runtime" }
+anyhow.workspace = true
+bevy_ecs.workspace = true
+log.workspace = true
+# Internal
+absolute_unit.workspace = true
+animate.workspace = true
+measure.workspace = true
+nitrous.workspace = true
+physical_constants.workspace = true
+runtime.workspace = true

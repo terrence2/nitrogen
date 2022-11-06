@@ -32,8 +32,8 @@ pub struct BasisVectors<T> {
 /// World space is OpenGL-style, right-handed coordinates with the
 /// prime meridian (London) on the positive z-axis, the pacific on
 /// the positive x axis and the north pole on the positive y axis.
-/// For convenience, `facing` translates into and out of the same
-/// style of local coordinate system.
+/// For convenience, `facing` and `motion` translate into and out
+/// of the same style of local coordinate system.
 #[derive(Component, NitrousComponent, Debug, Default, Clone)]
 #[Name = "frame"]
 pub struct WorldSpaceFrame {

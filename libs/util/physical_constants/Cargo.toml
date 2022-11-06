@@ -1,12 +1,17 @@
 [package]
 name = "physical_constants"
-version = "0.0.0"
-authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2021"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-approx = "^ 0.5"
-once_cell = "^ 1"
-absolute_unit = { path = "../../util/absolute_unit" }
-
-[dev-dependencies]
+approx.workspace = true
+once_cell.workspace = true
+# Internal
+absolute_unit.workspace = true

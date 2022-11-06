@@ -141,12 +141,12 @@ impl ScreenCamera {
 
     #[method]
     pub fn increase_fov(&mut self, pressed: bool) {
-        self.input.fov_delta = degrees!(if pressed { 1 } else { 0 });
+        self.input.fov_delta = degrees!(i32::from(pressed));
     }
 
     #[method]
     pub fn decrease_fov(&mut self, pressed: bool) {
-        self.input.fov_delta = degrees!(if pressed { -1 } else { 0 });
+        self.input.fov_delta = degrees!(-i32::from(pressed));
     }
 
     #[method]

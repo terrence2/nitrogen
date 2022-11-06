@@ -1,15 +1,19 @@
 [package]
 name = "geometry"
-version = "0.0.0"
-authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2021"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-approx = "^ 0.5"
-nalgebra = "^ 0.31"
-num-traits = "^ 0.2"
-absolute_unit = { path = "../../util/absolute_unit" }
-
-[dependencies.simba]
-version = "^ 0.7"
-default-features = false
+approx.workspace = true
+nalgebra.workspace = true
+num-traits.workspace = true
+simba.workspace = true
+# Internal
+absolute_unit.workspace = true

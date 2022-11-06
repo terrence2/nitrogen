@@ -1,32 +1,40 @@
 [package]
 name = "fullscreen"
-version = "0.0.0"
-authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2021"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-anyhow = { version = "^ 1", features = ["backtrace"] }
-log = "^ 0.4"
-parking_lot = "^ 0.12"
-wgpu = { version = "^ 0.13", features = ["spirv"] }
-zerocopy = "^ 0.6"
-gpu = { path = "../../system/gpu" }
-runtime = { path = "../../util/runtime" }
+anyhow.workspace = true
+log.workspace = true
+parking_lot.workspace = true
+wgpu.workspace = true
+zerocopy.workspace = true
+# Internal
+gpu.workspace = true
+runtime.workspace = true
 
 [dev-dependencies]
-bevy_ecs = { version = "^ 0.8", features = ["trace"] }
-chrono = "^ 0.4"
-absolute_unit = { path = "../../util/absolute_unit" }
-animate = { path = "../../sim/animate" }
-camera = { path = "../../sim/camera" }
-event_mapper = { path = "../../sim/event_mapper" }
-geodesy = { path = "../../util/geodesy" }
-global_data = { path = "../../wgpu-buffer/global_data" }
-input = { path = "../../system/input" }
-measure = { path = "../../sim/measure" }
-nitrous = { path = "../../util/nitrous" }
-orrery = { path = "../../sim/orrery" }
-window = { path = "../../system/window" }
+bevy_ecs.workspace = true
+chrono.workspace = true
+# Internal
+absolute_unit.workspace = true
+animate.workspace = true
+camera.workspace = true
+event_mapper.workspace = true
+geodesy.workspace = true
+global_data.workspace = true
+input.workspace = true
+measure.workspace = true
+nitrous.workspace = true
+orrery.workspace = true
+window.workspace = true
 
 [build-dependencies]
-build_shaders = { path = "../../util/build_shaders" }
+build_shaders.workspace = true

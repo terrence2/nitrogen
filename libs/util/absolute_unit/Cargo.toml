@@ -1,15 +1,20 @@
 [package]
 name = "absolute_unit"
 description = "A system of scalars with units."
-version = "0.0.0"
-authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2021"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-approx = "^ 0.5"
-hashbag = "^ 0.1"
-num-traits = "^ 0.2"
-ordered-float = "^ 3"
+approx.workspace = true
+hashbag.workspace = true
+num-traits.workspace = true
+ordered-float.workspace = true
 
 [dev-dependencies]
-nalgebra = "^ 0.31"
+nalgebra.workspace = true

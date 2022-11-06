@@ -1,30 +1,38 @@
 [package]
 name = "atmosphere"
-version = "0.0.0"
-authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2021"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-approx = "^ 0.5"
-bitflags = ">= 1.0"
-anyhow = { version = "^ 1", features = ["backtrace"] }
-image = "^ 0.24"
-lazy_static = "^ 1"
-log = "^ 0.4"
-nalgebra = "^ 0.31"
-num-traits = "^ 0.2"
-parking_lot = "^ 0.12"
-static_assertions = "^ 1"
-wgpu = { version = "^ 0.13", features = ["spirv"] }
-zerocopy = "^ 0.6"
-absolute_unit = { path = "../../util/absolute_unit" }
-gpu = { path = "../../system/gpu" }
-physical_constants = { path = "../../util/physical_constants" }
-runtime = { path = "../../util/runtime" }
+approx.workspace = true
+bitflags.workspace = true
+anyhow.workspace = true
+image.workspace = true
+lazy_static.workspace = true
+log.workspace = true
+nalgebra.workspace = true
+num-traits.workspace = true
+parking_lot.workspace = true
+static_assertions.workspace = true
+wgpu.workspace = true
+zerocopy.workspace = true
+# Internal
+absolute_unit.workspace = true
+gpu.workspace = true
+physical_constants.workspace = true
+runtime.workspace = true
 
 [dev-dependencies]
-spirv-reflect = "^ 0.2"
-nitrous = { path = "../../util/nitrous" }
+spirv-reflect.workspace = true
+# Internal
+nitrous.workspace = true
 
 [build-dependencies]
-build_shaders = { path = "../../util/build_shaders" }
+build_shaders.workspace = true

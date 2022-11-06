@@ -1,23 +1,30 @@
 [package]
 name = "composite"
-version = "0.0.0"
-authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2021"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-anyhow = { version = "^ 1", features = ["backtrace"] }
-bevy_ecs = { version = "^ 0.8", features = ["trace"] }
-log = "^ 0.4"
-wgpu = { version = "^ 0.13", features = ["spirv"] }
-fullscreen = { path = "../../wgpu-buffer/fullscreen" }
-global_data = { path = "../../wgpu-buffer/global_data" }
-gpu = { path = "../../system/gpu" }
-input = { path = "../../system/input" }
-runtime = { path = "../../util/runtime" }
-shader_shared = { path = "../../wgpu-buffer/shader_shared" }
-ui = { path = "../../wgpu-buffer/ui" }
-widget = { path = "../../wgpu-buffer/widget" }
-world = { path = "../../wgpu-buffer/world" }
+anyhow.workspace = true
+bevy_ecs.workspace = true
+log.workspace = true
+wgpu.workspace = true
+# Internal
+fullscreen.workspace = true
+global_data.workspace = true
+gpu.workspace = true
+input.workspace = true
+runtime.workspace = true
+shader_shared.workspace = true
+ui.workspace = true
+widget.workspace = true
+world.workspace = true
 
 [build-dependencies]
-build_shaders = { path = "../../util/build_shaders" }
+build_shaders.workspace = true

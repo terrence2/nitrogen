@@ -10,7 +10,7 @@ checksum = "d9fe5e32de01730eb1f6b7f5b51c17e03e2325bf40a74f754f04f130043affff"
 
 [[package]]
 name = "absolute_unit"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "approx",
  "hashbag",
@@ -71,7 +71,7 @@ dependencies = [
 
 [[package]]
 name = "animate"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "absolute_unit",
  "anyhow",
@@ -89,7 +89,7 @@ dependencies = [
 
 [[package]]
 name = "ansi"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "bitflags",
  "libc",
@@ -194,7 +194,7 @@ checksum = "e91831deabf0d6d7ec49552e489aed63b7456a7a3c46cff62adad428110b0af0"
 
 [[package]]
 name = "atlas"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "build_shaders",
@@ -209,7 +209,7 @@ dependencies = [
 
 [[package]]
 name = "atmosphere"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "absolute_unit",
  "anyhow",
@@ -418,7 +418,7 @@ checksum = "0d8c1fef690941d3e7788d328517591fecc684c084084702d6ff1641e993699a"
 
 [[package]]
 name = "build_shaders"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "log",
@@ -483,7 +483,7 @@ dependencies = [
 
 [[package]]
 name = "camera"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "absolute_unit",
  "anyhow",
@@ -504,7 +504,7 @@ dependencies = [
 
 [[package]]
 name = "catalog"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy_ecs",
@@ -626,7 +626,7 @@ checksum = "3d7b894f5411737b7867f4827955924d7c254fc9f4d91a6aad6b097804b1018b"
 
 [[package]]
 name = "composite"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy_ecs",
@@ -762,9 +762,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam"
-version = "0.8.1"
+version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4ae5588f6b3c3cb05239e90bd110f257254aecd01e4635400391aeae07497845"
+checksum = "2801af0d36612ae591caa9568261fddce32ce6e08a7275ea334a06a4ad021a2c"
 dependencies = [
  "cfg-if 1.0.0",
  "crossbeam-channel",
@@ -810,9 +810,9 @@ dependencies = [
 
 [[package]]
 name = "crossbeam-queue"
-version = "0.3.2"
+version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9b10ddc024425c88c2ad148c1b0fd53f4c6d38db9697c9f1588381212fa657c9"
+checksum = "1cd42583b04998a5363558e5f9291ee5a5ff6b49944332103f251e7479a82aa7"
 dependencies = [
  "cfg-if 1.0.0",
  "crossbeam-utils",
@@ -964,7 +964,7 @@ checksum = "9ea835d29036a4087793836fa931b08837ad5e957da9e23886b29586fb9b6650"
 
 [[package]]
 name = "dump-atmosphere-tables"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "atmosphere",
@@ -979,7 +979,7 @@ dependencies = [
 
 [[package]]
 name = "dump-layer-pack"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "memmap",
@@ -990,7 +990,7 @@ dependencies = [
 
 [[package]]
 name = "dump-terrain-tables"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "nalgebra",
@@ -999,7 +999,7 @@ dependencies = [
 
 [[package]]
 name = "dump-terrain-tiles"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "absolute_unit",
  "anyhow",
@@ -1091,7 +1091,7 @@ checksum = "77f3309417938f28bf8228fcff79a4a37103981e3e186d2ccd19c74b38f4eb71"
 
 [[package]]
 name = "event_mapper"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy_ecs",
@@ -1177,7 +1177,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "font_common"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "atlas",
@@ -1189,7 +1189,7 @@ dependencies = [
 
 [[package]]
 name = "font_ttf"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "font_common",
@@ -1215,7 +1215,7 @@ checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
 
 [[package]]
 name = "fullscreen"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "absolute_unit",
  "animate",
@@ -1361,7 +1361,7 @@ dependencies = [
 
 [[package]]
 name = "geodesy"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "absolute_unit",
  "approx",
@@ -1372,7 +1372,7 @@ dependencies = [
 
 [[package]]
 name = "geometry"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "absolute_unit",
  "approx",
@@ -1452,7 +1452,7 @@ checksum = "9b919933a397b79c37e33b77bb2aa3dc8eb6e165ad809e58ff75bc7db2e34574"
 
 [[package]]
 name = "global_data"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "absolute_unit",
  "anyhow",
@@ -1486,7 +1486,7 @@ dependencies = [
 
 [[package]]
 name = "gpu"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy_ecs",
@@ -1665,11 +1665,11 @@ checksum = "90953f308a79fe6d62a4643e51f848fbfddcd05975a38e69fdf4ab86a7baf7ca"
 
 [[package]]
 name = "input"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy_ecs",
- "futures",
+ "futures-lite",
  "gilrs",
  "log",
  "nitrous",
@@ -1714,7 +1714,7 @@ dependencies = [
 
 [[package]]
 name = "jilrs"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "evdev",
@@ -1887,7 +1887,7 @@ dependencies = [
 
 [[package]]
 name = "marker"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "absolute_unit",
  "anyhow",
@@ -1931,7 +1931,7 @@ dependencies = [
 
 [[package]]
 name = "measure"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "absolute_unit",
  "bevy_ecs",
@@ -2165,7 +2165,7 @@ checksum = "e4a24736216ec316047a1fc4252e27dabb04218aa4a3f37c6e7ddbf1f9782b54"
 
 [[package]]
 name = "nitrogen"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "absolute_unit",
  "animate",
@@ -2191,10 +2191,7 @@ dependencies = [
  "nalgebra",
  "nitrous",
  "orrery",
- "parking_lot 0.12.1",
- "paste",
  "platform-dirs",
- "rayon",
  "runtime",
  "stars",
  "structopt",
@@ -2211,7 +2208,7 @@ dependencies = [
 
 [[package]]
 name = "nitrous"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy_ecs",
@@ -2230,7 +2227,7 @@ dependencies = [
 
 [[package]]
 name = "nitrous_injector"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2446,7 +2443,7 @@ dependencies = [
 
 [[package]]
 name = "orrery"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "animate",
  "anyhow",
@@ -2473,7 +2470,7 @@ dependencies = [
 
 [[package]]
 name = "packed_injector"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2482,7 +2479,7 @@ dependencies = [
 
 [[package]]
 name = "packed_struct"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "packed_injector",
@@ -2618,7 +2615,7 @@ dependencies = [
 
 [[package]]
 name = "physical_constants"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "absolute_unit",
  "approx",
@@ -2918,7 +2915,7 @@ dependencies = [
 
 [[package]]
 name = "runtime"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "ansi",
  "anyhow",
@@ -3018,7 +3015,7 @@ dependencies = [
 
 [[package]]
 name = "shader_shared"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "zerocopy",
 ]
@@ -3157,7 +3154,7 @@ dependencies = [
 
 [[package]]
 name = "star_catalog"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "packed_struct",
@@ -3166,7 +3163,7 @@ dependencies = [
 
 [[package]]
 name = "stars"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "absolute_unit",
  "animate",
@@ -3313,7 +3310,7 @@ dependencies = [
 
 [[package]]
 name = "terrain"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "absolute_unit",
  "anyhow",
@@ -3438,7 +3435,7 @@ dependencies = [
 
 [[package]]
 name = "tracelog"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "nitrous",
@@ -3553,7 +3550,7 @@ checksum = "b63708a265f51345575b27fe43f9500ad611579e764c79edbc2037b1121959ec"
 
 [[package]]
 name = "ui"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy_ecs",
@@ -3615,7 +3612,7 @@ checksum = "f1bddf1187be692e79c5ffeab891132dfb0f236ed36a43c7ed39f1165ee20191"
 
 [[package]]
 name = "vehicle"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "absolute_unit",
  "animate",
@@ -3787,7 +3784,7 @@ dependencies = [
 
 [[package]]
 name = "web-demo"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "absolute_unit",
  "animate",
@@ -3936,7 +3933,7 @@ dependencies = [
 
 [[package]]
 name = "widget"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "animate",
  "anyhow",
@@ -3955,7 +3952,6 @@ dependencies = [
  "ordered-float",
  "parking_lot 0.12.1",
  "platform-dirs",
- "rayon",
  "runtime",
  "smallvec",
  "wgpu",
@@ -3996,7 +3992,7 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 
 [[package]]
 name = "window"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "bevy_ecs",
@@ -4088,7 +4084,7 @@ dependencies = [
 
 [[package]]
 name = "world"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "atmosphere",

@@ -119,6 +119,10 @@ impl TimeStep {
         &self.sim_time
     }
 
+    pub fn sim_duration(&self) -> Duration {
+        self.sim_time - self.sim_start_time
+    }
+
     pub fn step(&self) -> &Duration {
         &self.sim_step
     }

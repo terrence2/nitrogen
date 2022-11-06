@@ -266,12 +266,11 @@ impl QuadTree {
     }
 
     pub(crate) fn note_required(&mut self, window: &Aabb<i32, 2>, resolution: Angle<ArcSeconds>) {
-        self.visit_required_node(0, self.root, window, resolution);
+        self.visit_required_node(self.root, window, resolution);
     }
 
     fn visit_required_node(
         &mut self,
-        level: usize,
         id: QuadTreeId,
         window: &Aabb<i32, 2>,
         resolution: Angle<ArcSeconds>,
@@ -312,7 +311,7 @@ impl QuadTree {
         let children = self.nodes[id.offset()].children;
         for child in &children {
             if !child.is_empty() && self.aabb_as(child).overlaps(window) {
-                self.visit_required_node(level + 1, *child, window, resolution);
+                self.visit_required_node(*child, window, resolution);
             }
         }
     }

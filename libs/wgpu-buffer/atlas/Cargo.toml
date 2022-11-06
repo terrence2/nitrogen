@@ -1,20 +1,27 @@
 [package]
 name = "atlas"
-version = "0.0.0"
-authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2021"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-anyhow = { version = "^ 1", features = ["backtrace"] }
-image = "^ 0.24"
-log = "^ 0.4"
-wgpu = { version = "^ 0.13", features = ["spirv"] }
-geometry = { path = "../../util/geometry" }
-gpu = { path = "../../system/gpu" }
-zerocopy = "^ 0.6"
+anyhow.workspace = true
+image.workspace = true
+log.workspace = true
+wgpu.workspace = true
+zerocopy.workspace = true
+# Internal
+geometry.workspace = true
+gpu.workspace = true
 
 [dev-dependencies]
-rand = "^ 0.8"
+rand.workspace = true
 
 [build-dependencies]
-build_shaders = { path = "../../util/build_shaders" }
+build_shaders.workspace = true

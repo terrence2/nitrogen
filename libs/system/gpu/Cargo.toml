@@ -1,25 +1,32 @@
 [package]
 name = "gpu"
-version = "0.0.0"
-authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2021"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-anyhow = { version = "^ 1", features = ["backtrace"] }
-bevy_ecs = { version = "^ 0.8", features = ["trace"] }
-futures-lite = "^ 1"
-log = "^ 0.4"
-ordered-float = "^ 3"
-parking_lot = "^ 0.12"
-raw-window-handle = "^ 0.4"
-structopt = "^ 0.3"
-wgpu = { version = "^ 0.13", features = ["spirv"] }
-winit = "^ 0.26"
-zerocopy = "^ 0.6"
-input = { path = "../../system/input" }
-nitrous = { path = "../../util/nitrous" }
-runtime = { path = "../../util/runtime" }
-window = { path = "../../system/window" }
+anyhow.workspace = true
+bevy_ecs.workspace = true
+futures-lite.workspace = true
+log.workspace = true
+ordered-float.workspace = true
+parking_lot.workspace = true
+raw-window-handle.workspace = true
+structopt.workspace = true
+wgpu.workspace = true
+winit.workspace = true
+zerocopy.workspace = true
+# Internal
+input.workspace = true
+nitrous.workspace = true
+runtime.workspace = true
+window.workspace = true
 
 [dev-dependencies]
-paste = "^ 1"
+paste.workspace = true

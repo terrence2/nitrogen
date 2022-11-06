@@ -1,38 +1,46 @@
 [package]
 name = "stars"
-version = "0.0.0"
-authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2021"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-approx = "^ 0.5"
-bitflags = ">= 1.0"
-anyhow = { version = "^ 1", features = ["backtrace"] }
-lazy_static = "^ 1"
-log = "^ 0.4"
-nalgebra = "^ 0.31"
-static_assertions = "^ 1"
-wgpu = { version = "^ 0.13", features = ["spirv"] }
-zerocopy = "^ 0.6"
-star_catalog = { path = "../../util/star_catalog" }
-gpu = { path = "../../system/gpu" }
-runtime = { path = "../../util/runtime" }
+approx.workspace = true
+bitflags.workspace = true
+anyhow.workspace = true
+lazy_static.workspace = true
+log.workspace = true
+nalgebra.workspace = true
+static_assertions.workspace = true
+wgpu.workspace = true
+zerocopy.workspace = true
+# Internal
+star_catalog.workspace = true
+gpu.workspace = true
+runtime.workspace = true
 
 [dev-dependencies]
-bevy_ecs = { version = "^ 0.8", features = ["trace"] }
-chrono = "^ 0.4"
-absolute_unit = { path = "../../util/absolute_unit" }
-animate = { path = "../../sim/animate" }
-camera = { path = "../../sim/camera" }
-event_mapper = { path = "../../sim/event_mapper" }
-fullscreen = { path = "../../wgpu-buffer/fullscreen" }
-geodesy = { path = "../../util/geodesy" }
-global_data = { path = "../../wgpu-buffer/global_data" }
-input = { path = "../../system/input" }
-measure = { path = "../../sim/measure" }
-nitrous = { path = "../../util/nitrous" }
-orrery = { path = "../../sim/orrery" }
-window = { path = "../../system/window" }
+bevy_ecs.workspace = true
+chrono.workspace = true
+# Internal
+absolute_unit.workspace = true
+animate.workspace = true
+camera.workspace = true
+event_mapper.workspace = true
+fullscreen.workspace = true
+geodesy.workspace = true
+global_data.workspace = true
+input.workspace = true
+measure.workspace = true
+nitrous.workspace = true
+orrery.workspace = true
+window.workspace = true
 
 [build-dependencies]
-build_shaders = { path = "../../util/build_shaders" }
+build_shaders.workspace = true

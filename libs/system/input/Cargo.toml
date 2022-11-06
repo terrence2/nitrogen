@@ -1,22 +1,28 @@
 [package]
 name = "input"
-version = "0.0.0"
-authors = ["Terrence Cole <terrence.d.cole@gmail.com>"]
-edition = "2021"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+readme.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-anyhow = { version = "^ 1", features = ["backtrace"] }
-bevy_ecs = { version = "^ 0.8", features = ["trace"] }
-gilrs = "^ 0.9"
-log = "^ 0.4"
-parking_lot = "^ 0.12"
-smallvec = "^ 1"
-winit = "^ 0.26"
-nitrous = { path = "../../util/nitrous" }
-runtime = { path = "../../util/runtime" }
+anyhow.workspace = true
+bevy_ecs.workspace = true
+gilrs.workspace = true
+log.workspace = true
+parking_lot.workspace = true
+smallvec.workspace = true
+winit.workspace = true
+# Internal
+nitrous.workspace = true
+runtime.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-# Note: need to match wgpu exactly
-wasm-bindgen = "=0.2.82"
-web-sys = { version = "=0.3.59", features = ["console"] }
-futures = "^ 0.3"
+wasm-bindgen.workspace = true
+web-sys.workspace = true
+futures-lite.workspace = true
