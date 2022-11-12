@@ -16,9 +16,9 @@ use animate::{TimeStep, TimeStepStep};
 use anyhow::{anyhow, Result};
 use bevy_ecs::prelude::*;
 use chrono::{prelude::*, Duration};
-use lazy_static::lazy_static;
 use nalgebra::{Point3, Unit, UnitQuaternion, Vector3, Vector4};
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
+use once_cell::sync::Lazy;
 use runtime::{Extension, Runtime};
 use std::f64::consts::PI;
 
@@ -261,41 +261,45 @@ impl OrbitalParameters {
     }
 }
 
-lazy_static! {
-    static ref LEAP_SECONDS: Vec<DateTime<Utc>> = {
-        let mut v = vec![
-            Utc.ymd(1972, 6, 30).and_hms(23, 59, 59),
-            Utc.ymd(1972, 12, 31).and_hms(23, 59, 59),
-            Utc.ymd(1973, 12, 31).and_hms(23, 59, 59),
-            Utc.ymd(1974, 12, 31).and_hms(23, 59, 59),
-            Utc.ymd(1975, 12, 31).and_hms(23, 59, 59),
-            Utc.ymd(1976, 12, 31).and_hms(23, 59, 59),
-            Utc.ymd(1977, 12, 31).and_hms(23, 59, 59),
-            Utc.ymd(1978, 12, 31).and_hms(23, 59, 59),
-            Utc.ymd(1979, 12, 31).and_hms(23, 59, 59),
-            Utc.ymd(1981, 6, 30).and_hms(23, 59, 59),
-            Utc.ymd(1982, 6, 30).and_hms(23, 59, 59),
-            Utc.ymd(1983, 6, 30).and_hms(23, 59, 59),
-            Utc.ymd(1985, 6, 30).and_hms(23, 59, 59),
-            Utc.ymd(1987, 12, 31).and_hms(23, 59, 59),
-            Utc.ymd(1989, 12, 31).and_hms(23, 59, 59),
-            Utc.ymd(1990, 12, 31).and_hms(23, 59, 59),
-            Utc.ymd(1992, 6, 30).and_hms(23, 59, 59),
-            Utc.ymd(1993, 6, 30).and_hms(23, 59, 59),
-            Utc.ymd(1994, 6, 30).and_hms(23, 59, 59),
-            Utc.ymd(1995, 12, 31).and_hms(23, 59, 59),
-            Utc.ymd(1997, 6, 30).and_hms(23, 59, 59),
-            Utc.ymd(1998, 12, 31).and_hms(23, 59, 59),
-            Utc.ymd(2005, 12, 31).and_hms(23, 59, 59),
-            Utc.ymd(2008, 12, 31).and_hms(23, 59, 59),
-            Utc.ymd(2012, 6, 30).and_hms(23, 59, 59),
-            Utc.ymd(2015, 6, 30).and_hms(23, 59, 59),
-            Utc.ymd(2016, 12, 31).and_hms(23, 59, 59),
-        ];
-        v.reverse();
-        v
-    };
+fn utc(year: i32, month: u32, day: u32, hour: u32, min: u32, sec: u32) -> DateTime<Utc> {
+    Utc.with_ymd_and_hms(year, month, day, hour, min, sec)
+        .earliest()
+        .unwrap()
 }
+
+static LEAP_SECONDS: Lazy<Vec<DateTime<Utc>>> = Lazy::new(|| {
+    let mut v = vec![
+        utc(1972, 6, 30, 23, 59, 59),
+        utc(1972, 12, 31, 23, 59, 59),
+        utc(1973, 12, 31, 23, 59, 59),
+        utc(1974, 12, 31, 23, 59, 59),
+        utc(1975, 12, 31, 23, 59, 59),
+        utc(1976, 12, 31, 23, 59, 59),
+        utc(1977, 12, 31, 23, 59, 59),
+        utc(1978, 12, 31, 23, 59, 59),
+        utc(1979, 12, 31, 23, 59, 59),
+        utc(1981, 6, 30, 23, 59, 59),
+        utc(1982, 6, 30, 23, 59, 59),
+        utc(1983, 6, 30, 23, 59, 59),
+        utc(1985, 6, 30, 23, 59, 59),
+        utc(1987, 12, 31, 23, 59, 59),
+        utc(1989, 12, 31, 23, 59, 59),
+        utc(1990, 12, 31, 23, 59, 59),
+        utc(1992, 6, 30, 23, 59, 59),
+        utc(1993, 6, 30, 23, 59, 59),
+        utc(1994, 6, 30, 23, 59, 59),
+        utc(1995, 12, 31, 23, 59, 59),
+        utc(1997, 6, 30, 23, 59, 59),
+        utc(1998, 12, 31, 23, 59, 59),
+        utc(2005, 12, 31, 23, 59, 59),
+        utc(2008, 12, 31, 23, 59, 59),
+        utc(2012, 6, 30, 23, 59, 59),
+        utc(2015, 6, 30, 23, 59, 59),
+        utc(2016, 12, 31, 23, 59, 59),
+    ];
+    v.reverse();
+    v
+});
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash, SystemLabel)]
 pub enum OrreryStep {
@@ -377,7 +381,10 @@ impl Orrery {
         min: i64,
         sec: i64,
     ) {
-        self.now = Utc.ymd(year as i32, month as u32, day as u32).and_hms(
+        self.now = utc(
+            year as i32,
+            month as u32,
+            day as u32,
             hour as u32,
             min as u32,
             sec as u32,
@@ -391,10 +398,11 @@ impl Orrery {
 
     #[method]
     pub fn set_unix_ms(&mut self, ms: f64) {
-        self.now = DateTime::<Utc>::from_utc(
-            NaiveDateTime::from_timestamp((ms / 1000.) as i64, (ms % 1000.) as u32 * 1_000_000),
-            Utc,
-        );
+        if let Some(utc) =
+            NaiveDateTime::from_timestamp_opt((ms / 1000.) as i64, (ms % 1000.) as u32 * 1_000_000)
+        {
+            self.now = DateTime::<Utc>::from_utc(utc, Utc);
+        }
     }
 
     #[method]
@@ -433,7 +441,7 @@ impl Orrery {
         // offset from January 2000 without leap seconds added.
 
         const MILLIS_PER_CENTURY: f64 = 1000f64 * 60f64 * 60f64 * 24f64 * 364.25f64 * 100f64;
-        let from_j2000 = self.now - Utc.ymd(2000, 1, 1).and_hms(12, 0, 0) + self.num_leap_seconds();
+        let from_j2000 = self.now - utc(2000, 1, 1, 12, 0, 0) + self.num_leap_seconds();
         (from_j2000.num_milliseconds() as f64) / MILLIS_PER_CENTURY
     }
 
@@ -442,7 +450,7 @@ impl Orrery {
         // consistent direction every year at UTC time Jan 1, 12:00 PM. Thus, we want to get the
         // number of days from Jan 1 to now.
         const MILLIS_PER_DAY: f64 = 1000f64 * 60f64 * 60f64 * 24f64;
-        let from_base = self.now - Utc.ymd(self.now.year(), 1, 1).and_hms(12, 0, 0);
+        let from_base = self.now - utc(self.now.year(), 1, 1, 12, 0, 0);
         (from_base.num_milliseconds() as f64) / MILLIS_PER_DAY
     }
 
