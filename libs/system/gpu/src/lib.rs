@@ -23,7 +23,7 @@ pub use winit::dpi::{LogicalSize, PhysicalSize};
 
 use anyhow::{anyhow, bail, Result};
 use bevy_ecs::prelude::*;
-use futures_lite::future::block_on;
+use futures::executor::block_on;
 use log::{info, trace};
 use nitrous::{inject_nitrous_resource, method, NitrousResource};
 use parking_lot::Mutex;
@@ -174,6 +174,7 @@ impl Gpu {
             width: physical_size.width,
             height: physical_size.height,
             present_mode: config.present_mode,
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
         };
         surface.configure(&device, &sc_desc);
         let depth_texture = Self::create_depth_texture(&device, &sc_desc);
@@ -455,6 +456,7 @@ impl Gpu {
             width: config.window_size().width,
             height: config.window_size().height,
             present_mode: self.config.present_mode,
+            alpha_mode: wgpu::CompositeAlphaMode::Auto,
         };
         self.surface.configure(&self.device, &sc_desc);
         self.depth_texture = Self::create_depth_texture(&self.device, &sc_desc);

@@ -171,7 +171,11 @@ pub fn build() -> Result<()> {
                     bail!(msg)
                 }
             };
-            let dot_content = naga::back::dot::write(&module, None)?;
+            let dot_content = naga::back::dot::write(
+                &module,
+                None,
+                naga::back::dot::Options { cfg_only: false },
+            )?;
             if dump_spirv {
                 fs::write(
                     &format!("{}.module", target_path),

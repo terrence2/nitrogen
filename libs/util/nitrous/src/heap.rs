@@ -211,6 +211,11 @@ macro_rules! impl_immutable_heap_methods {
                 .map(|lookup| Value::new_resource(lookup))
         }
 
+        #[inline]
+        pub fn non_send_resource<T: 'static>(&self) -> &T {
+            self.world.non_send_resource()
+        }
+
         // FIXME: this should be immutable
         #[inline]
         pub fn resource_by_name(&self, name: &str) -> &dyn ScriptResource {
@@ -363,6 +368,11 @@ macro_rules! impl_mutable_heap_methods {
         pub fn insert_non_send_resource<T: 'static>(&mut self, value: T) -> &mut Self {
             self.world.insert_non_send_resource(value);
             self
+        }
+
+        #[inline]
+        pub fn non_send_resource_mut<T: 'static>(&mut self) -> Mut<T> {
+            self.world.non_send_resource_mut()
         }
 
         #[inline]

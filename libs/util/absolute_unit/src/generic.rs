@@ -376,6 +376,39 @@ macro_rules! supports_scalar_ops {
 }
 
 #[macro_export]
+macro_rules! supports_cancellation {
+    ($TypeNameSelf:ty, $TypeNameOther:ty, $UnitA:path, $UnitB:path) => {
+        impl<A1, B1, A2, B2> std::ops::Div<$TypeNameOther> for $TypeNameSelf
+        where
+            A1: $UnitA,
+            B1: $UnitB,
+            A2: $UnitA,
+            B2: $UnitB,
+        {
+            type Output = $crate::Scalar;
+
+            fn div(self, other: $TypeNameOther) -> Self::Output {
+                Self::Output::from(self.v.0 / other.v.0)
+            }
+        }
+    };
+
+    ($TypeNameSelf:ty, $TypeNameOther:ty, $UnitA:path) => {
+        impl<A1, A2> std::ops::Div<$TypeNameOther> for $TypeNameSelf
+        where
+            A1: $UnitA,
+            A2: $UnitA,
+        {
+            type Output = Scalar;
+
+            fn div(self, other: $TypeNameOther) -> Self::Output {
+                Self::Output::from(self.v.0 / other.v.0)
+            }
+        }
+    };
+}
+
+#[macro_export]
 macro_rules! supports_shift_ops {
     ($TypeNameSelf:ty, $TypeNameOther:ty, $UnitA:path, $UnitB:path) => {
         impl<A1, B1, A2, B2> std::ops::Add<$TypeNameOther> for $TypeNameSelf

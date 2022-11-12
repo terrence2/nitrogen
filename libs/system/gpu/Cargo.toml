@@ -13,7 +13,7 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 bevy_ecs.workspace = true
-futures-lite.workspace = true
+futures.workspace = true
 log.workspace = true
 ordered-float.workspace = true
 parking_lot.workspace = true

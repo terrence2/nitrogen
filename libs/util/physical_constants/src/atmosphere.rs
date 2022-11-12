@@ -181,9 +181,14 @@ impl StandardAtmosphere {
     pub fn density<UnitMass: MassUnit, UnitLength: LengthUnit>(
         &self,
     ) -> Density<UnitMass, UnitLength> {
-        Density::<UnitMass, UnitLength>::from(&kilograms_per_meter3!(
-            self.pressure::<Pascals>().f64() / (R * self.temperature::<Kelvin>().f64())
-        ))
+        let temp = self.temperature::<Kelvin>();
+        if temp > kelvin!(0) {
+            Density::<UnitMass, UnitLength>::from(&kilograms_per_meter3!(
+                self.pressure::<Pascals>().f64() / (R * temp.f64())
+            ))
+        } else {
+            Density::<UnitMass, UnitLength>::from(0_f64)
+        }
     }
 }
 

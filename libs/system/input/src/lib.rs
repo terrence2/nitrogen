@@ -40,7 +40,7 @@ use winit::{
     event::{
         DeviceEvent, DeviceId, Event, KeyboardInput, MouseScrollDelta, StartCause, WindowEvent,
     },
-    event_loop::{ControlFlow, EventLoop, EventLoopProxy},
+    event_loop::{ControlFlow, EventLoop, EventLoopBuilder, EventLoopProxy},
     window::WindowBuilder,
 };
 
@@ -268,11 +268,14 @@ impl InputController {
         use winit::{platform::run_return::EventLoopExtRunReturn, window::Window};
 
         #[cfg(unix)]
-        use winit::platform::unix::EventLoopExtUnix;
+        use winit::platform::unix::EventLoopBuilderExtUnix;
         #[cfg(windows)]
-        use winit::platform::windows::EventLoopExtWindows;
+        use winit::platform::windows::EventLoopBuilderExtWindows;
 
-        let mut event_loop = EventLoop::<MetaEvent>::new_any_thread();
+        let mut event_loop = EventLoopBuilder::<MetaEvent>::with_user_event()
+            .with_any_thread(true)
+            .build();
+        // let mut event_loop = EventLoop::<MetaEvent>::new_any_thread();
         let os_window = Window::new(&event_loop).unwrap();
         let mut have_config = 0;
         while have_config <= 0 && have_config > -100 {
@@ -360,7 +363,7 @@ pub struct InputSystem;
 
 impl InputSystem {
     pub fn make_event_loop() -> EventLoop<MetaEvent> {
-        EventLoop::<MetaEvent>::with_user_event()
+        EventLoopBuilder::<MetaEvent>::with_user_event().build()
     }
 
     #[cfg(target_arch = "wasm32")]
@@ -445,7 +448,7 @@ impl InputSystem {
         O: Clone + Send + Sync + 'static,
         M: 'static + Send + FnMut(Runtime) -> Result<()>,
     {
-        let event_loop = EventLoop::<MetaEvent>::with_user_event();
+        let event_loop = EventLoopBuilder::<MetaEvent>::with_user_event().build();
         let window = window_builder.build(&event_loop)?;
         let (tx_input_event, rx_input_event) = channel();
         let (tx_system_event, rx_system_event) = channel();
@@ -556,6 +559,8 @@ impl InputSystem {
         system_events: &mut Vec<SystemEvent>,
     ) {
         match event {
+            WindowEvent::Ime(_) => {}
+            WindowEvent::Occluded(_) => {}
             WindowEvent::Resized(s) => {
                 system_events.push(SystemEvent::WindowResized {
                     width: s.width,

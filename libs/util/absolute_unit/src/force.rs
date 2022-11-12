@@ -12,9 +12,9 @@
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
 use crate::{
-    impl_value_type_conversions, supports_absdiffeq, supports_quantity_ops, supports_scalar_ops,
-    supports_shift_ops, supports_value_type_conversion, Acceleration, DynamicUnits, Length,
-    LengthUnit, Mass, MassUnit, Scalar, TimeUnit, Torque, Unit,
+    impl_value_type_conversions, supports_absdiffeq, supports_cancellation, supports_quantity_ops,
+    supports_scalar_ops, supports_shift_ops, supports_value_type_conversion, Acceleration,
+    DynamicUnits, Length, LengthUnit, Mass, MassUnit, Scalar, TimeUnit, Torque, Unit,
 };
 use ordered_float::OrderedFloat;
 use std::{
@@ -38,10 +38,11 @@ pub struct Force<Unit: ForceUnit> {
     v: OrderedFloat<f64>, // in Unit
     phantom_1: PhantomData<Unit>,
 }
-supports_quantity_ops!(Force<A>, ForceUnit);
-supports_shift_ops!(Force<A1>, Force<A2>, ForceUnit);
-supports_scalar_ops!(Force<A>, ForceUnit);
 supports_absdiffeq!(Force<A>, ForceUnit);
+supports_cancellation!(Force<A1>, Force<A2>, ForceUnit);
+supports_quantity_ops!(Force<A>, ForceUnit);
+supports_scalar_ops!(Force<A>, ForceUnit);
+supports_shift_ops!(Force<A1>, Force<A2>, ForceUnit);
 supports_value_type_conversion!(Force<A>, ForceUnit, impl_value_type_conversions);
 
 impl<Unit> fmt::Display for Force<Unit>
@@ -105,19 +106,6 @@ where
     fn div(self, rhs: Mass<M>) -> Self::Output {
         let mass = Mass::<F::UnitMass>::from(&rhs);
         Self::Output::from(self.v.0 / mass.f64())
-    }
-}
-
-impl<F0, F1> Div<Force<F1>> for Force<F0>
-where
-    F0: ForceUnit, // kg*m/s^2
-    F1: ForceUnit, // kg*m/s^2
-{
-    type Output = Scalar;
-
-    fn div(self, rhs: Force<F1>) -> Self::Output {
-        let rhs = Force::<F0>::from(&rhs);
-        Self::Output::from(self.v.0 / rhs.v.0)
     }
 }
 
