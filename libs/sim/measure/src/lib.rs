@@ -179,15 +179,22 @@ impl WorldSpaceFrame {
 #[derive(Component, NitrousComponent, Copy, Clone, Debug, Default)]
 #[Name = "motion"]
 pub struct BodyMotion {
+    // Linear motion
     acceleration_m_s2: Vector3<Acceleration<Meters, Seconds>>,
     linear_velocity: Vector3<Velocity<Meters, Seconds>>,
+
+    // Rotational motion
     angular_velocity: Vector3<AngularVelocity<Radians, Seconds>>,
+
+    // Current motion vector, which may differ from the facing vector
+    stability: UnitQuaternion<f64>,
 }
 
 #[inject_nitrous_component]
 impl BodyMotion {
     pub fn new_forward<UnitLength: LengthUnit, UnitTime: TimeUnit>(
         vehicle_forward_velocity: Velocity<UnitLength, UnitTime>,
+        facing: &UnitQuaternion<f64>,
     ) -> Self {
         Self {
             acceleration_m_s2: Vector3::new(
@@ -205,7 +212,16 @@ impl BodyMotion {
                 radians_per_second!(0f64),
                 radians_per_second!(0f64),
             ),
+            stability: *facing,
         }
+    }
+
+    pub fn stability(&self) -> &UnitQuaternion<f64> {
+        &self.stability
+    }
+
+    pub fn stability_mut(&mut self) -> &mut UnitQuaternion<f64> {
+        &mut self.stability
     }
 
     pub fn velocity(&self) -> &Vector3<Velocity<Meters, Seconds>> {

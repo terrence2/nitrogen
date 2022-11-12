@@ -382,6 +382,16 @@ impl Runtime {
     }
 
     #[inline]
+    pub fn non_send_resource<T: 'static>(&self) -> &T {
+        self.heap.non_send_resource()
+    }
+
+    #[inline]
+    pub fn non_send_resource_mut<T: 'static>(&mut self) -> Mut<T> {
+        self.heap.non_send_resource_mut()
+    }
+
+    #[inline]
     pub fn maybe_resource<T: Resource>(&self) -> Option<&T> {
         self.heap.maybe_resource()
     }
