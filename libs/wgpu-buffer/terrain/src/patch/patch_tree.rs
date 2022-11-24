@@ -497,6 +497,9 @@ impl PatchTree {
         // let eye_direction = (camera_target - eye_position.coords).normalize();
         self.cached_eye_position = camera.position::<Kilometers>().point64();
         self.cached_eye_direction = *camera.forward();
+        assert!(self.cached_eye_position.x.is_finite(), "camera 'sploded");
+        assert!(self.cached_eye_position.y.is_finite(), "camera 'sploded");
+        assert!(self.cached_eye_position.z.is_finite(), "camera 'sploded");
 
         for (i, f) in camera
             .world_space_frustum::<Kilometers>()

@@ -11,6 +11,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+approx.workspace = true
 bevy_ecs.workspace = true
 nalgebra.workspace = true
 # Internal

@@ -46,14 +46,6 @@ impl Extension for CameraSystem {
                 meters!(0.5),
             ),
         );
-        runtime.run_string(
-            r#"
-                bindings.bind("+PageUp", "camera.increase_fov(pressed)");
-                bindings.bind("+PageDown", "camera.decrease_fov(pressed)");
-                bindings.bind("Shift+LBracket", "camera.decrease_exposure()");
-                bindings.bind("Shift+RBracket", "camera.increase_exposure()");
-            "#,
-        )?;
         // Input happens in EventMapper in Input stage. This queues up scripts to run
         // as part of the Script stage. This stage mutates InputState here and elsewhere.
         // We then process this input in the Simulation stage so that input gets shown

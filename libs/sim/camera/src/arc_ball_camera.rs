@@ -122,6 +122,7 @@ impl ArcBallController {
 
     #[method]
     pub fn set_target(&mut self, target: Graticule<GeoSurface>) {
+        assert!(target.latitude.is_finite());
         self.target = target;
     }
 
