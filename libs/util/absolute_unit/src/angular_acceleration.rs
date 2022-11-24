@@ -39,7 +39,7 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Display::fmt(&self.v.0, f)?;
-        write!(f, "{}/{}^2", L::UNIT_SHORT_NAME, T::UNIT_SHORT_NAME)
+        write!(f, "{}/{}²", L::UNIT_SUFFIX, T::UNIT_SHORT_NAME)
     }
 }
 

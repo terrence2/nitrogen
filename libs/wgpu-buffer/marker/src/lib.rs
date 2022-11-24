@@ -24,8 +24,8 @@ use csscolorparser::Color;
 use geometry::{Aabb3, Arrow, Cylinder, RenderPrimitive, Sphere};
 use global_data::GlobalParametersBuffer;
 use gpu::{Gpu, GpuStep};
-use measure::WorldSpaceFrame;
-use nalgebra::{Matrix4, Point3, Vector3};
+use measure::{BodyMotion, WorldSpaceFrame};
+use nalgebra::{Matrix4, Point3, UnitQuaternion, Vector3};
 use nitrous::{
     inject_nitrous_component, inject_nitrous_resource, NitrousComponent, NitrousResource,
 };
@@ -66,22 +66,23 @@ struct MarkerCylinder {
 #[derive(Component, NitrousComponent, Debug, Default)]
 #[Name = "markers"]
 pub struct EntityMarkers {
-    points: HashMap<String, MarkerPoint>,
-    boxes: HashMap<String, MarkerBox>,
-    arrows: HashMap<String, MarkerArrow>,
-    cylinders: HashMap<String, MarkerCylinder>,
+    body_points: HashMap<String, MarkerPoint>,
+    body_boxes: HashMap<String, MarkerBox>,
+    body_arrows: HashMap<String, MarkerArrow>,
+    body_cylinders: HashMap<String, MarkerCylinder>,
+    motion_arrows: HashMap<String, MarkerArrow>,
 }
 
 #[inject_nitrous_component]
 impl EntityMarkers {
-    pub fn add_point(
+    pub fn add_body_point(
         &mut self,
         name: &str,
         position: Point3<Length<Meters>>,
         radius: Length<Meters>,
         color: Color,
     ) {
-        self.points.insert(
+        self.body_points.insert(
             name.to_owned(),
             MarkerPoint {
                 primitive: Sphere::from_center_and_radius(&position.map(|v| v.f64()), radius.f64()),
@@ -90,14 +91,14 @@ impl EntityMarkers {
         );
     }
 
-    pub fn add_box(
+    pub fn add_body_box(
         &mut self,
         name: &str,
         lo: Point3<Length<Meters>>,
         hi: Point3<Length<Meters>>,
         color: Color,
     ) {
-        self.boxes.insert(
+        self.body_boxes.insert(
             name.to_owned(),
             MarkerBox {
                 primitive: Aabb3::from_bounds(lo, hi),
@@ -106,8 +107,8 @@ impl EntityMarkers {
         );
     }
 
-    pub fn add_box_direct(&mut self, name: &str, aabb: Aabb3<Meters>, color: Color) {
-        self.boxes.insert(
+    pub fn add_body_box_direct(&mut self, name: &str, aabb: Aabb3<Meters>, color: Color) {
+        self.body_boxes.insert(
             name.to_owned(),
             MarkerBox {
                 primitive: aabb,
@@ -116,7 +117,7 @@ impl EntityMarkers {
         );
     }
 
-    pub fn add_arrow(
+    pub fn add_body_arrow(
         &mut self,
         name: &str,
         origin: Point3<Length<Meters>>,
@@ -124,7 +125,7 @@ impl EntityMarkers {
         radius: Length<Meters>,
         color: Color,
     ) {
-        self.arrows.insert(
+        self.body_arrows.insert(
             name.to_owned(),
             MarkerArrow {
                 primitive: Arrow::new(origin, vector, radius),
@@ -133,7 +134,7 @@ impl EntityMarkers {
         );
     }
 
-    pub fn add_cylinder(
+    pub fn add_body_cylinder(
         &mut self,
         name: &str,
         origin: Point3<Length<Meters>>,
@@ -141,7 +142,7 @@ impl EntityMarkers {
         radius: Length<Meters>,
         color: Color,
     ) {
-        self.cylinders.insert(
+        self.body_cylinders.insert(
             name.to_owned(),
             MarkerCylinder {
                 primitive: Cylinder::new(origin, vector, radius),
@@ -150,8 +151,13 @@ impl EntityMarkers {
         );
     }
 
-    pub fn add_cylinder_direct(&mut self, name: &str, cylinder: Cylinder<Meters>, color: Color) {
-        self.cylinders.insert(
+    pub fn add_body_cylinder_direct(
+        &mut self,
+        name: &str,
+        cylinder: Cylinder<Meters>,
+        color: Color,
+    ) {
+        self.body_cylinders.insert(
             name.to_owned(),
             MarkerCylinder {
                 primitive: cylinder,
@@ -160,34 +166,65 @@ impl EntityMarkers {
         );
     }
 
-    pub fn update_arrow_vector(&mut self, name: &str, vector: Vector3<Length<Meters>>) {
-        if let Some(arrow) = self.arrows.get_mut(name) {
+    pub fn add_motion_arrow(
+        &mut self,
+        name: &str,
+        origin: Point3<Length<Meters>>,
+        vector: Vector3<Length<Meters>>,
+        radius: Length<Meters>,
+        color: Color,
+    ) {
+        self.motion_arrows.insert(
+            name.to_owned(),
+            MarkerArrow {
+                primitive: Arrow::new(origin, vector, radius),
+                color,
+            },
+        );
+    }
+
+    pub fn update_body_arrow_vector(&mut self, name: &str, vector: Vector3<Length<Meters>>) {
+        if let Some(arrow) = self.body_arrows.get_mut(name) {
             arrow.primitive.set_axis(vector);
         }
     }
 
-    pub fn remove_arrow(&mut self, name: &str) {
-        self.arrows.remove(name);
+    pub fn update_motion_arrow_vector(&mut self, name: &str, vector: Vector3<Length<Meters>>) {
+        if let Some(arrow) = self.motion_arrows.get_mut(name) {
+            arrow.primitive.set_axis(vector);
+        }
     }
 
-    pub fn remove_cylinder(&mut self, name: &str) {
-        self.cylinders.remove(name);
+    pub fn remove_body_arrow(&mut self, name: &str) {
+        self.body_arrows.remove(name);
     }
 
-    pub fn remove_box(&mut self, name: &str) {
-        self.boxes.remove(name);
+    pub fn remove_body_cylinder(&mut self, name: &str) {
+        self.body_cylinders.remove(name);
     }
 
-    pub fn clear_arrows(&mut self) {
-        self.arrows.clear();
+    pub fn remove_body_box(&mut self, name: &str) {
+        self.body_boxes.remove(name);
     }
 
-    pub fn clear_cylinders(&mut self) {
-        self.cylinders.clear();
+    pub fn remove_motion_arrow(&mut self, name: &str) {
+        self.motion_arrows.remove(name);
     }
 
-    pub fn clear_boxes(&mut self) {
-        self.boxes.clear();
+    pub fn clear_body_arrows(&mut self) {
+        self.body_arrows.clear();
+    }
+
+    pub fn clear_body_cylinders(&mut self) {
+        self.body_cylinders.clear();
+    }
+
+    pub fn clear_body_boxes(&mut self) {
+        self.body_boxes.clear();
+    }
+
+    pub fn clear_motion_arrows(&mut self) {
+        self.motion_arrows.clear();
     }
 }
 
@@ -476,19 +513,22 @@ impl Markers {
 
     fn draw_arrow(
         view: &Matrix4<f64>,
-        frame: &WorldSpaceFrame,
+        position: &Point3<f64>,
+        facing: &UnitQuaternion<f64>,
         marker: &MarkerArrow,
         vertices: &mut Vec<MarkerVertex>,
         indices: &mut Vec<u32>,
     ) {
+        // let facing = frame.facing();
+        // let facing = maybe_motion.unwrap().stability();
         let mut prim = marker.primitive.to_primitive(5);
         let base = vertices.len() as u32;
         for vert in &mut prim.verts {
-            let p_world = frame.position().point64() + (frame.facing() * vert.position);
+            let p_world = position + (facing * vert.position);
             let p_eye = view * p_world.to_homogeneous();
             vertices.push(MarkerVertex::new(
                 p_eye.xyz(),
-                frame.facing() * vert.normal,
+                facing * vert.normal,
                 &marker.color,
             ));
         }
@@ -500,7 +540,7 @@ impl Markers {
     }
 
     fn sys_upload_geometry(
-        model_markers: Query<(&EntityMarkers, &WorldSpaceFrame)>,
+        model_markers: Query<(&EntityMarkers, &WorldSpaceFrame, Option<&BodyMotion>)>,
         mut markers: ResMut<Markers>,
         camera: Res<ScreenCamera>,
         gpu: Res<Gpu>,
@@ -510,8 +550,8 @@ impl Markers {
             let mut upload_vertices = Vec::new();
             let mut upload_indices = Vec::new();
             let view = camera.view::<Meters>().to_homogeneous();
-            for (ent_markers, frame) in model_markers.iter() {
-                for marker in ent_markers.boxes.values() {
+            for (ent_markers, frame, maybe_motion) in model_markers.iter() {
+                for marker in ent_markers.body_boxes.values() {
                     Self::draw_box(
                         &view,
                         frame,
@@ -520,7 +560,7 @@ impl Markers {
                         &mut upload_indices,
                     );
                 }
-                for marker in ent_markers.points.values() {
+                for marker in ent_markers.body_points.values() {
                     Self::draw_point(
                         &view,
                         frame,
@@ -529,16 +569,17 @@ impl Markers {
                         &mut upload_indices,
                     );
                 }
-                for arrow in ent_markers.arrows.values() {
+                for arrow in ent_markers.body_arrows.values() {
                     Self::draw_arrow(
                         &view,
-                        frame,
+                        &frame.position().point64(),
+                        frame.facing(),
                         arrow,
                         &mut upload_vertices,
                         &mut upload_indices,
                     );
                 }
-                for cylinder in ent_markers.cylinders.values() {
+                for cylinder in ent_markers.body_cylinders.values() {
                     Self::draw_cylinder(
                         &view,
                         frame,
@@ -546,6 +587,18 @@ impl Markers {
                         &mut upload_vertices,
                         &mut upload_indices,
                     );
+                }
+                if let Some(motion) = maybe_motion {
+                    for arrow in ent_markers.motion_arrows.values() {
+                        Self::draw_arrow(
+                            &view,
+                            &frame.position().point64(),
+                            motion.stability(),
+                            arrow,
+                            &mut upload_vertices,
+                            &mut upload_indices,
+                        );
+                    }
                 }
             }
             markers.vertex_count = upload_vertices.len() as u32;

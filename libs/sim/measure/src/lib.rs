@@ -12,10 +12,8 @@
 //
 // You should have received a copy of the GNU General Public License
 // along with Nitrogen.  If not, see <http://www.gnu.org/licenses/>.
-use absolute_unit::{
-    feet, meters, meters_per_second, meters_per_second2, radians_per_second, Acceleration,
-    AngularVelocity, Length, LengthUnit, Meters, Radians, Seconds, TimeUnit, Velocity,
-};
+use absolute_unit::prelude::*;
+use approx::relative_eq;
 use bevy_ecs::prelude::*;
 use geodesy::{Cartesian, GeoCenter, GeoSurface, Graticule, Target};
 use nalgebra::{convert, Point3, Unit as NUnit, UnitQuaternion, Vector3};
@@ -34,11 +32,21 @@ pub struct BasisVectors<T> {
 /// the positive x axis and the north pole on the positive y axis.
 /// For convenience, `facing` and `motion` translate into and out
 /// of the same style of local coordinate system.
-#[derive(Component, NitrousComponent, Debug, Default, Clone)]
+#[derive(Component, NitrousComponent, Debug, Clone)]
 #[Name = "frame"]
 pub struct WorldSpaceFrame {
     position: Cartesian<GeoCenter, Meters>,
     facing: UnitQuaternion<f64>,
+}
+
+impl Default for WorldSpaceFrame {
+    fn default() -> Self {
+        Self {
+            position: Graticule::<GeoCenter>::new(radians!(0_f64), radians!(0_f64), *EARTH_RADIUS)
+                .into(),
+            facing: UnitQuaternion::default(),
+        }
+    }
 }
 
 #[inject_nitrous_component]
@@ -94,6 +102,13 @@ impl WorldSpaceFrame {
     }
 
     pub fn new(position: Cartesian<GeoCenter, Meters>, forward: Vector3<f64>) -> Self {
+        debug_assert!(position.coords[0].is_finite());
+        debug_assert!(position.coords[1].is_finite());
+        debug_assert!(position.coords[2].is_finite());
+        debug_assert!(!relative_eq!(
+            (position.coords[0] + position.coords[1] + position.coords[2]).f64(),
+            0_f64
+        ));
         let up_like = position.vec64().normalize();
         let facing = UnitQuaternion::face_towards(&forward, &up_like);
         debug_assert!(facing.i.is_finite(), "NaN facing");

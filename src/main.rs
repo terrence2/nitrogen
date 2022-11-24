@@ -60,6 +60,11 @@ bindings.bind("+Shift+Down", "@camera.arcball.target_down_fast(pressed)");
 bindings.bind("+Up", "@camera.arcball.target_up(pressed)");
 bindings.bind("+Down", "@camera.arcball.target_down(pressed)");
 
+bindings.bind("+PageUp", "camera.increase_fov(pressed)");
+bindings.bind("+PageDown", "camera.decrease_fov(pressed)");
+bindings.bind("Shift+LBracket", "camera.decrease_exposure()");
+bindings.bind("Shift+RBracket", "camera.increase_exposure()");
+
 // By default start out pointing at Mt Everest.
 let location := "Everest";
 @camera.arcball.set_target(@camera.arcball.notable_location(location));
