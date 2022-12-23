@@ -32,7 +32,7 @@ pub fn terminal_size() -> (u16, u16) {
         #[allow(clippy::useless_conversion)]
         libc::ioctl(libc::STDOUT_FILENO, libc::TIOCGWINSZ.into(), &mut winsize);
         if winsize.ws_row > 0 && winsize.ws_col > 0 {
-            (winsize.ws_row as u16, winsize.ws_col as u16)
+            (winsize.ws_row, winsize.ws_col)
         } else {
             (24, 80)
         }

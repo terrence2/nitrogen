@@ -128,6 +128,6 @@ impl DataSource for Index {
         debug_assert!(lat_img <= 1);
         let lon_off = lon_px as u32 % Self::TILE_SIZE;
         let lat_off = Self::TILE_SIZE - (lat_px as u32 % Self::TILE_SIZE) - 1;
-        *self.raw[lon_img as usize][lat_img as usize].get_pixel(lon_off as u32, lat_off as u32)
+        *self.raw[lon_img as usize][lat_img as usize].get_pixel(lon_off, lat_off)
     }
 }

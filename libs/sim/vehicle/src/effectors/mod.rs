@@ -26,5 +26,5 @@ pub(crate) fn effector_chase(target: f64, dt: f64, mut position: f64) -> f64 {
             position = target;
         }
     }
-    position.max(-1.).min(1.)
+    position.clamp(-1., 1.)
 }

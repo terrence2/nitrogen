@@ -375,7 +375,7 @@ pub fn generate_mip_tile_from_mip(
             match kind {
                 DataSetDataKind::Height => {
                     let height = tile.pull_height_sample(lat_off, lon_off);
-                    tile.set_height_sample(lat_off as i32, lon_off as i32, height);
+                    tile.set_height_sample(lat_off, lon_off, height);
                 }
                 DataSetDataKind::Normal => {
                     let normal = tile.pull_normal_sample(lat_off, lon_off);
@@ -450,7 +450,7 @@ fn write_layer_pack(
         println!("  skipping write because pack is empty");
         return Ok(());
     }
-    let layer_pack_path = dataset.read().base_path().join(&format!(
+    let layer_pack_path = dataset.read().base_path().join(format!(
         "{}-L{:02}.mip",
         dataset.read().prefix(),
         target_level

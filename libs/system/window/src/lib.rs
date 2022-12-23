@@ -297,10 +297,7 @@ impl Window {
             self.os_window.inner_size().width,
             self.os_window.inner_size().height,
         );
-        let new_size = PhysicalSize {
-            width: width as u32,
-            height: height as u32,
-        };
+        let new_size = PhysicalSize { width, height };
 
         // On X11 (maybe others?), the w/h pair we get in the change event maybe has not
         // made it to / been fully processed by, the window, so try to make sure the window

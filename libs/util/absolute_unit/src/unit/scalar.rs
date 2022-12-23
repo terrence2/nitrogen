@@ -28,8 +28,12 @@ impl Scalar {
         self.into_inner()
     }
 
-    pub fn ln(self) -> f64 {
-        self.0.ln()
+    pub fn ln(self) -> Scalar {
+        Scalar(OrderedFloat(self.0.ln()))
+    }
+
+    pub fn abs(self) -> Scalar {
+        Scalar(OrderedFloat(self.0.abs()))
     }
 
     pub fn into_inner(self) -> f64 {

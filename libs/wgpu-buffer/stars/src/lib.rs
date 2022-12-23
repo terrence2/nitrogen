@@ -214,8 +214,8 @@ impl StarsBuffer {
         let stars = Stars::new()?;
         for i in 0..stars.catalog_size() {
             let entry = stars.entry(i)?;
-            let ra = entry.right_ascension() as f32;
-            let dec = entry.declination() as f32;
+            let ra = entry.right_ascension();
+            let dec = entry.declination();
             let color = entry.color();
             let radius = RADIUS * entry.radius_scale();
             let star = StarInst {
@@ -260,7 +260,7 @@ impl StarsBuffer {
             };
             bin_positions.push(pos);
             for index in bin_indices {
-                indices.push(*index as u32);
+                indices.push(*index);
             }
         }
 
