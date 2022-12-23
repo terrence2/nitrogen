@@ -29,7 +29,7 @@ use shaderc::{
 };
 use std::{
     env, fs,
-    path::{Path, PathBuf},
+    path::{Path, PathBuf, MAIN_SEPARATOR},
 };
 
 fn type_for_filename(name: &str) -> ShaderKind {
@@ -92,9 +92,10 @@ fn find_included_file(
         include_dirs.push(libs_dir.join("nitrogen"));
     }
 
-    let input_path: PathBuf = name.split('/').collect();
+    let input_path: PathBuf = name.split(MAIN_SEPARATOR).collect();
     trace!("Using include dirs: {:?}", include_dirs);
     for path in &include_dirs {
+        #[allow(clippy::needless_borrow)]
         let attempt = path.join(&input_path);
         trace!("Checking: {:?}", attempt);
         if attempt.is_file() {
@@ -149,7 +150,7 @@ pub fn build() -> Result<()> {
         );
         fs::write(&target_path, spirv.as_binary_u8())?;
         if let Some(spirv_assembly) = assembly {
-            fs::write(&format!("{}.s", target_path), spirv_assembly.as_text())?;
+            fs::write(format!("{}.s", target_path), spirv_assembly.as_text())?;
         }
 
         // Parse the generated spirv with naga to simulate what wgpu will be doing.
@@ -177,11 +178,8 @@ pub fn build() -> Result<()> {
                 naga::back::dot::Options { cfg_only: false },
             )?;
             if dump_spirv {
-                fs::write(
-                    &format!("{}.module", target_path),
-                    &format!("{:#?}", module),
-                )?;
-                fs::write(&format!("{}.dot", target_path), dot_content)?;
+                fs::write(format!("{}.module", target_path), format!("{:#?}", module))?;
+                fs::write(format!("{}.dot", target_path), dot_content)?;
             }
         }
     }

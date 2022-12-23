@@ -285,7 +285,7 @@ impl ScreenCamera {
     fn apply_input_state(&mut self) {
         let mut fov = degrees!(self.fov_y);
         fov += self.input.fov_delta;
-        fov = fov.min(degrees!(90)).max(degrees!(1));
+        fov = fov.clamp(degrees!(1), degrees!(90));
         self.fov_y = radians!(fov);
     }
 

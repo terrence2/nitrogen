@@ -80,7 +80,7 @@ pub struct RuntimeResource;
 impl RuntimeResource {
     #[method]
     fn exec(&self, filename: &str, mut heap: HeapMut) -> Result<()> {
-        let script_text = fs::read_to_string(&PathBuf::from(filename))?;
+        let script_text = fs::read_to_string(PathBuf::from(filename))?;
         heap.resource_mut::<ScriptQueue>()
             .run_interactive(&script_text);
         Ok(())

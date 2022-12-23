@@ -325,8 +325,7 @@ impl ArcBallController {
             self.eye.latitude = self
                 .eye
                 .latitude
-                .min(radians!(PI / 2.0 - 0.001))
-                .max(radians!(-PI / 2.0 + 0.001));
+                .clamp(radians!(-PI / 2.0 + 0.001), radians!(PI / 2.0 - 0.001));
         }
 
         if self.input.in_move {

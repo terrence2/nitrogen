@@ -845,7 +845,7 @@ impl InputSystem {
             (_, 27) => Some(VirtualKeyCode::RBracket),
             (_, 43) => Some(VirtualKeyCode::Backslash),
 
-            // (_, ) => Some(VirtualKeyCode::Capital), // ?
+            (_, 58) => Some(VirtualKeyCode::Capital),
             (_, 30) => Some(VirtualKeyCode::A),
             (_, 31) => Some(VirtualKeyCode::S),
             (_, 32) => Some(VirtualKeyCode::D),
